@@ -1,574 +1,616 @@
-# 智能桌面助手 — 功能说明文档
+Beautiful-Elf 智能桌面助手 — 完整功能介绍方案
+前后端分离架构 · 本地优先 · AI 驱动
+前端：Electron 41 + React 19 + TypeScript 6 + Three.js r181
+后端：FastAPI 0.124 + MySQL 9.5 + Redis 8.6 + Celery 5.6
+AI：LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3-Embedding + Qwen3.5
+
+项目概览
+Beautiful-Elf 是一款前后端分离的智能桌面助手，采用当前（2026年）最新稳定技术栈构建。前端基于 Electron + React 提供桌面应用交互与 3D 宠物窗口，后端基于 FastAPI + MySQL + Redis + Celery 提供高性能 API、实时推送与异步任务处理。系统深度集成 LlamaIndex + LangChain + LangGraph 构建企业级 RAG 管道，使用 Qdrant 作为向量数据库，Qwen3.5 系列模型提供对话与嵌入能力。技能可动态安装、炼化与链式调用，行为模式检测实现智能化主动建议。
+
+技术栈全景
+类别	技术	版本	用途
+前端桌面	Electron	v41.0.0	应用容器、系统 API、独立宠物窗口
+UI 框架	Ant Design	v6.4.2	组件库、主题系统、图标
+前端框架	React	v19.2.6	UI 渲染
+语言	TypeScript	v6.0	类型安全
+构建工具	electron-vite	v3.0.0+	构建、ESM、热更新
+3D 引擎	Three.js + @react-three/fiber + @react-three/drei	r181 + v9.6.0 + v9.118.0	桌面宠物渲染、场景管理
+物理引擎	ammojs-es	最新	PMX 模型刚体模拟
+状态管理	Zustand + TanStack Query	v5.0.12 + v5.100.13	客户端状态、服务端缓存
+HTTP/表单	Axios + React Hook Form + Zod	v1.16.0 + v7.76.0 + v4.3.6	网络请求、表单、全栈校验
+日志	electron-log	v5.x	分级日志、自动轮转
+长列表优化	react-window	v1.x	虚拟滚动（聊天记录）
+代码片段编辑	react-codemirror	最新	轻量级代码编辑器
+PDF 预览	pdf.js	最新	文件预览
+OCR 识别	Tesseract.js	最新	纯前端文字识别
+剪贴板管理	集成成熟 Electron 剪贴板管理器方案	-	历史记录、固定、搜索
+打包/更新	electron-builder + electron-updater	v26.9.0 + v4.3.9	多平台打包、自动更新
+测试	Vitest + @testing-library/react	v4.1	单元/集成测试
+代码规范	ESLint + Prettier + @typescript-eslint	v10.2.1 + v3.8.2	前端代码质量
+Git 规范	Husky + lint-staged + commitlint	v9.1.0 + v16.4.0 + v21.0.1	Git hooks、提交规范
+| 后端框架 | FastAPI + Uvicorn | v0.124.0 + v0.47.0 | 异步 API、WebSocket |
+| 数据库 | MySQL | v9.5.0 | 关系数据持久存储 |
+| 异步驱动 | aiomysql | v0.3.2 | 非阻塞数据库访问 |
+| ORM | SQLAlchemy | v2.0.46 | 数据库 ORM |
+| 迁移工具 | Alembic | v1.18.1 | Schema 版本化管理 |
+| 缓存/消息 | Redis | v8.6.0 | 缓存、消息代理、限流 |
+| 任务队列 | Celery | v5.6.0 | 异步任务、定时任务、工作流编排 |
+| 配置管理 | Pydantic Settings | v2.12.0 | 类型安全配置 |
+| 数据验证 | Pydantic | v2.12.5 | 请求/响应数据校验 |
+| 反向代理 | Nginx | v1.30.0 | 服务器部署模式使用（可选） |
+| 高性能计算 | Rust + PyO3 + maturin | 最新 | 批量向量相似度、pHash、LCS |
+| 代码规范 | Ruff | v0.9.0 | Python 代码检查与格式化 |
 
-> 基于项目实际代码更新，仅保留功能描述，不含代码。
+| AI 能力 | Ollama | 最新 | 本地大模型服务 |
+| 对话模型 | Qwen3.5 (Ollama) | 最新 | 通用对话、工具调用 |
+| 嵌入模型 | Qwen3-Embedding (Ollama) | 最新 | 文本向量化 |
+| RAG 管道 | LlamaIndex + LangChain + LangGraph | 最新 | 文档索引、检索、多跳推理 |
+| 向量数据库 | Qdrant | 最新 | 高性能本地/远程向量检索 |
+| 视觉模型 | llava (备用) | 最新 | 图像分析（可选） |
 
----
+一、项目工程化
+能力	技术实现	说明
+构建与热更新	electron-vite	支持主进程、渲染进程、预加载脚本的 HMR
+代码规范	ESLint + @typescript-eslint + Prettier	统一代码风格，集成于 IDE 和 Git hooks
+Git 工作流	Husky + lint-staged + commitlint	提交前自动格式化、校验提交信息
+单元/集成测试	Vitest + @testing-library/react	组件测试、Hook 测试、API 集成测试
+日志记录	electron-log	按模块分文件输出，支持日志轮转（10MB/5个）
+打包与更新	electron-builder + electron-updater	多平台打包，增量自动更新
+性能监控（开发）	Stats.js	实时显示 FPS、MS、MB
+二、核心基础设施
+2.1 事件总线
+实现：基于 Node.js EventEmitter 封装全局事件总线，支持 on、off、emit、once。
 
-## 项目概述
+模块级隔离：每个模块在 module.json 中声明 provides（发出的事件）和 consumes（监听的事件），未声明的事件自动拦截并记录错误日志。
 
-基于 Electron + React + TypeScript 的智能桌面助手，采用模块化架构，支持 23 个功能模块，通过 AI 调度器实现意图识别与工具路由。
+错误隔离：单个事件处理器的异常不影响其他处理器，错误通过 _error 事件独立上报。
 
-**技术栈**：Electron 33 + React 18 + Vite 5 + TypeScript 5 + Zustand + SQLite (better-sqlite3) + Ollama
+2.2 日志系统
+前端：electron-log，按模块输出到独立文件（如 chat.log、pet.log），支持 debug/info/warn/error 四级。
 
----
+后端：Python logging + Uvicorn 访问日志，输出到 logs/ 目录，支持 JSON 格式（便于日志聚合）。
 
-## 核心系统（src/main/core）
+日志轮转：单文件最大 10MB，最多保留 5 个归档，过期自动清理。
 
-### 事件总线系统
+2.4 设置系统（全局配置管理中心）
+设置系统是 Beautiful-Elf 的配置中枢，统一管理应用、AI、模型、界面等所有可配置项。前端使用 Ant Design Form + Tabs 分区展示，后端配置通过 Pydantic Settings 加载并与前端同步。
 
-- **GlobalEventBus**：全局事件总线，基于 Node.js EventEmitter，支持 on/off/emit/once/removeAllListeners
-- **ModuleScopedEventBus**：模块限定范围事件总线，按 module.json 的 provides/consumes 声明控制事件收发权限，未声明的事件自动拦截并告警
-- **错误隔离**：事件处理器异常不影响其他处理器，错误通过 `_error` 事件上报
-- **内存管理**：handlerMap 三层映射结构支持精确取消，removeAllListeners 按事件名或全局清理
+2.4.1 Ollama 配置
+Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）或远程服务器地址，支持 HTTP/HTTPS。
 
-### 统一日志系统
+扫描本地大模型：前端调用后端 API /api/ollama/models，返回 Ollama 中已下载的模型列表（如 qwen3.5:7b、qwen3-embedding:latest、llava:latest）。
 
-- **AppLogger**：模块级日志器，支持 debug/info/warn/error 四级
-- **多传输器**：ConsoleTransport（控制台输出）+ FileTransport（文件输出，按模块分文件）
-- **日志轮转**：LogRotationManager 实现自动轮转，单文件最大 10MB，最多保留 5 个归档文件
-- **错误日志**：独立 error 级别日志文件
+模型选择：
 
-### 配置管理器
+对话模型：从扫描到的模型中选择一个作为默认对话模型（推荐 qwen3.5:7b 或 qwen3.5:14b）。
 
-- **全局配置**：Ollama 连接、UI 主题/语言、模块启停列表、安全策略、性能参数
-- **模块配置隔离**：每个模块独立配置文件，互不干扰
-- **变更监听**：onChange 回调机制，配置变更实时通知
-- **持久化**：JSON 文件存储在 userData/config/ 目录
+嵌入模型：选择用于 RAG 和意图识别的嵌入模型（推荐 qwen3-embedding）。
 
-### 持久化存储层（SQLite）
+视觉模型：可选，用于 OCR 辅助或图像分析（如 llava）。
 
-- **DatabaseManager**：基于 better-sqlite3，WAL 模式提升并发性能
-- **表结构管理**：各模块通过 Repository 模式自行建表和管理
-- **备份支持**：BackupManager 实现自动备份（定时触发）和手动备份，保留天数可配置，过期自动清理
+测试连接：提供“测试连接”按钮，调用 Ollama 的 /api/tags 接口，验证地址正确且服务可用，失败时给出明确错误提示。
 
-### 模块管理器（核心中枢）
+模型下载管理（高级）：可展示已安装模型列表，并提供一键下载新模型（通过 Ollama CLI 或 API 异步拉取）。
 
-- **ModuleScanner**：扫描模块目录，解析 module.json 元数据
-- **DependencyResolver**：依赖解析，支持循环依赖检测、缺失依赖告警、版本兼容性检查
-- **ModuleValidator**：模块合法性校验
-- **ModuleLoader**：模块加载，注入 ModuleContext（事件总线、配置、AI、日志、存储等）
-- **ModuleManager**：统一调度扫描→解析→校验→加载的完整生命周期
-- **技能搜索路径**：应用根目录 skills + 模块目录 skills + 用户数据 skills + 工作区 skills
+2.4.2 AI 设置
+模型温度 (Temperature)：滑块范围 0.0～2.0，步长 0.1，控制生成内容的随机性。默认 0.7。
 
-### 性能监控
+最大生成长度 (Max Tokens)：数字输入框，范围 1～8192，默认 2048。控制单次回答的最大长度。
 
-- **PerformanceMonitor**：定时采集 CPU/内存/磁盘/GPU 使用率
-- **ResourceCollector**：系统资源数据采集器
-- **历史记录**：保留 360 个采样点（5 秒间隔，共 30 分钟）
-- **趋势预测**：基于历史数据预测资源使用趋势
-- **告警机制**：CPU 80%、内存 85%、磁盘 90%、GPU 90% 阈值告警
-- **降频策略**：ThrottleStrategyEngine 实现 aware → degraded → lowPower 三级降频
-- **模块资源控制**：ModuleResourceController 按声明的资源限制动态调控模块，支持暂停/恢复
+Top-P：范围 0.0～1.0，默认 0.9。核采样参数。
 
-### 轮询注册中心
+频率惩罚 / 存在惩罚：可选，用于减少重复。
 
-- **PollingRegistry**：统一管理所有轮询任务，供仪表盘展示
-- **两类轮询**：核心轮询（性能监控、自动备份等常驻任务，不绑定模块）+ 模块轮询（绑定 moduleId，模块 deactivate 时自动清理）
-- **执行记录**：tickCount 自动累加、lastActivity 模块上报、lastError 错误上报
-- **实时推送**：每次变更自动推送到渲染进程，无需前端轮询
+AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界面中 AI 助手的头像显示。头像存储在后端用户数据。
 
-### 安全沙箱
+系统提示词：可编辑全局系统提示词（如“你是一个可爱的桌面助手”），或针对不同模块单独配置。
 
-- **SandboxManager**：每个模块运行在独立的 utilityProcess 子进程中
-- **SandboxIPC**：沙箱 IPC 通信协议，支持请求/响应模式，10s 超时
-- **SandboxWorker**：沙箱子进程工作线程
-- **逃逸防护**：白名单模式 + API 拦截层，仅允许安全的 Node.js 内置模块（events、util、url、path、crypto、stream 等 13 个），明确禁用 fs、child_process、net、http、vm 等危险模块
-- **环境变量白名单**：仅允许 PATH、HOME、LANG、LC_ALL、DISPLAY、APP_ROOT
-- **超时控制**：启动超时 10s、初始化超时 15s、优雅关闭超时 5s
-- **资源监控**：实时追踪每个沙箱实例的内存和 CPU 使用量
+2.4.3 应用设置
+语言：支持简体中文、英文，切换后界面即时刷新（Ant Design 国际化 + 自定义文案）。
 
-### 能力仲裁器
+开机自启：开关控制 Electron 是否开机启动。
 
-- **CapabilityRegistry**：能力注册表，支持同名能力多模块注册与去重
-- **CapabilityArbiter**：多模块注册同名能力时的仲裁逻辑
-- **仲裁优先级**：用户显式指定 > 用户覆盖配置 > priority 字段 > 加载顺序
-- **用户覆盖持久化**：用户的选择保存到配置文件，下次启动自动恢复
-- **ToolParamSchemas**：为每个模块工具定义 JSON Schema，让 LLM 知道该传什么参数
+启动时最小化到托盘：开关。
 
-### AI 调度器
+关闭主窗口行为：退出应用 / 最小化到托盘。
 
-- **OllamaAIService**：封装 Ollama REST API，支持对话（同步/流式）、图片分析、意图识别、嵌入向量
-- **AiDispatcher**：意图识别 → 路由分发 → 通用对话的完整调度链路
-- **工具调用**：支持 function calling，自动执行工具并返回结果
-- **连续失败保护**：连续失败 3 次自动降级到通用对话模式
-- **默认模型**：ministral:3b（对话）、qwen2.5-vl（视觉）、nomic-embed-text（嵌入）
+2.4.4 宠物设置
+宠物模型选择：模型路径设置-设置保存后台，列出后台返回的模型列表  后台去读取设置的路径目录下的 .pmx 文件，用户可切换不同模型。
 
-### SOUL 管理器
+宠物窗口设置：透明度、是否置顶、窗口尺寸（预设 400×500，可自定义）。
 
-- **SoulManager**：助手人格配置的读取、创建、更新（单例模式）
-- **SoulReader**：从 SOUL.md 文件中提取助手名称，兼容开发模式和打包模式
-- **存储路径**：`<userData>/config/soul.json`
-- **人格配置**：性格标签、说话风格、情感倾向、背景故事、行为准则
-- **兼容逻辑**：首次启动检查本地 SOUL.md，有则继承
-- **首次引导**：SoulOnboarding 组件引导用户创建助手人格
+属性衰减速度：可选“慢 / 正常 / 快”，影响饥饿、清洁等属性的每小时衰减值。
 
-### 应用框架
+气泡对话频率：控制宠物自动说话的间隔（30 秒～5 分钟）。
 
-- **菜单系统**：createAppMenu 创建原生应用菜单，macOS/Windows 自适应
-- **系统托盘**：支持最小化到托盘、右键菜单、窗口显示/隐藏切换
+2.4.5 快捷键设置
+全局快捷键映射：用户可自定义“打开主窗口”、“打开命令面板”、“截图”等快捷键。
 
----
+冲突检测：保存时检测是否与其他全局快捷键冲突，并提示。
 
-## 功能模块（modules/）
+2.4.6 隐私与安全
+数据加密：是否对本地存储的敏感配置（如 API Key）加密（默认开启）。
 
-### 日程日历（calendar）
+日志级别：可动态调整日志记录级别（Debug / Info / Warn / Error）。
 
-- 日程事件的 CRUD 操作（calendar_list/create/update/delete）
-- 按年月筛选日程列表
-- 支持全天事件和提前提醒设置
-- 每分钟自动检查提醒触发
-- SQLite 持久化存储
+匿名使用统计：可选是否允许收集匿名使用数据（用于改进）。
 
-### 剪贴板历史（clipboard-history）
+2.4.7 关于与更新
+版本信息：展示前端、后端、关键依赖版本。
 
-- 剪贴板内容轮询监听（5 秒间隔）
-- 历史记录列表查询（clipboard_list）
-- 内容固定/取消固定（clipboard_pin）
-- 复制历史记录到剪贴板（clipboard_copy）
+检查更新：手动触发 electron-updater 检查更新。
 
-### 代码片段（code-snippets）
+更新日志：从更新服务器拉取变更记录展示。
 
-- 代码片段的创建、更新、删除（snippet_create/update/delete）
-- 标签管理（创建时可添加标签列表）
-- 一键使用：复制到剪贴板并记录使用次数（snippet_use）
+技术实现：
 
-### 命令面板（command-palette）
+前端配置项保存后端，修改则请求后端保存并应用。
 
-- 全局快捷键 Ctrl+K 呼出
-- 模糊搜索命令列表
-- 内置命令注册
-- 其他模块可动态注册命令
-- 最多返回 20 条匹配结果
+后端配置（如 Ollama 地址、模型名称、温度等）通过 Pydantic Settings 从 .env 和环境变量加载，并提供 API /api/config 供前端读取和修改。修改后动态生效（部分需重启模块）。
 
-### 桌面集成（desktop-integration）
+前后端配置可同步：用户在前端修改 Ollama 地址后，后端 API 调用时自动使用新地址。
 
-- **TrayService**：系统托盘图标、右键菜单
-- **HotkeyService**：全局快捷键注册与触发
-- **NotificationService**：系统通知弹出
-- **AutostartService**：开机自启配置
+三、AI 智能核心
+所有 AI 能力基于 Ollama 本地模型 + LlamaIndex/LangChain/LangGraph 编排，Qdrant 作为向量数据库，实现企业级 RAG 管道。
 
-### 文件操作（file）
+3.1 对话与意图识别
+聊天接口：FastAPI 提供 /api/ai/chat（非流式）和 /api/ai/chatStream（WebSocket 流式）。
 
-- **FileReaderService**：文件读取（文本、二进制）
-- **FileWriterService**：文件写入与追加
-- **FileWatcherService**：目录变更监听
-- 代码高亮预览
+对话模型：使用 Ollama 运行的 Qwen3.5（7B/14B/32B 可选），支持函数调用（Function Calling）和工具使用。
 
-### 鼠标键盘控制（input）
+意图识别流程：
 
-- **MouseService**：鼠标移动、点击、拖拽（优先 robotjs，降级 xdotool/osascript/powershell）
-- **KeyboardService**：键盘输入、快捷键组合、按键模拟
+用户输入文本 → 调用嵌入模型 Qwen3-Embedding 生成向量。
+与意图知识库（MySQL 存储预置意图的向量）计算余弦相似度（Rust 加速批量）。
+最高置信度 ≥ 0.75 则命中意图，路由到对应模块的工具。
+未命中则进入通用对话模式，可触发 RAG 检索或工具调用。
+性能优化：Redis 缓存高频意图的向量（TTL 1 小时），批量相似度计算使用 Rust + PyO3 扩展。
 
-### 本地知识库（knowledge-base）
+3.2 RAG 知识库系统（LlamaIndex + LangChain + LangGraph + Qdrant）
+这是本项目的核心 AI 能力，采用业界最先进的 RAG 技术栈。
 
-- **文件导入**：支持多种文档格式导入（kb_import，自动向量化 + BM25 索引）
-- **VectraStore**：自动切片 + 嵌入向量 + BM25 索引
-- **混合检索**：向量语义搜索 + BM25 关键词搜索（kb_search，默认混合模式）
-- **RAGEngine**：LLM Reranker 重排序 + RAG 问答（kb_ask）
-- **DatasetCatalog**：数据集目录浏览
-- **DatasetDownloader**：数据集下载管理
+文档导入与索引（LlamaIndex）：
 
-### Live2D Cubism 5（live2d-5）
+支持格式：PDF、DOCX、MD、TXT、JSON、CSV、YAML、HTML、XML、ZIP。
 
-- 基于 Cubism 5 SDK for Web R5 的原生 WebGL 渲染
-- 独立窗口运行（400×500 宠物窗口）
-- 模型加载与切换
-- 表情队列控制（useExpressionQueue）
-- 鼠标追踪（useMouseTracking）
-- 动画预设系统
-- 不依赖 pixi.js，与旧版 Live2D 模块完全隔离
+使用 LlamaIndex 的 SimpleDirectoryReader 加载文档，RecursiveCharacterTextSplitter 分块（块大小 512，重叠 100）。
 
-### 记忆系统（memory）
+使用 Qwen3-Embedding 将每个块向量化，存储到 Qdrant 向量数据库（本地模式）。
 
-- **MemoryManager**：短期/长期记忆的存储、检索、清理
-- **语义搜索**：TF-IDF + 余弦相似度
-- **AI 摘要**：调用 Ollama 自动生成记忆摘要
-- **自动摘要**：短期记忆达到阈值（默认 50 条）时自动触发压缩摘要
-- **SQLite 持久化**：MemoryRepository 管理数据存储
+同时将文档元数据（文件名、时间、块数）存入 MySQL，便于管理。
 
-### 多会话管理（multi-session）
+检索与生成（LangChain + LangGraph）：
 
-- 会话的创建、切换、删除、重命名
-- 会话固定（置顶重要会话）
-- SQLite 持久化存储
+混合检索：Qdrant 支持向量 + 关键字全文搜索，可配置权重（默认 0.7 向量 + 0.3 关键字）。
 
-### 通知管理（notifications）
+重排序：使用 CrossEncoder 模型（可选）对召回结果精排。
 
-- 系统通知的持久化存储
-- 通知查询与筛选
-- 已读/未读状态管理
-- 监听事件总线自动创建通知
+LangGraph 多跳推理：对于复杂问题，自动拆解为多步检索（如“先查 A 概念，再查 B 关联”），使用 LangGraph 状态机管理推理链。
 
-### 主动关怀（proactive）
+流式回答：通过 WebSocket 逐 token 返回，同时携带来源引用。
 
-- **ReminderService**：定时提醒的创建、触发、管理
-- **WeatherService**：接入 wttr.in 天气 API，支持天气查询和预报
-- 天气预警提醒
-- 主动问候
+知识库管理：
 
-### 快速预览（quick-preview）
+DatasetCatalog：前端表格展示已导入文档，支持按类型、时间筛选、删除。
 
-- 文件快速预览（不打开编辑器）
-- 支持文本、代码、图片等多种格式
-- FilePreviewService 统一处理
+DatasetDownloader：导出知识库为 JSON 或 Qdrant 快照，便于备份迁移。
 
-### 屏幕理解（screen）
+3.3 工具注册与调用（LangChain Tools）
+ToolRegistry：统一注册表，支持动态添加工具。
 
-- **ScreenCaptureService**：屏幕截图捕获
-- **OcrService**：调用 Ollama qwen2.5-vl 视觉模型进行 OCR 文字识别
-- 批量 OCR 支持（recognizeBatch）
-- 屏幕区域选择
+工具实现：每个工具用 LangChain @tool 装饰器定义，自动生成 JSON Schema。
 
-### 技能系统（skill）
+工具调用流程：用户问题 → LLM 决策 → 自动调用对应工具 → 结果返回 LLM → 生成最终回答。
 
-- **SkillDiscovery**：技能发现与扫描
-- **SkillScanner**：SKILL.md 解析
-- **SkillCreator**：技能创建
-- **SkillInstaller**：技能安装
-- **SkillRefiner**：技能打磨优化
-- **SkillChain**：技能链式调用
-- **SkillStats**：技能使用统计
-- **SkillTransfer**：技能导入导出
-- **SkillPersistService**：技能状态持久化
-- **三级加载**：应用级 → 模块级 → 用户级
-
-### 系统仪表盘（system-dashboard）
+工具示例：查询天气、创建日程、搜索知识库、控制宠物等。
 
-- **SystemInfoService**：获取系统信息
-- CPU/内存/磁盘使用率实时展示
-- 系统运行时间
-- 模块状态总览
+3.4 记忆系统（短期 + 长期 + 语义）
+短期记忆：会话内消息历史（Zustand 存储）。
 
-### 任务规划（task）
-
-- **TaskPlanner**：复杂任务拆解为多步执行计划（AI 驱动）
-- **TaskExecutor**：任务步骤逐步执行
-- **TaskService**：任务业务逻辑编排
-- 任务 CRUD（task_create/list/delete）
-- 任务执行与暂停（task_execute/pause）
-- 进度查询（task_progress）
-- SQLite 持久化（TaskRepository + TaskStepRepository）
-
-### 主题商店（theme-store）
+长期记忆：MySQL 存储历史对话，同时将重要对话片段向量化存入 Qdrant 的 memory Collection。
 
-- 主题列表浏览（theme_list：内置 + 已导入 + 可下载）
-- 主题应用（theme_apply：可下载主题自动导入）
-- 主题导入/导出（theme_import/export）
-- 自定义主题删除（theme_delete，内置主题不可删）
-- 明暗模式切换
-- 启动时自动恢复上次主题
+语义检索：用户提问时，同时检索知识库和长期记忆，实现跨会话回忆。
 
-### 工具路由（tools）
-
-- **ToolRegistry**：工具注册表，支持动态注册
-- **ToolRouter**：意图路由，置信度校验
-- **ToolExecutor**：工具执行引擎
-- 工具执行（tool_execute）
-- 工具列表查询（tool_list）
-- 意图路由（tool_route）
-- 事件驱动：监听其他模块通过事件总线注册的工具
-
-### 翻译面板（translator）
-
-- **TranslationEngine**：翻译引擎（调用 LLM）
-- **LanguageDetector**：语言自动检测
-- **TranslationService**：翻译历史管理与收藏
-- "小希翻译"模式：先查知识库，没找到再调大模型
-- 知识库不可用时自动降级到纯 LLM 翻译
-
-### 视觉感知（vision）
-
-- **VisionManager**：视频流捕获与分析
-- 开始/停止视觉捕获（vision_start/stop）
-- AI 画面分析（vision_analyze，支持 general/text/code 三种模式）
-- 帧变化检测（SHA-256 hash 比对）
-- 事件驱动：通过事件总线发送帧变化事件
-
-### 工作流自动化（workflow）
-
-- **WorkflowService**：工作流业务逻辑编排
-- **WorkflowEngine**：工作流执行引擎
-- **WorkflowScheduler**：触发器调度（定时/事件触发）
-- 工作流 CRUD（workflow_create/list/delete）
-- 工作流执行与暂停（workflow_execute/pause）
-- 运行日志查询（workflow_log）
-- 内置模板系统（workflow_templates）
-- 从模板创建工作流（workflow_create_from_template）
-- 运行历史记录（WorkflowRunRepository）
-
----
-
-## 渲染进程（src/renderer）
-
-### 状态管理（Zustand）
-
-| Store | 职责 |
-|-------|------|
-| useAppStore | 全局应用状态、当前面板、语言 |
-| useChatStore | 聊天消息、流式输出、工具调用 |
-| useModulesStore | 模块列表、状态、启停控制 |
-| useSettingsStore | 应用设置、Ollama 配置、外观、性能监控参数 |
-| useSkillStore | 技能列表、筛选、选中、回收站 |
-| useVisionStore | 视觉分析结果、捕获区域 |
-| useSoulStore | 助手人格配置状态 |
-| useChangesStore | Git 变更文件列表、文件树 |
-| useCommandPaletteStore | 命令面板状态、搜索结果 |
-
-### UI 组件
-
-- **聊天面板**：MessageBubble、MessageList、ChatInput、StreamingText（Markdown 渲染）、ToolCallCard、MessageActions
-- **Live2D**：Live2DCanvas、Live2DControls、Live2DFallback、Live2DContext
-- **设置面板**：SettingsSection、OllamaConfig、ThemeSwitcher、ModelSelector、LanguageSelector、AvatarUploader/Editor、PerformanceMonitorConfig
-- **模块管理**：ModuleCard、ModuleDetail、ModuleHeader、ModuleToolbar、ModuleList、ResourceDashboard
-- **布局**：MainLayout、Sidebar、Header
-- **通用组件**：Button、Toggle、Slider、Modal、Toast、Loading、ErrorBoundary、StatusBar、IconMap
-- **通用模块组件**：ModuleHeader、ModuleToolbar、ModuleList（模块复用的基础 UI）
-- **命令面板**：CommandPalette（Ctrl+K 呼出）
-- **变更面板**：ChangesPanel、FileTree、FilePreview
-- **灵魂引导**：SoulOnboarding、SoulIndicator
-
-### 服务层
-
-- **chatService**：聊天服务封装
-- **Live2DEasyControlService**：Live2D 简易控制
-- **themeEngine**：主题引擎
-
-### 共享类型（src/shared/types/）
-
-| 文件 | 内容 |
-|------|------|
-| common.ts | DeepPartial、Optional、Prettify 通用工具类型 |
-| error.ts | 统一错误码枚举（ErrorCode）+ AppError 错误类 |
-| ipc.ts | IPC 通道类型定义（IPCChannels）、ScreenSource、LogEntry |
-| soul.ts | SoulConfig、SoulPersonality、SoulCreateRequest、SoulStatus 助手人格类型 |
-| index.ts | 统一导出 |
-
-### Hooks
-
-- **useIpc**：IPC 通信封装
-- **useTheme**：主题切换
-- **useAutoScroll**：聊天自动滚动
-- **useAutoContrast**：自动对比度调整
-
----
-
-## IPC 通道（ipc-handlers/）
-
-| 分类 | 处理器 | 通道 | 说明 |
-|------|--------|------|------|
-| AI | ai.handlers | ai:chat, ai:chatStream | 对话请求、流式对话 |
-| 模块 | module.handlers | module:list/enable/disable/reload | 模块管理，invokeModuleCapability 调用模块能力 |
-| 配置 | config.handlers | config:get/set | 配置读写 |
-| 文件 | file.handlers | file:read/write/watch | 文件操作 |
-| Git+文件 | git-file.handlers | git:status/diff, files:list/read/readAny, files:openPicker, dialog:openFile | Git 操作与文件浏览 |
-| 命令面板 | palette.handlers | palette:search/execute/open/close | 命令搜索与执行 |
-| 轮询 | polling.handlers | polling:register/registerModule/unregister/update/tick/list | 轮询任务管理 |
-| 技能 | skill.handlers | skill:* | 技能管理 |
-| 主题 | theme.handlers | theme:* | 主题管理 |
-| SOUL | soul.handlers | soul:* | 人格配置 |
-| 性能 | performance.handlers | performance:* | 性能监控数据 |
-| 热键 | hotkey.handlers | hotkey:register/unregister | 全局快捷键 |
-| Live2D | live2d.handlers | live2d:* | Live2D 模型控制 |
-
----
-
-## 数据安全
-
-- **EncryptionService**：AES-256-GCM 加密/解密，PBKDF2 密钥派生
-- **IntegrityChecker**：数据完整性校验
-- **BackupScheduler**：定时/手动/配置变更触发备份，cron 表达式调度，文件锁防并发，自动清理过期备份
-- **DataExporter**：数据一键导出/导入
-- **SecurityManager**：统一安全入口，整合上述四个子系统
-
----
-
-## 待开发功能（设计阶段）
-
-### 意图识别系统（v1.0 设计）
-
-> 状态：设计阶段 | 硬件：AMD 3800 CPU + 30GB 内存，无 GPU
-
-- **方案**：嵌入向量匹配（nomic-embed-text），CPU 延迟 ~21ms，用户无感
-- **IntentMatcher**：获取输入嵌入向量 → 与意图知识库余弦相似度比较 → 置信度 >= 0.75 命中
-- **三种学习方式**：
-  - 用户主动纠正（最可靠）：UI 反馈按钮，用户指出正确模块
-  - 行为隐式学习（最自然）：监听用户手动切换模块行为，与最近输入关联
-  - 模块执行反馈闭环：成功 → hitCount++，失败 → 降低置信度
-- **预置意图**：chat、vision、search、code、task、proactive、screen、file（8 个）
-- **存储**：knowledge.json + vectors-cache.bin + learning-log.json
-- **性能预算**：识别 < 50ms，内存增量 < 10MB，启动加载 < 100ms
-- **UI**：聊天气泡显示识别结果 + 👍/👎 反馈，设置页意图管理
-
-### 行为分析与自动技能创建（v1.0 设计）
-
-> 状态：设计阶段
-
-- **ActionTracker**：零侵入拦截模块调用，自动参数脱敏（文件路径→扩展名、文本→长度、URL→域名、密码→丢弃）
-- **ActionStore**：SQLite 持久化，异步写入队列（50 条批量，5 秒刷盘），保留 30 天自动清理
-- **PatternDetector**：滑动窗口 + 频繁序列挖掘，子模式去重（LCS 相似度 > 0.8 合并），置信度综合评分（出现次数 + 长度 + 时间规律性）
-- **跨会话模式检测**：会话首尾衔接模式、会话开头习惯性操作
-- **SkillSuggester**：检测到模式后自动生成技能建议（名称、描述、工作流步骤）
-- **通知冷却**：同一模式忽略后 7 天不再提醒，拒绝后永久不提醒，全局间隔 30 分钟
-- **用户交互**：创建技能 / 修改 / 暂时忽略 / 不再提醒
-- **性能预算**：行为记录 < 1ms，批量写入 < 10ms，模式检测 1000 条 < 50ms
-
-### 多代理编排系统（v1.0 设计）
-
-> 状态：设计阶段
-
-- **子代理生命周期**：pending → running → done/fail/kill/timeout
-- **两种运行模式**：
-  - run（一次性）：执行完成即销毁，适合确定性任务
-  - session（持久会话）：保持连接，支持多轮交互，适合专用助手
-- **任务调度**：自动并行分析 → 拓扑排序 → 同层并行 → 串行依赖
-- **通信协议**：主→子（spawn/send/steer/kill），子→主（progress/completed/failed）
-- **错误处理**：超时自动终止、异常崩溃隔离、可重试错误重试 1 次
-- **资源限制**：最大并发 5 个，单代理最大 200K token，最长 15 分钟
-- **安全约束**：子代理不能再创建子代理、不能直接发消息给用户、不能修改安全文件
-- **UI**：子代理监控面板、任务分解可视化、子代理详情页
-- **开发计划**：核心调度引擎 8h + UI 面板 6h + 持久会话 6h + 高级调度 4h + 历史统计 4h = 约 28h
-
-### Oracle 深度思考（v1.0 设计）
-
-> 状态：设计阶段
-
-- **三档推理强度**：
-  - 💡 快速思考：自有提示词增强，无额外延迟
-  - 🧠 深度推理：agent-reasoning CoT，2-3x 延迟
-  - 🔬 全面分析：agent-reasoning ToT/Refinement，5-10x 延迟
-- **架构**：ChatInput 下拉框 → ChatService 传递 oracleMode → IPC → OracleReasoningService
-- **OracleReasoningService**：管理 agent-reasoning 代理进程生命周期，检测代理可用性，提供不同模式系统提示词，不可用时降级到 quick
-- **文件改动**：useChatStore 新增状态、ChatInput 新增下拉框、chatService 传递参数、新增 oracle-reasoning-service.ts
-
-### 主题系统 v2.0（设计）
-
-> 状态：设计阶段 | 借鉴 shadcn/ui + Chakra UI + Mantine + Ant Design + Radix
-
-- **三层 Token 架构**：Seed Token（7 个值）→ Map Token（自动派生）→ Alias Token（语义化）
-- **Seed Token**：primary、background、foreground、border、radius、fontScale、spacingScale
-- **暗色模式自动生成**：Mantine primaryShade 算法派生
-- **autoContrast 自动对比度**：Mantine 借鉴，确保文字可读性
-- **Alpha 透明度色板**：Chakra UI 借鉴，自动生成透明度变体
-- **灰度系统**：Radix 12 级灰度刻度
-- **Radius 派生**：shadcn/ui 借鉴，从 base radius 自动派生各尺寸
-- **迁移策略**：渐进式 4 阶段（基础设施 → 组件适配 → 主题商店升级 → 清理旧代码）
-
----
-
-## 技术调研报告
-
-### RAG 流程分析（7 步流水线 vs 当前实现）
-
-> 基于 LangChain RAG 标准流程对比，识别缺失项和优化空间
-
-**当前状态**：基础功能 80% 已完成，骨架完整，细节有缺。
-
-**7 步流水线逐项对比：**
-
-| 步骤 | 当前状态 | 说明 |
-|------|---------|------|
-| 文档加载 | 🟢 MD/TXT/JSON/CSV/YAML/HTML/XML/Parquet/ZIP 完整 | 结构化数据切分是亮点 |
-| 文档加载 | 🔴 缺 PDF/DOCX/XLSX | 企业文档 80% 是 PDF，不支持等于 RAG 废了一半 |
-| 文本分割 | 🟢 4 种策略 + 智能检测 + overlap | 基础扎实 |
-| 向量化 | 🟢 nomic-embed-text via Ollama | 可用 |
-| 向量化 | 🟡 embedBatch 串行 | 导入大量文档会很慢 |
-| 检索 | 🟢 Top-K 余弦相似度 | 基础可用 |
-| 检索 | 🟡 缺相似度阈值过滤、MMR 多样性、混合检索、Reranker | 检索质量有较大提升空间 |
-| Prompt | 🟢 系统提示词 + 上下文注入 + 来源引用 | 可用 |
-| Prompt | 🟡 硬编码模板，未与 SoulManager 联动 | 可优化 |
-| 模型调用 | 🟢 OllamaAIService + 流式输出 + 超时控制 | 可用 |
-| 模型调用 | 🟡 无失败重试、无多模型路由 | 可优化 |
-| 输出解析 | 🔴 无 OutputParser | 模型返回什么就直接展示，无法保证格式一致 |
-
-**🔴 必须补的（影响核心功能）：**
-- PDF 支持（集成 pdf-parse）
-- DOCX 支持（集成 mammoth）
-- Excel/XLSX 支持（集成 xlsx/SheetJS）
-- OutputParser（JSON/Markdown/Citation 解析）
-- embedBatch 并行优化（Promise.all + 并发控制）
-
-**🟡 建议优化的：**
-- 相似度阈值过滤（score < 0.5 丢弃）
-- Prompt 模板可配置
-- 失败重试机制（指数退避 3 次）
-- 混合检索（向量 + BM25，RRF 融合排序）
-- MMR 多样性检索
-
-**🟢 长期目标：**
-- Reranker 重排序（需额外交叉编码器模型）
-- 多模型路由（简单问题用小模型）
-- 语义切分（利用嵌入向量判断语义边界）
-- URL 网页导入
-- SoulManager 与 RAG 联动（人格化知识库问答）
-
-**LlamaIndex 借鉴方向（不引入库，抄设计）：**
-- 关键词索引（BM25）：TF-IDF 或 BM25 关键词检索
-- 检索后处理链：过滤 → 重排序 → 压缩 → 去重
-- 响应合成模式：compact/refine/tree_summarize 三种模式
-- 子问题分解：复杂问题自动拆解为子问题分别检索
-- RAG 评估：忠实度/相关性/正确性三个评估指标
-
----
-
-### QQ 宠物技术架构分析与 Live2D5 借鉴
-
-> 从 QQ 宠物（2005）设计中提取可借鉴思路，指导 Live2D5 桌面宠物开发
-
-**QQ 宠物核心架构：**
-- 独立进程（qqpet.exe）+ Flash OCX 控件透明渲染 + HTTP 轮询 + 服务端主导
-- 核心循环：时间流逝 → 属性衰减 → 事件触发 → 通知客户端 → 用户互动 → 循环
-
-**属性衰减系统：**
-- 饥饿值（每小时 -N）→ 低于阈值 → 饥饿动画
-- 清洁值（每小时 -N）→ 低于阈值 → 脏动画
-- 心情值（每小时 -N）→ 低于阈值 → 郁闷动画
-- 健康值（饥饿+清洁过低时衰减）→ 低于阈值 → 生病
-- 成长值（在线时长累积）→ 达到阈值 → 升级
-- **关键设计**：离线时也衰减（服务端计算），上线时一次性结算差值
-
-**事件系统：** 定时事件（生日/节日）、触发事件（属性阈值）、随机事件（捡道具）、社交事件（好友互访）
-
-**与 Live2D5 对比：**
-
-| 维度 | QQ 宠物 | Live2D5 | 差距 |
-|------|--------|---------|------|
-| 渲染 | Flash OCX + 精灵图帧动画 | Cubism 5 SDK + WebGL 实时骨骼 | 我们远超 |
-| 窗口 | C++ Win32 不规则透明 | Electron transparent | 持平 |
-| 动画 | 预渲染帧序列 | 实时骨骼驱动 + 物理引擎 | 我们远超 |
-| 通信 | HTTP 轮询 30-60s | IPC 毫秒级 | 我们远超 |
-| 数据 | 服务端主导，关了再开还在 | **无持久化，关了就没了** | 🔴 最大差距 |
-| 状态机 | 简单属性阈值触发 | **无状态机** | 🔴 缺失 |
-| 交互 | 点击菜单 | 拖拽/点击 + AI 对话 | 我们更强 |
-| 对话 | 固定台词 | AI 生成自然语言 | 我们远超 |
-
-**借鉴方案（按优先级）：**
-
-| 优先级 | 功能 | 说明 |
-|--------|------|------|
-| P0 | 属性系统 + 状态机 | hunger/mood/cleanliness/health/intimacy/level，本地持久化 + 离线差值结算 |
-| P0 | 气泡对话（AI 驱动） | 根据宠物状态 + 上下文生成自然语言（替代固定台词） |
-| P1 | 事件触发动画 | 声明式规则引擎，属性阈值触发动画 + 气泡 |
-| P1 | 帧率自适应 | 窗口不可见时降到 5fps，可见时恢复 60fps |
-| P2 | 亲密度/成长系统 | 互动累积亲密度，阈值解锁新表情/动作 |
-| P2 | 动画队列 + 过渡 | motion group 平滑过渡 |
-| P3 | 装扮系统 | Cubism 5 参数控制部位显示/隐藏 |
-| P4 | 社交互动 | 局域网/互联网宠物互访 |
-
-**我们的架构优势：**
-- AI 对话（自然语言 vs 固定台词）
-- 实时骨骼动画（物理引擎 vs 帧序列）
-- 本地优先（不依赖服务器）
-- 模块热插拔
-- WebGL GPU 加速（比 Flash CPU 渲染强 10 倍）
-
-**核心结论**：渲染层我们远超 QQ 宠物，但**状态管理和持久化是最大短板**，是最先要补的。
-
----
-
-## 开发规范
-
-- 开发内容放在 `desktop/` 目录
-- 提交到 `dev` 分支
-- 变更记录写入 `desktop/dev-docs/`
-- 模块采用 Repository → Service → Module 三层架构
-- 遵循 karpathy-guidelines：先想再写、最简优先、精准改动、目标驱动
+自动摘要：Celery 定时任务调用 Qwen3.5 生成每日对话摘要，存入长期记忆。
+
+3.5 灵魂系统（Soul）
+人格配置：每个助手拥有独立的 SOUL.md 文件，定义性格标签、说话风格、情感倾向、背景故事、行为准则。
+
+SoulManager：后端管理助手人格的 CRUD，MySQL 持久化。
+
+首次引导：使用 Ant Design Steps 组件引导用户创建专属助手人格（名称、头像、性格选项）。
+
+运行时使用：对话时注入人格系统提示词，使 LLM 输出符合角色设定。
+
+3.6 翻译模块
+简单翻译：检索知识库中的术语表（专业词汇），若命中则直接返回。
+
+核心翻译：调用 Qwen3.5 进行多语言翻译。
+
+RAG 增强：先检索知识库中的术语表（专业词汇），若命中则直接使用，否则调用 LLM。
+
+四、桌面效率工具
+4.1 日程模块
+前端：@ant-design/calendar + date-fns，支持月/周/日视图。
+
+CRUD：使用 React Hook Form + Zod 校验表单（标题、时间、全天事件、提前提醒时间）。
+
+提醒：后端 Celery Beat 定时任务（每分钟扫描），触发时通过 WebSocket 推送，前端 Electron Notification 弹窗。
+
+数据存储：MySQL 存储日程事件，Redis 缓存未来 7 天的事件用于快速展示。
+
+4.2 剪贴板模块（集成成熟方案）
+实现方式：不重复造轮子，直接集成 Electron 生态中成熟的剪贴板管理器代码库electron-clipboard-manager。
+
+核心能力：
+
+监听剪贴板变化（使用 clipboard-event-emitter 替代轮询，事件驱动）。
+
+支持内容固定（Pin）、搜索、一键复制。
+
+前端 UI：Ant Design List + 虚拟滚动，右键菜单删除。
+
+4.3 代码片段模块（轻量级编辑器）
+编辑器：使用 react-codemirror（基于 CodeMirror 6），体积小（约 250KB），支持 100+ 语言语法高亮、主题、自动补全。
+
+标签管理：Ant Design Tag + Select 多选标签。
+
+使用统计：MySQL 记录使用次数，高频片段排序靠前。
+
+CRUD：FastAPI 接口 + 前端表单。
+
+4.4 命令面板
+UI 组件：使用 Ant Design AutoComplete 实现，浮层展示匹配结果。
+
+触发：全局快捷键 Ctrl+K（Electron globalShortcut + IPC）。
+
+命令来源：内置命令（打开设置、切换主题、打开宠物窗口、截图等） + 模块动态注册。
+
+智能排序：按使用频率 + 匹配度排序，最多显示 20 条。
+
+4.5 提醒与天气
+提醒服务：用户可设置一次性或重复提醒（每天/每周），后端 Celery Beat 调度，前端 Electron Notification 弹窗。
+
+天气服务：FastAPI 调用 wttr.in 或 open-meteo 免费 API，Redis 缓存（30 分钟），支持当前天气 + 未来 3 天预报。
+
+主动问候：根据时间和天气，AI 生成个性化问候语（如“早上好！今天有雨，记得带伞”）。
+
+4.6 文件预览
+支持格式：文本（.txt）、代码（.js/.py/.html 等）、图片（.jpg/.png）、PDF。
+
+实现：
+
+文本/代码：react-codemirror 只读模式展示。
+
+图片：Ant Design Image 组件预览。
+
+PDF：pdf.js 渲染第一页缩略图或完整文档。
+
+入口：在聊天窗口点击文件链接、或在文件管理器中选择“用 Beautiful-Elf 预览”。
+
+4.7 OCR 识别（纯前端 Tesseract.js）
+截图：Electron desktopCapturer 捕获整个屏幕或选定区域（绘制 Canvas 选区）。
+
+识别：直接在前端使用 Tesseract.js 进行文字识别，无需上传后端。
+
+支持中文简体、英文等多语言。
+
+通过 Web Worker 处理，不阻塞 UI。
+
+优势：数据完全本地处理，隐私安全；响应速度快，离线可用。
+
+历史记录：识别结果存储到 MySQL（可选），前端表格展示。
+
+五、3D 桌面宠物
+基于 Three.js 生态实现高性能、低资源占用的桌面宠物，支持 PMX 模型（MMD 模型格式）。
+
+在宠物窗口的 blur、hide、close 事件中，主动调用 renderer.dispose() 和 scene.clear()，并设置 null 以便垃圾回收。
+
+同时，当宠物窗口不可见时，停止动画循环（cancelAnimationFrame），节省 CPU/GPU。
+
+5.1 渲染引擎
+3D 库：Three.js r181 + @react-three/fiber（声明式 React 组件）。
+
+辅助组件：@react-three/drei 提供灯光、环境、性能监控等。
+
+模型加载：使用 Three.js 官方 MMDLoader 加载 .pmx 模型文件及 .vmd 动作文件。
+
+物理模拟：ammojs-es 处理模型内置刚体（头发、衣物、饰品的物理飘动）。
+
+独立窗口：Electron BrowserWindow 配置 transparent: true、frame: false、alwaysOnTop: true，尺寸 400×500。
+
+性能优化：窗口不可见时帧率降至 5fps，可见时恢复 60fps；支持多模型切换。
+
+5.2 宠物状态系统
+属性（后端 MySQL 存储）：
+
+🍖 饥饿值：每小时衰减 5%，低于 30% 触发饥饿动画。
+
+🧹 清洁值：每小时衰减 3%，低于 40% 触发脏动画。
+
+😊 心情值：每小时衰减 2%，低于 20% 触发郁闷动画。
+
+❤️ 健康值：饥饿+清洁双低时联动衰减。
+
+💕 亲密度：互动（喂食、清洁、聊天）累积，解锁新表情/动作。
+
+⭐ 等级：成长值累积升级。
+
+状态机：声明式 JSON 规则（如 { "hunger": "<30", "action": "hungryAnimation", "bubble": "我好饿..." }），前端监听属性变化触发。
+
+离线差值结算：宠物窗口关闭时记录时间戳，重新打开时根据离线时长计算属性衰减，一次性更新。
+
+AI 气泡对话：根据当前状态（低饥饿、高亲密度等）调用 Ollama 生成自然语言，显示在宠物头顶（Ant Design Popover）。
+
+5.3 动画与交互
+内置动画：待机、走路、跳跃、喂食、清洁、生病等，使用 .vmd 动作文件。
+
+表情：通过 PMX morph（变形器）实现眨眼、微笑、伤心等表情。
+
+鼠标追踪：监听宠物窗口的 mousemove 事件，计算头部骨骼旋转角度（IK 可选用 MMDAnimationHelper）。
+
+交互事件：点击宠物弹出属性面板（Modal），拖拽宠物窗口移动（-webkit-app-region: drag）。
+
+六、智能化扩展
+6.1 意图学习系统
+用户主动纠正：当路由错误时，用户可通过反馈按钮（Ant Design Rate）选择正确模块，系统记录并更新意图向量。
+
+隐式学习：监听用户手动切换模块的行为（如说“天气”却点了日程模块），自动关联意图并调整置信度。
+
+向量更新：后台 Celery 任务定期重新计算受影响的意图向量，使用 Rust 加速批量余弦相似度。
+
+结果反馈闭环：模块执行成功 → 增加命中次数；执行失败 → 降低置信度，避免再次误判。
+
+
+
+6.2 行为模式检测与技能自动建议
+ActionTracker：零侵入拦截所有模块调用，记录行为序列（自动脱敏敏感参数）。
+
+脱敏规则：文件路径 → 扩展名；文本 → 长度；URL → 域名；密码 → 丢弃。
+
+存储：MySQL 持久化行为日志，Redis 异步写入队列（50 条批量，5 秒刷盘），保留 7 天。
+
+默认关闭行为模式检测，用户主动启用时才记录。
+
+同时提供“一键清除所有行为数据”按钮。
+
+PatternDetector：
+
+滑动窗口（窗口大小 5）提取用户操作序列。
+
+使用 Rust + PyO3 加速 LCS（最长公共子序列）相似度计算，相似度 > 0.8 则合并为模式。
+
+支持跨会话模式检测（如每天上班后先看日程再查天气）。
+
+SkillSuggester：
+
+检测到模式后，调用 LLM 生成技能建议（名称、描述、工作流步骤）。
+
+前端通过 Ant Design Notification 提示用户：“发现您经常在查看日程后查询天气，是否创建‘工作前准备’技能？”
+
+用户可选择创建、修改、忽略、不再提醒。
+
+通知冷却：同一模式忽略后 7 天不再提醒，全局间隔 30 分钟。
+
+6.3 技能系统（可动态扩展与炼化）
+技能发现：扫描 skills/ 目录下的 SKILL.md 文件（YAML Front Matter 描述元数据：名称、版本、依赖、触发词）。
+
+技能安装：
+
+从 GitHub 仓库或本地压缩包导入技能（.skill 文件）。
+
+后端解压到 skills/ 目录，并注册到数据库。
+
+启用/禁用：前端 Card + Switch 控制，禁用时不再参与意图路由。
+
+技能炼化（Refine）：
+
+用户可选中一个已安装技能，点击“炼化”按钮。
+
+后端调用 LLM 分析该技能的使用统计数据（成功率、调用次数），生成优化建议（如改进描述词、调整参数默认值）。
+
+用户可编辑 SKILL.md 或代码实现，提交后重新加载。
+
+生成新技能：
+
+用户通过自然语言描述需求（如“每天晚上八点提醒我喝水”）。
+
+后端调用 LLM 生成完整技能代码（工具函数 + SKILL.md），自动安装。
+
+6.4 子代理系统（LangGraph 原生支持）
+实现：使用 LangGraph 构建多代理系统，每个子代理是一个 LangGraph 节点。
+
+生命周期：主代理根据任务复杂度动态创建子代理，子代理可独立运行并返回结果。
+
+调度：FastAPI + Celery 执行子代理任务，支持并行和依赖。
+
+监控：前端 WebSocket 接收子代理执行步骤（Ant Design Timeline 展示）。
+
+安全约束：子代理不能创建子代理、不能直接发消息给用户、不能修改系统文件。
+
+6.5 工作流模块
+工作流定义：使用 LangGraph 的 StateGraph 定义工作流 DAG，节点可以是工具、技能或子代理。
+
+触发方式：
+
+手动触发：用户在前端点击“执行”。
+
+定时触发：Celery Beat 调度。
+
+事件触发：监听事件总线（如文件变化触发处理工作流）。
+
+执行引擎：Celery 任务队列执行 LangGraph 编译后的可执行图。
+
+模板系统：预置常用工作流模板（如“文档处理”：PDF 导入 → 向量化 → 生成摘要），用户可一键创建。
+
+运行监控：实时展示每个节点的状态、耗时、输出，支持暂停/重试。
+
+6.6 视觉模块
+屏幕捕获：Electron desktopCapturer 获取视频流，支持选区捕获。
+
+帧变化检测：使用 pHash（感知哈希）算法，每帧计算哈希值，与上一帧比较差异比例。
+
+Rust + PyO3 加速哈希计算，变化超过 5% 才发送后端。
+
+AI 分析：可选调用 Ollama llava 模型（用户授权后），支持三种分析模式：
+
+general：描述画面内容。
+
+text：提取截图中的文字。
+
+code：识别截图中的代码并解释。
+
+主动推送：用户可设置“当屏幕出现特定内容时提醒”（如“检测到错误弹窗”），通过事件总线触发。
+
+6.7 推理深度（Oracle）
+三档模式（前端 Segmented 切换）：
+
+快速思考：标准提示词，无额外延迟（适合日常对话）。
+深度推理：启用思维链（CoT），2-3 倍延迟（适合逻辑推理题）。
+全面分析：启用思维树（ToT） + 自我反省（Refinement），5-10 倍延迟（适合复杂规划）。
+后端实现：不同模式对应不同的 LangChain 提示词模板和参数（如 temperature、max_tokens）。
+
+降级策略：若用户问题简单，即使选择深度模式也自动降级为快速模式（通过检测关键词）。
+
+七、系统与安全
+7.1 性能监控系统
+数据采集：后端使用 psutil 每分钟采集 CPU、内存、磁盘、GPU（如有）使用率，并存储到 MySQL（保留 360 个采样点，约 30 分钟趋势）。
+
+实时推送：通过 WebSocket 每 5 秒推送最新数据到前端。
+
+前端展示：Ant Design Progress + 自定义图表（echarts）实时显示。
+
+告警机制：CPU > 80%、内存 > 85%、磁盘 > 90% 时触发告警（前端通知 + 日志）。
+
+趋势预测：基于历史数据线性回归预测未来 10 分钟的使用率（仅展示，不自动操作）。
+
+7.2 轮询管理
+前端轮询注册表：PollingRegistry 统一管理所有轮询任务（如天气刷新、剪贴板监听、性能数据拉取）。
+
+核心轮询：性能监控、自动备份等常驻任务。
+
+模块轮询：模块可注册自己的轮询任务，绑定模块生命周期（模块禁用时自动停止）。
+
+后端任务调度：Celery Beat 统一管理定时任务（日程提醒、记忆摘要、数据备份等）。
+
+7.3 安全系统
+
+备份调度：Celery Beat 每3天凌晨自动执行 mysqldump 备份 MySQL，保留最近 15 天备份。
+
+数据导出/导入：用户可导出所有个人数据（JSON 格式），或从备份恢复。
+
+前端安全基线：
+
+contextIsolation: true、nodeIntegration: false。
+
+配置 CSP（内容安全策略）限制脚本来源。
+
+禁用 webSecurity 仅限开发模式。
+
+7.4 系统服务
+系统托盘：Electron Tray + Menu，支持显示/隐藏主窗口、退出应用。
+
+全局快捷键：globalShortcut 注册（如 Ctrl+Shift+B 打开命令面板），通过 IPC 通知渲染进程。
+
+桌面通知：Electron 原生 Notification API，支持点击回调（跳转到相关模块）。
+
+开机自启：app.setLoginItemSettings 可配置。
+
+文件操作：Electron 原生 fs 模块（主进程）提供安全的文件读写。
+
+八、UI 与个性化
+8.1 主题系统
+主题引擎：Ant Design v6 ConfigProvider + 自定义 Design Token。
+
+暗色模式：Ant Design 暗色算法，一键切换。
+
+主题管理：
+
+内置主题（明亮、暗色、高对比度）。
+
+用户可导入/导出主题 JSON 文件（通过前端上传下载）。
+
+在线主题商店（可选扩展）：从远程仓库下载主题包。
+
+启动恢复：从后端获取当前主题，启动时自动应用。
+
+8.2 前端组件体系
+布局：Ant Design Layout（侧边栏 + 头部 + 内容区）。
+
+聊天面板：List + 自定义 MessageBubble，支持 Markdown 渲染（react-markdown + remark-gfm），代码块语法高亮（prismjs）。
+
+设置面板：Form + Tabs 分区（Ollama 配置、AI 设置、应用设置、宠物设置、快捷键设置、隐私与安全、关于与更新等）。
+
+模块管理：Card + Switch 展示模块列表，Descriptions 展示模块详情。
+
+技能面板：Table 展示技能，支持启用/禁用、炼化、链式配置。
+
+命令面板：Modal + AutoComplete，支持快捷键唤起。
+
+宠物属性面板：Progress + Statistic 实时展示六维属性。
+
+图标：@ant-design/icons v6.0.0。
+
+8.3 自定义 Hooks
+useIPC：封装 Zod 类型安全的 IPC 调用。
+
+useTheme：主题切换与持久化。
+
+useAutoScroll：聊天窗口自动滚动到底部。
+
+useDebounce：搜索防抖。
+
+useWebSocket：WebSocket 连接管理与重连。
+
+九、开发与部署
+9.1 开发环境
+前端：npm run dev 启动 electron-vite 开发服务器，支持 HMR。
+
+后端：uvicorn main:app --reload 启动 FastAPI，celery -A app.celery worker --loglevel=info 启动任务队列。
+
+数据库：Docker Compose 一键启动 MySQL + Redis（生产环境可单独部署）。
+
+9.2 构建与打包
+前端：npm run build 构建生产版本，electron-builder 打包为 .exe / .dmg / .AppImage。
+
+后端：可打包为独立二进制（pyinstaller）或直接部署为 Python 服务。
+
+9.3 部署模式
+本地一体模式（默认）：Electron 内嵌后端服务（Electron 启动时自动 spawn Python 进程），适合单机使用。
+
+服务器模式：前端连接到远程后端 API（需配置 Nginx 反向代理），多设备共享数据。
+
+9.4 自动更新
+前端：electron-updater 配置更新服务器地址，静默下载并提示用户安装。
+
+后端：通过 Celery 任务拉取更新脚本，热重启服务（需管理员权限）。
+
+附录：完整功能清单
+模块	功能	实现技术
+工程化	构建、规范、测试、打包、更新	electron-vite, ESLint, Vitest, builder
+事件总线	模块间通信，错误隔离	Node.js EventEmitter
+日志系统	前后端分级、轮转、聚合	electron-log + logging
+AI 对话	流式输出、意图路由、工具调用	Qwen3.5 + LangChain
+记忆系统	短期+长期、语义检索、自动摘要	Qdrant + Celery
+知识库 RAG	多格式导入、混合检索、多跳推理	LlamaIndex + LangChain + LangGraph + Qdrant
+翻译模块	本地模型 + 知识库优先	Qwen3.5 + RAG
+日程提醒	日历视图、定时通知	@ant-design/calendar + Celery
+剪贴板历史	监听、搜索、固定	集成成熟 Electron 剪贴板管理方案
+代码片段	编辑器、标签、统计	react-codemirror
+命令面板	全局快捷键、动态命令	antd AutoComplete + globalShortcut
+天气	实时天气、主动问候	open-meteo API
+文件预览	文本、代码、图片、PDF	pdf.js + react-codemirror
+OCR	截图识别、批量处理	Tesseract.js（纯前端）
+3D 宠物	PMX 模型、物理模拟、状态机	Three.js + ammojs
+意图学习	用户纠正、隐式反馈	向量更新 + Redis
+行为模式检测	LCS 相似度、技能建议	Rust 加速
+技能系统	发现、安装、炼化、链式调用	自研 + LangGraph
+子代理	复杂任务拆解、并行执行	LangGraph + Celery
+工作流	DAG 编排、定时/事件触发	LangGraph + Celery
+视觉模块	屏幕捕获、变化检测、分析	desktopCapturer + llava（可选）
+推理深度	CoT/ToT 三档	LangChain 提示词模板
+性能监控	资源采集、告警、趋势	psutil + WebSocket
+安全	加密、备份、CSP、	cryptography + electron
+主题系统	明亮/暗色、导入导出	Ant Design ConfigProvider
+设置系统	Ollama 配置、AI 参数、应用首选项、快捷键、隐私等 Pydantic Settings
+Beautiful-Elf 是一个功能完整、技术先进、可落地性强的智能桌面助手方案。AI 核心采用 LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3.5 构建企业级 RAG 管道，剪贴板和 OCR 等模块直接复用成熟开源方案，设置系统提供从本地模型管理到 AI 参数的精细控制。
