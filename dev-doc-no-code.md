@@ -30,7 +30,7 @@ MySQL 与 Qdrant 通过 ID 关联，查询时先检索 Qdrant 获取向量匹配
 
 MySQL 核心表结构（概要）
 表名	职责	关联
-settings	动态配置 KV 存储（所有配置统一存 MySQL，不使用 .env）	-
+settings	动态配置 KV 存储（所有配置统一存 MySQL，不使用 .env，含 restart_required 标记）	-
 conversations	会话列表	-
 messages	消息记录（原始对话历史，完整保留）	conversation_id
 memory_entries	长期记忆（从对话提炼的摘要+元数据）	-
@@ -57,10 +57,12 @@ performance_metrics	性能采样数据（360点，约30分钟）	-
 soul_configs	助手人格配置	-
 backup_records	备份记录（备份时间、文件路径、状态）	-
 
+通用字段说明：所有业务表均包含 deleted（TINYINT，默认 0）软删除标记和 created_at / updated_at 时间戳。查询时自动过滤 deleted = 1 的记录。
+
 数据一致性保障
 写入 MySQL 成功后，异步同步向量到 Qdrant（通过 Celery 任务）。
 同步失败自动重试 3 次（指数退避），仍失败则告警并记录到修复队列。
-删除数据时：先删 Qdrant 向量 → 再删 MySQL 业务数据（避免孤儿向量）。
+删除数据时：采用软删除策略 — MySQL 表统一增加 deleted 字段（TINYINT，默认 0），删除操作仅将 0 → 1，不物理删除数据；同时将 Qdrant 对应向量的 payload 中标记 deleted: true。查询时自动过滤 deleted = 1 的记录，向量检索时也过滤 payload.deleted。物理清理由定时任务每月执行一次（需二次确认）。
 更新数据时：先更新 MySQL → 触发重新 embedding → 更新 Qdrant 向量。
 备份策略
 MySQL：Celery Beat 定期 mysqldump 备份，保留最近 15 天。
@@ -131,6 +133,17 @@ Git 工作流	Husky + lint-staged + commitlint	提交前自动格式化、校验
 后端：Python logging + Uvicorn 访问日志，输出到 logs/ 目录，支持 JSON 格式（便于日志聚合）。
 
 日志轮转：单文件最大 10MB，最多保留 5 个归档，过期自动清理。
+
+2.3 WebSocket 通信层
+连接管理：后端通过 FastAPI WebSocket 端点维护长连接，支持多客户端同时连接（主窗口、宠物窗口等）。
+
+心跳检测：客户端每 30 秒发送 ping，服务端回复 pong。若连续 3 次未收到 pong，客户端判定断线。
+
+断线重连：客户端实现指数退避重连策略（初始 1 秒，最大 30 秒，抖动因子 0.5），重连成功后自动同步离线期间的变更事件。
+
+消息格式：统一 JSON 格式 `{ "type": "事件类型", "payload": {...}, "timestamp": 1234567890 }`，支持的事件类型包括 config_update、notification、pet_state、workflow_progress、subagent_status 等。
+
+连接池上限：单实例最多维护 10 个 WebSocket 连接，超出时拒绝新连接并通知客户端。
 
 2.4 设置系统（全局配置管理中心）
 设置系统是 Beautiful-Elf 的配置中枢，统一管理应用、AI、模型、界面等所有可配置项。前端使用 Ant Design Form + Tabs 分区展示，所有配置统一存储在 MySQL settings 表，启动时加载到内存，运行时通过 API 读写。
@@ -208,7 +221,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 前端修改配置 → 调用 API /api/config → 后端更新 MySQL settings 表 + 刷新内存配置 → 通过 WebSocket 广播配置变更事件 → 其他客户端同步更新。
 
-首次启动时 MySQL 为空，使用代码中的默认值初始化 settings 表。部分配置（如 Ollama 地址）修改后需重启对应模块才能生效，前端给出提示。
+首次启动时 MySQL 为空，使用代码中的默认值初始化 settings 表。配置项分为两类：热更新配置（修改后即时生效，如 AI 参数、主题、快捷键）和需重启配置（如 Ollama 地址、数据库连接信息），settings 表中通过 restart_required 字段标记。前端修改需重启的配置时，自动弹出提示"此配置需要重启应用/模块才能生效"，用户可选择立即重启或稍后手动重启。
 
 数据库连接信息（MySQL、Redis、Qdrant 地址）作为唯一例外，通过环境变量或命令行参数传入（因为这些是 MySQL 本身的依赖，不能从 MySQL 读取自身连接信息）。
 
@@ -226,6 +239,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 去 Qdrant intent_vectors Collection 做相似度搜索（Rust 加速批量余弦计算）。
 返回 top-1 结果（含 payload 中的 intent_id 和 score）。
 最高置信度 ≥ 0.75 则命中意图，用 intent_id 查询 MySQL intents 表获取完整配置，路由到对应模块的工具。
+意图冲突处理：当 top-1 与 top-2 的置信度差值 < 0.1 时（如 0.82 vs 0.78），判定为意图冲突，不自动路由，而是触发澄清对话（如"你是想查天气，还是设置日程？"），展示 top-2 意图供用户选择。用户选择后记录到 intent_usage 表用于后续优化。
 未命中则进入通用对话模式，可触发 RAG 检索或工具调用。
 性能优化：Redis 缓存高频意图文本→模块的映射结果（TTL 1 小时），避免重复向量检索。意图被用户纠正或置信度变化时，主动删除对应 Redis 缓存 key（不等 TTL 过期），确保下次请求使用最新数据。批量相似度计算使用 Rust + PyO3 扩展。
 
@@ -236,7 +250,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 支持格式：PDF、DOCX、MD、TXT、JSON、CSV、YAML、HTML、XML、ZIP。
 
-使用 LlamaIndex 的 SimpleDirectoryReader 加载文档，RecursiveCharacterTextSplitter 分块（块大小 512，重叠 100）。
+使用 LlamaIndex 的 SimpleDirectoryReader 加载文档。分块策略采用 LlamaIndex 的 SemanticSplitterNodeParser（基于嵌入模型的语义分块），它会根据文本语义边界自动决定分块大小，而非固定切割。对于 Markdown 文档优先按标题层级分块，代码文件按函数/类边界分块。可选配置：buffer_size（语义块之间的缓冲区大小，默认 1）、breakpoint_percentile_threshold（语义断点阈值，默认 95）。保留 fallback 策略：若语义分块失败（如嵌入服务不可用），降级为 RecursiveCharacterTextSplitter（块大小 512，重叠 100）。
 
 使用 Qwen3-Embedding 将每个块向量化，存储到 Qdrant knowledge_chunks Collection（本地模式），payload 中记录 doc_id 和 chunk_index。
 
@@ -254,7 +268,7 @@ LangGraph 多跳推理：对于复杂问题，自动拆解为多步检索（如"
 
 知识库管理：
 
-DatasetCatalog：前端表格展示已导入文档（数据来自 MySQL knowledge_documents 表），支持按类型、时间筛选、删除。删除时先清理 Qdrant 中对应的向量分块，再删除 MySQL 记录。
+DatasetCatalog：前端表格展示已导入文档（数据来自 MySQL knowledge_documents 表，自动过滤 deleted = 1 的记录），支持按类型、时间筛选、删除。删除采用软删除：MySQL knowledge_documents.deleted → 1，同时将 Qdrant 对应向量 payload 标记 deleted: true。支持"回收站"功能，可恢复误删文档。
 
 DatasetDownloader：导出知识库为 JSON（包含 MySQL 元数据 + Qdrant 向量快照），便于备份迁移。
 
@@ -491,7 +505,7 @@ SkillSuggester：
 
 监控：前端 WebSocket 接收子代理执行步骤（Ant Design Timeline 展示）。
 
-安全约束：子代理不能创建子代理、不能直接发消息给用户、不能修改系统文件。
+运行中子代理管理面板：前端展示当前所有运行中的子代理列表（Ant Design Table），包含子代理 ID、任务名称、状态（运行中/暂停/已完成）、已运行时间、当前步骤。每个子代理行提供"终止"按钮（Ant Design Popconfirm 确认），点击后通过 WebSocket 发送终止指令，LangGraph 立即中断该子代理的执行并清理资源。支持一键终止所有运行中的子代理。
 
 6.5 工作流模块
 工作流定义：使用 LangGraph 的 StateGraph 定义工作流 DAG，节点可以是工具、技能或子代理。
@@ -515,7 +529,7 @@ SkillSuggester：
 
 帧变化检测：使用 pHash（感知哈希）算法，每帧计算哈希值，与上一帧比较差异比例。
 
-Rust + PyO3 加速哈希计算，变化超过 5% 才发送后端。
+Rust + PyO3 加速哈希计算，变化阈值可配置（默认 5%，范围 1%～20%）。根据活动窗口类型自动调整敏感度：代码编辑场景阈值较低（3%，因为代码变化小但重要），视频/游戏场景阈值较高（15%，减少无效捕获）。用户也可在设置中手动调整。变化超过阈值才发送后端。
 
 AI 分析：可选调用 Ollama llava 模型（用户授权后），支持三种分析模式：
 
@@ -558,7 +572,14 @@ code：识别截图中的代码并解释。
 
 后端任务调度：Celery Beat 统一管理定时任务（日程提醒、记忆摘要、数据备份等）。
 
-7.3 安全系统
+7.3 错误处理与容错
+前端错误边界：每个功能模块用 React ErrorBoundary 包裹，模块崩溃时显示友好的错误卡片（含"重新加载"按钮），不影响其他模块和主界面。全局兜底 ErrorBoundary 捕获未处理异常，上报错误日志并提示用户。
+
+后端异常处理：FastAPI 注册全局异常处理器（exception_handler），统一捕获所有未处理异常，返回标准错误格式 `{ "code": 500, "message": "...", "request_id": "..." }`。业务异常（如参数校验失败、权限不足）使用自定义 HTTPException 子类，返回对应的 HTTP 状态码和错误信息。
+
+WebSocket 错误恢复：WebSocket 连接异常断开时，客户端按指数退避策略自动重连（见 2.3 节）。服务端 WebSocket handler 包裹 try/except，单个连接的异常不影响其他连接。
+
+7.4 安全系统
 
 备份调度：Celery Beat 每 3 天凌晨自动执行 mysqldump 备份 MySQL，保留最近 15 天备份，备份记录（时间、文件路径、状态）存 MySQL backup_records 表。Redis 开启 AOF + RDB 持久化。Qdrant 向量数据不单独备份（可从 MySQL 重新 embedding 重建）。
 
@@ -572,7 +593,7 @@ contextIsolation: true、nodeIntegration: false。
 
 禁用 webSecurity 仅限开发模式。
 
-7.4 系统服务
+7.5 系统服务
 系统托盘：Electron Tray + Menu，支持显示/隐藏主窗口、退出应用。
 
 全局快捷键：globalShortcut 注册（如 Ctrl+Shift+B 打开命令面板），通过 IPC 通知渲染进程。
@@ -625,7 +646,7 @@ useAutoScroll：聊天窗口自动滚动到底部。
 
 useDebounce：搜索防抖。
 
-useWebSocket：WebSocket 连接管理与重连。
+useWebSocket：WebSocket 连接管理、心跳检测（30 秒 ping/pong）与指数退避重连（见 2.3 节）。
 
 九、开发与部署
 9.1 开发环境
@@ -670,12 +691,13 @@ OCR	截图识别、批量处理	Tesseract.js（纯前端）
 意图学习	用户纠正、隐式反馈	MySQL + Qdrant 向量更新
 行为模式检测	LCS 相似度、技能建议	MySQL action_logs + Rust 加速
 技能系统	发现、安装、炼化、链式调用	自研 + LangGraph
-子代理	复杂任务拆解、并行执行	LangGraph + Celery
+子代理	复杂任务拆解、并行执行、运行管理面板（一键终止）	LangGraph + Celery
 工作流	DAG 编排、定时/事件触发	LangGraph + Celery
 视觉模块	屏幕捕获、变化检测、分析	desktopCapturer + llava（可选）
 推理深度	CoT/ToT 三档	LangChain 提示词模板
 性能监控	资源采集、告警、趋势	psutil + WebSocket
-安全	加密、备份、CSP、	cryptography + electron
+安全	加密、备份、CSP	cryptography + electron
+错误处理	前端 ErrorBoundary + 后端全局异常 + WebSocket 恢复	React + FastAPI
 主题系统	明亮/暗色、导入导出	Ant Design ConfigProvider
 设置系统	所有配置存 MySQL settings 表，前端读写，WebSocket 同步	Pydantic Settings + MySQL
 Beautiful-Elf 是一个功能完整、技术先进、可落地性强的智能桌面助手方案。数据架构采用 MySQL（业务数据）+ Qdrant（向量数据）+ Redis（缓存/消息）三层分离设计，职责清晰、可维护性强。AI 核心采用 LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3.5 构建企业级 RAG 管道，剪贴板和 OCR 等模块直接复用成熟开源方案，设置系统提供从本地模型管理到 AI 参数的精细控制。
