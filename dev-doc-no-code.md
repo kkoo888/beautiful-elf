@@ -176,10 +176,22 @@ API 版本化	APIRouter prefix（/api/v1/）	所有接口统一版本前缀，�
 
 连接池上限：单实例最多维护 10 个 WebSocket 连接，超出时拒绝新连接并通知客户端。
 
-2.5 设置系统（全局配置管理中心）
+2.5 多窗口 IPC 通信
+Electron 多窗口架构：主窗口（聊天、设置、工具面板）和宠物窗口（独立 BrowserWindow）各自为独立渲染进程，通过 Electron IPC 通信。
+
+IPC 通道设计：使用 ipcMain.handle / ipcRenderer.invoke 模式（Promise 化），通道命名按模块划分（如 `pet:getAttributes`、`pet:updateState`、`main:openSettings`、`main:showNotification`）。
+
+双向通信：
+主窗口 → 宠物窗口：发送指令（切换模型、触发动画、更新状态），通过 BrowserWindow.webContents.send 转发。
+宠物窗口 → 主窗口：上报事件（用户点击、属性变化、气泡触发），通过 ipcRenderer.send 发送到主进程，主进程再广播给主窗口。
+状态同步：宠物状态变更时，主窗口的宠物属性面板实时更新（通过 IPC 事件驱动，不轮询）。
+
+类型安全：IPC 通道使用 TypeScript 定义请求/响应类型（类似 tRPC 模式），编译时校验参数类型，避免运行时序列化错误。
+
+2.6 设置系统（全局配置管理中心）
 设置系统是 Beautiful-Elf 的配置中枢，统一管理应用、AI、模型、界面等所有可配置项。前端使用 Ant Design Form + Tabs 分区展示，所有配置统一存储在 MySQL settings 表，启动时加载到内存，运行时通过 API 读写。
 
-2.5.1 Ollama 配置
+2.6.1 Ollama 配置
 Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）或远程服务器地址，支持 HTTP/HTTPS。配置存储在 MySQL settings 表，修改后后台立即更新 settings 表中对应的地址字段，其他服务（如对话、嵌入）直接读取该字段，无需重启。
 
 扫描本地大模型：前端调用后端 API /api/v1/ollama/models，返回 Ollama 中已下载的模型列表（如 qwen3.5:7b、qwen3-embedding:latest、llava:latest）。
@@ -196,7 +208,7 @@ Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）�
 
 模型下载管理（高级）：可展示已安装模型列表，并提供一键下载新模型（通过 Ollama CLI 或 API 异步拉取）。
 
-2.5.2 AI 设置
+2.6.2 AI 设置
 模型温度 (Temperature)：滑块范围 0.0～2.0，步长 0.1，控制生成内容的随机性。默认 0.7。
 
 最大生成长度 (Max Tokens)：数字输入框，范围 1～8192，默认 2048。控制单次回答的最大长度。
@@ -209,7 +221,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 系统提示词：可编辑全局系统提示词（如"你是一个可爱的桌面助手"），或针对不同模块单独配置。
 
-2.5.3 应用设置
+2.6.3 应用设置
 语言：当前支持简体中文，后续根据需要扩展国际化支持。
 
 开机自启：开关控制 Electron 是否开机启动。
@@ -218,7 +230,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 关闭主窗口行为：退出应用 / 最小化到托盘。
 
-2.5.4 宠物设置
+2.6.4 宠物设置
 宠物模型选择：模型路径设置-设置保存后台，列出后台返回的模型列表  后台去读取设置的路径目录下的 .pmx 文件，用户可切换不同模型。
 
 宠物窗口设置：透明度、是否置顶、窗口尺寸（预设 400×500，可自定义）。
@@ -227,19 +239,19 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 气泡对话频率：控制宠物自动说话的间隔（30 秒～5 分钟）。
 
-2.5.5 快捷键设置
+2.6.5 快捷键设置
 全局快捷键映射：用户可自定义"打开主窗口"、"打开命令面板"、"截图"等快捷键。
 
 冲突检测：保存时检测是否与其他全局快捷键冲突，并提示。
 
-2.5.6 隐私与安全
+2.6.6 隐私与安全
 数据加密：是否对本地存储的敏感配置（如 API Key）加密（默认开启）。
 
 日志级别：可动态调整日志记录级别（Debug / Info / Warn / Error）。
 
 匿名使用统计：可选是否允许收集匿名使用数据（用于改进）。
 
-2.5.7 关于与更新
+2.6.7 关于与更新
 版本信息：展示前端、后端、关键依赖版本（从 MySQL settings 表读取）。
 
 检查更新：手动触发 electron-updater 检查更新。
@@ -323,6 +335,8 @@ ToolRegistry：统一注册表，工具注册信息持久化到 MySQL tools 表�
 工具调用流程：用户问题 → LLM 决策 → 自动调用对应工具 → 结果返回 LLM → 生成最终回答。
 
 工具示例：查询天气、创建日程、搜索知识库、控制宠物等。
+
+API 错误码体系：统一错误码格式 `{ "code": "MODULE_ERROR_TYPE", "message": "人类可读描述", "request_id": "trace_id" }`。错误码按模块前缀分类：INTENT_*（意图模块）、RAG_*（知识库）、PET_*（宠物）、SKILL_*（技能）、OLLAMA_*（AI 模型）、SYSTEM_*（系统级）。前端根据错误码精确匹配 UI 提示（如 OLLAMA_TIMEOUT → "AI 模型响应超时，请检查 Ollama 服务"；INTENT_NOT_FOUND → "未匹配到意图，已进入通用对话"）。业务异常使用自定义 HTTPException 子类，携带对应 HTTP 状态码（400 参数错误、404 资源不存在、429 限流、503 服务不可用）。
 
 3.4 记忆系统（短期 + 长期 + 语义）
 短期记忆：会话内消息历史（前端 Zustand 存储，不持久化）。
@@ -722,6 +736,8 @@ useWebSocket：WebSocket 连接管理、心跳检测（30 秒 ping/pong）与指
 日志系统	前后端分级、轮转、聚合、结构化字段（trace_id/user_id）、敏感数据脱敏	electron-log + logging
 健康检查	存活/就绪/依赖状态三个端点，配合监控告警	FastAPI
 事件总线	模块间通信，错误隔离	Node.js EventEmitter
+多窗口 IPC	主窗口↔宠物窗口双向通信、类型安全、状态同步	Electron ipcMain/ipcRenderer
+API 错误码	统一错误码体系（模块前缀分类）、前端精确匹配 UI 提示	FastAPI HTTPException
 AI 对话	流式输出、意图路由、工具调用、AI 护栏、语义缓存、用户反馈闭环	Qwen3.5 + LangChain
 记忆系统	短期+长期、语义检索、自动摘要	MySQL + Qdrant + Celery
 知识库 RAG	多格式导入、混合检索、多跳推理	LlamaIndex + LangChain + LangGraph + Qdrant
