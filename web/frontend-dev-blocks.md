@@ -66,46 +66,53 @@
 ### 目录结构
 
 ```
-src/
-├── main/                    # Electron 主进程
-│   ├── index.ts
-│   ├── window-manager.ts   # 窗口管理
-│   ├── tray.ts             # 系统托盘
-│   └── ipc-handlers.ts     # IPC 处理
-├── preload/                 # 预加载脚本
-│   └── index.ts
-├── renderer/                # 渲染进程 (React)
-│   ├── App.tsx
-│   ├── index.tsx
-│   ├── assets/
-│   ├── components/          # 通用组件
-│   │   ├── error-boundary/
-│   │   ├── loading/
-│   │   └── layout/
-│   ├── modules/             # 功能模块
-│   │   ├── chat/
-│   │   ├── schedule/
-│   │   ├── clipboard/
-│   │   ├── snippets/
-│   │   ├── knowledge/
-│   │   ├── memory/
-│   │   ├── translate/
-│   │   ├── skills/
-│   │   ├── workflow/
-│   │   ├── subagent/
-│   │   ├── tools/
-│   │   ├── pet/
-│   │   ├── performance/
-│   │   ├── notification/
-│   │   └── settings/
-│   ├── stores/              # Zustand stores
-│   ├── hooks/               # 自定义 hooks
-│   ├── services/            # API 调用层
-│   ├── utils/               # 工具函数
-│   ├── types/               # TypeScript 类型
-│   └── styles/              # 全局样式
-└── shared/                  # 主进程 & 渲染进程共享
-    └── constants.ts
+web/                           # 前端项目根目录
+├── package.json
+├── tsconfig.json
+├── electron-vite.config.ts
+├── .eslintrc.cjs
+├── .prettierrc
+├── src/
+│   ├── main/                    # Electron 主进程
+│   │   ├── index.ts
+│   │   ├── window-manager.ts   # 窗口管理
+│   │   ├── tray.ts             # 系统托盘
+│   │   └── ipc-handlers.ts     # IPC 处理
+│   ├── preload/                 # 预加载脚本
+│   │   └── index.ts
+│   ├── renderer/                # 渲染进程 (React)
+│   │   ├── App.tsx
+│   │   ├── index.tsx
+│   │   ├── assets/
+│   │   ├── components/          # 通用组件
+│   │   │   ├── error-boundary/
+│   │   │   ├── loading/
+│   │   │   └── layout/
+│   │   ├── modules/             # 功能模块
+│   │   │   ├── chat/
+│   │   │   ├── schedule/
+│   │   │   ├── clipboard/
+│   │   │   ├── snippets/
+│   │   │   ├── knowledge/
+│   │   │   ├── memory/
+│   │   │   ├── translate/
+│   │   │   ├── skills/
+│   │   │   ├── workflow/
+│   │   │   ├── subagent/
+│   │   │   ├── tools/
+│   │   │   ├── pet/
+│   │   │   ├── performance/
+│   │   │   ├── notification/
+│   │   │   └── settings/
+│   │   ├── stores/              # Zustand stores
+│   │   ├── hooks/               # 自定义 hooks
+│   │   ├── services/            # API 调用层
+│   │   ├── utils/               # 工具函数
+│   │   ├── types/               # TypeScript 类型
+│   │   └── styles/              # 全局样式
+│   └── shared/                  # 主进程 & 渲染进程共享
+│       └── constants.ts
+└── tests/                       # 测试文件
 ```
 
 ### 验收标准
