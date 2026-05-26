@@ -28,6 +28,20 @@ MySQL 与 Qdrant 通过 ID 关联，查询时先检索 Qdrant 获取向量匹配
 
 示例：意图识别 → Qdrant 返回 { intent_id, score } → 用 intent_id 查 MySQL intents 表获取完整配置 → 路由到目标模块。
 
+CQRS 读写分离
+采用 Command Query Responsibility Segregation 模式，读写操作分离为独立的 Service 层，各自可独立优化。
+
+Command（写操作）：负责数据的创建、更新、删除，走 CommandService → Repository → MySQL，写入成功后触发事件（如缓存失效、向量同步、WebSocket 广播）。写操作严格校验（Zod / Pydantic），保证数据一致性。
+
+Query（读操作）：负责数据的查询展示，走 QueryService → 可直接读 Redis 缓存 / 只读连接 / 聚合多个数据源。读操作可独立优化（如添加缓存、预计算、物化视图），不影响写入性能。
+
+适用场景：
+高频读场景（聊天记录列表、日程展示、技能面板）→ Query 层走 Redis 缓存 + 分页查询。
+复杂写场景（知识库导入、工作流执行、意图更新）→ Command 层走 Celery 异步任务。
+实时场景（宠物状态、性能监控）→ WebSocket 推送，前端 Zustand 直接更新，不走 Query 层。
+
+实现方式：FastAPI 路由层调用对应的 Service（CommandService / QueryService），Service 内部调用 Repository 操作数据库。前端通过 TanStack Query 的 queryKey 区分读写，写操作成功后自动 invalidate 对应的 queryKey 触发重新查询。
+
 MySQL 核心表结构（概要）
 表名	职责	关联
 settings	动态配置 KV 存储（所有配置统一存 MySQL，不使用 .env，含 restart_required 标记）	-
@@ -736,4 +750,4 @@ Prompt 管理	版本化存储、回滚、A/B 测试	MySQL prompts 表
 操作撤销	关键操作 30 秒内可撤销，软删除兜底	Ant Design message
 渐进式加载	核心模块首屏加载，其他懒加载 + 骨架屏	React.lazy + Suspense
 设置系统	所有配置存 MySQL settings 表，前端读写，WebSocket 同步	Pydantic Settings + MySQL
-Beautiful-Elf 是一个功能完整、技术先进、可落地性强的智能桌面助手方案。数据架构采用 MySQL（业务数据）+ Qdrant（向量数据）+ Redis（缓存/消息）三层分离设计，职责清晰、可维护性强。AI 核心采用 LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3.5 构建企业级 RAG 管道，剪贴板和 OCR 等模块直接复用成熟开源方案，设置系统提供从本地模型管理到 AI 参数的精细控制。
+Beautiful-Elf 是一个功能完整、技术先进、可落地性强的智能桌面助手方案。数据架构采用 MySQL（业务数据）+ Qdrant（向量数据）+ Redis（缓存/消息）三层分离设计，配合 CQRS 读写分离模式，职责清晰、可维护性强。AI 核心采用 LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3.5 构建企业级 RAG 管道，剪贴板和 OCR 等模块直接复用成熟开源方案，设置系统提供从本地模型管理到 AI 参数的精细控制。
