@@ -1,11 +1,42 @@
-Beautiful-Elf 智能桌面助手 — 完整功能介绍方案
+Beautiful-Elf 智能桌面助手 - 完整功能介绍方案
 前后端分离架构 · 本地优先 · AI 驱动
 前端：Electron 41 + React 19 + TypeScript 6 + Three.js r181
 后端：FastAPI 0.124 + MySQL 9.5 + Redis 8.6 + Celery 5.6
 AI：LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3-Embedding + Qwen3.5
 
 项目概览
-Beautiful-Elf 是一款前后端分离的智能桌面助手，采用当前（2026年）最新稳定技术栈构建。前端基于 Electron + React 提供桌面应用交互与 3D 宠物窗口，后端基于 FastAPI + MySQL + Redis + Celery 提供高性能 API、实时推送与异步任务处理。系统深度集成 LlamaIndex + LangChain + LangGraph 构建企业级 RAG 管道，使用 Qdrant 作为向量数据库，Qwen3.5 系列模型提供对话与嵌入能力。技能可动态安装、炼化与链式调用，行为模式检测实现智能化主动建议。
+Beautiful-Elf 是一款前后端分离的智能桌面助手，采用当前（2026年）最新稳定技术栈构建。前端基于 Electron + React 提供桌面应用交互与 3D 宠物窗口，后端基于 FastAPI + MySQL + Redis + Celery 提供高性能 API、实时推送与异步任务处理。系统深度集成 LlamaIndex + LangChain + LangGraph 构建企业级 RAG 管道，使用 Qdrant 作为向量数据库，Qwen3.5 系列模型提供对话与嵌入能力。数据架构采用存储分层设计：MySQL 存储所有业务数据，Qdrant 仅存储 AI 向量数据，Redis 负责缓存与消息代理，三者通过 ID 关联，职责清晰。技能可动态安装、炼化与链式调用，行为模式检测实现智能化主动建议。
+
+数据架构总览
+本项目采用存储分层架构，业务数据与向量数据完全分离，各自使用最合适的存储引擎。
+
+分层原则
+MySQL 9.5 - 业务数据唯一真相源
+所有 CRUD 业务数据：用户设置、日程、剪贴板、代码片段、对话历史、记忆元数据、技能配置、工作流定义、宠物属性、行为日志、意图配置（文本+元数据）等。
+使用 Alembic 管理 Schema 版本化迁移。
+Qdrant - AI 向量数据专用
+仅存储需要语义检索的向量：知识库文档分块向量、长期记忆向量、意图嵌入向量。
+通过 ID 关联 MySQL 业务数据，不做数据冗余。
+向量数据可从 MySQL 重建（重新 embedding），不单独备份。
+Redis 8.6 - 缓存 + 消息 + 限流
+缓存：MySQL 热数据的缓存（如未来 7 天日程、意图→模块映射结果），TTL 可配置。
+消息代理：Celery Broker、WebSocket 消息队列。
+限流：API 限流计数器（令牌桶/滑动窗口）。
+不存储任何向量数据。
+数据关联方式
+MySQL 与 Qdrant 通过 ID 关联，查询时先检索 Qdrant 获取向量匹配结果（含 payload 中的业务 ID），再用 ID 去 MySQL 查询完整业务数据。
+
+示例：意图识别 → Qdrant 返回 { intent_id, score } → 用 intent_id 查 MySQL intents 表获取完整配置 → 路由到目标模块。
+
+数据一致性保障
+写入 MySQL 成功后，异步同步向量到 Qdrant（通过 Celery 任务）。
+同步失败自动重试 3 次（指数退避），仍失败则告警并记录到修复队列。
+删除数据时：先删 Qdrant 向量 → 再删 MySQL 业务数据（避免孤儿向量）。
+更新数据时：先更新 MySQL → 触发重新 embedding → 更新 Qdrant 向量。
+备份策略
+MySQL：Celery Beat 定期 mysqldump 备份，保留最近 15 天。
+Redis：持久化（AOF + RDB），丢失后可从 MySQL 重建缓存。
+Qdrant：不单独备份，丢失后可从 MySQL 重新 embedding 重建。
 
 技术栈全景
 类别	技术	版本	用途
@@ -88,7 +119,7 @@ Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）�
 
 视觉模型：可选，用于 OCR 辅助或图像分析（如 llava）。
 
-测试连接：提供“测试连接”按钮，调用 Ollama 的 /api/tags 接口，验证地址正确且服务可用，失败时给出明确错误提示。
+测试连接：提供"测试连接"按钮，调用 Ollama 的 /api/tags 接口，验证地址正确且服务可用，失败时给出明确错误提示。
 
 模型下载管理（高级）：可展示已安装模型列表，并提供一键下载新模型（通过 Ollama CLI 或 API 异步拉取）。
 
@@ -103,7 +134,7 @@ Top-P：范围 0.0～1.0，默认 0.9。核采样参数。
 
 AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界面中 AI 助手的头像显示。头像存储在后端用户数据。
 
-系统提示词：可编辑全局系统提示词（如“你是一个可爱的桌面助手”），或针对不同模块单独配置。
+系统提示词：可编辑全局系统提示词（如"你是一个可爱的桌面助手"），或针对不同模块单独配置。
 
 2.4.3 应用设置
 语言：支持简体中文、英文，切换后界面即时刷新（Ant Design 国际化 + 自定义文案）。
@@ -119,12 +150,12 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 宠物窗口设置：透明度、是否置顶、窗口尺寸（预设 400×500，可自定义）。
 
-属性衰减速度：可选“慢 / 正常 / 快”，影响饥饿、清洁等属性的每小时衰减值。
+属性衰减速度：可选"慢 / 正常 / 快"，影响饥饿、清洁等属性的每小时衰减值。
 
 气泡对话频率：控制宠物自动说话的间隔（30 秒～5 分钟）。
 
 2.4.5 快捷键设置
-全局快捷键映射：用户可自定义“打开主窗口”、“打开命令面板”、“截图”等快捷键。
+全局快捷键映射：用户可自定义"打开主窗口"、"打开命令面板"、"截图"等快捷键。
 
 冲突检测：保存时检测是否与其他全局快捷键冲突，并提示。
 
@@ -161,10 +192,11 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 意图识别流程：
 
 用户输入文本 → 调用嵌入模型 Qwen3-Embedding 生成向量。
-与意图知识库（MySQL 存储预置意图的向量）计算余弦相似度（Rust 加速批量）。
-最高置信度 ≥ 0.75 则命中意图，路由到对应模块的工具。
+去 Qdrant intent_vectors Collection 做相似度搜索（Rust 加速批量余弦计算）。
+返回 top-1 结果（含 payload 中的 intent_id 和 score）。
+最高置信度 ≥ 0.75 则命中意图，用 intent_id 查询 MySQL intents 表获取完整配置，路由到对应模块的工具。
 未命中则进入通用对话模式，可触发 RAG 检索或工具调用。
-性能优化：Redis 缓存高频意图的向量（TTL 1 小时），批量相似度计算使用 Rust + PyO3 扩展。
+性能优化：Redis 缓存高频意图文本→模块的映射结果（TTL 1 小时），避免重复向量检索。批量相似度计算使用 Rust + PyO3 扩展。
 
 3.2 RAG 知识库系统（LlamaIndex + LangChain + LangGraph + Qdrant）
 这是本项目的核心 AI 能力，采用业界最先进的 RAG 技术栈。
@@ -175,9 +207,9 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 使用 LlamaIndex 的 SimpleDirectoryReader 加载文档，RecursiveCharacterTextSplitter 分块（块大小 512，重叠 100）。
 
-使用 Qwen3-Embedding 将每个块向量化，存储到 Qdrant 向量数据库（本地模式）。
+使用 Qwen3-Embedding 将每个块向量化，存储到 Qdrant knowledge_chunks Collection（本地模式），payload 中记录 doc_id 和 chunk_index。
 
-同时将文档元数据（文件名、时间、块数）存入 MySQL，便于管理。
+文档元数据（文件名、导入时间、块数、文件类型）存入 MySQL knowledge_documents 表，便于管理和展示。Qdrant 中的 doc_id 与 MySQL 中的 id 一一对应。
 
 检索与生成（LangChain + LangGraph）：
 
@@ -185,15 +217,15 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 重排序：使用 CrossEncoder 模型（可选）对召回结果精排。
 
-LangGraph 多跳推理：对于复杂问题，自动拆解为多步检索（如“先查 A 概念，再查 B 关联”），使用 LangGraph 状态机管理推理链。
+LangGraph 多跳推理：对于复杂问题，自动拆解为多步检索（如"先查 A 概念，再查 B 关联"），使用 LangGraph 状态机管理推理链。
 
 流式回答：通过 WebSocket 逐 token 返回，同时携带来源引用。
 
 知识库管理：
 
-DatasetCatalog：前端表格展示已导入文档，支持按类型、时间筛选、删除。
+DatasetCatalog：前端表格展示已导入文档（数据来自 MySQL knowledge_documents 表），支持按类型、时间筛选、删除。删除时先清理 Qdrant 中对应的向量分块，再删除 MySQL 记录。
 
-DatasetDownloader：导出知识库为 JSON 或 Qdrant 快照，便于备份迁移。
+DatasetDownloader：导出知识库为 JSON（包含 MySQL 元数据 + Qdrant 向量快照），便于备份迁移。
 
 3.3 工具注册与调用（LangChain Tools）
 ToolRegistry：统一注册表，支持动态添加工具。
@@ -205,13 +237,13 @@ ToolRegistry：统一注册表，支持动态添加工具。
 工具示例：查询天气、创建日程、搜索知识库、控制宠物等。
 
 3.4 记忆系统（短期 + 长期 + 语义）
-短期记忆：会话内消息历史（Zustand 存储）。
+短期记忆：会话内消息历史（前端 Zustand 存储，不持久化）。
 
-长期记忆：MySQL 存储历史对话，同时将重要对话片段向量化存入 Qdrant 的 memory Collection。
+长期记忆：MySQL memory_entries 表存储历史对话文本、摘要和元数据；重要对话片段向量化后存入 Qdrant memory_vectors Collection，payload 中记录 memory_id 和 conversation_id，与 MySQL 通过 ID 关联。
 
-语义检索：用户提问时，同时检索知识库和长期记忆，实现跨会话回忆。
+语义检索：用户提问时，同时检索 Qdrant knowledge_chunks 和 memory_vectors 两个 Collection，实现知识库+跨会话记忆的联合检索，结果用 ID 回查 MySQL 获取完整上下文。
 
-自动摘要：Celery 定时任务调用 Qwen3.5 生成每日对话摘要，存入长期记忆。
+自动摘要：Celery 定时任务调用 Qwen3.5 生成每日对话摘要，摘要文本存入 MySQL，同时 embedding 后写入 Qdrant。
 
 3.5 灵魂系统（Soul）
 人格配置：每个助手拥有独立的 SOUL.md 文件，定义性格标签、说话风格、情感倾向、背景故事、行为准则。
@@ -237,7 +269,7 @@ CRUD：使用 React Hook Form + Zod 校验表单（标题、时间、全天事�
 
 提醒：后端 Celery Beat 定时任务（每分钟扫描），触发时通过 WebSocket 推送，前端 Electron Notification 弹窗。
 
-数据存储：MySQL 存储日程事件，Redis 缓存未来 7 天的事件用于快速展示。
+数据存储：MySQL 存储日程事件，Redis 缓存未来 7 天的事件用于快速展示。日程变更时通过写穿透策略同步更新 MySQL 和 Redis 缓存（写入 MySQL 成功后立即清除对应 Redis 缓存，下次读取时重新加载）。
 
 4.2 剪贴板模块（集成成熟方案）
 实现方式：不重复造轮子，直接集成 Electron 生态中成熟的剪贴板管理器代码库electron-clipboard-manager。
@@ -273,7 +305,7 @@ UI 组件：使用 Ant Design AutoComplete 实现，浮层展示匹配结果。
 
 天气服务：FastAPI 调用 wttr.in 或 open-meteo 免费 API，Redis 缓存（30 分钟），支持当前天气 + 未来 3 天预报。
 
-主动问候：根据时间和天气，AI 生成个性化问候语（如“早上好！今天有雨，记得带伞”）。
+主动问候：根据时间和天气，AI 生成个性化问候语（如"早上好！今天有雨，记得带伞"）。
 
 4.6 文件预览
 支持格式：文本（.txt）、代码（.js/.py/.html 等）、图片（.jpg/.png）、PDF。
@@ -286,7 +318,7 @@ UI 组件：使用 Ant Design AutoComplete 实现，浮层展示匹配结果。
 
 PDF：pdf.js 渲染第一页缩略图或完整文档。
 
-入口：在聊天窗口点击文件链接、或在文件管理器中选择“用 Beautiful-Elf 预览”。
+入口：在聊天窗口点击文件链接、或在文件管理器中选择"用 Beautiful-Elf 预览"。
 
 4.7 OCR 识别（纯前端 Tesseract.js）
 截图：Electron desktopCapturer 捕获整个屏幕或选定区域（绘制 Canvas 选区）。
@@ -355,11 +387,11 @@ AI 气泡对话：根据当前状态（低饥饿、高亲密度等）调用 Olla
 6.1 意图学习系统
 用户主动纠正：当路由错误时，用户可通过反馈按钮（Ant Design Rate）选择正确模块，系统记录并更新意图向量。
 
-隐式学习：监听用户手动切换模块的行为（如说“天气”却点了日程模块），自动关联意图并调整置信度。
+隐式学习：监听用户手动切换模块的行为（如说"天气"却点了日程模块），自动关联意图并调整置信度。
 
-向量更新：后台 Celery 任务定期重新计算受影响的意图向量，使用 Rust 加速批量余弦相似度。
+向量更新：后台 Celery 任务将更新后的意图文本重新 embedding，写入 Qdrant intent_vectors Collection，同步更新 MySQL intents 表的元数据。使用 Rust 加速批量余弦相似度计算。
 
-结果反馈闭环：模块执行成功 → 增加命中次数；执行失败 → 降低置信度，避免再次误判。
+结果反馈闭环：模块执行成功 → MySQL 中 hitCount++，同时更新 Qdrant 对应向量的 payload；执行失败 → 降低置信度，避免再次误判。
 
 
 
@@ -368,11 +400,11 @@ ActionTracker：零侵入拦截所有模块调用，记录行为序列（自动�
 
 脱敏规则：文件路径 → 扩展名；文本 → 长度；URL → 域名；密码 → 丢弃。
 
-存储：MySQL 持久化行为日志，Redis 异步写入队列（50 条批量，5 秒刷盘），保留 7 天。
+存储：MySQL 持久化行为日志，Redis 异步写入队列（1 秒刷盘，进程退出时 flush），保留 7 天自动清理。
 
 默认关闭行为模式检测，用户主动启用时才记录。
 
-同时提供“一键清除所有行为数据”按钮。
+同时提供"一键清除所有行为数据"按钮。
 
 PatternDetector：
 
@@ -386,7 +418,7 @@ SkillSuggester：
 
 检测到模式后，调用 LLM 生成技能建议（名称、描述、工作流步骤）。
 
-前端通过 Ant Design Notification 提示用户：“发现您经常在查看日程后查询天气，是否创建‘工作前准备’技能？”
+前端通过 Ant Design Notification 提示用户："发现您经常在查看日程后查询天气，是否创建'工作前准备'技能？"
 
 用户可选择创建、修改、忽略、不再提醒。
 
@@ -405,7 +437,7 @@ SkillSuggester：
 
 技能炼化（Refine）：
 
-用户可选中一个已安装技能，点击“炼化”按钮。
+用户可选中一个已安装技能，点击"炼化"按钮。
 
 后端调用 LLM 分析该技能的使用统计数据（成功率、调用次数），生成优化建议（如改进描述词、调整参数默认值）。
 
@@ -413,7 +445,7 @@ SkillSuggester：
 
 生成新技能：
 
-用户通过自然语言描述需求（如“每天晚上八点提醒我喝水”）。
+用户通过自然语言描述需求（如"每天晚上八点提醒我喝水"）。
 
 后端调用 LLM 生成完整技能代码（工具函数 + SKILL.md），自动安装。
 
@@ -433,7 +465,7 @@ SkillSuggester：
 
 触发方式：
 
-手动触发：用户在前端点击“执行”。
+手动触发：用户在前端点击"执行"。
 
 定时触发：Celery Beat 调度。
 
@@ -441,7 +473,7 @@ SkillSuggester：
 
 执行引擎：Celery 任务队列执行 LangGraph 编译后的可执行图。
 
-模板系统：预置常用工作流模板（如“文档处理”：PDF 导入 → 向量化 → 生成摘要），用户可一键创建。
+模板系统：预置常用工作流模板（如"文档处理"：PDF 导入 → 向量化 → 生成摘要），用户可一键创建。
 
 运行监控：实时展示每个节点的状态、耗时、输出，支持暂停/重试。
 
@@ -460,7 +492,7 @@ text：提取截图中的文字。
 
 code：识别截图中的代码并解释。
 
-主动推送：用户可设置“当屏幕出现特定内容时提醒”（如“检测到错误弹窗”），通过事件总线触发。
+主动推送：用户可设置"当屏幕出现特定内容时提醒"（如"检测到错误弹窗"），通过事件总线触发。
 
 6.7 推理深度（Oracle）
 三档模式（前端 Segmented 切换）：
@@ -495,9 +527,9 @@ code：识别截图中的代码并解释。
 
 7.3 安全系统
 
-备份调度：Celery Beat 每3天凌晨自动执行 mysqldump 备份 MySQL，保留最近 15 天备份。
+备份调度：Celery Beat 每 3 天凌晨自动执行 mysqldump 备份 MySQL，保留最近 15 天备份。Redis 开启 AOF + RDB 持久化。Qdrant 向量数据不单独备份（可从 MySQL 重新 embedding 重建）。
 
-数据导出/导入：用户可导出所有个人数据（JSON 格式），或从备份恢复。
+数据导出/导入：用户可导出所有个人数据（JSON 格式，包含 MySQL 业务数据），或从备份恢复。恢复后自动触发 Qdrant 向量重建任务。
 
 前端安全基线：
 
@@ -568,7 +600,7 @@ useWebSocket：WebSocket 连接管理与重连。
 
 后端：uvicorn main:app --reload 启动 FastAPI，celery -A app.celery worker --loglevel=info 启动任务队列。
 
-数据库：Docker Compose 一键启动 MySQL + Redis（生产环境可单独部署）。
+数据库：Docker Compose 一键启动 MySQL + Redis + Qdrant（生产环境可单独部署）。
 
 9.2 构建与打包
 前端：npm run build 构建生产版本，electron-builder 打包为 .exe / .dmg / .AppImage。
@@ -591,7 +623,7 @@ useWebSocket：WebSocket 连接管理与重连。
 事件总线	模块间通信，错误隔离	Node.js EventEmitter
 日志系统	前后端分级、轮转、聚合	electron-log + logging
 AI 对话	流式输出、意图路由、工具调用	Qwen3.5 + LangChain
-记忆系统	短期+长期、语义检索、自动摘要	Qdrant + Celery
+记忆系统	短期+长期、语义检索、自动摘要	MySQL + Qdrant + Celery
 知识库 RAG	多格式导入、混合检索、多跳推理	LlamaIndex + LangChain + LangGraph + Qdrant
 翻译模块	本地模型 + 知识库优先	Qwen3.5 + RAG
 日程提醒	日历视图、定时通知	@ant-design/calendar + Celery
@@ -602,7 +634,7 @@ AI 对话	流式输出、意图路由、工具调用	Qwen3.5 + LangChain
 文件预览	文本、代码、图片、PDF	pdf.js + react-codemirror
 OCR	截图识别、批量处理	Tesseract.js（纯前端）
 3D 宠物	PMX 模型、物理模拟、状态机	Three.js + ammojs
-意图学习	用户纠正、隐式反馈	向量更新 + Redis
+意图学习	用户纠正、隐式反馈	MySQL + Qdrant 向量更新
 行为模式检测	LCS 相似度、技能建议	Rust 加速
 技能系统	发现、安装、炼化、链式调用	自研 + LangGraph
 子代理	复杂任务拆解、并行执行	LangGraph + Celery
@@ -613,4 +645,4 @@ OCR	截图识别、批量处理	Tesseract.js（纯前端）
 安全	加密、备份、CSP、	cryptography + electron
 主题系统	明亮/暗色、导入导出	Ant Design ConfigProvider
 设置系统	Ollama 配置、AI 参数、应用首选项、快捷键、隐私等 Pydantic Settings
-Beautiful-Elf 是一个功能完整、技术先进、可落地性强的智能桌面助手方案。AI 核心采用 LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3.5 构建企业级 RAG 管道，剪贴板和 OCR 等模块直接复用成熟开源方案，设置系统提供从本地模型管理到 AI 参数的精细控制。
+Beautiful-Elf 是一个功能完整、技术先进、可落地性强的智能桌面助手方案。数据架构采用 MySQL（业务数据）+ Qdrant（向量数据）+ Redis（缓存/消息）三层分离设计，职责清晰、可维护性强。AI 核心采用 LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3.5 构建企业级 RAG 管道，剪贴板和 OCR 等模块直接复用成熟开源方案，设置系统提供从本地模型管理到 AI 参数的精细控制。
