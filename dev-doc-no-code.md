@@ -12,7 +12,7 @@ Beautiful-Elf 是一款前后端分离的智能桌面助手，采用当前（202
 
 分层原则
 MySQL 9.5 - 业务数据唯一真相源
-所有 CRUD 业务数据：用户设置、日程、剪贴板、代码片段、对话历史、记忆元数据、技能配置、工作流定义、宠物属性、行为日志、意图配置（文本+元数据）等。
+所有 CRUD 业务数据：用户设置、日程、剪贴板、代码片段、对话历史、记忆元数据、技能配置、工作流定义、宠物属性、行为日志、意图配置（文本+元数据）、工具注册、命令注册、性能采样、备份记录等。所有配置统一存 MySQL settings 表，不使用 .env 文件（数据库连接信息除外）。
 使用 Alembic 管理 Schema 版本化迁移。
 Qdrant - AI 向量数据专用
 仅存储需要语义检索的向量：知识库文档分块向量、长期记忆向量、意图嵌入向量。
@@ -27,6 +27,35 @@ Redis 8.6 - 缓存 + 消息 + 限流
 MySQL 与 Qdrant 通过 ID 关联，查询时先检索 Qdrant 获取向量匹配结果（含 payload 中的业务 ID），再用 ID 去 MySQL 查询完整业务数据。
 
 示例：意图识别 → Qdrant 返回 { intent_id, score } → 用 intent_id 查 MySQL intents 表获取完整配置 → 路由到目标模块。
+
+MySQL 核心表结构（概要）
+表名	职责	关联
+settings	动态配置 KV 存储（所有配置统一存 MySQL，不使用 .env）	-
+conversations	会话列表	-
+messages	消息记录（原始对话历史，完整保留）	conversation_id
+memory_entries	长期记忆（从对话提炼的摘要+元数据）	-
+knowledge_documents	知识库文档元数据	-
+knowledge_chunks	知识库文档分块索引（记录 Qdrant 中的向量 ID）	→ Qdrant knowledge_chunks
+intents	意图配置（文本+触发词+目标模块+元数据）	→ Qdrant intent_vectors
+intent_usage	意图命中统计（hitCount、置信度）	intent_id
+skills	技能注册（元数据+启用状态）	→ 文件系统 skills/
+skill_stats	技能使用统计（成功率、调用次数）	skill_id
+workflows	工作流定义（LangGraph DAG JSON）	-
+workflow_runs	工作流运行记录	workflow_id
+workflow_step_runs	节点执行详情	run_id
+tools	工具注册表（名称、描述、JSON Schema）	-
+tool_stats	工具调用统计	tool_id
+schedules	日程事件	-
+clipboard_items	剪贴板历史	-
+snippets	代码片段	-
+pet_attributes	宠物六维属性	-
+pet_interactions	互动记录（喂食、清洁、聊天）	-
+action_logs	行为日志（7天TTL，定时清理）	-
+commands	命令注册（内置+模块动态注册）	-
+command_usage	命令使用频率（用于智能排序）	command_id
+performance_metrics	性能采样数据（360点，约30分钟）	-
+soul_configs	助手人格配置	-
+backup_records	备份记录（备份时间、文件路径、状态）	-
 
 数据一致性保障
 写入 MySQL 成功后，异步同步向量到 Qdrant（通过 Celery 任务）。
@@ -66,7 +95,7 @@ Git 规范	Husky + lint-staged + commitlint	v9.1.0 + v16.4.0 + v21.0.1	Git hooks
 | 迁移工具 | Alembic | v1.18.1 | Schema 版本化管理 |
 | 缓存/消息 | Redis | v8.6.0 | 缓存、消息代理、限流 |
 | 任务队列 | Celery | v5.6.0 | 异步任务、定时任务、工作流编排 |
-| 配置管理 | Pydantic Settings | v2.12.0 | 类型安全配置 |
+| 配置管理 | Pydantic Settings | v2.12.0 | 配置校验与类型安全（数据存 MySQL settings 表） |
 | 数据验证 | Pydantic | v2.12.5 | 请求/响应数据校验 |
 | 反向代理 | Nginx | v1.30.0 | 服务器部署模式使用（可选） |
 | 高性能计算 | Rust + PyO3 + maturin | 最新 | 批量向量相似度、pHash、LCS |
@@ -104,10 +133,10 @@ Git 工作流	Husky + lint-staged + commitlint	提交前自动格式化、校验
 日志轮转：单文件最大 10MB，最多保留 5 个归档，过期自动清理。
 
 2.4 设置系统（全局配置管理中心）
-设置系统是 Beautiful-Elf 的配置中枢，统一管理应用、AI、模型、界面等所有可配置项。前端使用 Ant Design Form + Tabs 分区展示，后端配置通过 Pydantic Settings 加载并与前端同步。
+设置系统是 Beautiful-Elf 的配置中枢，统一管理应用、AI、模型、界面等所有可配置项。前端使用 Ant Design Form + Tabs 分区展示，所有配置统一存储在 MySQL settings 表，启动时加载到内存，运行时通过 API 读写。
 
 2.4.1 Ollama 配置
-Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）或远程服务器地址，支持 HTTP/HTTPS。
+Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）或远程服务器地址，支持 HTTP/HTTPS。配置存储在 MySQL settings 表，修改后即时生效。
 
 扫描本地大模型：前端调用后端 API /api/ollama/models，返回 Ollama 中已下载的模型列表（如 qwen3.5:7b、qwen3-embedding:latest、llava:latest）。
 
@@ -167,7 +196,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 匿名使用统计：可选是否允许收集匿名使用数据（用于改进）。
 
 2.4.7 关于与更新
-版本信息：展示前端、后端、关键依赖版本。
+版本信息：展示前端、后端、关键依赖版本（从 MySQL settings 表读取）。
 
 检查更新：手动触发 electron-updater 检查更新。
 
@@ -175,11 +204,13 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 技术实现：
 
-前端配置项保存后端，修改则请求后端保存并应用。
+所有配置统一存储在 MySQL settings 表（KV 结构），不使用 .env 文件（数据库连接信息除外）。启动时从 MySQL 加载全部配置到内存，运行时直接读取内存配置。
 
-后端配置（如 Ollama 地址、模型名称、温度等）通过 Pydantic Settings 从 .env 和环境变量加载，并提供 API /api/config 供前端读取和修改。修改后动态生效（部分需重启模块）。
+前端修改配置 → 调用 API /api/config → 后端更新 MySQL settings 表 + 刷新内存配置 → 通过 WebSocket 广播配置变更事件 → 其他客户端同步更新。
 
-前后端配置可同步：用户在前端修改 Ollama 地址后，后端 API 调用时自动使用新地址。
+首次启动时 MySQL 为空，使用代码中的默认值初始化 settings 表。部分配置（如 Ollama 地址）修改后需重启对应模块才能生效，前端给出提示。
+
+数据库连接信息（MySQL、Redis、Qdrant 地址）作为唯一例外，通过环境变量或命令行参数传入（因为这些是 MySQL 本身的依赖，不能从 MySQL 读取自身连接信息）。
 
 三、AI 智能核心
 所有 AI 能力基于 Ollama 本地模型 + LlamaIndex/LangChain/LangGraph 编排，Qdrant 作为向量数据库，实现企业级 RAG 管道。
@@ -196,7 +227,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 返回 top-1 结果（含 payload 中的 intent_id 和 score）。
 最高置信度 ≥ 0.75 则命中意图，用 intent_id 查询 MySQL intents 表获取完整配置，路由到对应模块的工具。
 未命中则进入通用对话模式，可触发 RAG 检索或工具调用。
-性能优化：Redis 缓存高频意图文本→模块的映射结果（TTL 1 小时），避免重复向量检索。批量相似度计算使用 Rust + PyO3 扩展。
+性能优化：Redis 缓存高频意图文本→模块的映射结果（TTL 1 小时），避免重复向量检索。意图被用户纠正或置信度变化时，主动删除对应 Redis 缓存 key（不等 TTL 过期），确保下次请求使用最新数据。批量相似度计算使用 Rust + PyO3 扩展。
 
 3.2 RAG 知识库系统（LlamaIndex + LangChain + LangGraph + Qdrant）
 这是本项目的核心 AI 能力，采用业界最先进的 RAG 技术栈。
@@ -228,7 +259,7 @@ DatasetCatalog：前端表格展示已导入文档（数据来自 MySQL knowledg
 DatasetDownloader：导出知识库为 JSON（包含 MySQL 元数据 + Qdrant 向量快照），便于备份迁移。
 
 3.3 工具注册与调用（LangChain Tools）
-ToolRegistry：统一注册表，支持动态添加工具。
+ToolRegistry：统一注册表，工具注册信息持久化到 MySQL tools 表（名称、描述、JSON Schema、所属模块），启动时加载到内存。调用统计数据（调用次数、成功率、平均耗时）记录到 MySQL tool_stats 表。
 
 工具实现：每个工具用 LangChain @tool 装饰器定义，自动生成 JSON Schema。
 
@@ -239,11 +270,13 @@ ToolRegistry：统一注册表，支持动态添加工具。
 3.4 记忆系统（短期 + 长期 + 语义）
 短期记忆：会话内消息历史（前端 Zustand 存储，不持久化）。
 
-长期记忆：MySQL memory_entries 表存储历史对话文本、摘要和元数据；重要对话片段向量化后存入 Qdrant memory_vectors Collection，payload 中记录 memory_id 和 conversation_id，与 MySQL 通过 ID 关联。
+对话历史：MySQL conversations 表存储会话列表，messages 表存储每条消息的完整记录（角色、内容、时间戳、工具调用等）。这是原始数据，完整保留，不向量化。
+
+长期记忆：MySQL memory_entries 表存储从对话中提炼的摘要和关键信息（非原始消息）；重要记忆片段向量化后存入 Qdrant memory_vectors Collection，payload 中记录 memory_id 和 conversation_id，与 MySQL 通过 ID 关联。
 
 语义检索：用户提问时，同时检索 Qdrant knowledge_chunks 和 memory_vectors 两个 Collection，实现知识库+跨会话记忆的联合检索，结果用 ID 回查 MySQL 获取完整上下文。
 
-自动摘要：Celery 定时任务调用 Qwen3.5 生成每日对话摘要，摘要文本存入 MySQL，同时 embedding 后写入 Qdrant。
+自动摘要：Celery 定时任务调用 Qwen3.5 对每日对话历史（messages 表）生成摘要，摘要文本存入 MySQL memory_entries，同时 embedding 后写入 Qdrant。原始对话记录不受影响。
 
 3.5 灵魂系统（Soul）
 人格配置：每个助手拥有独立的 SOUL.md 文件，定义性格标签、说话风格、情感倾向、背景故事、行为准则。
@@ -296,9 +329,9 @@ UI 组件：使用 Ant Design AutoComplete 实现，浮层展示匹配结果。
 
 触发：全局快捷键 Ctrl+K（Electron globalShortcut + IPC）。
 
-命令来源：内置命令（打开设置、切换主题、打开宠物窗口、截图等） + 模块动态注册。
+命令来源：内置命令（打开设置、切换主题、打开宠物窗口、截图等） + 模块动态注册。所有命令注册信息存 MySQL commands 表。
 
-智能排序：按使用频率 + 匹配度排序，最多显示 20 条。
+智能排序：按使用频率（MySQL command_usage 表记录每次执行） + 匹配度排序，最多显示 20 条。
 
 4.5 提醒与天气
 提醒服务：用户可设置一次性或重复提醒（每天/每周），后端 Celery Beat 调度，前端 Electron Notification 弹窗。
@@ -354,7 +387,7 @@ PDF：pdf.js 渲染第一页缩略图或完整文档。
 性能优化：窗口不可见时帧率降至 5fps，可见时恢复 60fps；支持多模型切换。
 
 5.2 宠物状态系统
-属性（后端 MySQL 存储）：
+属性（后端 MySQL pet_attributes 表存储）：
 
 🍖 饥饿值：每小时衰减 5%，低于 30% 触发饥饿动画。
 
@@ -391,7 +424,7 @@ AI 气泡对话：根据当前状态（低饥饿、高亲密度等）调用 Olla
 
 向量更新：后台 Celery 任务将更新后的意图文本重新 embedding，写入 Qdrant intent_vectors Collection，同步更新 MySQL intents 表的元数据。使用 Rust 加速批量余弦相似度计算。
 
-结果反馈闭环：模块执行成功 → MySQL 中 hitCount++，同时更新 Qdrant 对应向量的 payload；执行失败 → 降低置信度，避免再次误判。
+结果反馈闭环：模块执行成功 → MySQL intent_usage 表中 hitCount++，同时更新 Qdrant 对应向量的 payload；执行失败 → 降低置信度，避免再次误判。意图更新时主动清除 Redis 中对应的缓存 key。
 
 
 
@@ -433,13 +466,13 @@ SkillSuggester：
 
 后端解压到 skills/ 目录，并注册到数据库。
 
-启用/禁用：前端 Card + Switch 控制，禁用时不再参与意图路由。
+启用/禁用：前端 Card + Switch 控制，状态持久化到 MySQL skills.enabled 字段，禁用时不再参与意图路由。
 
 技能炼化（Refine）：
 
 用户可选中一个已安装技能，点击"炼化"按钮。
 
-后端调用 LLM 分析该技能的使用统计数据（成功率、调用次数），生成优化建议（如改进描述词、调整参数默认值）。
+后端从 MySQL skill_stats 表读取该技能的使用统计数据（成功率、调用次数、平均耗时），调用 LLM 分析并生成优化建议（如改进描述词、调整参数默认值）。
 
 用户可编辑 SKILL.md 或代码实现，提交后重新加载。
 
@@ -471,7 +504,7 @@ SkillSuggester：
 
 事件触发：监听事件总线（如文件变化触发处理工作流）。
 
-执行引擎：Celery 任务队列执行 LangGraph 编译后的可执行图。
+执行引擎：Celery 任务队列执行 LangGraph 编译后的可执行图。运行记录存 MySQL workflow_runs 表，每个节点的执行详情（状态、耗时、输入输出）存 MySQL workflow_step_runs 表。
 
 模板系统：预置常用工作流模板（如"文档处理"：PDF 导入 → 向量化 → 生成摘要），用户可一键创建。
 
@@ -527,7 +560,7 @@ code：识别截图中的代码并解释。
 
 7.3 安全系统
 
-备份调度：Celery Beat 每 3 天凌晨自动执行 mysqldump 备份 MySQL，保留最近 15 天备份。Redis 开启 AOF + RDB 持久化。Qdrant 向量数据不单独备份（可从 MySQL 重新 embedding 重建）。
+备份调度：Celery Beat 每 3 天凌晨自动执行 mysqldump 备份 MySQL，保留最近 15 天备份，备份记录（时间、文件路径、状态）存 MySQL backup_records 表。Redis 开启 AOF + RDB 持久化。Qdrant 向量数据不单独备份（可从 MySQL 重新 embedding 重建）。
 
 数据导出/导入：用户可导出所有个人数据（JSON 格式，包含 MySQL 业务数据），或从备份恢复。恢复后自动触发 Qdrant 向量重建任务。
 
@@ -635,7 +668,7 @@ AI 对话	流式输出、意图路由、工具调用	Qwen3.5 + LangChain
 OCR	截图识别、批量处理	Tesseract.js（纯前端）
 3D 宠物	PMX 模型、物理模拟、状态机	Three.js + ammojs
 意图学习	用户纠正、隐式反馈	MySQL + Qdrant 向量更新
-行为模式检测	LCS 相似度、技能建议	Rust 加速
+行为模式检测	LCS 相似度、技能建议	MySQL action_logs + Rust 加速
 技能系统	发现、安装、炼化、链式调用	自研 + LangGraph
 子代理	复杂任务拆解、并行执行	LangGraph + Celery
 工作流	DAG 编排、定时/事件触发	LangGraph + Celery
@@ -644,5 +677,5 @@ OCR	截图识别、批量处理	Tesseract.js（纯前端）
 性能监控	资源采集、告警、趋势	psutil + WebSocket
 安全	加密、备份、CSP、	cryptography + electron
 主题系统	明亮/暗色、导入导出	Ant Design ConfigProvider
-设置系统	Ollama 配置、AI 参数、应用首选项、快捷键、隐私等 Pydantic Settings
+设置系统	所有配置存 MySQL settings 表，前端读写，WebSocket 同步	Pydantic Settings + MySQL
 Beautiful-Elf 是一个功能完整、技术先进、可落地性强的智能桌面助手方案。数据架构采用 MySQL（业务数据）+ Qdrant（向量数据）+ Redis（缓存/消息）三层分离设计，职责清晰、可维护性强。AI 核心采用 LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3.5 构建企业级 RAG 管道，剪贴板和 OCR 等模块直接复用成熟开源方案，设置系统提供从本地模型管理到 AI 参数的精细控制。
