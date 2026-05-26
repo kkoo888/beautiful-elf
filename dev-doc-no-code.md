@@ -220,7 +220,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 前端修改配置 → 调用 API /api/config → 后端更新 MySQL settings 表 + 刷新内存配置 → 通过 WebSocket 广播配置变更事件 → 其他客户端同步更新。
 
-首次启动时 MySQL 为空，使用代码中的默认值初始化 settings 表。配置项分为两类：热更新配置（修改后即时生效，如 AI 参数、主题、快捷键）和需重启配置（如 Ollama 地址、数据库连接信息），settings 表中通过 restart_required 字段标记。前端修改需重启的配置时，自动弹出提示"此配置需要重启应用/模块才能生效"，用户可选择立即重启或稍后手动重启。
+首次启动时 MySQL 为空，使用代码中的默认值初始化 settings 表。配置项分为两类：热更新配置（修改后即时生效，如 AI 参数、主题、快捷键、Ollama 地址）和需重启配置（如数据库连接信息），settings 表中通过 restart_required 字段标记。前端修改需重启的配置时，自动弹出提示"此配置需要重启应用/模块才能生效"，用户可选择立即重启或稍后手动重启。
 
 数据库连接信息（MySQL、Redis、Qdrant 地址）作为唯一例外，通过环境变量或命令行参数传入（因为这些是 MySQL 本身的依赖，不能从 MySQL 读取自身连接信息）。
 
@@ -674,7 +674,7 @@ useWebSocket：WebSocket 连接管理、心跳检测（30 秒 ping/pong）与指
 AI 对话	流式输出、意图路由、工具调用	Qwen3.5 + LangChain
 记忆系统	短期+长期、语义检索、自动摘要	MySQL + Qdrant + Celery
 知识库 RAG	多格式导入、混合检索、多跳推理	LlamaIndex + LangChain + LangGraph + Qdrant
-翻译模块	本地模型 + 知识库优先	Qwen3.5 + RAG
+翻译模块	术语优先（无资料支持）+ RAG 增强（调 LLM）	Qwen3.5 + RAG
 日程提醒	日历视图、定时通知	@ant-design/calendar + Celery
 剪贴板历史	监听、搜索、固定	集成成熟 Electron 剪贴板管理方案
 代码片段	编辑器、标签、统计	react-codemirror
