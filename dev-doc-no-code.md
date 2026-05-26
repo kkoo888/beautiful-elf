@@ -90,25 +90,24 @@ OCR 识别	Tesseract.js	最新	纯前端文字识别
 测试	Vitest + @testing-library/react	v4.1	单元/集成测试
 代码规范	ESLint + Prettier + @typescript-eslint	v10.2.1 + v3.8.2	前端代码质量
 Git 规范	Husky + lint-staged + commitlint	v9.1.0 + v16.4.0 + v21.0.1	Git hooks、提交规范
-| 后端框架 | FastAPI + Uvicorn | v0.124.0 + v0.47.0 | 异步 API、WebSocket |
-| 数据库 | MySQL | v9.5.0 | 关系数据持久存储 |
-| 异步驱动 | aiomysql | v0.3.2 | 非阻塞数据库访问 |
-| ORM | SQLAlchemy | v2.0.46 | 数据库 ORM |
-| 迁移工具 | Alembic | v1.18.1 | Schema 版本化管理 |
-| 缓存/消息 | Redis | v8.6.0 | 缓存、消息代理、限流 |
-| 任务队列 | Celery | v5.6.0 | 异步任务、定时任务、工作流编排 |
-| 配置管理 | Pydantic Settings | v2.12.0 | 配置校验与类型安全（数据存 MySQL settings 表） |
-| 数据验证 | Pydantic | v2.12.5 | 请求/响应数据校验 |
-| 反向代理 | Nginx | v1.30.0 | 服务器部署模式使用（可选） |
-| 高性能计算 | Rust + PyO3 + maturin | 最新 | 批量向量相似度、pHash、LCS |
-| 代码规范 | Ruff | v0.9.0 | Python 代码检查与格式化 |
-
-| AI 能力 | Ollama | 最新 | 本地大模型服务 |
-| 对话模型 | Qwen3.5 (Ollama) | 最新 | 通用对话、工具调用 |
-| 嵌入模型 | Qwen3-Embedding (Ollama) | 最新 | 文本向量化 |
-| RAG 管道 | LlamaIndex + LangChain + LangGraph | 最新 | 文档索引、检索、多跳推理 |
-| 向量数据库 | Qdrant | 最新 | 高性能本地/远程向量检索 |
-| 视觉模型 | llava (备用) | 最新 | 图像分析（可选） |
+后端框架	FastAPI + Uvicorn	v0.124.0 + v0.47.0	异步 API、WebSocket
+数据库	MySQL	v9.5.0	关系数据持久存储
+异步驱动	aiomysql	v0.3.2	非阻塞数据库访问
+ORM	SQLAlchemy	v2.0.46	数据库 ORM
+迁移工具	Alembic	v1.18.1	Schema 版本化管理
+缓存/消息	Redis	v8.6.0	缓存、消息代理、限流
+任务队列	Celery	v5.6.0	异步任务、定时任务、工作流编排
+配置管理	Pydantic Settings	v2.12.0	配置校验与类型安全（数据存 MySQL settings 表）
+数据验证	Pydantic	v2.12.5	请求/响应数据校验
+反向代理	Nginx	v1.30.0	服务器部署模式使用（可选）
+高性能计算	Rust + PyO3 + maturin	最新	批量向量相似度、pHash、LCS
+代码规范	Ruff	v0.9.0	Python 代码检查与格式化
+AI 能力	Ollama	最新	本地大模型服务
+对话模型	Qwen3.5 (Ollama)	最新	通用对话、工具调用
+嵌入模型	Qwen3-Embedding (Ollama)	最新	文本向量化
+RAG 管道	LlamaIndex + LangChain + LangGraph	最新	文档索引、检索、多跳推理
+向量数据库	Qdrant	最新	高性能本地/远程向量检索
+视觉模型	llava (备用)	最新	图像分析（可选）
 
 一、项目工程化
 能力	技术实现	说明
@@ -149,7 +148,7 @@ Git 工作流	Husky + lint-staged + commitlint	提交前自动格式化、校验
 设置系统是 Beautiful-Elf 的配置中枢，统一管理应用、AI、模型、界面等所有可配置项。前端使用 Ant Design Form + Tabs 分区展示，所有配置统一存储在 MySQL settings 表，启动时加载到内存，运行时通过 API 读写。
 
 2.4.1 Ollama 配置
-Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）或远程服务器地址，支持 HTTP/HTTPS。配置存储在 MySQL settings 表，修改后即时生效。
+Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）或远程服务器地址，支持 HTTP/HTTPS。配置存储在 MySQL settings 表，修改后后台立即更新 settings 表中对应的地址字段，其他服务（如对话、嵌入）直接读取该字段，无需重启。
 
 扫描本地大模型：前端调用后端 API /api/ollama/models，返回 Ollama 中已下载的模型列表（如 qwen3.5:7b、qwen3-embedding:latest、llava:latest）。
 
@@ -179,7 +178,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 系统提示词：可编辑全局系统提示词（如"你是一个可爱的桌面助手"），或针对不同模块单独配置。
 
 2.4.3 应用设置
-语言：支持简体中文、英文，切换后界面即时刷新（Ant Design 国际化 + 自定义文案）。
+语言：当前支持简体中文，后续根据需要扩展国际化支持。
 
 开机自启：开关控制 Electron 是否开机启动。
 
@@ -302,11 +301,9 @@ SoulManager：后端管理助手人格的 CRUD，MySQL 持久化。
 运行时使用：对话时注入人格系统提示词，使 LLM 输出符合角色设定。
 
 3.6 翻译模块
-简单翻译：检索知识库中的术语表（专业词汇），若命中则直接返回。
+术语优先翻译：检索知识库中的术语表（专业词汇），若命中则直接返回翻译结果；若未命中则提示"无资料支持"，不调用 LLM。
 
-核心翻译：调用 Qwen3.5 进行多语言翻译。
-
-RAG 增强：先检索知识库中的术语表（专业词汇），若命中则直接使用，否则调用 LLM。
+RAG 增强翻译：检索知识库中的术语表，若命中则直接使用专业译法；若未命中则调用 Qwen3.5 进行通用翻译。
 
 四、桌面效率工具
 4.1 日程模块
@@ -417,7 +414,7 @@ PDF：pdf.js 渲染第一页缩略图或完整文档。
 
 状态机：声明式 JSON 规则（如 { "hunger": "<30", "action": "hungryAnimation", "bubble": "我好饿..." }），前端监听属性变化触发。
 
-离线差值结算：宠物窗口关闭时记录时间戳，重新打开时根据离线时长计算属性衰减，一次性更新。
+离线差值结算：宠物窗口关闭时记录时间戳，重新打开时根据离线时长计算属性衰减，一次性更新。各属性最低衰减至 10%，不会因长时间离线而归零。
 
 AI 气泡对话：根据当前状态（低饥饿、高亲密度等）调用 Ollama 生成自然语言，显示在宠物头顶（Ant Design Popover）。
 
@@ -439,8 +436,6 @@ AI 气泡对话：根据当前状态（低饥饿、高亲密度等）调用 Olla
 向量更新：后台 Celery 任务将更新后的意图文本重新 embedding，写入 Qdrant intent_vectors Collection，同步更新 MySQL intents 表的元数据。使用 Rust 加速批量余弦相似度计算。
 
 结果反馈闭环：模块执行成功 → MySQL intent_usage 表中 hitCount++，同时更新 Qdrant 对应向量的 payload；执行失败 → 降低置信度，避免再次误判。意图更新时主动清除 Redis 中对应的缓存 key。
-
-
 
 6.2 行为模式检测与技能自动建议
 ActionTracker：零侵入拦截所有模块调用，记录行为序列（自动脱敏敏感参数）。
