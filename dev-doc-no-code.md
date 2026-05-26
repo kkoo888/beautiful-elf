@@ -56,8 +56,12 @@ command_usage	命令使用频率（用于智能排序）	command_id
 performance_metrics	性能采样数据（360点，约30分钟）	-
 soul_configs	助手人格配置	-
 backup_records	备份记录（备份时间、文件路径、状态）	-
+prompts	Prompt 版本管理（名称、内容、版本号、是否激活）	-
+ai_feedback	AI 回答反馈（问题、回答、反馈类型、trace_id）	conversation_id
 
 通用字段说明：所有业务表均包含 deleted（TINYINT，默认 0）软删除标记和 created_at / updated_at 时间戳。查询时自动过滤 deleted = 1 的记录。
+
+索引策略：高频查询字段必须建索引 — messages（conversation_id, created_at）、intents（deleted, enabled）、action_logs（created_at, module）、knowledge_documents（deleted, file_type）、conversations（created_at）、workflow_runs（workflow_id, status）、command_usage（command_id）。复合索引按查询模式组合（如 messages 表的 (conversation_id, created_at) 联合索引）。
 
 数据一致性保障
 写入 MySQL 成功后，异步同步向量到 Qdrant（通过 Celery 任务）。
@@ -114,10 +118,13 @@ RAG 管道	LlamaIndex + LangChain + LangGraph	最新	文档索引、检索、多
 构建与热更新	electron-vite	支持主进程、渲染进程、预加载脚本的 HMR
 代码规范	ESLint + @typescript-eslint + Prettier	统一代码风格，集成于 IDE 和 Git hooks
 Git 工作流	Husky + lint-staged + commitlint	提交前自动格式化、校验提交信息
+提交规范	conventional-commits（feat/fix/docs/refactor）	提交信息格式化，配合 commitlint 强制校验
+变更日志	standard-version / changesets	基于 conventional-commits 自动生成 CHANGELOG.md，每次发版自动更新
 单元/集成测试	Vitest + @testing-library/react	组件测试、Hook 测试、API 集成测试
 日志记录	electron-log	按模块分文件输出，支持日志轮转（10MB/5个）
 打包与更新	electron-builder + electron-updater	多平台打包，增量自动更新
 性能监控（开发）	Stats.js	实时显示 FPS、MS、MB
+API 版本化	APIRouter prefix（/api/v1/）	所有接口统一版本前缀，旧版本设废弃时间表，新版本并行运行，客户端按版本调用
 二、核心基础设施
 2.1 事件总线
 实现：基于 Node.js EventEmitter 封装全局事件总线，支持 on、off、emit、once。
@@ -131,9 +138,20 @@ Git 工作流	Husky + lint-staged + commitlint	提交前自动格式化、校验
 
 后端：Python logging + Uvicorn 访问日志，输出到 logs/ 目录，支持 JSON 格式（便于日志聚合）。
 
+结构化日志字段：每条日志统一携带 trace_id（请求链路 ID）、user_id、session_id、module、level、timestamp，支持按维度聚合查询。trace_id 在前端发起请求时生成，跨 API → Celery → Qdrant 全链路透传。
+
+敏感数据脱敏：日志中自动对 API Key、Token、用户消息内容做脱敏处理（保留前后几位，中间用 *** 代替）。
+
 日志轮转：单文件最大 10MB，最多保留 5 个归档，过期自动清理。
 
-2.3 WebSocket 通信层
+2.3 健康检查端点
+存活检查（/health）：返回服务是否存活，供进程管理器和负载均衡器探活。
+
+就绪检查（/ready）：检查所有依赖是否可用（MySQL 连接、Redis 连接、Qdrant 连接、Ollama 服务），任一不可用返回 503。
+
+依赖状态（/deps）：返回各依赖的详细状态（连接延迟、版本号、连接池使用率），供运维监控和排查。
+
+2.4 WebSocket 通信层
 连接管理：后端通过 FastAPI WebSocket 端点维护长连接，支持多客户端同时连接（主窗口、宠物窗口等）。
 
 心跳检测：客户端每 30 秒发送 ping，服务端回复 pong。若连续 3 次未收到 pong，客户端判定断线。
@@ -144,13 +162,13 @@ Git 工作流	Husky + lint-staged + commitlint	提交前自动格式化、校验
 
 连接池上限：单实例最多维护 10 个 WebSocket 连接，超出时拒绝新连接并通知客户端。
 
-2.4 设置系统（全局配置管理中心）
+2.5 设置系统（全局配置管理中心）
 设置系统是 Beautiful-Elf 的配置中枢，统一管理应用、AI、模型、界面等所有可配置项。前端使用 Ant Design Form + Tabs 分区展示，所有配置统一存储在 MySQL settings 表，启动时加载到内存，运行时通过 API 读写。
 
-2.4.1 Ollama 配置
+2.5.1 Ollama 配置
 Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）或远程服务器地址，支持 HTTP/HTTPS。配置存储在 MySQL settings 表，修改后后台立即更新 settings 表中对应的地址字段，其他服务（如对话、嵌入）直接读取该字段，无需重启。
 
-扫描本地大模型：前端调用后端 API /api/ollama/models，返回 Ollama 中已下载的模型列表（如 qwen3.5:7b、qwen3-embedding:latest、llava:latest）。
+扫描本地大模型：前端调用后端 API /api/v1/ollama/models，返回 Ollama 中已下载的模型列表（如 qwen3.5:7b、qwen3-embedding:latest、llava:latest）。
 
 模型选择：
 
@@ -160,11 +178,11 @@ Ollama 服务地址：可配置本地地址（默认 http://localhost:11434）�
 
 视觉模型：可选，用于 OCR 辅助或图像分析（如 llava）。
 
-测试连接：提供"测试连接"按钮，调用 Ollama 的 /api/tags 接口，验证地址正确且服务可用，失败时给出明确错误提示。
+测试连接：提供"测试连接"按钮，调用 Ollama 的 /api/v1/ollama/tags 接口，验证地址正确且服务可用，失败时给出明确错误提示。
 
 模型下载管理（高级）：可展示已安装模型列表，并提供一键下载新模型（通过 Ollama CLI 或 API 异步拉取）。
 
-2.4.2 AI 设置
+2.5.2 AI 设置
 模型温度 (Temperature)：滑块范围 0.0～2.0，步长 0.1，控制生成内容的随机性。默认 0.7。
 
 最大生成长度 (Max Tokens)：数字输入框，范围 1～8192，默认 2048。控制单次回答的最大长度。
@@ -177,7 +195,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 系统提示词：可编辑全局系统提示词（如"你是一个可爱的桌面助手"），或针对不同模块单独配置。
 
-2.4.3 应用设置
+2.5.3 应用设置
 语言：当前支持简体中文，后续根据需要扩展国际化支持。
 
 开机自启：开关控制 Electron 是否开机启动。
@@ -186,7 +204,7 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 关闭主窗口行为：退出应用 / 最小化到托盘。
 
-2.4.4 宠物设置
+2.5.4 宠物设置
 宠物模型选择：模型路径设置-设置保存后台，列出后台返回的模型列表  后台去读取设置的路径目录下的 .pmx 文件，用户可切换不同模型。
 
 宠物窗口设置：透明度、是否置顶、窗口尺寸（预设 400×500，可自定义）。
@@ -195,19 +213,19 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 气泡对话频率：控制宠物自动说话的间隔（30 秒～5 分钟）。
 
-2.4.5 快捷键设置
+2.5.5 快捷键设置
 全局快捷键映射：用户可自定义"打开主窗口"、"打开命令面板"、"截图"等快捷键。
 
 冲突检测：保存时检测是否与其他全局快捷键冲突，并提示。
 
-2.4.6 隐私与安全
+2.5.6 隐私与安全
 数据加密：是否对本地存储的敏感配置（如 API Key）加密（默认开启）。
 
 日志级别：可动态调整日志记录级别（Debug / Info / Warn / Error）。
 
 匿名使用统计：可选是否允许收集匿名使用数据（用于改进）。
 
-2.4.7 关于与更新
+2.5.7 关于与更新
 版本信息：展示前端、后端、关键依赖版本（从 MySQL settings 表读取）。
 
 检查更新：手动触发 electron-updater 检查更新。
@@ -218,19 +236,27 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 
 所有配置统一存储在 MySQL settings 表（KV 结构），不使用 .env 文件（数据库连接信息除外）。启动时从 MySQL 加载全部配置到内存，运行时直接读取内存配置。
 
-前端修改配置 → 调用 API /api/config → 后端更新 MySQL settings 表 + 刷新内存配置 → 通过 WebSocket 广播配置变更事件 → 其他客户端同步更新。
+前端修改配置 → 调用 API /api/v1/config → 后端更新 MySQL settings 表 + 刷新内存配置 → 通过 WebSocket 广播配置变更事件 → 其他客户端同步更新。
 
 首次启动时 MySQL 为空，使用代码中的默认值初始化 settings 表。配置项分为两类：热更新配置（修改后即时生效，如 AI 参数、主题、快捷键、Ollama 地址）和需重启配置（如数据库连接信息），settings 表中通过 restart_required 字段标记。前端修改需重启的配置时，自动弹出提示"此配置需要重启应用/模块才能生效"，用户可选择立即重启或稍后手动重启。
 
 数据库连接信息（MySQL、Redis、Qdrant 地址）作为唯一例外，通过环境变量或命令行参数传入（因为这些是 MySQL 本身的依赖，不能从 MySQL 读取自身连接信息）。
 
+数据库连接池配置：SQLAlchemy 连接池大小默认 10，最大 overflow 20，连接超时 30 秒，连接回收时间 3600 秒（防止 MySQL 端超时断开）。Redis 连接池 max_connections 默认 20。连接池使用率通过 /deps 健康检查端点暴露，超过 80% 触发告警。
+
 三、AI 智能核心
 所有 AI 能力基于 Ollama 本地模型 + LlamaIndex/LangChain/LangGraph 编排，Qdrant 作为向量数据库，实现企业级 RAG 管道。
 
 3.1 对话与意图识别
-聊天接口：FastAPI 提供 /api/ai/chat（非流式）和 /api/ai/chatStream（WebSocket 流式）。
+聊天接口：FastAPI 提供 /api/v1/ai/chat（非流式）和 /api/v1/ai/chatStream（WebSocket 流式）。
 
 对话模型：使用 Ollama 运行的 Qwen3.5（7B/14B/32B 可选），支持函数调用（Function Calling）和工具使用。
+
+AI 护栏（Guardrails）：
+输入侧：敏感词过滤（维护敏感词库，命中则拦截并提示用户）、Prompt 注入检测（识别"忽略之前的指令"等模式，命中则拒绝并记录日志）、输入长度限制（防止超长输入耗尽资源）。
+输出侧：回答长度校验（超长则截断并提示）、有害内容检测（调用安全分类模型，命中则拦截并返回默认回答）、格式校验（如工具调用结果必须是合法 JSON）。
+
+用户反馈闭环：每次 AI 回答底部提供 👍/👎 按钮，👎 时弹出可选的原因标签（不准确/不相关/有害/其他）+ 自由文本输入。反馈记录存入 MySQL（含问题、回答、反馈类型、trace_id），定期分析差评模式用于优化 Prompt 和 RAG 策略。
 
 意图识别流程：
 
@@ -241,6 +267,10 @@ AI 头像：用户可上传自定义头像（支持 JPG/PNG），用于聊天界
 意图冲突处理：当 top-1 与 top-2 的置信度差值 < 0.1 时（如 0.82 vs 0.78），判定为意图冲突，不自动路由，而是触发澄清对话（如"你是想查天气，还是设置日程？"），展示 top-2 意图供用户选择。用户选择后记录到 intent_usage 表用于后续优化。
 未命中则进入通用对话模式，可触发 RAG 检索或工具调用。
 性能优化：Redis 缓存高频意图文本→模块的映射结果（TTL 1 小时），避免重复向量检索。意图被用户纠正或置信度变化时，主动删除对应 Redis 缓存 key（不等 TTL 过期），确保下次请求使用最新数据。批量相似度计算使用 Rust + PyO3 扩展。
+
+LLM 语义缓存：对通用对话（非意图命中、非工具调用）启用语义缓存 — 用户提问先生成 embedding，与 Redis 中已缓存的问题向量做相似度比较，距离 < 0.05 则直接返回缓存回答（跳过 Ollama 推理），TTL 24 小时。命中缓存时前端显示"⚡ 快速回答"标识。仅对事实性问题启用，创意/生成类问题自动跳过缓存。
+
+Prompt 版本管理：系统提示词、意图模板、技能提示词统一存入 MySQL prompts 表（含 name、content、version、is_active、created_at）。修改 Prompt 时创建新版本而非覆盖旧版，支持一键回滚到历史版本。前端设置页面展示 Prompt 版本列表，可对比差异。A/B 测试：可对同一 Prompt 配置多个版本，按用户或比例分配，收集效果数据后选择最优版本。
 
 3.2 RAG 知识库系统（LlamaIndex + LangChain + LangGraph + Qdrant）
 这是本项目的核心 AI 能力，采用业界最先进的 RAG 技术栈。
@@ -599,6 +629,10 @@ contextIsolation: true、nodeIntegration: false。
 
 文件操作：Electron 原生 fs 模块（主进程）提供安全的文件读写。
 
+离线优先策略：断网时 — 聊天消息暂存到本地队列（IndexedDB），恢复网络后自动发送；日程数据可从 Redis 缓存查看（只读）；宠物本地正常运行；剪贴板、代码片段等本地模块不受影响。网络恢复时自动同步离线期间的变更。前端顶部状态栏显示网络状态（在线/离线/同步中）。
+
+操作撤销（Undo）：关键删除操作（删除日程、删除知识库文档、删除代码片段）执行后，底部弹出 Ant Design message 提示"已删除"，附带"撤销"按钮，30 秒内可点击撤销恢复（实际为软删除，撤销即恢复 deleted → 0）。超时后由定时任务物理清理。
+
 八、UI 与个性化
 8.1 主题系统
 主题引擎：Ant Design v6 ConfigProvider + 自定义 Design Token。
@@ -617,6 +651,8 @@ contextIsolation: true、nodeIntegration: false。
 
 8.2 前端组件体系
 布局：Ant Design Layout（侧边栏 + 头部 + 内容区）。
+
+渐进式加载：核心模块（聊天、设置）随首屏加载，其他模块（日程、剪贴板、代码片段、技能面板等）使用 React.lazy + Suspense 懒加载，首屏加载时间优化。每个懒加载模块包裹 Suspense fallback 显示骨架屏（Ant Design Skeleton）。
 
 聊天面板：List + 自定义 MessageBubble，支持 Markdown 渲染（react-markdown + remark-gfm），代码块语法高亮（prismjs）。
 
@@ -668,10 +704,11 @@ useWebSocket：WebSocket 连接管理、心跳检测（30 秒 ping/pong）与指
 
 附录：完整功能清单
 模块	功能	实现技术
-工程化	构建、规范、测试、打包、更新	electron-vite, ESLint, Vitest, builder
+工程化	构建、规范、测试、打包、更新、API 版本化、变更日志自动生成	electron-vite, ESLint, Vitest, builder, conventional-commits
+日志系统	前后端分级、轮转、聚合、结构化字段（trace_id/user_id）、敏感数据脱敏	electron-log + logging
+健康检查	存活/就绪/依赖状态三个端点，配合监控告警	FastAPI
 事件总线	模块间通信，错误隔离	Node.js EventEmitter
-日志系统	前后端分级、轮转、聚合	electron-log + logging
-AI 对话	流式输出、意图路由、工具调用	Qwen3.5 + LangChain
+AI 对话	流式输出、意图路由、工具调用、AI 护栏、语义缓存、用户反馈闭环	Qwen3.5 + LangChain
 记忆系统	短期+长期、语义检索、自动摘要	MySQL + Qdrant + Celery
 知识库 RAG	多格式导入、混合检索、多跳推理	LlamaIndex + LangChain + LangGraph + Qdrant
 翻译模块	术语优先（无资料支持）+ RAG 增强（调 LLM）	Qwen3.5 + RAG
@@ -694,5 +731,9 @@ OCR	截图识别、批量处理	Tesseract.js（纯前端）
 安全	加密、备份、CSP	cryptography + electron
 错误处理	前端 ErrorBoundary + 后端全局异常 + WebSocket 恢复	React + FastAPI
 主题系统	明亮/暗色、导入导出	Ant Design ConfigProvider
+Prompt 管理	版本化存储、回滚、A/B 测试	MySQL prompts 表
+离线优先	断网暂存、恢复同步、状态指示	IndexedDB + WebSocket
+操作撤销	关键操作 30 秒内可撤销，软删除兜底	Ant Design message
+渐进式加载	核心模块首屏加载，其他懒加载 + 骨架屏	React.lazy + Suspense
 设置系统	所有配置存 MySQL settings 表，前端读写，WebSocket 同步	Pydantic Settings + MySQL
 Beautiful-Elf 是一个功能完整、技术先进、可落地性强的智能桌面助手方案。数据架构采用 MySQL（业务数据）+ Qdrant（向量数据）+ Redis（缓存/消息）三层分离设计，职责清晰、可维护性强。AI 核心采用 LlamaIndex + LangChain + LangGraph + Qdrant + Qwen3.5 构建企业级 RAG 管道，剪贴板和 OCR 等模块直接复用成熟开源方案，设置系统提供从本地模型管理到 AI 参数的精细控制。
