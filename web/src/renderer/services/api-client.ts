@@ -19,7 +19,7 @@ const apiClient: AxiosInstance = axios.create({
 // 请求拦截器：camelCase → snake_case + trace_id 注入
 apiClient.interceptors.request.use(
   (config) => {
-    // 字段名转换
+    // 字段名转换：camelCase → snake_case
     if (config.data && typeof config.data === 'object') {
       config.data = camelToSnake(config.data)
     }
@@ -36,12 +36,9 @@ apiClient.interceptors.request.use(
 // 响应拦截器：snake_case → camelCase + 错误处理
 apiClient.interceptors.response.use(
   (response: AxiosResponse<ApiResponse<unknown>>) => {
-    // 字段名转换
+    // 字段名转换：snake_case → camelCase
     if (response.data && typeof response.data === 'object') {
-      const data = response.data as Record<string, unknown>
-      if (data.data && typeof data.data === 'object') {
-        data.data = snakeToCamel(data.data as Record<string, unknown>)
-      }
+      response.data = snakeToCamel(response.data) as ApiResponse<unknown>
     }
     return response
   },

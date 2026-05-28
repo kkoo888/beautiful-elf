@@ -1,6 +1,6 @@
 import { ConfigProvider, theme, type ThemeConfig } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import { useAppStore } from '@/stores/useAppStore'
+import { useThemePersist } from '@/hooks/use-theme-persist'
 import type { ThemeMode } from '@/types'
 
 /**
@@ -71,9 +71,10 @@ interface ThemeProviderProps {
 /**
  * 主题提供者
  * 封装 Ant Design ConfigProvider，统一管理主题 Token
+ * 使用 useThemePersist 实现主题持久化与跨窗口同步
  */
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  const themeMode = useAppStore((state) => state.theme)
+  const { theme: themeMode } = useThemePersist()
   const themeConfig = getThemeConfig(themeMode)
 
   return (

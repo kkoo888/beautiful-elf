@@ -75,9 +75,11 @@ export interface Conversation {
   /** 会话标题 */
   title: string
   /** 创建时间 */
-  createdAt: string
+  createdAt: number
   /** 更新时间 */
-  updatedAt: string
+  updatedAt: number
+  /** 消息数量 */
+  messageCount: number
   /** 最后一条消息预览 */
   lastMessage?: string
 }

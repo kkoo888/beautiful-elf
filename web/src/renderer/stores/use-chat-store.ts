@@ -17,12 +17,17 @@ interface ChatState {
 
   // 操作
   setConversations: (conversations: Conversation[]) => void
-  setCurrentConversationId: (id: string | null) => void
+  setCurrentConversation: (id: string | null) => void
   setMessages: (messages: ChatMessage[]) => void
   addMessage: (message: ChatMessage) => void
   setReasoningDepth: (depth: 'fast' | 'deep' | 'full') => void
   setIsLoading: (loading: boolean) => void
   clearMessages: () => void
+
+  // 会话管理
+  addConversation: (conv: Conversation) => void
+  removeConversation: (id: string) => void
+  updateConversation: (id: string, updates: Partial<Conversation>) => void
 }
 
 /**
@@ -36,7 +41,7 @@ export const useChatStore = create<ChatState>((set) => ({
   isLoading: false,
 
   setConversations: (conversations) => set({ conversations }),
-  setCurrentConversationId: (id) => set({ currentConversationId: id }),
+  setCurrentConversation: (id) => set({ currentConversationId: id }),
   setMessages: (messages) => set({ messages }),
   addMessage: (message) =>
     set((state) => ({
@@ -45,4 +50,27 @@ export const useChatStore = create<ChatState>((set) => ({
   setReasoningDepth: (reasoningDepth) => set({ reasoningDepth }),
   setIsLoading: (isLoading) => set({ isLoading }),
   clearMessages: () => set({ messages: [] }),
+
+  addConversation: (conv) =>
+    set((state) => ({
+      conversations: [conv, ...state.conversations],
+    })),
+  removeConversation: (id) =>
+    set((state) => {
+      const filtered = state.conversations.filter((c) => c.id !== id)
+      const newCurrentId =
+        state.currentConversationId === id
+          ? (filtered[0]?.id ?? null)
+          : state.currentConversationId
+      return {
+        conversations: filtered,
+        currentConversationId: newCurrentId,
+      }
+    }),
+  updateConversation: (id, updates) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === id ? { ...c, ...updates } : c
+      ),
+    })),
 }))

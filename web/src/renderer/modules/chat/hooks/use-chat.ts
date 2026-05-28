@@ -6,7 +6,7 @@
 import { useCallback, useRef } from 'react'
 import { useChatStore } from '@/stores/useChatStore'
 import { chat, chatStream, submitFeedback } from '../services/chat-api'
-import type { ChatMessage, FeedbackData, ReasoningDepth, StreamToken } from '../types/chat'
+import type { ChatMessage, Conversation, FeedbackData, ReasoningDepth, StreamToken } from '../types/chat'
 
 /** 生成唯一 ID */
 const generateId = (): string => crypto.randomUUID()
@@ -20,6 +20,10 @@ interface UseChatReturn {
   reasoningDepth: ReasoningDepth
   /** 是否正在生成 */
   isLoading: boolean
+  /** 会话列表 */
+  conversations: Conversation[]
+  /** 当前会话 ID（用于会话管理） */
+  currentConversationId: string | null
   /** 发送消息（流式） */
   sendMessage: (content: string) => void
   /** 发送消息（非流式） */
@@ -32,6 +36,12 @@ interface UseChatReturn {
   clearMessages: () => void
   /** 停止生成 */
   stopGeneration: () => void
+  /** 创建新会话 */
+  createConversation: () => void
+  /** 切换会话 */
+  switchConversation: (id: string) => void
+  /** 删除会话 */
+  deleteConversation: (id: string) => void
 }
 
 export function useChat(): UseChatReturn {
@@ -40,6 +50,7 @@ export function useChat(): UseChatReturn {
     currentConversationId,
     reasoningDepth,
     isLoading,
+    conversations,
     addMessage,
     setMessages,
     setReasoningDepth: storeSetReasoningDepth,
@@ -53,7 +64,14 @@ export function useChat(): UseChatReturn {
   const ensureConversationId = useCallback((): string => {
     if (currentConversationId) return currentConversationId
     const id = generateId()
-    useChatStore.getState().setCurrentConversationId(id)
+    useChatStore.getState().addConversation({
+      id,
+      title: '新会话',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messageCount: 0,
+    })
+    useChatStore.getState().setCurrentConversation(id)
     return id
   }, [currentConversationId])
 
@@ -74,6 +92,13 @@ export function useChat(): UseChatReturn {
       }
       addMessage(userMessage)
 
+      // 更新会话
+      useChatStore.getState().updateConversation(convId, {
+        updatedAt: Date.now(),
+        lastMessage: content.trim(),
+        messageCount: (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) + 1,
+      })
+
       // 创建 AI 占位消息
       const aiMessageId = generateId()
       const aiMessage: ChatMessage = {
@@ -93,6 +118,15 @@ export function useChat(): UseChatReturn {
           if (token.done) {
             setIsLoading(false)
             abortRef.current = null
+            // 更新会话最后消息
+            const finalMessages = useChatStore.getState().messages
+            const lastAiMsg = [...finalMessages].reverse().find((m) => m.role === 'assistant')
+            if (lastAiMsg) {
+              useChatStore.getState().updateConversation(convId, {
+                lastMessage: lastAiMsg.content.slice(0, 100),
+                messageCount: (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) + 1,
+              })
+            }
             return
           }
 
@@ -136,6 +170,14 @@ export function useChat(): UseChatReturn {
         createdAt: Date.now(),
       }
       addMessage(userMessage)
+
+      // 更新会话
+      useChatStore.getState().updateConversation(convId, {
+        updatedAt: Date.now(),
+        lastMessage: content.trim(),
+        messageCount: (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) + 1,
+      })
+
       setIsLoading(true)
 
       try {
@@ -158,6 +200,12 @@ export function useChat(): UseChatReturn {
           },
         }
         addMessage(aiMessage)
+
+        // 更新会话
+        useChatStore.getState().updateConversation(convId, {
+          lastMessage: response.content.slice(0, 100),
+          messageCount: (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) + 1,
+        })
       } catch (error) {
         console.error('[Chat] Request error:', error)
         const errorMessage: ChatMessage = {
@@ -222,16 +270,45 @@ export function useChat(): UseChatReturn {
     setIsLoading(false)
   }, [setIsLoading])
 
+  /** 创建新会话 */
+  const createConversation = useCallback(() => {
+    const id = crypto.randomUUID()
+    useChatStore.getState().addConversation({
+      id,
+      title: '新会话',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messageCount: 0,
+    })
+    useChatStore.getState().setCurrentConversation(id)
+    useChatStore.getState().clearMessages()
+  }, [])
+
+  /** 切换会话 */
+  const switchConversation = useCallback((id: string) => {
+    useChatStore.getState().setCurrentConversation(id)
+  }, [])
+
+  /** 删除会话 */
+  const deleteConversation = useCallback((id: string) => {
+    useChatStore.getState().removeConversation(id)
+  }, [])
+
   return {
     messages,
     conversationId: currentConversationId,
     reasoningDepth,
     isLoading,
+    conversations,
+    currentConversationId,
     sendMessage,
     sendMessageSync,
     setReasoningDepth,
     submitFeedback: handleFeedback,
     clearMessages,
     stopGeneration,
+    createConversation,
+    switchConversation,
+    deleteConversation,
   }
 }

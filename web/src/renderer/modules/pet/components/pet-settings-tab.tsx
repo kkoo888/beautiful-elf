@@ -1,22 +1,50 @@
 import { useState, useCallback } from 'react'
-import { Card, Space, Input, Slider, Select, InputNumber, Button, Typography, message } from 'antd'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Card, Space, Input, Slider, Select, InputNumber, Button, Typography, Descriptions, message } from 'antd'
 import {
   FolderOpenOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
   SettingOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import { DEFAULT_PET_SETTINGS, DECAY_SPEED_OPTIONS, type PetSettings } from '../types/pet'
+import { getAvailableModels, switchPetModel } from '../services/pet-api'
 
 export default function PetSettingsTab() {
   const [settings, setSettings] = useState<PetSettings>(DEFAULT_PET_SETTINGS)
   const [petVisible, setPetVisible] = useState(false)
+  const queryClient = useQueryClient()
+
+  const { data: models = [], isLoading: modelsLoading } = useQuery({
+    queryKey: ['pet-models'],
+    queryFn: getAvailableModels,
+  })
+
+  const switchMutation = useMutation({
+    mutationFn: switchPetModel,
+    onSuccess: () => {
+      message.success('模型已切换，宠物窗口将重新加载')
+      queryClient.invalidateQueries({ queryKey: ['pet-models'] })
+    },
+    onError: () => {
+      message.error('模型切换失败')
+    },
+  })
 
   const updateSetting = useCallback(
     <K extends keyof PetSettings>(key: K, value: PetSettings[K]) => {
       setSettings((prev) => ({ ...prev, [key]: value }))
     },
     []
+  )
+
+  const handleModelChange = useCallback(
+    (modelName: string) => {
+      updateSetting('modelPath', modelName)
+      switchMutation.mutate(modelName)
+    },
+    [updateSetting, switchMutation]
   )
 
   const handleTogglePet = useCallback(async () => {
@@ -26,6 +54,16 @@ export default function PetSettingsTab() {
     setPetVisible((v) => !v)
     message.info(petVisible ? '宠物窗口已隐藏' : '宠物窗口已显示')
   }, [petVisible])
+
+  const handleOpenModelDir = useCallback(async () => {
+    const api = window.electronAPI?.shell
+    if (!api?.openPath) {
+      message.warning('当前环境不支持打开目录')
+      return
+    }
+    // 打开模型所在目录，实际路径由后端决定
+    await api.openPath(settings.modelPath || '.')
+  }, [settings.modelPath])
 
   const handleSaveSettings = useCallback(() => {
     // TODO: persist settings to store/backend
@@ -38,7 +76,22 @@ export default function PetSettingsTab() {
         <Space direction="vertical" style={{ width: '100%' }} size="small">
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              模型路径
+              选择模型
+            </Typography.Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              placeholder="选择 .pmx 模型文件"
+              value={settings.modelPath || undefined}
+              onChange={handleModelChange}
+              loading={modelsLoading}
+              options={models.map((m) => ({ label: m, value: m }))}
+              notFoundContent={modelsLoading ? '加载中...' : '暂无可用模型'}
+            />
+          </div>
+
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              模型路径（手动输入）
             </Typography.Text>
             <Input
               placeholder="输入 3D 模型文件路径 (如 .glb / .gltf)"
@@ -47,6 +100,31 @@ export default function PetSettingsTab() {
               suffix={<FolderOpenOutlined style={{ color: '#999' }} />}
             />
           </div>
+
+          {settings.modelPath && (
+            <Descriptions size="small" column={1} bordered style={{ marginTop: 8 }}>
+              <Descriptions.Item label="当前模型">
+                {settings.modelPath.split('/').pop() || settings.modelPath}
+              </Descriptions.Item>
+              <Descriptions.Item label="路径">{settings.modelPath}</Descriptions.Item>
+            </Descriptions>
+          )}
+
+          <Space>
+            <Button
+              icon={<FolderOpenOutlined />}
+              onClick={handleOpenModelDir}
+              disabled={!settings.modelPath}
+            >
+              打开模型目录
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['pet-models'] })}
+            >
+              刷新模型列表
+            </Button>
+          </Space>
         </Space>
       </Card>
 

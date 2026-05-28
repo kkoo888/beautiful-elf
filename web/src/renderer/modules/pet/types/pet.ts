@@ -43,3 +43,11 @@ export interface PetWindowInfo {
   visible: boolean
   screenshot: string | null
 }
+
+// ─── 宠物模型 ───
+export interface PetModelInfo {
+  name: string
+  path: string
+  size: number
+  lastModified: number
+}

@@ -104,3 +104,25 @@ export async function fetchInteractions(): Promise<PetInteraction[]> {
     return [...MOCK_INTERACTIONS]
   }
 }
+
+// ─── 模型管理 ───
+export async function getAvailableModels(): Promise<string[]> {
+  try {
+    // TODO: 调用后端 API 读取本地目录下的 .pmx 文件
+    // const res = await apiClient.get<string[]>('/pet/models')
+    // return res.data
+    throw new Error('use mock')
+  } catch {
+    return ['default.pmx', 'haru.pmx', 'shizuku.pmx']
+  }
+}
+
+export async function switchPetModel(modelPath: string): Promise<void> {
+  try {
+    // TODO: 调用后端 API 切换模型
+    // await apiClient.post('/pet/switch-model', { modelPath })
+    throw new Error('use mock')
+  } catch {
+    console.log('Switching model to:', modelPath)
+  }
+}

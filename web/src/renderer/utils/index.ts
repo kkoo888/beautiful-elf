@@ -14,35 +14,35 @@ export {
 export { encrypt, decrypt } from './crypto'
 
 /**
- * camelCase 转 snake_case（深层递归）
+ * camelCase 转 snake_case（深层递归，支持数组）
  */
-export function camelToSnake(obj: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => {
-      const snakeKey = k.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
-      // 递归处理嵌套对象
-      if (v && typeof v === 'object' && !Array.isArray(v)) {
-        return [snakeKey, camelToSnake(v as Record<string, unknown>)]
-      }
-      return [snakeKey, v]
-    })
-  )
+export function camelToSnake(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(camelToSnake)
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [
+        k.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+        camelToSnake(v),
+      ])
+    )
+  }
+  return obj
 }
 
 /**
- * snake_case 转 camelCase（深层递归）
+ * snake_case 转 camelCase（深层递归，支持数组）
  */
-export function snakeToCamel(obj: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => {
-      const camelKey = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-      // 递归处理嵌套对象
-      if (v && typeof v === 'object' && !Array.isArray(v)) {
-        return [camelKey, snakeToCamel(v as Record<string, unknown>)]
-      }
-      return [camelKey, v]
-    })
-  )
+export function snakeToCamel(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(snakeToCamel)
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [
+        k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+        snakeToCamel(v),
+      ])
+    )
+  }
+  return obj
 }
 
 /**
