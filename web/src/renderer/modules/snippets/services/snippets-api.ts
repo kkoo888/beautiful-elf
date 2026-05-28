@@ -51,7 +51,7 @@ const MOCK_SNIPPETS: Snippet[] = [
   {
     id: '5',
     title: 'Shell 文件批量重命名',
-    content: `#!/bin/bash\nfor f in *.txt; do\n  mv "$f" "${f%.txt}.md"\ndone`,
+    content: '#!/bin/bash\nfor f in *.txt; do\n  mv "$f" "${f%.txt}.md"\ndone',
     language: 'shell',
     tags: ['shell', 'batch'],
     useCount: 12,
