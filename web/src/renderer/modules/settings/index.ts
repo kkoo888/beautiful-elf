@@ -9,6 +9,9 @@ export { ShortcutSettings } from './components/shortcut-settings'
 export { PrivacySettings } from './components/privacy-settings'
 export { AboutSettings } from './components/about-settings'
 export { SoulSettings } from './components/soul-settings'
+export { PromptManager } from './components/prompt-manager'
+export { PromptVersionHistory } from './components/prompt-version-history'
+export { PromptDiff } from './components/prompt-diff'
 
 // Hooks
 export { useSettings } from './hooks/use-settings'
@@ -36,7 +39,10 @@ export type {
   ConnectionTestResult,
   RestartRequiredField,
   PersonalityPreset,
-  SpeakingStyle
+  SpeakingStyle,
+  PromptConfig,
+  PromptVersion,
+  ABTestConfig
 } from './types/settings'
 
 export {
