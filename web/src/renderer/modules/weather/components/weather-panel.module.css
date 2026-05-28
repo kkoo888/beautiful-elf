@@ -1,0 +1,63 @@
+/* 天气面板样式 */
+
+.panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow: auto;
+}
+
+/* 天气主区域 */
+.weatherMain {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 温度大字 */
+.tempDisplay {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--ant-color-text);
+  line-height: 1;
+}
+
+.tempUnit {
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--ant-color-text-secondary);
+  margin-left: 4px;
+}
+
+/* 天气图标大图 */
+.weatherIconLarge {
+  font-size: 64px;
+  line-height: 1;
+}
+
+/* 详情行 */
+.detailRow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.detailItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--ant-color-text-secondary);
+}
+
+.detailValue {
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+/* 预报卡片 */
+.forecastSection {
+  margin-top: 8px;
+}

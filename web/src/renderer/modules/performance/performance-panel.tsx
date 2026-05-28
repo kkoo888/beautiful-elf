@@ -1,10 +1,2 @@
-import { PageHeader } from '@/components/page-header'
-
-/** 性能监控面板 */
-export default function PerformancePanel() {
-  return (
-    <div>
-      <PageHeader title="📊 性能监控" description="CPU / 内存 / 磁盘实时监控" />
-    </div>
-  )
-}
+/** 性能监控面板 - 重导出（兼容旧路径） */
+export { PerformancePanel as default } from './components/performance-panel'
