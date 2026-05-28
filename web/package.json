@@ -34,7 +34,13 @@
     "remark-gfm": "^4.0.1",
     "prismjs": "^1.30.0",
     "react-window": "^1.8.11",
-    "dayjs": "^1.11.13"
+    "dayjs": "^1.11.13",
+    "@uiw/react-codemirror": "^4.23.7",
+    "@codemirror/lang-javascript": "^6.2.3",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/theme-one-dark": "^6.1.2"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -62,6 +68,7 @@
     "vitest": "^4.1.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/user-event": "^14.6.1",
     "jsdom": "^26.1.0"
   }
 }

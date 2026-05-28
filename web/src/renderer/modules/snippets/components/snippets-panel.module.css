@@ -1,0 +1,218 @@
+/* Snippets 模块样式 */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  gap: 16px;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  margin: 0 !important;
+}
+
+/* 搜索栏 */
+.searchBar {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 200px;
+}
+
+.tagFilter {
+  min-width: 180px;
+  max-width: 300px;
+}
+
+/* 卡片网格 */
+.cardGrid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  align-content: start;
+  padding-bottom: 16px;
+}
+
+/* 响应式：小屏 1 列，中屏 2 列，大屏 3 列 */
+@media (max-width: 640px) {
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1024px) {
+  .cardGrid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+}
+
+/* 片段卡片 */
+.snippetCard {
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.snippetCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.cardTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+}
+
+.cardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+/* 代码预览 */
+.codePreview {
+  background: var(--color-bg-elevated, #fafafa);
+  border-radius: 8px;
+  padding: 8px 0;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow: hidden;
+  max-height: 140px;
+}
+
+.codeLine {
+  display: flex;
+  padding: 0 12px;
+  white-space: pre;
+}
+
+.codeLine:hover {
+  background: var(--color-bg-hover, rgba(0, 0, 0, 0.04));
+}
+
+.lineNumber {
+  color: var(--color-text-tertiary, #999);
+  width: 28px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 8px;
+  user-select: none;
+  border-right: 1px solid var(--color-border, #e8e8e8);
+  margin-right: 8px;
+}
+
+.lineContent {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codeMore {
+  text-align: center;
+  color: var(--color-text-tertiary, #999);
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+/* 编辑器 */
+.editorWrapper {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-border, #d9d9d9);
+}
+
+.editorWrapper:focus-within {
+  border-color: var(--color-primary, #f97316);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1);
+}
+
+.editorContainer {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.editorFormItem {
+  flex: 1;
+}
+
+/* 表单 */
+.snippetForm {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Drawer 内容 */
+.drawerContent {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.drawerFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border, #f0f0f0);
+  flex-shrink: 0;
+}
+
+/* 空状态 */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  color: var(--color-text-tertiary, #999);
+}
+
+.emptyIcon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.emptyText {
+  font-size: 16px;
+  color: var(--color-text-secondary, #666);
+}
+
+.emptyHint {
+  font-size: 14px;
+  color: var(--color-text-tertiary, #999);
+  margin-top: 8px;
+}
+
+/* 加载状态 */
+.loadingContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
