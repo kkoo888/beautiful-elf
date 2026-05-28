@@ -12,6 +12,8 @@ export { SoulSettings } from './components/soul-settings'
 export { PromptManager } from './components/prompt-manager'
 export { PromptVersionHistory } from './components/prompt-version-history'
 export { PromptDiff } from './components/prompt-diff'
+export { DataManagement } from './components/data-management'
+export type { ExportData } from './components/data-management'
 
 // Hooks
 export { useSettings } from './hooks/use-settings'
