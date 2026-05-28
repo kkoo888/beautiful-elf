@@ -1,10 +1,6 @@
-import { PageHeader } from '@/components/page-header'
+/**
+ * 设置模块入口
+ * 从 components/settings-panel 重新导出
+ */
 
-/** 设置面板 */
-export default function SettingsPanel() {
-  return (
-    <div>
-      <PageHeader title="⚙️ 设置" description="全局配置" />
-    </div>
-  )
-}
+export { default } from './components/settings-panel'
