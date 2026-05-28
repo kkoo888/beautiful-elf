@@ -4,7 +4,6 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { StatusBar } from './status-bar'
-import { useAppStore } from '@/stores/use-app-store'
 import { useTheme } from '@/hooks'
 
 const { Content } = Layout
@@ -12,6 +11,8 @@ const { Content } = Layout
 /**
  * 全局布局组件
  * 侧边栏 + 头部 + 内容区 + 底部状态栏
+ * - 侧边栏折叠时内容区自动扩展
+ * - 使用 Ant Design Layout.Sider
  */
 export function AppLayout() {
   const [isMaximized, setIsMaximized] = useState(true)
