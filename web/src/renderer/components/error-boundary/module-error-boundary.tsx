@@ -1,5 +1,6 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Result, Button, Typography } from 'antd'
+import { reportError } from '@/services/error-reporter'
 
 const { Text } = Typography
 
@@ -30,6 +31,10 @@ export class ModuleErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error(`[ModuleErrorBoundary:${this.props.moduleName}]`, error, errorInfo)
+
+    // 自动上报错误到后端，附带模块名
+    reportError(error, errorInfo, this.props.moduleName)
+
     this.props.onError?.(error, errorInfo)
   }
 

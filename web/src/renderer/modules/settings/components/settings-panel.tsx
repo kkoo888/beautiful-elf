@@ -14,6 +14,7 @@ import {
   InfoCircleOutlined,
   HeartOutlined,
   FileTextOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSettings } from '../hooks/use-settings'
@@ -25,6 +26,7 @@ import { PrivacySettings } from './privacy-settings'
 import { AboutSettings } from './about-settings'
 import { SoulSettings } from './soul-settings'
 import { PromptManager } from './prompt-manager'
+import { DataManagement } from './data-management'
 import styles from './settings-panel.module.css'
 
 const TAB_ITEMS = [
@@ -67,6 +69,11 @@ const TAB_ITEMS = [
     key: 'prompt',
     label: 'Prompt 管理',
     icon: <FileTextOutlined />,
+  },
+  {
+    key: 'data',
+    label: '数据管理',
+    icon: <DatabaseOutlined />,
   },
 ]
 
@@ -122,6 +129,8 @@ export default function SettingsPanel() {
           return <SoulSettings soul={soul} onChange={updateSoul} />
         case 'prompt':
           return <PromptManager />
+        case 'data':
+          return <DataManagement />
         default:
           return null
       }

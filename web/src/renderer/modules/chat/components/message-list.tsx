@@ -78,6 +78,7 @@ export const MessageList: React.FC<MessageListProps> = ({
 }) => {
   const listRef = useRef<VirtualList>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const outerRef = useRef<HTMLElement>(null)
   const [listHeight, setListHeight] = useState(600)
 
   // 追踪用户是否在底部附近
@@ -119,30 +120,12 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   }, [])
 
-  // ---- 2. 判断用户是否在底部附近 ----
-  const checkNearBottom = useCallback((): boolean => {
-    const list = listRef.current
-    if (!list) return true
-
-    // react-window 内部滚动容器
-    const outerRef = list.outerRef
-    if (!outerRef || !outerRef.current) return true
-
-    const el = outerRef.current as unknown as HTMLElement
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    return distanceFromBottom < AUTO_SCROLL_THRESHOLD
-  }, [])
-
-  // ---- 3. 滚动事件处理 ----
+  // ---- 2. 滚动事件处理 ----
   const handleScroll = useCallback(
     ({ scrollOffset }: { scrollDirection: string; scrollOffset: number }) => {
-      const list = listRef.current
-      if (!list) return
+      const el = outerRef.current
+      if (!el) return
 
-      const outerRef = list.outerRef
-      if (!outerRef || !outerRef.current) return
-
-      const el = outerRef.current as unknown as HTMLElement
       const isNearBottom = el.scrollHeight - scrollOffset - el.clientHeight < AUTO_SCROLL_THRESHOLD
       isNearBottomRef.current = isNearBottom
 
@@ -168,7 +151,7 @@ export const MessageList: React.FC<MessageListProps> = ({
     [hasMore, isLoadingMore, onLoadMore]
   )
 
-  // ---- 4. 新消息自动滚到底部 ----
+  // ---- 3. 新消息自动滚到底部 ----
   useEffect(() => {
     const newCount = messages.length
     const prevCount = prevCountRef.current
@@ -183,7 +166,7 @@ export const MessageList: React.FC<MessageListProps> = ({
     prevCountRef.current = newCount
   }, [messages.length])
 
-  // ---- 5. 流式更新时滚动 ----
+  // ---- 4. 流式更新时滚动 ----
   useEffect(() => {
     if (isLoading && isNearBottomRef.current) {
       requestAnimationFrame(() => {
@@ -192,7 +175,7 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   }, [messages, isLoading])
 
-  // ---- 6. 加载历史消息后恢复滚动位置 ----
+  // ---- 5. 加载历史消息后恢复滚动位置 ----
   useEffect(() => {
     if (!isLoadingMore && scrollSnapshotRef.current) {
       const snapshot = scrollSnapshotRef.current
@@ -201,15 +184,11 @@ export const MessageList: React.FC<MessageListProps> = ({
 
       // 等 DOM 更新后恢复位置
       requestAnimationFrame(() => {
-        const list = listRef.current
-        if (!list) return
+        const el = outerRef.current
+        if (!el) return
 
-        const outerRef = list.outerRef
-        if (!outerRef || !outerRef.current) return
-
-        const el = outerRef.current as unknown as HTMLElement
         const heightDiff = el.scrollHeight - snapshot.scrollHeight
-        list.scrollTo(snapshot.scrollOffset + heightDiff)
+        listRef.current?.scrollTo(snapshot.scrollOffset + heightDiff)
       })
     }
   }, [isLoadingMore, messages.length])
@@ -257,6 +236,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         itemData={itemData}
         overscanCount={OVERSCAN_COUNT}
         onScroll={handleScroll}
+        outerRef={outerRef}
         style={{ overflowX: 'hidden' }}
       >
         {Row}
