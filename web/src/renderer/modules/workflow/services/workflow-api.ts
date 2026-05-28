@@ -176,12 +176,54 @@ const mockRuns: WorkflowRun[] = [
     finishedAt: now - 3540_000,
     duration: 60000,
     nodeRuns: [
-      { nodeId: 'n1', nodeName: '开始', status: 'success', startedAt: now - 3600_000, finishedAt: now - 3595_000, duration: 5000 },
-      { nodeId: 'n2', nodeName: '接收输入', status: 'success', startedAt: now - 3595_000, finishedAt: now - 3585_000, duration: 10000 },
-      { nodeId: 'n3', nodeName: '意图识别', status: 'success', startedAt: now - 3585_000, finishedAt: now - 3565_000, duration: 20000 },
-      { nodeId: 'n4', nodeName: '路由分发', status: 'success', startedAt: now - 3565_000, finishedAt: now - 3555_000, duration: 10000 },
-      { nodeId: 'n5', nodeName: '执行任务', status: 'success', startedAt: now - 3555_000, finishedAt: now - 3545_000, duration: 10000 },
-      { nodeId: 'n6', nodeName: '输出结果', status: 'success', startedAt: now - 3545_000, finishedAt: now - 3540_000, duration: 5000 },
+      {
+        nodeId: 'n1',
+        nodeName: '开始',
+        status: 'success',
+        startedAt: now - 3600_000,
+        finishedAt: now - 3595_000,
+        duration: 5000,
+      },
+      {
+        nodeId: 'n2',
+        nodeName: '接收输入',
+        status: 'success',
+        startedAt: now - 3595_000,
+        finishedAt: now - 3585_000,
+        duration: 10000,
+      },
+      {
+        nodeId: 'n3',
+        nodeName: '意图识别',
+        status: 'success',
+        startedAt: now - 3585_000,
+        finishedAt: now - 3565_000,
+        duration: 20000,
+      },
+      {
+        nodeId: 'n4',
+        nodeName: '路由分发',
+        status: 'success',
+        startedAt: now - 3565_000,
+        finishedAt: now - 3555_000,
+        duration: 10000,
+      },
+      {
+        nodeId: 'n5',
+        nodeName: '执行任务',
+        status: 'success',
+        startedAt: now - 3555_000,
+        finishedAt: now - 3545_000,
+        duration: 10000,
+      },
+      {
+        nodeId: 'n6',
+        nodeName: '输出结果',
+        status: 'success',
+        startedAt: now - 3545_000,
+        finishedAt: now - 3540_000,
+        duration: 5000,
+      },
     ],
   },
   {
@@ -191,9 +233,30 @@ const mockRuns: WorkflowRun[] = [
     status: 'running',
     startedAt: now - 1200_000,
     nodeRuns: [
-      { nodeId: 'n1', nodeName: '开始', status: 'success', startedAt: now - 1200_000, finishedAt: now - 1195_000, duration: 5000 },
-      { nodeId: 'n2', nodeName: '数据采集', status: 'success', startedAt: now - 1195_000, finishedAt: now - 900_000, duration: 295000 },
-      { nodeId: 'n3', nodeName: '数据清洗', status: 'success', startedAt: now - 900_000, finishedAt: now - 600_000, duration: 300000 },
+      {
+        nodeId: 'n1',
+        nodeName: '开始',
+        status: 'success',
+        startedAt: now - 1200_000,
+        finishedAt: now - 1195_000,
+        duration: 5000,
+      },
+      {
+        nodeId: 'n2',
+        nodeName: '数据采集',
+        status: 'success',
+        startedAt: now - 1195_000,
+        finishedAt: now - 900_000,
+        duration: 295000,
+      },
+      {
+        nodeId: 'n3',
+        nodeName: '数据清洗',
+        status: 'success',
+        startedAt: now - 900_000,
+        finishedAt: now - 600_000,
+        duration: 300000,
+      },
       { nodeId: 'n4', nodeName: '分析处理', status: 'running', startedAt: now - 600_000 },
       { nodeId: 'n5', nodeName: '生成报告', status: 'idle' },
     ],
@@ -207,9 +270,31 @@ const mockRuns: WorkflowRun[] = [
     finishedAt: now - 10 * 86400_000 + 45000,
     duration: 45000,
     nodeRuns: [
-      { nodeId: 'n1', nodeName: '开始', status: 'success', startedAt: now - 10 * 86400_000, finishedAt: now - 10 * 86400_000 + 5000, duration: 5000 },
-      { nodeId: 'n2', nodeName: '检查更新', status: 'success', startedAt: now - 10 * 86400_000 + 5000, finishedAt: now - 10 * 86400_000 + 10000, duration: 5000 },
-      { nodeId: 'n3', nodeName: '下载内容', status: 'failed', startedAt: now - 10 * 86400_000 + 10000, finishedAt: now - 10 * 86400_000 + 45000, duration: 35000, error: '连接超时：无法访问远程知识库' },
+      {
+        nodeId: 'n1',
+        nodeName: '开始',
+        status: 'success',
+        startedAt: now - 10 * 86400_000,
+        finishedAt: now - 10 * 86400_000 + 5000,
+        duration: 5000,
+      },
+      {
+        nodeId: 'n2',
+        nodeName: '检查更新',
+        status: 'success',
+        startedAt: now - 10 * 86400_000 + 5000,
+        finishedAt: now - 10 * 86400_000 + 10000,
+        duration: 5000,
+      },
+      {
+        nodeId: 'n3',
+        nodeName: '下载内容',
+        status: 'failed',
+        startedAt: now - 10 * 86400_000 + 10000,
+        finishedAt: now - 10 * 86400_000 + 45000,
+        duration: 35000,
+        error: '连接超时：无法访问远程知识库',
+      },
       { nodeId: 'n4', nodeName: '索引构建', status: 'skipped' },
     ],
   },
@@ -316,7 +401,10 @@ export async function createWorkflow(input: WorkflowFormInput): Promise<Workflow
   return workflow
 }
 
-export async function updateWorkflow(id: string, input: Partial<WorkflowFormInput>): Promise<Workflow> {
+export async function updateWorkflow(
+  id: string,
+  input: Partial<WorkflowFormInput>
+): Promise<Workflow> {
   await delay()
   const idx = workflowStore.findIndex((w) => w.id === id)
   if (idx === -1) throw new Error('Workflow not found')
@@ -346,11 +434,21 @@ export async function createFromTemplate(templateId: string): Promise<Workflow> 
   if (!tpl) throw new Error('Template not found')
   const nodes = tpl.nodes.map((n) => ({ ...n, id: `node-${Date.now()}-${n.id}` }))
   const edges = tpl.edges.map((e) => ({ ...e, id: `e-${Date.now()}-${e.id}` }))
-  return createWorkflow({ name: `${tpl.name}（副本）`, description: tpl.description, triggerType: 'manual', nodes, edges })
+  return createWorkflow({
+    name: `${tpl.name}（副本）`,
+    description: tpl.description,
+    triggerType: 'manual',
+    nodes,
+    edges,
+  })
 }
 
 /** 保存 DAG（节点 + 边） */
-export async function saveWorkflowDag(workflowId: string, nodes: WorkflowNode[], edges: WorkflowEdge[]): Promise<Workflow> {
+export async function saveWorkflowDag(
+  workflowId: string,
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[]
+): Promise<Workflow> {
   await delay()
   const wf = workflowStore.find((w) => w.id === workflowId)
   if (!wf) throw new Error('Workflow not found')
@@ -407,7 +505,11 @@ export async function duplicateWorkflow(id: string): Promise<Workflow> {
   await delay()
   const wf = workflowStore.find((w) => w.id === id)
   if (!wf) throw new Error('Workflow not found')
-  const newNodes = wf.nodes.map((n) => ({ ...n, id: `node-${Date.now()}-${n.id}`, status: 'idle' as const }))
+  const newNodes = wf.nodes.map((n) => ({
+    ...n,
+    id: `node-${Date.now()}-${n.id}`,
+    status: 'idle' as const,
+  }))
   const newEdges = wf.edges.map((e) => ({ ...e, id: `e-${Date.now()}-${e.id}` }))
   return createWorkflow({
     name: `${wf.name}（副本）`,
