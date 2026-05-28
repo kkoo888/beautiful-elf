@@ -67,14 +67,14 @@
 ```sql
 CREATE TABLE settings (
     id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    `key`           VARCHAR(128)    NOT NULL COMMENT '配置键',
-    value           TEXT            NOT NULL COMMENT '配置值 (JSON 字符串)',
+    settings_key    VARCHAR(128)    NOT NULL COMMENT '配置键',
+    key_value       TEXT            NOT NULL COMMENT '配置值 (JSON 字符串)',
     description     VARCHAR(512)    DEFAULT '' COMMENT '配置说明',
     restart_required TINYINT        NOT NULL DEFAULT 0 COMMENT '是否需要重启 (0=否, 1=是)',
     deleted         TINYINT         NOT NULL DEFAULT 0,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_settings_key (`key`),
+    UNIQUE KEY uk_settings_key (settings_key),
     INDEX idx_settings_deleted (deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全局配置表';
 ```
