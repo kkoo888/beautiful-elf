@@ -1,0 +1,406 @@
+/* 日程模块样式 */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 16px;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.searchInput {
+  width: 200px;
+}
+
+/* 日历视图区 */
+.calendarContainer {
+  flex: 1;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--color-bg-container, #fff);
+}
+
+/* 导航栏 */
+.navBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-secondary, #f0f0f0);
+}
+
+.navCenter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.navLabel {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 160px;
+  text-align: center;
+}
+
+/* 月视图网格 */
+.monthGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-top: 1px solid var(--color-border-secondary, #f0f0f0);
+}
+
+.weekdayHeader {
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #999);
+  border-bottom: 1px solid var(--color-border-secondary, #f0f0f0);
+}
+
+.dayCell {
+  min-height: 100px;
+  padding: 4px;
+  border-right: 1px solid var(--color-border-secondary, #f0f0f0);
+  border-bottom: 1px solid var(--color-border-secondary, #f0f0f0);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.dayCell:nth-child(7n) {
+  border-right: none;
+}
+
+.dayCell:hover {
+  background: var(--color-bg-text-hover, rgba(0, 0, 0, 0.02));
+}
+
+.dayCell.otherMonth {
+  opacity: 0.35;
+}
+
+.dayCell.today {
+  background: var(--color-primary-bg, #fff7ed);
+}
+
+.dayCell.selected {
+  background: var(--color-primary-bg-hover, #ffedd5);
+  box-shadow: inset 0 0 0 2px var(--color-primary, #f97316);
+}
+
+.dayNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.dayNumber.today {
+  background: var(--color-primary, #f97316);
+  color: #fff;
+  font-weight: 700;
+}
+
+.eventsList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.moreLink {
+  font-size: 11px;
+  color: var(--color-primary, #f97316);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.moreLink:hover {
+  text-decoration: underline;
+}
+
+/* 事件卡片 */
+.eventCard {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  overflow: hidden;
+  transition: opacity 0.15s;
+  color: #fff;
+}
+
+.eventCard:hover {
+  opacity: 0.85;
+}
+
+.eventDot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.eventTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eventTime {
+  font-size: 11px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+/* 提醒标记 */
+.reminderBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #d97706;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* 周视图 / 日视图 时间轴 */
+.timeGrid {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  flex: 1;
+}
+
+.timeLabels {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeLabel {
+  height: 60px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-size: 11px;
+  color: var(--color-text-secondary, #999);
+  transform: translateY(-8px);
+}
+
+.timeContent {
+  position: relative;
+  border-left: 1px solid var(--color-border-secondary, #f0f0f0);
+}
+
+.timeSlot {
+  height: 60px;
+  border-bottom: 1px solid var(--color-border-secondary, #f0f0f0);
+  cursor: pointer;
+}
+
+.timeSlot:hover {
+  background: var(--color-bg-text-hover, rgba(0, 0, 0, 0.02));
+}
+
+.timeEvent {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.timeEvent:hover {
+  opacity: 0.9;
+}
+
+.timeEventTitle {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeEventTime {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* 空状态 */
+.emptyDay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--color-text-secondary, #999);
+  gap: 8px;
+}
+
+/* 详情弹窗 */
+.detailContent {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detailRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.detailLabel {
+  flex-shrink: 0;
+  width: 80px;
+  color: var(--color-text-secondary, #999);
+  font-size: 13px;
+}
+
+.detailValue {
+  flex: 1;
+  font-size: 14px;
+}
+
+.detailDesc {
+  padding: 12px;
+  background: var(--color-bg-text-hover, rgba(0, 0, 0, 0.02));
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* 表单 */
+.formDrawer {
+  /* Drawer 内部样式覆盖 */
+}
+
+.allDayRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.colorPicker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.colorDot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.colorDot:hover {
+  transform: scale(1.15);
+}
+
+.colorDot.selected {
+  border-color: var(--color-text, #333);
+  transform: scale(1.15);
+}
+
+/* 加载态 */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+}
+
+/* 响应式：窄屏日视图 */
+@media (max-width: 768px) {
+  .panel {
+    padding: 8px;
+  }
+
+  .header {
+    flex-wrap: wrap;
+  }
+
+  .searchInput {
+    width: 100%;
+    order: 3;
+  }
+
+  .dayCell {
+    min-height: 60px;
+    padding: 2px;
+  }
+
+  .dayNumber {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+
+  .eventCard {
+    font-size: 11px;
+    padding: 1px 4px;
+  }
+
+  .navLabel {
+    font-size: 14px;
+    min-width: 120px;
+  }
+}
