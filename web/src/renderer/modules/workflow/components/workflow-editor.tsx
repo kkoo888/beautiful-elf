@@ -1,132 +1,279 @@
-/** DAG 编辑器（简化版：步骤列表拖拽排序） */
+/** DAG 可视化编辑器（React Flow） */
 
-import { List, Tag, Button, Space, Typography, Input } from 'antd'
-import { HolderOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
-import { useState, useCallback } from 'react'
-import type { WorkflowStep } from '../types/workflow'
-import { generateId } from '@/utils'
-import styles from './workflow-panel.module.css'
+import { useCallback, useMemo, useRef } from 'react'
+import ReactFlow, {
+  Controls,
+  Background,
+  MiniMap,
+  addEdge,
+  useNodesState,
+  useEdgesState,
+  Handle,
+  Position,
+  BackgroundVariant,
+  type Connection,
+  type Edge,
+  type Node,
+  type OnConnect,
+  type OnNodesChange,
+  type OnEdgesChange,
+  type NodeTypes,
+} from 'reactflow'
+import 'reactflow/dist/style.css'
+import { Tag } from 'antd'
+import {
+  StartNode,
+  EndNode,
+  TaskNode,
+  ConditionNode,
+  ParallelNode,
+  NODE_STATUS_STYLES,
+} from './nodes'
+import type { WorkflowNode, WorkflowEdge, DagNodeType, NodeStatus } from '../types/workflow'
 
-const { Text } = Typography
+// ─── 节点类型注册 ──────────────────────────────────────────
 
-const STEP_TYPE_MAP: Record<WorkflowStep['type'], { label: string; color: string }> = {
-  action: { label: '动作', color: 'blue' },
-  condition: { label: '条件', color: 'orange' },
-  loop: { label: '循环', color: 'purple' },
-  parallel: { label: '并行', color: 'cyan' },
+const nodeTypes: NodeTypes = {
+  start: StartNode,
+  end: EndNode,
+  task: TaskNode,
+  condition: ConditionNode,
+  parallel: ParallelNode,
 }
 
+// ─── 工具函数：WorkflowNode ↔ ReactFlow Node ─────────────
+
+function toRFNode(wfNode: WorkflowNode): Node {
+  return {
+    id: wfNode.id,
+    type: wfNode.type,
+    position: wfNode.position,
+    data: { label: wfNode.label, status: wfNode.status, ...wfNode.config },
+  }
+}
+
+function toRFEdge(wfEdge: WorkflowEdge): Edge {
+  return {
+    id: wfEdge.id,
+    source: wfEdge.source,
+    target: wfEdge.target,
+    label: wfEdge.label,
+    animated: false,
+    style: { stroke: '#8c8c8c', strokeWidth: 2 },
+  }
+}
+
+function fromRFNode(rfNode: Node): WorkflowNode {
+  const { label, status, ...rest } = rfNode.data ?? {}
+  return {
+    id: rfNode.id,
+    type: (rfNode.type ?? 'task') as DagNodeType,
+    label: label ?? '',
+    position: rfNode.position,
+    config: rest ?? {},
+    status: (status ?? 'idle') as NodeStatus,
+  }
+}
+
+function fromRFEdge(rfEdge: Edge): WorkflowEdge {
+  return {
+    id: rfEdge.id,
+    source: rfEdge.source,
+    target: rfEdge.target,
+    label: typeof rfEdge.label === 'string' ? rfEdge.label : undefined,
+  }
+}
+
+// ─── 组件 Props ────────────────────────────────────────────
+
 interface WorkflowEditorProps {
-  /** 初始步骤列表 */
-  steps: WorkflowStep[]
-  /** 步骤变更回调 */
-  onStepsChange: (steps: WorkflowStep[]) => void
+  /** 工作流节点 */
+  nodes: WorkflowNode[]
+  /** 工作流边 */
+  edges: WorkflowEdge[]
+  /** 节点变更回调 */
+  onNodesChange: (nodes: WorkflowNode[]) => void
+  /** 边变更回调 */
+  onEdgesChange: (edges: WorkflowEdge[]) => void
+  /** 选中节点回调 */
+  onNodeSelect?: (node: WorkflowNode | null) => void
   /** 是否只读 */
   readonly?: boolean
 }
 
-export function WorkflowEditor({ steps, onStepsChange, readonly }: WorkflowEditorProps) {
-  const [newStepName, setNewStepName] = useState('')
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
+/** 节点类型标签映射 */
+const NODE_TYPE_LABEL: Record<DagNodeType, { label: string; color: string }> = {
+  start: { label: '开始', color: 'green' },
+  end: { label: '结束', color: 'red' },
+  task: { label: '任务', color: 'blue' },
+  condition: { label: '条件', color: 'orange' },
+  parallel: { label: '并行', color: 'purple' },
+}
 
-  const handleDragStart = useCallback((index: number) => {
-    setDragIndex(index)
-  }, [])
+export function WorkflowEditor({
+  nodes: wfNodes,
+  edges: wfEdges,
+  onNodesChange: onWfNodesChange,
+  onEdgesChange: onWfEdgesChange,
+  onNodeSelect,
+  readonly = false,
+}: WorkflowEditorProps) {
+  const reactFlowWrapper = useRef<HTMLDivElement>(null)
 
-  const handleDragOver = useCallback(
-    (e: React.DragEvent, index: number) => {
-      e.preventDefault()
-      if (dragIndex === null || dragIndex === index) return
-      const reordered = [...steps]
-      const [moved] = reordered.splice(dragIndex, 1)
-      reordered.splice(index, 0, moved)
-      const updated = reordered.map((s, i) => ({ ...s, order: i }))
-      onStepsChange(updated)
-      setDragIndex(index)
+  // 转换为 React Flow 格式
+  const initialNodes = useMemo(() => wfNodes.map(toRFNode), [wfNodes])
+  const initialEdges = useMemo(() => wfEdges.map(toRFEdge), [wfEdges])
+
+  const [nodes, setNodes, onNodesChangeRaw] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChangeRaw] = useEdgesState(initialEdges)
+
+  // 同步外部数据变更
+  useMemo(() => {
+    setNodes(wfNodes.map(toRFNode))
+  }, [wfNodes, setNodes])
+
+  useMemo(() => {
+    setEdges(wfEdges.map(toRFEdge))
+  }, [wfEdges, setEdges])
+
+  // 节点变更 → 同步回父组件
+  const handleNodesChange: OnNodesChange = useCallback(
+    (changes) => {
+      onNodesChangeRaw(changes)
+      // 延迟同步：在 React Flow 状态更新后读取最新值
+      setTimeout(() => {
+        setNodes((nds) => {
+          onWfNodesChange(nds.map(fromRFNode))
+          return nds
+        })
+      }, 0)
     },
-    [dragIndex, steps, onStepsChange]
+    [onNodesChangeRaw, onWfNodesChange, setNodes]
   )
 
-  const handleDragEnd = useCallback(() => {
-    setDragIndex(null)
+  // 边变更 → 同步回父组件
+  const handleEdgesChange: OnEdgesChange = useCallback(
+    (changes) => {
+      onEdgesChangeRaw(changes)
+      setTimeout(() => {
+        setEdges((eds) => {
+          onWfEdgesChange(eds.map(fromRFEdge))
+          return eds
+        })
+      }, 0)
+    },
+    [onEdgesChangeRaw, onWfEdgesChange, setEdges]
+  )
+
+  // 连线
+  const onConnect: OnConnect = useCallback(
+    (connection: Connection) => {
+      if (readonly) return
+      const newEdge: Edge = {
+        ...connection,
+        id: `e-${connection.source}-${connection.target}`,
+        animated: false,
+        style: { stroke: '#8c8c8c', strokeWidth: 2 },
+      }
+      setEdges((eds) => addEdge(newEdge, eds))
+      setTimeout(() => {
+        setEdges((eds) => {
+          onWfEdgesChange(eds.map(fromRFEdge))
+          return eds
+        })
+      }, 0)
+    },
+    [readonly, setEdges, onWfEdgesChange]
+  )
+
+  // 节点选中
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      onNodeSelect?.(fromRFNode(node))
+    },
+    [onNodeSelect]
+  )
+
+  // 点击空白取消选中
+  const handlePaneClick = useCallback(() => {
+    onNodeSelect?.(null)
+  }, [onNodeSelect])
+
+  // MiniMap 节点颜色
+  const minimapNodeColor = useCallback((node: Node) => {
+    const status = (node.data?.status as string) ?? 'idle'
+    const style = NODE_STATUS_STYLES[status] ?? NODE_STATUS_STYLES.idle
+    return style.border
   }, [])
 
-  const handleAddStep = useCallback(() => {
-    if (!newStepName.trim()) return
-    const newStep: WorkflowStep = {
-      id: generateId(),
-      name: newStepName.trim(),
-      type: 'action',
-      config: {},
-      dependsOn: [],
-      order: steps.length,
-    }
-    onStepsChange([...steps, newStep])
-    setNewStepName('')
-  }, [newStepName, steps, onStepsChange])
+  // 拖拽添加节点
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
 
-  const handleRemoveStep = useCallback(
-    (id: string) => {
-      const filtered = steps.filter((s) => s.id !== id).map((s, i) => ({ ...s, order: i }))
-      onStepsChange(filtered)
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault()
+      if (readonly) return
+
+      const type = event.dataTransfer.getData('application/reactflow-type') as DagNodeType
+      const label = event.dataTransfer.getData('application/reactflow-label')
+      if (!type || !label) return
+
+      const bounds = reactFlowWrapper.current?.getBoundingClientRect()
+      if (!bounds) return
+
+      const position = {
+        x: event.clientX - bounds.left - 60,
+        y: event.clientY - bounds.top - 20,
+      }
+
+      const newNode: WorkflowNode = {
+        id: `node-${Date.now()}`,
+        type,
+        label,
+        position,
+        config: {},
+        status: 'idle',
+      }
+
+      const updatedNodes = [...wfNodes, newNode]
+      onWfNodesChange(updatedNodes)
     },
-    [steps, onStepsChange]
+    [readonly, wfNodes, onWfNodesChange]
   )
 
   return (
-    <div>
-      <div className={styles.stepList}>
-        <List
-          dataSource={steps}
-          renderItem={(step, index) => (
-            <div
-              className={styles.stepItem}
-              draggable={!readonly}
-              onDragStart={() => handleDragStart(index)}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDragEnd={handleDragEnd}
-              style={{ opacity: dragIndex === index ? 0.5 : 1 }}
-            >
-              {!readonly && (
-                <div className={styles.dragHandle}>
-                  <HolderOutlined />
-                </div>
-              )}
-              <div className={styles.stepIndex}>{index + 1}</div>
-              <div className={styles.stepInfo}>
-                <div className={styles.stepName}>{step.name}</div>
-                <div className={styles.stepType}>
-                  <Tag color={STEP_TYPE_MAP[step.type].color}>{STEP_TYPE_MAP[step.type].label}</Tag>
-                </div>
-              </div>
-              {!readonly && (
-                <Button
-                  type="text"
-                  size="small"
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleRemoveStep(step.id)}
-                />
-              )}
-            </div>
-          )}
-          locale={{ emptyText: <Text type="secondary">暂无步骤，添加一个开始编排</Text> }}
-        />
-      </div>
-      {!readonly && (
-        <Space.Compact style={{ marginTop: 12 }}>
-          <Input
-            placeholder="输入步骤名称"
-            value={newStepName}
-            onChange={(e) => setNewStepName(e.target.value)}
-            onPressEnter={handleAddStep}
-            style={{ width: 240 }}
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAddStep}>
-            添加步骤
-          </Button>
-        </Space.Compact>
-      )}
+    <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%' }}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
+        onConnect={onConnect}
+        onNodeClick={handleNodeClick}
+        onPaneClick={handlePaneClick}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        nodeTypes={nodeTypes}
+        fitView
+        snapToGrid
+        snapGrid={[16, 16]}
+        nodesDraggable={!readonly}
+        nodesConnectable={!readonly}
+        elementsSelectable={!readonly}
+        deleteKeyCode={readonly ? null : 'Delete'}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Controls position="bottom-left" />
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#e0e0e0" />
+        <MiniMap nodeColor={minimapNodeColor} position="bottom-right" pannable zoomable />
+      </ReactFlow>
     </div>
   )
 }
+
+// ─── 导出节点类型标签（供配置面板使用） ─────────────────────
+
+export { NODE_TYPE_LABEL }

@@ -156,7 +156,7 @@ export function WebSocketProvider({
     (type: WSMessageType | '*', handler: MessageHandler): Unsubscribe => {
       return clientRef.current?.subscribe(type, handler) ?? (() => {})
     },
-    [],
+    []
   )
 
   const handleReconnect = useCallback(() => {
@@ -175,16 +175,13 @@ export function WebSocketProvider({
       isConnected: connectionState === 'connected',
       connectionState,
     }),
-    [send, subscribe, connectionState],
+    [send, subscribe, connectionState]
   )
 
   return (
     <WebSocketContext value={value}>
       {showDisconnectBanner && (
-        <DisconnectBanner
-          connectionState={connectionState}
-          onReconnect={handleReconnect}
-        />
+        <DisconnectBanner connectionState={connectionState} onReconnect={handleReconnect} />
       )}
       {children}
     </WebSocketContext>

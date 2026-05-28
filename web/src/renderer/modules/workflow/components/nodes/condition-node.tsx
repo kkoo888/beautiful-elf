@@ -16,7 +16,11 @@ function ConditionNodeComponent({ data }: NodeProps<ConditionNodeData>) {
 
   return (
     <div style={{ position: 'relative', width: 100, height: 100 }}>
-      <Handle type="target" position={Position.Top} style={{ width: 8, height: 8, background: statusStyle.border }} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={{ width: 8, height: 8, background: statusStyle.border }}
+      />
       <div
         style={{
           width: 100,
@@ -45,7 +49,11 @@ function ConditionNodeComponent({ data }: NodeProps<ConditionNodeData>) {
           {data.label}
         </span>
       </div>
-      <Handle type="source" position={Position.Bottom} style={{ width: 8, height: 8, background: statusStyle.border }} />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={{ width: 8, height: 8, background: statusStyle.border }}
+      />
       <Handle
         type="source"
         position={Position.Right}

@@ -29,9 +29,17 @@ function TaskNodeComponent({ data }: NodeProps<TaskNodeData>) {
         boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ width: 8, height: 8, background: statusStyle.border }} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={{ width: 8, height: 8, background: statusStyle.border }}
+      />
       {data.label}
-      <Handle type="source" position={Position.Bottom} style={{ width: 8, height: 8, background: statusStyle.border }} />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        style={{ width: 8, height: 8, background: statusStyle.border }}
+      />
     </div>
   )
 }

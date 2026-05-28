@@ -1,12 +1,15 @@
-import { Card, Switch, Descriptions, Button, Space, Tag, Badge } from 'antd'
+import { Card, Switch, Descriptions, Button, Space, Badge } from 'antd'
 import { ReloadOutlined, CloseOutlined, SyncOutlined } from '@ant-design/icons'
 import { useState } from 'react'
+import PetScreenshotPreview from './pet-screenshot-preview'
 
 export default function PetControlTab() {
   const [desktopPetEnabled, setDesktopPetEnabled] = useState(true)
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      <PetScreenshotPreview />
+
       <Card size="small" title="桌面宠物">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>启用桌面宠物</span>
@@ -45,7 +48,9 @@ export default function PetControlTab() {
           <Button icon={<CloseOutlined />} danger>
             关闭窗口
           </Button>
-          <Button icon={<SyncOutlined />}>刷新</Button>
+          <Button icon={<SyncOutlined />}>
+            刷新
+          </Button>
           <Button icon={<ReloadOutlined />} type="primary">
             重载模型
           </Button>
