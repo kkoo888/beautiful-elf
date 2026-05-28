@@ -35,13 +35,13 @@ export const WeatherForecast: React.FC<WeatherForecastProps> = ({ forecast }) =>
             style={{ textAlign: 'center', borderRadius: 10 }}
             styles={{ body: { padding: '12px 8px' } }}
           >
-            <div style={{ fontSize: 12, color: 'var(--ant-color-text-secondary)', marginBottom: 4 }}>
+            <div
+              style={{ fontSize: 12, color: 'var(--ant-color-text-secondary)', marginBottom: 4 }}
+            >
               {formatDate(item.date)}
             </div>
             <div style={{ fontSize: 28, marginBottom: 4 }}>{item.icon}</div>
-            <div style={{ fontSize: 12, marginBottom: 4 }}>
-              {WEATHER_LABELS[item.condition]}
-            </div>
+            <div style={{ fontSize: 12, marginBottom: 4 }}>{WEATHER_LABELS[item.condition]}</div>
             <div style={{ fontSize: 13, fontWeight: 600 }}>
               <span style={{ color: 'var(--ant-color-error)' }}>{item.tempHigh}°</span>
               {' / '}

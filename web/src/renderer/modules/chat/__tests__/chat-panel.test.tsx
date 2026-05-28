@@ -24,15 +24,15 @@ vi.mock('../hooks/use-chat', () => ({
     setReasoningDepth: mockSetReasoningDepth,
     submitFeedback: mockSubmitFeedback,
     clearMessages: mockClearMessages,
-    stopGeneration: mockStopGeneration
-  })
+    stopGeneration: mockStopGeneration,
+  }),
 }))
 
 // Mock child components
 vi.mock('../components/message-list', () => ({
   SimpleMessageList: ({ messages }: { messages: unknown[] }) => (
     <div data-testid="message-list">{messages.length} messages</div>
-  )
+  ),
 }))
 
 vi.mock('../components/message-input', () => ({
@@ -40,11 +40,11 @@ vi.mock('../components/message-input', () => ({
     <div data-testid="message-input">
       <button onClick={() => onSend('test message')}>Send</button>
     </div>
-  )
+  ),
 }))
 
 vi.mock('../components/reasoning-depth', () => ({
-  ReasoningDepthSwitch: () => <div data-testid="reasoning-switch" />
+  ReasoningDepthSwitch: () => <div data-testid="reasoning-switch" />,
 }))
 
 describe('ChatPanel', () => {

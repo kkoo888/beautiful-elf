@@ -1,11 +1,7 @@
 /** 技能卡片组件 */
 
 import { Card, Switch, Tag, Tooltip } from 'antd'
-import {
-  ThunderboltOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-} from '@ant-design/icons'
+import { ThunderboltOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import type { Skill } from '../types/skills'
 import styles from './skills-panel.module.css'
 
@@ -30,11 +26,7 @@ export function SkillCard({ skill, onToggle, onClick, isToggling }: SkillCardPro
   }
 
   return (
-    <Card
-      className={styles.card}
-      hoverable
-      onClick={() => onClick(skill)}
-    >
+    <Card className={styles.card} hoverable onClick={() => onClick(skill)}>
       <div className={styles.cardBody}>
         {/* 头部：名称 + 开关 */}
         <div className={styles.cardHeader}>

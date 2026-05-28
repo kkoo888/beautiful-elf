@@ -22,7 +22,7 @@ export function StatusBar() {
         justifyContent: 'space-between',
         borderTop: '1px solid var(--ant-color-border-secondary)',
         backgroundColor: 'var(--ant-color-bg-container)',
-        fontSize: 12
+        fontSize: 12,
       }}
     >
       <Space size="small">

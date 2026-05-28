@@ -29,7 +29,11 @@ export interface UseToolsReturn {
 }
 
 export function useTools(): UseToolsReturn {
-  const { data: tools = [], isLoading, error } = useQuery({
+  const {
+    data: tools = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: TOOLS_KEY,
     queryFn: fetchTools,
   })

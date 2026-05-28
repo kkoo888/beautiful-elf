@@ -2,10 +2,7 @@ import { Drawer, Tag, Typography, Button, Space, Tooltip } from 'antd'
 import { CopyOutlined, PushpinOutlined, DeleteOutlined } from '@ant-design/icons'
 import { formatDate } from '@/utils'
 import type { ClipboardItem } from '../types/clipboard'
-import {
-  getContentTypeIcon,
-  getContentTypeLabel
-} from '../hooks/use-clipboard'
+import { getContentTypeIcon, getContentTypeLabel } from '../hooks/use-clipboard'
 import styles from './clipboard-panel.module.css'
 
 const { Text, Paragraph } = Typography
@@ -27,7 +24,7 @@ export function ClipboardDetail({
   onClose,
   onCopy,
   onTogglePin,
-  onDelete
+  onDelete,
 }: ClipboardDetailProps) {
   if (!item) return null
 
@@ -59,10 +56,7 @@ export function ClipboardDetail({
             />
           </Tooltip>
           <Tooltip title="复制">
-            <Button
-              icon={<CopyOutlined />}
-              onClick={() => onCopy(item)}
-            />
+            <Button icon={<CopyOutlined />} onClick={() => onCopy(item)} />
           </Tooltip>
           <Tooltip title="删除">
             <Button
@@ -78,9 +72,7 @@ export function ClipboardDetail({
       }
     >
       <div className={styles.detailMeta}>
-        <Text type="secondary">
-          复制于 {formatDate(item.copiedAt, 'YYYY-MM-DD HH:mm:ss')}
-        </Text>
+        <Text type="secondary">复制于 {formatDate(item.copiedAt, 'YYYY-MM-DD HH:mm:ss')}</Text>
         {item.isPinned && (
           <Tag color="orange" className={styles.detailPinTag}>
             📌 已固定

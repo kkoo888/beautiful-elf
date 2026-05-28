@@ -22,7 +22,7 @@ export function PageHeader({ title, description, extra }: PageHeaderProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 16
+        marginBottom: 16,
       }}
     >
       <div>

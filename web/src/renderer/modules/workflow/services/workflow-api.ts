@@ -89,7 +89,14 @@ const mockWorkflows: Workflow[] = [
     triggerType: 'schedule',
     steps: [
       { id: generateId(), name: '扫描日程', type: 'action', config: {}, dependsOn: [], order: 0 },
-      { id: generateId(), name: '筛选待提醒', type: 'condition', config: {}, dependsOn: [], order: 1 },
+      {
+        id: generateId(),
+        name: '筛选待提醒',
+        type: 'condition',
+        config: {},
+        dependsOn: [],
+        order: 1,
+      },
       { id: generateId(), name: '发送通知', type: 'action', config: {}, dependsOn: [], order: 2 },
     ],
     createdAt: iso(new Date(now.getTime() - 45 * 86400_000)),
@@ -123,11 +130,46 @@ const mockRuns: WorkflowRun[] = [
     finishedAt: iso(new Date(now.getTime() - 3540_000)),
     duration: 60000,
     nodeRuns: [
-      { nodeId: 'n1', nodeName: '接收输入', status: 'success', startedAt: iso(new Date(now.getTime() - 3600_000)), finishedAt: iso(new Date(now.getTime() - 3590_000)), duration: 10000 },
-      { nodeId: 'n2', nodeName: '意图识别', status: 'success', startedAt: iso(new Date(now.getTime() - 3590_000)), finishedAt: iso(new Date(now.getTime() - 3570_000)), duration: 20000 },
-      { nodeId: 'n3', nodeName: '路由分发', status: 'success', startedAt: iso(new Date(now.getTime() - 3570_000)), finishedAt: iso(new Date(now.getTime() - 3560_000)), duration: 10000 },
-      { nodeId: 'n4', nodeName: '执行任务', status: 'success', startedAt: iso(new Date(now.getTime() - 3560_000)), finishedAt: iso(new Date(now.getTime() - 3545_000)), duration: 15000 },
-      { nodeId: 'n5', nodeName: '输出结果', status: 'success', startedAt: iso(new Date(now.getTime() - 3545_000)), finishedAt: iso(new Date(now.getTime() - 3540_000)), duration: 5000 },
+      {
+        nodeId: 'n1',
+        nodeName: '接收输入',
+        status: 'success',
+        startedAt: iso(new Date(now.getTime() - 3600_000)),
+        finishedAt: iso(new Date(now.getTime() - 3590_000)),
+        duration: 10000,
+      },
+      {
+        nodeId: 'n2',
+        nodeName: '意图识别',
+        status: 'success',
+        startedAt: iso(new Date(now.getTime() - 3590_000)),
+        finishedAt: iso(new Date(now.getTime() - 3570_000)),
+        duration: 20000,
+      },
+      {
+        nodeId: 'n3',
+        nodeName: '路由分发',
+        status: 'success',
+        startedAt: iso(new Date(now.getTime() - 3570_000)),
+        finishedAt: iso(new Date(now.getTime() - 3560_000)),
+        duration: 10000,
+      },
+      {
+        nodeId: 'n4',
+        nodeName: '执行任务',
+        status: 'success',
+        startedAt: iso(new Date(now.getTime() - 3560_000)),
+        finishedAt: iso(new Date(now.getTime() - 3545_000)),
+        duration: 15000,
+      },
+      {
+        nodeId: 'n5',
+        nodeName: '输出结果',
+        status: 'success',
+        startedAt: iso(new Date(now.getTime() - 3545_000)),
+        finishedAt: iso(new Date(now.getTime() - 3540_000)),
+        duration: 5000,
+      },
     ],
   },
   {
@@ -137,9 +179,28 @@ const mockRuns: WorkflowRun[] = [
     status: 'running',
     startedAt: iso(new Date(now.getTime() - 1200_000)),
     nodeRuns: [
-      { nodeId: 'n1', nodeName: '数据采集', status: 'success', startedAt: iso(new Date(now.getTime() - 1200_000)), finishedAt: iso(new Date(now.getTime() - 900_000)), duration: 300000 },
-      { nodeId: 'n2', nodeName: '数据清洗', status: 'success', startedAt: iso(new Date(now.getTime() - 900_000)), finishedAt: iso(new Date(now.getTime() - 600_000)), duration: 300000 },
-      { nodeId: 'n3', nodeName: '分析处理', status: 'running', startedAt: iso(new Date(now.getTime() - 600_000)) },
+      {
+        nodeId: 'n1',
+        nodeName: '数据采集',
+        status: 'success',
+        startedAt: iso(new Date(now.getTime() - 1200_000)),
+        finishedAt: iso(new Date(now.getTime() - 900_000)),
+        duration: 300000,
+      },
+      {
+        nodeId: 'n2',
+        nodeName: '数据清洗',
+        status: 'success',
+        startedAt: iso(new Date(now.getTime() - 900_000)),
+        finishedAt: iso(new Date(now.getTime() - 600_000)),
+        duration: 300000,
+      },
+      {
+        nodeId: 'n3',
+        nodeName: '分析处理',
+        status: 'running',
+        startedAt: iso(new Date(now.getTime() - 600_000)),
+      },
       { nodeId: 'n4', nodeName: '生成报告', status: 'pending' },
     ],
   },
@@ -152,8 +213,23 @@ const mockRuns: WorkflowRun[] = [
     finishedAt: iso(new Date(now.getTime() - 10 * 86400_000 + 45000)),
     duration: 45000,
     nodeRuns: [
-      { nodeId: 'n1', nodeName: '检查更新', status: 'success', startedAt: iso(new Date(now.getTime() - 10 * 86400_000)), finishedAt: iso(new Date(now.getTime() - 10 * 86400_000 + 10000)), duration: 10000 },
-      { nodeId: 'n2', nodeName: '下载内容', status: 'failed', startedAt: iso(new Date(now.getTime() - 10 * 86400_000 + 10000)), finishedAt: iso(new Date(now.getTime() - 10 * 86400_000 + 45000)), duration: 35000, error: '连接超时：无法访问远程知识库' },
+      {
+        nodeId: 'n1',
+        nodeName: '检查更新',
+        status: 'success',
+        startedAt: iso(new Date(now.getTime() - 10 * 86400_000)),
+        finishedAt: iso(new Date(now.getTime() - 10 * 86400_000 + 10000)),
+        duration: 10000,
+      },
+      {
+        nodeId: 'n2',
+        nodeName: '下载内容',
+        status: 'failed',
+        startedAt: iso(new Date(now.getTime() - 10 * 86400_000 + 10000)),
+        finishedAt: iso(new Date(now.getTime() - 10 * 86400_000 + 45000)),
+        duration: 35000,
+        error: '连接超时：无法访问远程知识库',
+      },
       { nodeId: 'n3', nodeName: '索引构建', status: 'skipped' },
     ],
   },
@@ -249,7 +325,10 @@ export async function createWorkflow(input: WorkflowFormInput): Promise<Workflow
 }
 
 /** 更新工作流 */
-export async function updateWorkflow(id: string, input: Partial<WorkflowFormInput>): Promise<Workflow> {
+export async function updateWorkflow(
+  id: string,
+  input: Partial<WorkflowFormInput>
+): Promise<Workflow> {
   await delay()
   const idx = workflowStore.findIndex((w) => w.id === id)
   if (idx === -1) throw new Error('Workflow not found')
@@ -282,7 +361,12 @@ export async function createFromTemplate(templateId: string): Promise<Workflow> 
   const tpl = mockTemplates.find((t) => t.id === templateId)
   if (!tpl) throw new Error('Template not found')
   const steps: WorkflowStep[] = tpl.steps.map((s, i) => ({ ...s, id: generateId(), order: i }))
-  return createWorkflow({ name: `${tpl.name}（副本）`, description: tpl.description, triggerType: 'manual', steps })
+  return createWorkflow({
+    name: `${tpl.name}（副本）`,
+    description: tpl.description,
+    triggerType: 'manual',
+    steps,
+  })
 }
 
 /** 重排工作流步骤 */

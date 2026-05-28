@@ -32,21 +32,25 @@ const queryClient = new QueryClient({
     queries: {
       retry: 2,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
-      staleTime: 5 * 60 * 1000 // 5 分钟
-    }
-  }
+      staleTime: 5 * 60 * 1000, // 5 分钟
+    },
+  },
 })
 
 /**
  * 模块级 Suspense 包裹器
  * 每个路由独立加载状态 + 错误边界
  */
-function ModuleSuspense({ children, moduleName }: { children: React.ReactNode; moduleName: string }) {
+function ModuleSuspense({
+  children,
+  moduleName,
+}: {
+  children: React.ReactNode
+  moduleName: string
+}) {
   return (
     <ModuleErrorBoundary moduleName={moduleName}>
-      <Suspense fallback={<LoadingSkeleton type="text" rows={4} />}>
-        {children}
-      </Suspense>
+      <Suspense fallback={<LoadingSkeleton type="text" rows={4} />}>{children}</Suspense>
     </ModuleErrorBoundary>
   )
 }

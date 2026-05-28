@@ -39,7 +39,7 @@ export const useAppStore = create<AppState>()(
       setTheme: (theme) => set({ theme }),
       toggleTheme: () =>
         set((state) => ({
-          theme: state.theme === 'light' ? 'dark' : 'light'
+          theme: state.theme === 'light' ? 'dark' : 'light',
         })),
 
       // 侧边栏
@@ -47,7 +47,7 @@ export const useAppStore = create<AppState>()(
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       toggleSidebar: () =>
         set((state) => ({
-          sidebarCollapsed: !state.sidebarCollapsed
+          sidebarCollapsed: !state.sidebarCollapsed,
         })),
 
       // 网络状态
@@ -60,14 +60,14 @@ export const useAppStore = create<AppState>()(
 
       // 轮询控制
       pollingEnabled: true,
-      setPollingEnabled: (pollingEnabled) => set({ pollingEnabled })
+      setPollingEnabled: (pollingEnabled) => set({ pollingEnabled }),
     }),
     {
       name: 'beautiful-elf:app',
       partialize: (state) => ({
         theme: state.theme,
-        sidebarCollapsed: state.sidebarCollapsed
-      })
+        sidebarCollapsed: state.sidebarCollapsed,
+      }),
     }
   )
 )

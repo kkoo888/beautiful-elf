@@ -8,7 +8,7 @@ export type {
   PaginatedResponse,
   ApiErrorResponse,
   PaginationParams,
-  SortParams
+  SortParams,
 } from './api'
 
 // 通用类型
@@ -22,7 +22,7 @@ export type {
   Point,
   Rect,
   ThemeMode,
-  NetworkStatus
+  NetworkStatus,
 } from './common'
 
 // ─── 对话 ───
@@ -261,6 +261,15 @@ declare global {
       }
       app: {
         getVersion: () => Promise<string>
+      }
+      pet: {
+        show: () => Promise<void>
+        hide: () => Promise<void>
+        toggle: () => Promise<void>
+        getAttributes: () => Promise<PetAttributes | { error: string; message: string }>
+        onScreenshotUpdate: (callback: (data: string) => void) => void
+        onVisibilityChange: (callback: (visible: boolean) => void) => void
+        sendScreenshot: (data: string) => void
       }
     }
   }

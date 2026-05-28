@@ -4,11 +4,11 @@
 
 /** 通知类型 */
 export type NotificationType =
-  | 'schedule'      // 📅 日程提醒
-  | 'workflow'      // ⚙️ 工作流（完成/失败）
-  | 'subagent'      // 🤖 子代理（完成/失败）
+  | 'schedule' // 📅 日程提醒
+  | 'workflow' // ⚙️ 工作流（完成/失败）
+  | 'subagent' // 🤖 子代理（完成/失败）
   | 'skill_suggest' // 💡 技能建议
-  | 'system_alert'  // 📊 系统告警
+  | 'system_alert' // 📊 系统告警
 
 /** 通知类型图标映射 */
 export const NOTIFICATION_TYPE_ICON: Record<NotificationType, string> = {

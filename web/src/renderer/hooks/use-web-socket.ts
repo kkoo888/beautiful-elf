@@ -3,7 +3,7 @@ import {
   WS_URL,
   WS_HEARTBEAT_INTERVAL,
   WS_RECONNECT_INITIAL,
-  WS_RECONNECT_MAX
+  WS_RECONNECT_MAX,
 } from '@shared/constants'
 
 type WSStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
@@ -158,6 +158,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     isConnected: status === 'connected',
     connect,
     disconnect,
-    send
+    send,
   }
 }

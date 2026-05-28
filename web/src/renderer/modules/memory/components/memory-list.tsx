@@ -50,10 +50,7 @@ export function MemoryList({
   if (memories.length === 0) {
     return (
       <div className={styles.emptyContainer}>
-        <EmptyState
-          icon="🧠"
-          description="AI 会从对话中提炼记忆，自动记录在这里"
-        />
+        <EmptyState icon="🧠" description="AI 会从对话中提炼记忆，自动记录在这里" />
       </div>
     )
   }

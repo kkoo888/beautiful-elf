@@ -17,11 +17,16 @@ const defaultSettings = {
     baseUrl: 'http://localhost:11434',
     chatModel: 'qwen2.5:7b',
     embedModel: 'nomic-embed-text',
-    visionModel: 'llava:7b'
+    visionModel: 'llava:7b',
   },
   ai: { temperature: 0.7, maxTokens: 2048, topP: 0.9, systemPrompt: 'test' },
-  app: { language: 'zh-CN', autoLaunch: false, minimizeToTray: true, closeBehavior: 'minimize' as const },
-  privacy: { encryptData: false, logLevel: 'info' as const, anonymousStats: true }
+  app: {
+    language: 'zh-CN',
+    autoLaunch: false,
+    minimizeToTray: true,
+    closeBehavior: 'minimize' as const,
+  },
+  privacy: { encryptData: false, logLevel: 'info' as const, anonymousStats: true },
 }
 
 const defaultSoul = {
@@ -30,7 +35,7 @@ const defaultSoul = {
   personality: ['温柔'],
   speakingStyle: '温柔亲切',
   emotionalTendency: 60,
-  backgroundStory: ''
+  backgroundStory: '',
 }
 
 vi.mock('../hooks/use-settings', () => ({
@@ -44,8 +49,8 @@ vi.mock('../hooks/use-settings', () => ({
     loadModels: mockLoadModels,
     models: [],
     restartHint: null,
-    clearRestartHint: mockClearRestartHint
-  })
+    clearRestartHint: mockClearRestartHint,
+  }),
 }))
 
 // Mock @/components/page-header
@@ -55,7 +60,7 @@ vi.mock('@/components/page-header', () => ({
       <h1>{title}</h1>
       {description && <p>{description}</p>}
     </div>
-  )
+  ),
 }))
 
 import SettingsPanel from '../components/settings-panel'

@@ -9,14 +9,9 @@ import {
   fetchHistory,
   fetchLanguages,
   detectLanguage,
-  toggleFavorite
+  toggleFavorite,
 } from '../services/translate-api'
-import type {
-  TranslateResult,
-  TranslateMode,
-  Language,
-  DetectResult
-} from '../types/translate'
+import type { TranslateResult, TranslateMode, Language, DetectResult } from '../types/translate'
 
 interface UseTranslateReturn {
   /** 源文本 */
@@ -121,7 +116,7 @@ export function useTranslate(): UseTranslateReturn {
         sourceText: sourceText.trim(),
         sourceLang,
         targetLang,
-        mode
+        mode,
       })
       setResult(res)
     } catch (error) {
@@ -161,16 +156,13 @@ export function useTranslate(): UseTranslateReturn {
   }, [])
 
   /** 收藏/取消收藏 */
-  const handleFavorite = useCallback(
-    async (id: string, favorite: boolean) => {
-      try {
-        await toggleFavorite({ id, favorite })
-      } catch (error) {
-        console.error('[Translate] Favorite error:', error)
-      }
-    },
-    []
-  )
+  const handleFavorite = useCallback(async (id: string, favorite: boolean) => {
+    try {
+      await toggleFavorite({ id, favorite })
+    } catch (error) {
+      console.error('[Translate] Favorite error:', error)
+    }
+  }, [])
 
   /** 清空输入 */
   const clearInput = useCallback(() => {
@@ -198,6 +190,6 @@ export function useTranslate(): UseTranslateReturn {
     swapLanguages,
     loadHistory,
     handleFavorite,
-    clearInput
+    clearInput,
   }
 }

@@ -40,7 +40,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   // Ollama 错误
   OLLAMA_UNAVAILABLE: 'Ollama 服务不可用',
   OLLAMA_MODEL_NOT_FOUND: '模型未找到，请检查配置',
-  OLLAMA_GENERATE_FAILED: '模型生成失败'
+  OLLAMA_GENERATE_FAILED: '模型生成失败',
 }
 
 export class ApiError extends Error {

@@ -37,7 +37,7 @@ export const TranslateInput: React.FC<TranslateInputProps> = ({
   onModeChange,
   isTranslating,
   onTranslate,
-  onClear
+  onClear,
 }) => {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -59,7 +59,7 @@ export const TranslateInput: React.FC<TranslateInputProps> = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '8px 16px',
-          borderBottom: '1px solid var(--color-border-secondary, #f0f0f0)'
+          borderBottom: '1px solid var(--color-border-secondary, #f0f0f0)',
         }}
       >
         <div className={styles.modeToggle}>

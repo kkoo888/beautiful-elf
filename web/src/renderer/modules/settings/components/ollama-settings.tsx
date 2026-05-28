@@ -30,7 +30,7 @@ export function OllamaSettings({
   models,
   onChange,
   onTestConnection,
-  onLoadModels
+  onLoadModels,
 }: OllamaSettingsProps) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null)
@@ -105,7 +105,7 @@ export function OllamaSettings({
               style={{ width: '100%', marginBottom: 8 }}
               options={models.map((m) => ({
                 label: `${m.name} (${formatSize(m.size)})`,
-                value: m.name
+                value: m.name,
               }))}
             />
             <Select
@@ -116,7 +116,7 @@ export function OllamaSettings({
               style={{ width: '100%', marginBottom: 8 }}
               options={models.map((m) => ({
                 label: `${m.name} (${formatSize(m.size)})`,
-                value: m.name
+                value: m.name,
               }))}
             />
             <Select
@@ -127,15 +127,11 @@ export function OllamaSettings({
               style={{ width: '100%' }}
               options={models.map((m) => ({
                 label: `${m.name} (${formatSize(m.size)})`,
-                value: m.name
+                value: m.name,
               }))}
             />
           </div>
-          <Button
-            icon={<ReloadOutlined />}
-            loading={loadingModels}
-            onClick={handleRefreshModels}
-          >
+          <Button icon={<ReloadOutlined />} loading={loadingModels} onClick={handleRefreshModels}>
             刷新
           </Button>
         </div>

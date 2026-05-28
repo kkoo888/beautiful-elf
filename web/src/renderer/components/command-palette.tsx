@@ -41,11 +41,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       .sort((a, b) => {
         // 精确匹配优先
         const aExact =
-          a.name.toLowerCase() === query ||
-          a.keywords.some((kw) => kw.toLowerCase() === query)
+          a.name.toLowerCase() === query || a.keywords.some((kw) => kw.toLowerCase() === query)
         const bExact =
-          b.name.toLowerCase() === query ||
-          b.keywords.some((kw) => kw.toLowerCase() === query)
+          b.name.toLowerCase() === query || b.keywords.some((kw) => kw.toLowerCase() === query)
         if (aExact && !bExact) return -1
         if (!aExact && bExact) return 1
 
@@ -141,7 +139,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         style={{
           borderRadius: 0,
           border: 'none',
-          borderBottom: '1px solid var(--ant-color-border)'
+          borderBottom: '1px solid var(--ant-color-border)',
         }}
       />
       <List
@@ -155,7 +153,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               padding: '8px 16px',
               cursor: 'pointer',
               backgroundColor:
-                index === selectedIndex ? 'var(--ant-color-bg-text-hover)' : undefined
+                index === selectedIndex ? 'var(--ant-color-bg-text-hover)' : undefined,
             }}
           >
             <Space>

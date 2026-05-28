@@ -23,7 +23,7 @@ export function ClipboardContextMenu({
   onCopy,
   onTogglePin,
   onDelete,
-  onOpenDetail
+  onOpenDetail,
 }: ClipboardContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -58,7 +58,7 @@ export function ClipboardContextMenu({
       onClick: () => {
         onCopy(item)
         onClose()
-      }
+      },
     },
     {
       key: 'detail',
@@ -66,7 +66,7 @@ export function ClipboardContextMenu({
       onClick: () => {
         onOpenDetail(item)
         onClose()
-      }
+      },
     },
     {
       key: 'pin',
@@ -74,7 +74,7 @@ export function ClipboardContextMenu({
       onClick: () => {
         onTogglePin(item.id)
         onClose()
-      }
+      },
     },
     { key: 'divider', label: '', isDivider: true },
     {
@@ -84,8 +84,8 @@ export function ClipboardContextMenu({
       onClick: () => {
         onDelete(item.id)
         onClose()
-      }
-    }
+      },
+    },
   ]
 
   return (
@@ -94,7 +94,7 @@ export function ClipboardContextMenu({
       className={styles.contextMenu}
       style={{
         left: position.x,
-        top: position.y
+        top: position.y,
       }}
       role="menu"
     >

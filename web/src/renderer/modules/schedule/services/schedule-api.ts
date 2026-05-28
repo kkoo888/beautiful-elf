@@ -154,8 +154,7 @@ export async function fetchSchedules(params?: ScheduleQueryParams): Promise<Sche
       const kw = params.keyword.toLowerCase()
       result = result.filter(
         (s) =>
-          s.title.toLowerCase().includes(kw) ||
-          (s.description?.toLowerCase().includes(kw) ?? false)
+          s.title.toLowerCase().includes(kw) || (s.description?.toLowerCase().includes(kw) ?? false)
       )
     }
     return result

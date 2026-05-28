@@ -43,21 +43,19 @@ export const useCommandStore = create<CommandState>((set, get) => ({
 
   unregisterModule: (module) => {
     set((state) => ({
-      commands: state.commands.filter((c) => c.module !== module)
+      commands: state.commands.filter((c) => c.module !== module),
     }))
   },
 
   recordUsage: (commandId) => {
     set((state) => ({
       commands: state.commands.map((c) =>
-        c.id === commandId
-          ? { ...c, use_count: c.use_count + 1, last_used_at: Date.now() }
-          : c
-      )
+        c.id === commandId ? { ...c, use_count: c.use_count + 1, last_used_at: Date.now() } : c
+      ),
     }))
   },
 
   open: () => set({ isOpen: true }),
   close: () => set({ isOpen: false }),
-  toggle: () => set((state) => ({ isOpen: !state.isOpen }))
+  toggle: () => set((state) => ({ isOpen: !state.isOpen })),
 }))

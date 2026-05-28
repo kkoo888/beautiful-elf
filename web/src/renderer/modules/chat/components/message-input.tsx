@@ -21,7 +21,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onSend,
   disabled = false,
   onStop,
-  isLoading = false
+  isLoading = false,
 }) => {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)

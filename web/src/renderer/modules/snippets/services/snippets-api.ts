@@ -1,10 +1,6 @@
 import { apiClient } from '@/services/api-client'
 import type { ApiResponse, PaginatedResponse } from '@/types'
-import type {
-  Snippet,
-  SnippetFormData,
-  SnippetQueryParams
-} from '../types/snippets'
+import type { Snippet, SnippetFormData, SnippetQueryParams } from '../types/snippets'
 
 /** Mock 数据 */
 const MOCK_SNIPPETS: Snippet[] = [
@@ -16,7 +12,7 @@ const MOCK_SNIPPETS: Snippet[] = [
     tags: ['react', 'hooks'],
     useCount: 42,
     createdAt: '2026-05-01T10:00:00Z',
-    updatedAt: '2026-05-20T14:30:00Z'
+    updatedAt: '2026-05-20T14:30:00Z',
   },
   {
     id: '2',
@@ -26,7 +22,7 @@ const MOCK_SNIPPETS: Snippet[] = [
     tags: ['algorithm', 'sort'],
     useCount: 28,
     createdAt: '2026-04-15T08:00:00Z',
-    updatedAt: '2026-05-10T09:00:00Z'
+    updatedAt: '2026-05-10T09:00:00Z',
   },
   {
     id: '3',
@@ -36,7 +32,7 @@ const MOCK_SNIPPETS: Snippet[] = [
     tags: ['css', 'layout'],
     useCount: 35,
     createdAt: '2026-03-20T12:00:00Z',
-    updatedAt: '2026-05-18T16:00:00Z'
+    updatedAt: '2026-05-18T16:00:00Z',
   },
   {
     id: '4',
@@ -46,7 +42,7 @@ const MOCK_SNIPPETS: Snippet[] = [
     tags: ['http', 'fetch', 'utils'],
     useCount: 19,
     createdAt: '2026-04-01T15:00:00Z',
-    updatedAt: '2026-05-15T11:00:00Z'
+    updatedAt: '2026-05-15T11:00:00Z',
   },
   {
     id: '5',
@@ -56,8 +52,8 @@ const MOCK_SNIPPETS: Snippet[] = [
     tags: ['shell', 'batch'],
     useCount: 12,
     createdAt: '2026-05-05T10:00:00Z',
-    updatedAt: '2026-05-22T08:00:00Z'
-  }
+    updatedAt: '2026-05-22T08:00:00Z',
+  },
 ]
 
 /** 模拟延迟 */
@@ -87,9 +83,7 @@ export async function fetchSnippets(
 
   // 标签过滤
   if (params?.tags && params.tags.length > 0) {
-    items = items.filter((s) =>
-      params.tags!.some((tag) => s.tags.includes(tag))
-    )
+    items = items.filter((s) => params.tags!.some((tag) => s.tags.includes(tag)))
   }
 
   // 按使用次数排序（高频靠前）
@@ -105,9 +99,7 @@ export async function fetchSnippets(
 }
 
 /** 创建片段 */
-export async function createSnippet(
-  data: SnippetFormData
-): Promise<Snippet> {
+export async function createSnippet(data: SnippetFormData): Promise<Snippet> {
   // const { data: res } = await apiClient.post<ApiResponse<Snippet>>('/snippets', data)
   // return res.data
 
@@ -118,17 +110,14 @@ export async function createSnippet(
     ...data,
     useCount: 0,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   }
   MOCK_SNIPPETS.unshift(snippet)
   return snippet
 }
 
 /** 更新片段 */
-export async function updateSnippet(
-  id: string,
-  data: SnippetFormData
-): Promise<Snippet> {
+export async function updateSnippet(id: string, data: SnippetFormData): Promise<Snippet> {
   // const { data: res } = await apiClient.put<ApiResponse<Snippet>>(`/snippets/${id}`, data)
   // return res.data
 
@@ -138,7 +127,7 @@ export async function updateSnippet(
   MOCK_SNIPPETS[idx] = {
     ...MOCK_SNIPPETS[idx],
     ...data,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   }
   return MOCK_SNIPPETS[idx]
 }

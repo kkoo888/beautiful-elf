@@ -28,7 +28,7 @@ export function EmptyState({
   actionText,
   onAction,
   children,
-  image
+  image,
 }: EmptyStateProps) {
   return (
     <div
@@ -38,7 +38,7 @@ export function EmptyState({
         alignItems: 'center',
         justifyContent: 'center',
         padding: '48px 24px',
-        textAlign: 'center'
+        textAlign: 'center',
       }}
     >
       <Empty

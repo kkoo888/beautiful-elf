@@ -56,7 +56,9 @@ vi.mock('../services/skills-api', () => ({
     stats: { callCount: 128, successRate: 0.97, avgDuration: 850 },
     createdAt: '2026-01-01T00:00:00Z',
   }),
-  fetchSkillStats: vi.fn().mockResolvedValue({ callCount: 128, successRate: 0.97, avgDuration: 850 }),
+  fetchSkillStats: vi
+    .fn()
+    .mockResolvedValue({ callCount: 128, successRate: 0.97, avgDuration: 850 }),
   refineSkill: vi.fn().mockResolvedValue({
     suggestions: ['建议一', '建议二'],
     refinedContent: '# weather (Refined)\n\n优化后的内容',
@@ -70,7 +72,7 @@ function renderWithProviders(ui: React.ReactElement) {
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>{ui}</ConfigProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
 }
 

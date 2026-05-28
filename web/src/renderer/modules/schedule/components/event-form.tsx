@@ -1,17 +1,7 @@
 /** 创建/编辑日程表单（Drawer 侧滑面板） */
 
 import { useEffect, memo } from 'react'
-import {
-  Drawer,
-  Form,
-  Input,
-  DatePicker,
-  Switch,
-  Select,
-  Button,
-  Space,
-  message,
-} from 'antd'
+import { Drawer, Form, Input, DatePicker, Switch, Select, Button, Space, message } from 'antd'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -29,10 +19,12 @@ const scheduleSchema = z
   .object({
     title: z.string().min(1, '标题不能为空').max(100, '标题最多 100 个字符'),
     description: z.string().max(500, '描述最多 500 个字符').optional(),
-    timeRange: z.tuple([z.instanceof(dayjs as unknown as typeof dayjs), z.instanceof(dayjs as unknown as typeof dayjs)]).refine(
-      (val) => val[0].isValid() && val[1].isValid(),
-      '请选择有效的时间范围'
-    ),
+    timeRange: z
+      .tuple([
+        z.instanceof(dayjs as unknown as typeof dayjs),
+        z.instanceof(dayjs as unknown as typeof dayjs),
+      ])
+      .refine((val) => val[0].isValid() && val[1].isValid(), '请选择有效的时间范围'),
     isAllDay: z.boolean(),
     reminderMinutes: z.number().min(0).max(1440),
     color: z.string().optional(),
@@ -159,9 +151,7 @@ export const EventForm = memo<EventFormProps>(function EventForm({
           <Controller
             name="title"
             control={control}
-            render={({ field }) => (
-              <Input {...field} placeholder="输入日程标题" maxLength={100} />
-            )}
+            render={({ field }) => <Input {...field} placeholder="输入日程标题" maxLength={100} />}
           />
         </Form.Item>
 
@@ -203,9 +193,7 @@ export const EventForm = memo<EventFormProps>(function EventForm({
           <Controller
             name="isAllDay"
             control={control}
-            render={({ field }) => (
-              <Switch checked={field.value} onChange={field.onChange} />
-            )}
+            render={({ field }) => <Switch checked={field.value} onChange={field.onChange} />}
           />
         </Form.Item>
 

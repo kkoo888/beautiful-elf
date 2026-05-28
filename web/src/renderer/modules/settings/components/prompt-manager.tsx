@@ -16,14 +16,14 @@ import {
   Switch,
   InputNumber,
   Typography,
-  message
+  message,
 } from 'antd'
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   HistoryOutlined,
-  ExperimentOutlined
+  ExperimentOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { PromptConfig, PromptVersion, ABTestConfig } from '../types/settings'
@@ -48,19 +48,20 @@ const INITIAL_PROMPTS: PromptConfig[] = [
         content: '你是一个友好的 AI 助手，请用中文回答用户问题。',
         createdAt: Date.now() - 86400000 * 3,
         createdBy: '系统',
-        isActive: false
+        isActive: false,
       },
       {
         id: 'v1-2',
         version: 2,
-        content: '你是一个友好的 AI 助手。请用简洁清晰的中文回答用户问题，必要时可使用 Markdown 格式化输出。',
+        content:
+          '你是一个友好的 AI 助手。请用简洁清晰的中文回答用户问题，必要时可使用 Markdown 格式化输出。',
         createdAt: Date.now() - 86400000,
         createdBy: '管理员',
-        isActive: true
-      }
+        isActive: true,
+      },
     ],
     activeVersionId: 'v1-2',
-    abTest: { enabled: false, variants: [] }
+    abTest: { enabled: false, variants: [] },
   },
   {
     id: 'p2',
@@ -70,14 +71,15 @@ const INITIAL_PROMPTS: PromptConfig[] = [
       {
         id: 'v2-1',
         version: 1,
-        content: '你是一个专业的编程助手，擅长 TypeScript、React 和 Node.js。请提供高质量的代码建议。',
+        content:
+          '你是一个专业的编程助手，擅长 TypeScript、React 和 Node.js。请提供高质量的代码建议。',
         createdAt: Date.now() - 86400000 * 7,
         createdBy: '系统',
-        isActive: true
-      }
+        isActive: true,
+      },
     ],
-    activeVersionId: 'v2-1'
-  }
+    activeVersionId: 'v2-1',
+  },
 ]
 
 /** Prompt 管理组件 */
@@ -112,7 +114,9 @@ export function PromptManager() {
         // 编辑
         setPrompts((prev) =>
           prev.map((p) =>
-            p.id === editingPrompt.id ? { ...p, name: values.name, description: values.description } : p
+            p.id === editingPrompt.id
+              ? { ...p, name: values.name, description: values.description }
+              : p
           )
         )
         message.success('Prompt 已更新')
@@ -129,10 +133,10 @@ export function PromptManager() {
               content: '',
               createdAt: Date.now(),
               createdBy: '当前用户',
-              isActive: true
-            }
+              isActive: true,
+            },
           ],
-          activeVersionId: ''
+          activeVersionId: '',
         }
         newPrompt.activeVersionId = newPrompt.versions[0].id
         setPrompts((prev) => [...prev, newPrompt])
@@ -149,21 +153,18 @@ export function PromptManager() {
   }, [])
 
   // ── 版本历史回调 ─────────────────────────────────────
-  const handleSetActive = useCallback(
-    (promptId: string, versionId: string) => {
-      setPrompts((prev) =>
-        prev.map((p) => {
-          if (p.id !== promptId) return p
-          const versions = p.versions.map((v) => ({
-            ...v,
-            isActive: v.id === versionId
-          }))
-          return { ...p, versions, activeVersionId: versionId }
-        })
-      )
-    },
-    []
-  )
+  const handleSetActive = useCallback((promptId: string, versionId: string) => {
+    setPrompts((prev) =>
+      prev.map((p) => {
+        if (p.id !== promptId) return p
+        const versions = p.versions.map((v) => ({
+          ...v,
+          isActive: v.id === versionId,
+        }))
+        return { ...p, versions, activeVersionId: versionId }
+      })
+    )
+  }, [])
 
   // ── A/B 测试 ─────────────────────────────────────────
   const openAbTest = useCallback(
@@ -174,7 +175,7 @@ export function PromptManager() {
         record.versions.map((v) => ({ versionId: v.id, weight: 100 / record.versions.length }))
       abForm.setFieldsValue({
         enabled: record.abTest?.enabled ?? false,
-        variants
+        variants,
       })
     },
     [abForm]
@@ -187,12 +188,10 @@ export function PromptManager() {
         enabled: values.enabled,
         variants: values.variants.map((v: { versionId: string; weight: number }) => ({
           versionId: v.versionId,
-          weight: v.weight
-        }))
+          weight: v.weight,
+        })),
       }
-      setPrompts((prev) =>
-        prev.map((p) => (p.id === abTestPrompt.id ? { ...p, abTest } : p))
-      )
+      setPrompts((prev) => prev.map((p) => (p.id === abTestPrompt.id ? { ...p, abTest } : p)))
       setAbTestPrompt(null)
       message.success('A/B 测试配置已保存')
     })
@@ -213,14 +212,14 @@ export function PromptManager() {
               {record.description}
             </Text>
           </div>
-        )
+        ),
       },
       {
         title: '版本数',
         key: 'versionCount',
         width: 80,
         align: 'center',
-        render: (_, record) => <Tag>{record.versions.length}</Tag>
+        render: (_, record) => <Tag>{record.versions.length}</Tag>,
       },
       {
         title: '激活版本',
@@ -229,7 +228,7 @@ export function PromptManager() {
         render: (_, record) => {
           const active = record.versions.find((v) => v.id === record.activeVersionId)
           return active ? <Tag color="green">v{active.version}</Tag> : <Tag>—</Tag>
-        }
+        },
       },
       {
         title: 'A/B 测试',
@@ -237,11 +236,7 @@ export function PromptManager() {
         width: 100,
         align: 'center',
         render: (_, record) =>
-          record.abTest?.enabled ? (
-            <Tag color="blue">已开启</Tag>
-          ) : (
-            <Tag>关闭</Tag>
-          )
+          record.abTest?.enabled ? <Tag color="blue">已开启</Tag> : <Tag>关闭</Tag>,
       },
       {
         title: '操作',
@@ -286,8 +281,8 @@ export function PromptManager() {
               </Button>
             </Popconfirm>
           </Space>
-        )
-      }
+        ),
+      },
     ],
     [openEdit, openAbTest, handleDelete]
   )
@@ -371,11 +366,7 @@ export function PromptManager() {
                       align="baseline"
                       style={{ display: 'flex', marginBottom: 8 }}
                     >
-                      <Form.Item
-                        {...field}
-                        name={[field.name, 'versionId']}
-                        noStyle
-                      >
+                      <Form.Item {...field} name={[field.name, 'versionId']} noStyle>
                         <Input disabled style={{ width: 180 }} />
                       </Form.Item>
                       <Form.Item

@@ -4,8 +4,9 @@
 
 export { WebSocketClient } from './websocket-client'
 export { WebSocketContext, WebSocketProvider } from './websocket-provider'
-export { useWebSocket } from './use-websocket'
+export { useWebSocket, useWSMessage, useConnectionState, useSendMessage } from './use-websocket'
 export { MessageQueue } from './message-queue'
+export { EventDeduplicator } from './types'
 export type {
   WSMessage,
   WSMessageType,

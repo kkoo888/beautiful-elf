@@ -79,11 +79,7 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
               删除
             </Button>
           </Popconfirm>
-          <Button
-            type="primary"
-            icon={<EditOutlined />}
-            onClick={() => onEdit(event)}
-          >
+          <Button type="primary" icon={<EditOutlined />} onClick={() => onEdit(event)}>
             编辑
           </Button>
         </Space>
@@ -97,17 +93,13 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
             <ClockCircleOutlined /> 时间
           </span>
           <span className={styles.detailValue}>
-            {event.is_all_day ? (
-              isSameDay ? (
-                `${startTime.format('YYYY-MM-DD')} 全天`
-              ) : (
-                `${startTime.format('YYYY-MM-DD')} - ${endTime.format('YYYY-MM-DD')} 全天`
-              )
-            ) : isSameDay ? (
-              `${startTime.format('YYYY-MM-DD HH:mm')} - ${endTime.format('HH:mm')}`
-            ) : (
-              `${startTime.format('YYYY-MM-DD HH:mm')} - ${endTime.format('YYYY-MM-DD HH:mm')}`
-            )}
+            {event.is_all_day
+              ? isSameDay
+                ? `${startTime.format('YYYY-MM-DD')} 全天`
+                : `${startTime.format('YYYY-MM-DD')} - ${endTime.format('YYYY-MM-DD')} 全天`
+              : isSameDay
+                ? `${startTime.format('YYYY-MM-DD HH:mm')} - ${endTime.format('HH:mm')}`
+                : `${startTime.format('YYYY-MM-DD HH:mm')} - ${endTime.format('YYYY-MM-DD HH:mm')}`}
           </span>
         </div>
 
@@ -156,7 +148,10 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
           <span className={styles.detailLabel}>
             <CalendarOutlined /> 创建
           </span>
-          <span className={styles.detailValue} style={{ fontSize: 12, color: 'var(--color-text-secondary, #999)' }}>
+          <span
+            className={styles.detailValue}
+            style={{ fontSize: 12, color: 'var(--color-text-secondary, #999)' }}
+          >
             {dayjs(event.created_at).format('YYYY-MM-DD HH:mm')}
           </span>
         </div>

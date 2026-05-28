@@ -1,7 +1,13 @@
 /** 运行监控组件（Timeline） */
 
 import { Timeline, Tag, Typography, Spin, Empty } from 'antd'
-import { CheckCircleFilled, CloseCircleFilled, LoadingOutlined, ClockCircleOutlined, MinusCircleFilled } from '@ant-design/icons'
+import {
+  CheckCircleFilled,
+  CloseCircleFilled,
+  LoadingOutlined,
+  ClockCircleOutlined,
+  MinusCircleFilled,
+} from '@ant-design/icons'
 import { useState } from 'react'
 import type { WorkflowRun, NodeRun, NodeStatus } from '../types/workflow'
 import styles from './workflow-panel.module.css'
@@ -60,8 +66,24 @@ export function WorkflowMonitor({ runs, loading }: WorkflowMonitorProps) {
           >
             <div className={styles.runName}>{run.workflowName}</div>
             <div className={styles.runMeta}>
-              <Tag color={run.status === 'success' ? 'success' : run.status === 'failed' ? 'error' : run.status === 'running' ? 'processing' : 'default'}>
-                {run.status === 'success' ? '成功' : run.status === 'failed' ? '失败' : run.status === 'running' ? '运行中' : '已取消'}
+              <Tag
+                color={
+                  run.status === 'success'
+                    ? 'success'
+                    : run.status === 'failed'
+                      ? 'error'
+                      : run.status === 'running'
+                        ? 'processing'
+                        : 'default'
+                }
+              >
+                {run.status === 'success'
+                  ? '成功'
+                  : run.status === 'failed'
+                    ? '失败'
+                    : run.status === 'running'
+                      ? '运行中'
+                      : '已取消'}
               </Tag>
               {run.duration && <span>{formatDuration(run.duration)}</span>}
             </div>
@@ -80,14 +102,24 @@ export function WorkflowMonitor({ runs, loading }: WorkflowMonitorProps) {
               <div>
                 <Text strong>{node.nodeName}</Text>
                 <Tag color={NODE_STATUS_COLOR[node.status]} style={{ marginLeft: 8 }}>
-                  {node.status === 'success' ? '成功' : node.status === 'failed' ? '失败' : node.status === 'running' ? '运行中' : node.status === 'skipped' ? '已跳过' : '等待中'}
+                  {node.status === 'success'
+                    ? '成功'
+                    : node.status === 'failed'
+                      ? '失败'
+                      : node.status === 'running'
+                        ? '运行中'
+                        : node.status === 'skipped'
+                          ? '已跳过'
+                          : '等待中'}
                 </Tag>
                 {node.duration !== undefined && (
                   <span className={styles.nodeDuration}>{formatDuration(node.duration)}</span>
                 )}
                 {node.error && (
                   <div>
-                    <Text type="danger" style={{ fontSize: 12 }}>{node.error}</Text>
+                    <Text type="danger" style={{ fontSize: 12 }}>
+                      {node.error}
+                    </Text>
                   </div>
                 )}
               </div>

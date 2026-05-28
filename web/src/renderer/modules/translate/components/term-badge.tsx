@@ -23,10 +23,7 @@ export const TermBadgeList: React.FC<TermBadgeProps> = ({ termHits }) => {
   return (
     <div className={styles.termBadges}>
       {termHits.map((hit, index) => (
-        <Tooltip
-          key={`${hit.term}-${index}`}
-          title={`${hit.term} → ${hit.translation}`}
-        >
+        <Tooltip key={`${hit.term}-${index}`} title={`${hit.term} → ${hit.translation}`}>
           <span className={styles.termBadge}>
             <span className={styles.termBadgeIcon}>📚</span>
             {hit.term}
@@ -48,23 +45,16 @@ interface TermHighlightTextProps {
  * 带术语高亮的译文渲染
  * 将命中术语在译文中用高亮样式标注
  */
-export const TermHighlightText: React.FC<TermHighlightTextProps> = ({
-  text,
-  termHits
-}) => {
+export const TermHighlightText: React.FC<TermHighlightTextProps> = ({ text, termHits }) => {
   if (termHits.length === 0) {
     return <>{text}</>
   }
 
   // 构建替换映射（按长度降序，避免短术语误匹配长术语的一部分）
-  const sortedTerms = [...termHits].sort(
-    (a, b) => b.translation.length - a.translation.length
-  )
+  const sortedTerms = [...termHits].sort((a, b) => b.translation.length - a.translation.length)
 
   // 构建正则（转义特殊字符）
-  const escapedTerms = sortedTerms.map((t) =>
-    t.translation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  )
+  const escapedTerms = sortedTerms.map((t) => t.translation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   const regex = new RegExp(`(${escapedTerms.join('|')})`, 'g')
 
   const parts = text.split(regex)
@@ -75,10 +65,7 @@ export const TermHighlightText: React.FC<TermHighlightTextProps> = ({
         const matchedTerm = sortedTerms.find((t) => t.translation === part)
         if (matchedTerm) {
           return (
-            <Tooltip
-              key={index}
-              title={`${matchedTerm.term}（术语）`}
-            >
+            <Tooltip key={index} title={`${matchedTerm.term}（术语）`}>
               <span className={styles.termHighlight}>{part}</span>
             </Tooltip>
           )

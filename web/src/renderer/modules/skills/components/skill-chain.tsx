@@ -2,11 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { Button, Empty } from 'antd'
-import {
-  HolderOutlined,
-  PlusOutlined,
-  DeleteOutlined,
-} from '@ant-design/icons'
+import { HolderOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { Skill, ChainNode } from '../types/skills'
 import styles from './skills-panel.module.css'
 
@@ -27,14 +23,11 @@ export function SkillChain({ skills, chainNodes, onChange }: SkillChainProps) {
     setDragIndex(index)
   }, [])
 
-  const handleDragOver = useCallback(
-    (e: React.DragEvent, index: number) => {
-      e.preventDefault()
-      dragOverIndex.current = index
-      setDropIndex(index)
-    },
-    [],
-  )
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    dragOverIndex.current = index
+    setDropIndex(index)
+  }, [])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -55,7 +48,7 @@ export function SkillChain({ skills, chainNodes, onChange }: SkillChainProps) {
       setDragIndex(null)
       setDropIndex(null)
     },
-    [dragIndex, dropIndex, chainNodes, onChange],
+    [dragIndex, dropIndex, chainNodes, onChange]
   )
 
   const handleDragEnd = useCallback(() => {
@@ -70,7 +63,7 @@ export function SkillChain({ skills, chainNodes, onChange }: SkillChainProps) {
       const newNode: ChainNode = { skillId, order: chainNodes.length }
       onChange([...chainNodes, newNode])
     },
-    [chainNodes, onChange],
+    [chainNodes, onChange]
   )
 
   const handleRemove = useCallback(
@@ -80,26 +73,20 @@ export function SkillChain({ skills, chainNodes, onChange }: SkillChainProps) {
         .map((node, i) => ({ ...node, order: i }))
       onChange(updated)
     },
-    [chainNodes, onChange],
+    [chainNodes, onChange]
   )
 
-  const getSkillName = (id: string) =>
-    skills.find((s) => s.id === id)?.name ?? id
+  const getSkillName = (id: string) => skills.find((s) => s.id === id)?.name ?? id
 
   // 可添加的技能（未在链中的）
-  const availableSkills = skills.filter(
-    (s) => !chainNodes.some((n) => n.skillId === s.id),
-  )
+  const availableSkills = skills.filter((s) => !chainNodes.some((n) => n.skillId === s.id))
 
   return (
     <div className={styles.chainContent}>
       {/* 链节点列表 */}
       {chainNodes.length === 0 ? (
         <div className={styles.chainEmpty}>
-          <Empty
-            description="拖拽技能到此处配置执行链"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          />
+          <Empty description="拖拽技能到此处配置执行链" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         </div>
       ) : (
         <div className={styles.chainList}>
@@ -117,9 +104,7 @@ export function SkillChain({ skills, chainNodes, onChange }: SkillChainProps) {
               >
                 <HolderOutlined className={styles.chainHandle} />
                 <span className={styles.chainOrder}>{index + 1}</span>
-                <span className={styles.chainName}>
-                  {getSkillName(node.skillId)}
-                </span>
+                <span className={styles.chainName}>{getSkillName(node.skillId)}</span>
                 <Button
                   type="text"
                   size="small"
@@ -128,9 +113,7 @@ export function SkillChain({ skills, chainNodes, onChange }: SkillChainProps) {
                   onClick={() => handleRemove(index)}
                 />
               </div>
-              {index < chainNodes.length - 1 && (
-                <div className={styles.chainArrow}>↓</div>
-              )}
+              {index < chainNodes.length - 1 && <div className={styles.chainArrow}>↓</div>}
             </div>
           ))}
         </div>

@@ -70,9 +70,7 @@ describe('MemoryPanel', () => {
     const Wrapper = createWrapper()
     render(<MemoryPanel />, { wrapper: Wrapper })
 
-    expect(
-      screen.getByPlaceholderText('输入问题，语义检索相关记忆…')
-    ).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('输入问题，语义检索相关记忆…')).toBeInTheDocument()
   })
 
   it('should render memory cards after loading', async () => {
@@ -97,9 +95,7 @@ describe('MemoryPanel', () => {
     render(<MemoryPanel />, { wrapper: Wrapper })
 
     await waitFor(() => {
-      expect(
-        screen.getByText('AI 会从对话中提炼记忆，自动记录在这里')
-      ).toBeInTheDocument()
+      expect(screen.getByText('AI 会从对话中提炼记忆，自动记录在这里')).toBeInTheDocument()
     })
   })
 

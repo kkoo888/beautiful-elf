@@ -39,12 +39,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ result, loading, o
   return (
     <div className="analysis-panel">
       <div className="analysis-panel-header">
-        <Segmented
-          options={modeOptions}
-          value={mode}
-          onChange={handleModeChange}
-          size="small"
-        />
+        <Segmented options={modeOptions} value={mode} onChange={handleModeChange} size="small" />
       </div>
 
       <div className="analysis-panel-content">
@@ -70,7 +65,9 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ result, loading, o
             </Paragraph>
 
             <div className="analysis-panel-confidence">
-              <Text type="secondary" style={{ fontSize: 12 }}>置信度</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                置信度
+              </Text>
               <Progress
                 percent={Math.round(result.confidence * 100)}
                 size="small"
@@ -79,12 +76,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ result, loading, o
               />
             </div>
 
-            <Button
-              icon={<CopyOutlined />}
-              onClick={handleCopy}
-              block
-              style={{ marginTop: 12 }}
-            >
+            <Button icon={<CopyOutlined />} onClick={handleCopy} block style={{ marginTop: 12 }}>
               复制结果
             </Button>
           </>

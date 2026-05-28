@@ -62,7 +62,11 @@ export function useWorkflow(): UseWorkflowReturn {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'list' | 'editor' | 'templates' | 'monitor'>('list')
 
-  const { data: workflows = [], isLoading, error } = useQuery({
+  const {
+    data: workflows = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: WORKFLOW_KEY,
     queryFn: fetchWorkflows,
   })
@@ -88,7 +92,8 @@ export function useWorkflow(): UseWorkflowReturn {
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: Partial<WorkflowFormInput> }) => updateWorkflow(id, input),
+    mutationFn: ({ id, input }: { id: string; input: Partial<WorkflowFormInput> }) =>
+      updateWorkflow(id, input),
     onSuccess: invalidateAll,
   })
 
@@ -103,17 +108,35 @@ export function useWorkflow(): UseWorkflowReturn {
   })
 
   const reorderMut = useMutation({
-    mutationFn: ({ workflowId, stepIds }: { workflowId: string; stepIds: string[] }) => reorderSteps(workflowId, stepIds),
+    mutationFn: ({ workflowId, stepIds }: { workflowId: string; stepIds: string[] }) =>
+      reorderSteps(workflowId, stepIds),
     onSuccess: invalidateAll,
   })
 
-  const createWorkflowMut = useCallback((input: WorkflowFormInput) => createMut.mutateAsync(input), [createMut])
-  const updateWorkflowMut = useCallback((id: string, input: Partial<WorkflowFormInput>) => updateMut.mutateAsync({ id, input }), [updateMut])
+  const createWorkflowMut = useCallback(
+    (input: WorkflowFormInput) => createMut.mutateAsync(input),
+    [createMut]
+  )
+  const updateWorkflowMut = useCallback(
+    (id: string, input: Partial<WorkflowFormInput>) => updateMut.mutateAsync({ id, input }),
+    [updateMut]
+  )
   const deleteWorkflowMut = useCallback((id: string) => deleteMut.mutateAsync(id), [deleteMut])
-  const createFromTemplateMut = useCallback((templateId: string) => templateMut.mutateAsync(templateId), [templateMut])
-  const reorderStepsMut = useCallback((workflowId: string, stepIds: string[]) => reorderMut.mutateAsync({ workflowId, stepIds }), [reorderMut])
+  const createFromTemplateMut = useCallback(
+    (templateId: string) => templateMut.mutateAsync(templateId),
+    [templateMut]
+  )
+  const reorderStepsMut = useCallback(
+    (workflowId: string, stepIds: string[]) => reorderMut.mutateAsync({ workflowId, stepIds }),
+    [reorderMut]
+  )
 
-  const isMutating = createMut.isPending || updateMut.isPending || deleteMut.isPending || templateMut.isPending || reorderMut.isPending
+  const isMutating =
+    createMut.isPending ||
+    updateMut.isPending ||
+    deleteMut.isPending ||
+    templateMut.isPending ||
+    reorderMut.isPending
 
   const selectedWorkflow = workflows.find((w) => w.id === selectedId)
 

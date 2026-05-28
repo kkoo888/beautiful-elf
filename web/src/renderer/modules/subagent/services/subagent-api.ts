@@ -16,24 +16,98 @@ function iso(d: Date): string {
 }
 
 const mockSteps1: SubagentStep[] = [
-  { id: generateId(), name: '解析用户需求', status: 'success', startedAt: iso(new Date(now.getTime() - 1800_000)), finishedAt: iso(new Date(now.getTime() - 1740_000)), duration: 60000, output: '识别到 3 个子任务' },
-  { id: generateId(), name: '生成代码框架', status: 'success', startedAt: iso(new Date(now.getTime() - 1740_000)), finishedAt: iso(new Date(now.getTime() - 1500_000)), duration: 240000, output: '生成了 5 个文件' },
-  { id: generateId(), name: '编写单元测试', status: 'running', startedAt: iso(new Date(now.getTime() - 1500_000)) },
+  {
+    id: generateId(),
+    name: '解析用户需求',
+    status: 'success',
+    startedAt: iso(new Date(now.getTime() - 1800_000)),
+    finishedAt: iso(new Date(now.getTime() - 1740_000)),
+    duration: 60000,
+    output: '识别到 3 个子任务',
+  },
+  {
+    id: generateId(),
+    name: '生成代码框架',
+    status: 'success',
+    startedAt: iso(new Date(now.getTime() - 1740_000)),
+    finishedAt: iso(new Date(now.getTime() - 1500_000)),
+    duration: 240000,
+    output: '生成了 5 个文件',
+  },
+  {
+    id: generateId(),
+    name: '编写单元测试',
+    status: 'running',
+    startedAt: iso(new Date(now.getTime() - 1500_000)),
+  },
   { id: generateId(), name: '代码审查', status: 'pending' },
   { id: generateId(), name: '提交代码', status: 'pending' },
 ]
 
 const mockSteps2: SubagentStep[] = [
-  { id: generateId(), name: '分析错误日志', status: 'success', startedAt: iso(new Date(now.getTime() - 600_000)), finishedAt: iso(new Date(now.getTime() - 540_000)), duration: 60000, output: '定位到 2 个异常点' },
-  { id: generateId(), name: '复现问题', status: 'success', startedAt: iso(new Date(now.getTime() - 540_000)), finishedAt: iso(new Date(now.getTime() - 420_000)), duration: 120000, output: '成功复现' },
-  { id: generateId(), name: '修复代码', status: 'success', startedAt: iso(new Date(now.getTime() - 420_000)), finishedAt: iso(new Date(now.getTime() - 300_000)), duration: 120000, output: '修改了 3 个文件' },
-  { id: generateId(), name: '回归测试', status: 'running', startedAt: iso(new Date(now.getTime() - 300_000)) },
+  {
+    id: generateId(),
+    name: '分析错误日志',
+    status: 'success',
+    startedAt: iso(new Date(now.getTime() - 600_000)),
+    finishedAt: iso(new Date(now.getTime() - 540_000)),
+    duration: 60000,
+    output: '定位到 2 个异常点',
+  },
+  {
+    id: generateId(),
+    name: '复现问题',
+    status: 'success',
+    startedAt: iso(new Date(now.getTime() - 540_000)),
+    finishedAt: iso(new Date(now.getTime() - 420_000)),
+    duration: 120000,
+    output: '成功复现',
+  },
+  {
+    id: generateId(),
+    name: '修复代码',
+    status: 'success',
+    startedAt: iso(new Date(now.getTime() - 420_000)),
+    finishedAt: iso(new Date(now.getTime() - 300_000)),
+    duration: 120000,
+    output: '修改了 3 个文件',
+  },
+  {
+    id: generateId(),
+    name: '回归测试',
+    status: 'running',
+    startedAt: iso(new Date(now.getTime() - 300_000)),
+  },
 ]
 
 const mockSteps3: SubagentStep[] = [
-  { id: generateId(), name: '搜索文献资料', status: 'success', startedAt: iso(new Date(now.getTime() - 300_000)), finishedAt: iso(new Date(now.getTime() - 240_000)), duration: 60000, output: '找到 12 篇相关文献' },
-  { id: generateId(), name: '提取关键信息', status: 'success', startedAt: iso(new Date(now.getTime() - 240_000)), finishedAt: iso(new Date(now.getTime() - 180_000)), duration: 60000, output: '提取了 28 条关键数据' },
-  { id: generateId(), name: '生成摘要报告', status: 'success', startedAt: iso(new Date(now.getTime() - 180_000)), finishedAt: iso(new Date(now.getTime() - 120_000)), duration: 60000, output: '报告已生成' },
+  {
+    id: generateId(),
+    name: '搜索文献资料',
+    status: 'success',
+    startedAt: iso(new Date(now.getTime() - 300_000)),
+    finishedAt: iso(new Date(now.getTime() - 240_000)),
+    duration: 60000,
+    output: '找到 12 篇相关文献',
+  },
+  {
+    id: generateId(),
+    name: '提取关键信息',
+    status: 'success',
+    startedAt: iso(new Date(now.getTime() - 240_000)),
+    finishedAt: iso(new Date(now.getTime() - 180_000)),
+    duration: 60000,
+    output: '提取了 28 条关键数据',
+  },
+  {
+    id: generateId(),
+    name: '生成摘要报告',
+    status: 'success',
+    startedAt: iso(new Date(now.getTime() - 180_000)),
+    finishedAt: iso(new Date(now.getTime() - 120_000)),
+    duration: 60000,
+    output: '报告已生成',
+  },
 ]
 
 const mockRuns: SubagentRun[] = [

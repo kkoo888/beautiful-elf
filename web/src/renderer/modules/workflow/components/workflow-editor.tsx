@@ -33,16 +33,19 @@ export function WorkflowEditor({ steps, onStepsChange, readonly }: WorkflowEdito
     setDragIndex(index)
   }, [])
 
-  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    if (dragIndex === null || dragIndex === index) return
-    const reordered = [...steps]
-    const [moved] = reordered.splice(dragIndex, 1)
-    reordered.splice(index, 0, moved)
-    const updated = reordered.map((s, i) => ({ ...s, order: i }))
-    onStepsChange(updated)
-    setDragIndex(index)
-  }, [dragIndex, steps, onStepsChange])
+  const handleDragOver = useCallback(
+    (e: React.DragEvent, index: number) => {
+      e.preventDefault()
+      if (dragIndex === null || dragIndex === index) return
+      const reordered = [...steps]
+      const [moved] = reordered.splice(dragIndex, 1)
+      reordered.splice(index, 0, moved)
+      const updated = reordered.map((s, i) => ({ ...s, order: i }))
+      onStepsChange(updated)
+      setDragIndex(index)
+    },
+    [dragIndex, steps, onStepsChange]
+  )
 
   const handleDragEnd = useCallback(() => {
     setDragIndex(null)
@@ -62,10 +65,13 @@ export function WorkflowEditor({ steps, onStepsChange, readonly }: WorkflowEdito
     setNewStepName('')
   }, [newStepName, steps, onStepsChange])
 
-  const handleRemoveStep = useCallback((id: string) => {
-    const filtered = steps.filter((s) => s.id !== id).map((s, i) => ({ ...s, order: i }))
-    onStepsChange(filtered)
-  }, [steps, onStepsChange])
+  const handleRemoveStep = useCallback(
+    (id: string) => {
+      const filtered = steps.filter((s) => s.id !== id).map((s, i) => ({ ...s, order: i }))
+      onStepsChange(filtered)
+    },
+    [steps, onStepsChange]
+  )
 
   return (
     <div>

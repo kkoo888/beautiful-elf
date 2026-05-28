@@ -70,9 +70,7 @@ export function FilePreviewPanel() {
           <InboxOutlined />
         </p>
         <p className="ant-upload-text">点击或拖拽文件到此区域进行预览</p>
-        <p className="ant-upload-hint">
-          支持文本、代码、图片、PDF 等常见文件格式
-        </p>
+        <p className="ant-upload-hint">支持文本、代码、图片、PDF 等常见文件格式</p>
       </Dragger>
       <FilePreviewModal open={modalOpen} onClose={handleClose} file={previewFile} />
     </div>

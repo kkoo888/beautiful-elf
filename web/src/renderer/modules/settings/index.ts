@@ -23,7 +23,7 @@ export {
   getSoulConfig,
   saveSoulConfig,
   testConnection,
-  fetchModels
+  fetchModels,
 } from './services/settings-api'
 
 // Types
@@ -42,13 +42,10 @@ export type {
   SpeakingStyle,
   PromptConfig,
   PromptVersion,
-  ABTestConfig
+  ABTestConfig,
 } from './types/settings'
 
-export {
-  SPEAKING_STYLES,
-  PERSONALITY_PRESETS
-} from './types/settings'
+export { SPEAKING_STYLES, PERSONALITY_PRESETS } from './types/settings'
 
 // 灵魂引导
 export { SoulOnboard } from './components/soul-onboard'

@@ -13,7 +13,7 @@ vi.mock('../services/clipboard-api', () => ({
         language: 'bash',
         isPinned: true,
         copiedAt: '2026-05-28T10:30:00Z',
-        createdAt: '2026-05-28T10:30:00Z'
+        createdAt: '2026-05-28T10:30:00Z',
       },
       {
         id: '2',
@@ -21,12 +21,12 @@ vi.mock('../services/clipboard-api', () => ({
         contentType: 'text',
         isPinned: false,
         copiedAt: '2026-05-28T10:25:00Z',
-        createdAt: '2026-05-28T10:25:00Z'
-      }
+        createdAt: '2026-05-28T10:25:00Z',
+      },
     ],
     total: 2,
     page: 1,
-    pageSize: 50
+    pageSize: 50,
   }),
   deleteClipboardItem: vi.fn().mockResolvedValue(undefined),
   togglePinClipboardItem: vi.fn().mockResolvedValue({
@@ -35,20 +35,20 @@ vi.mock('../services/clipboard-api', () => ({
     contentType: 'text',
     isPinned: true,
     copiedAt: '2026-05-28T10:25:00Z',
-    createdAt: '2026-05-28T10:25:00Z'
-  })
+    createdAt: '2026-05-28T10:25:00Z',
+  }),
 }))
 
 // Mock useDebounce to return value immediately
 vi.mock('@/hooks', () => ({
-  useDebounce: <T,>(value: T) => value
+  useDebounce: <T,>(value: T) => value,
 }))
 
 // Mock clipboard API
 Object.assign(navigator, {
   clipboard: {
-    writeText: vi.fn().mockResolvedValue(undefined)
-  }
+    writeText: vi.fn().mockResolvedValue(undefined),
+  },
 })
 
 describe('ClipboardPanel', () => {
@@ -63,9 +63,7 @@ describe('ClipboardPanel', () => {
 
   it('should render search input', async () => {
     render(<ClipboardPanel />)
-    expect(
-      screen.getByPlaceholderText('搜索剪贴板内容...')
-    ).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('搜索剪贴板内容...')).toBeInTheDocument()
   })
 
   it('should load and display clipboard items', async () => {

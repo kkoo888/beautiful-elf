@@ -76,14 +76,9 @@ export function NotificationPanel() {
       {/* 通知列表 */}
       <div className={styles.list}>
         {filtered.length === 0 ? (
-          <Empty
-            description="暂无通知"
-            className={styles.empty}
-          />
+          <Empty description="暂无通知" className={styles.empty} />
         ) : (
-          filtered.map((n) => (
-            <NotificationItem key={n.id} notification={n} onRead={markAsRead} />
-          ))
+          filtered.map((n) => <NotificationItem key={n.id} notification={n} onRead={markAsRead} />)
         )}
       </div>
     </div>

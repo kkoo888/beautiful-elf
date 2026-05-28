@@ -21,7 +21,7 @@ export const ChatPanel: React.FC = () => {
     setReasoningDepth,
     submitFeedback,
     clearMessages,
-    stopGeneration
+    stopGeneration,
   } = useChat()
 
   const handleSend = useCallback(
@@ -55,11 +55,7 @@ export const ChatPanel: React.FC = () => {
       </div>
 
       {/* 消息列表 */}
-      <SimpleMessageList
-        messages={messages}
-        isLoading={isLoading}
-        onFeedback={submitFeedback}
-      />
+      <SimpleMessageList messages={messages} isLoading={isLoading} onFeedback={submitFeedback} />
 
       {/* 输入框 */}
       <MessageInput

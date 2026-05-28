@@ -11,10 +11,7 @@ interface ClipboardItemProps {
   /** 高亮后的内容 HTML（搜索匹配词高亮） */
   highlightedContent: string
   onCopy: (item: ClipboardItem) => void
-  onContextMenu: (
-    item: ClipboardItem,
-    position: { x: number; y: number }
-  ) => void
+  onContextMenu: (item: ClipboardItem, position: { x: number; y: number }) => void
   onOpenDetail: (item: ClipboardItem) => void
 }
 
@@ -27,7 +24,7 @@ export function ClipboardItemRow({
   highlightedContent,
   onCopy,
   onContextMenu,
-  onOpenDetail
+  onOpenDetail,
 }: ClipboardItemProps) {
   const handleClick = useCallback(() => {
     onCopy(item)
@@ -64,17 +61,13 @@ export function ClipboardItemRow({
     >
       <div className={styles.itemHeader}>
         <span className={styles.itemIcon}>{icon}</span>
-        {item.language && (
-          <span className={styles.itemLanguage}>{item.language}</span>
-        )}
+        {item.language && <span className={styles.itemLanguage}>{item.language}</span>}
         {item.isPinned && (
           <Tooltip title="已固定">
             <span className={styles.pinBadge}>📌</span>
           </Tooltip>
         )}
-        <span className={styles.itemTime}>
-          {formatRelativeTime(item.copiedAt)}
-        </span>
+        <span className={styles.itemTime}>{formatRelativeTime(item.copiedAt)}</span>
       </div>
 
       <div
@@ -84,11 +77,7 @@ export function ClipboardItemRow({
 
       <div className={styles.itemActions}>
         <Tooltip title="查看详情">
-          <button
-            className={styles.actionBtn}
-            onClick={handleDetailClick}
-            aria-label="查看详情"
-          >
+          <button className={styles.actionBtn} onClick={handleDetailClick} aria-label="查看详情">
             👁️
           </button>
         </Tooltip>

@@ -7,10 +7,7 @@ import { useCallback, useMemo, useRef } from 'react'
 import { Input, Select, Slider, Typography, Tag, Upload, message } from 'antd'
 import { UserOutlined, CameraOutlined } from '@ant-design/icons'
 import type { SoulConfig } from '../types/settings'
-import {
-  PERSONALITY_PRESETS,
-  SPEAKING_STYLES
-} from '../types/settings'
+import { PERSONALITY_PRESETS, SPEAKING_STYLES } from '../types/settings'
 import styles from './settings-panel.module.css'
 
 const { Text } = Typography
@@ -74,10 +71,7 @@ export function SoulSettings({ soul, onChange }: SoulSettingsProps) {
       <div className={styles.formItem}>
         <Text className={styles.formLabel}>头像</Text>
         <div className={styles.avatarUpload}>
-          <div
-            className={styles.avatarPreview}
-            onClick={() => fileInputRef.current?.click()}
-          >
+          <div className={styles.avatarPreview} onClick={() => fileInputRef.current?.click()}>
             {soul.avatar ? (
               <img src={soul.avatar} alt="avatar" />
             ) : (
@@ -144,7 +138,7 @@ export function SoulSettings({ soul, onChange }: SoulSettingsProps) {
                 color={selected ? preset.color : 'default'}
                 style={{
                   opacity: selected ? 1 : 0.6,
-                  transform: selected ? 'scale(1.05)' : 'scale(1)'
+                  transform: selected ? 'scale(1.05)' : 'scale(1)',
                 }}
                 onClick={() => togglePersonality(preset.label)}
               >

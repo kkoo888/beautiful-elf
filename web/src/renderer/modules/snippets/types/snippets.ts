@@ -55,7 +55,7 @@ export const LANGUAGE_OPTIONS = [
   { value: 'php', label: 'PHP' },
   { value: 'ruby', label: 'Ruby' },
   { value: 'swift', label: 'Swift' },
-  { value: 'kotlin', label: 'Kotlin' }
+  { value: 'kotlin', label: 'Kotlin' },
 ] as const
 
 /** 标签颜色映射 */
@@ -67,7 +67,7 @@ export const TAG_COLORS = [
   'cyan',
   'magenta',
   'gold',
-  'lime'
+  'lime',
 ] as const
 
 /** 根据标签名生成固定颜色 */

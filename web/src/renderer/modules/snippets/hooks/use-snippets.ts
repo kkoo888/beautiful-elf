@@ -6,23 +6,22 @@ import {
   updateSnippet,
   deleteSnippet,
   recordSnippetUse,
-  fetchAllTags
+  fetchAllTags,
 } from '../services/snippets-api'
 import type { SnippetFormData, SnippetQueryParams } from '../types/snippets'
 
 /** 查询 key */
 const QUERY_KEYS = {
   snippets: ['snippets'] as const,
-  snippetList: (params?: SnippetQueryParams) =>
-    ['snippets', 'list', params] as const,
-  tags: ['snippets', 'tags'] as const
+  snippetList: (params?: SnippetQueryParams) => ['snippets', 'list', params] as const,
+  tags: ['snippets', 'tags'] as const,
 }
 
 /** 获取片段列表 */
 export function useSnippets(params?: SnippetQueryParams) {
   return useQuery({
     queryKey: QUERY_KEYS.snippetList(params),
-    queryFn: () => fetchSnippets(params)
+    queryFn: () => fetchSnippets(params),
   })
 }
 
@@ -30,7 +29,7 @@ export function useSnippets(params?: SnippetQueryParams) {
 export function useSnippetTags() {
   return useQuery({
     queryKey: QUERY_KEYS.tags,
-    queryFn: fetchAllTags
+    queryFn: fetchAllTags,
   })
 }
 
@@ -46,7 +45,7 @@ export function useCreateSnippet() {
     },
     onError: () => {
       message.error('创建失败，请重试')
-    }
+    },
   })
 }
 
@@ -55,15 +54,14 @@ export function useUpdateSnippet() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: SnippetFormData }) =>
-      updateSnippet(id, data),
+    mutationFn: ({ id, data }: { id: string; data: SnippetFormData }) => updateSnippet(id, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.snippets })
       message.success('片段更新成功')
     },
     onError: () => {
       message.error('更新失败，请重试')
-    }
+    },
   })
 }
 
@@ -79,7 +77,7 @@ export function useDeleteSnippet() {
     },
     onError: () => {
       message.error('删除失败，请重试')
-    }
+    },
   })
 }
 
@@ -91,6 +89,6 @@ export function useRecordSnippetUse() {
     mutationFn: (id: string) => recordSnippetUse(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.snippets })
-    }
+    },
   })
 }

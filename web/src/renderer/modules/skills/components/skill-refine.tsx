@@ -107,7 +107,9 @@ export function SkillRefine({ open, skill, onClose, onRefine, isRefining }: Skil
 
             {/* 优化后的内容 */}
             <div className={styles.detailSection}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
                 <span className={styles.detailLabel}>优化后的 SKILL.md</span>
                 <Button
                   type="text"

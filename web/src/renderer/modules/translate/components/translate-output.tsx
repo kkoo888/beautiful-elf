@@ -21,10 +21,7 @@ interface TranslateOutputProps {
  * 翻译译文输出面板
  * 展示翻译结果，支持术语高亮和一键复制
  */
-export const TranslateOutput: React.FC<TranslateOutputProps> = ({
-  result,
-  isTranslating
-}) => {
+export const TranslateOutput: React.FC<TranslateOutputProps> = ({ result, isTranslating }) => {
   const [copied, setCopied] = useState(false)
 
   /** 复制译文到剪贴板 */
@@ -59,9 +56,7 @@ export const TranslateOutput: React.FC<TranslateOutputProps> = ({
         <div className={styles.emptyState}>
           <span className={styles.emptyIcon}>🌐</span>
           <span className={styles.emptyText}>输入文本开始翻译</span>
-          <span className={styles.emptySubtext}>
-            支持多种语言互译，术语模式可识别专业词汇
-          </span>
+          <span className={styles.emptySubtext}>支持多种语言互译，术语模式可识别专业词汇</span>
         </div>
       </div>
     )
@@ -74,10 +69,7 @@ export const TranslateOutput: React.FC<TranslateOutputProps> = ({
       {/* 译文内容 */}
       <div className={`${styles.outputContent} ${styles.fadeIn}`}>
         {hasTermHits ? (
-          <TermHighlightText
-            text={result.targetText}
-            termHits={result.termHits!}
-          />
+          <TermHighlightText text={result.targetText} termHits={result.termHits!} />
         ) : (
           result.targetText
         )}

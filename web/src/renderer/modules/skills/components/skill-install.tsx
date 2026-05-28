@@ -2,11 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { Drawer, Upload, Input, Button, Typography, Divider, message } from 'antd'
-import {
-  UploadOutlined,
-  GithubOutlined,
-  InboxOutlined,
-} from '@ant-design/icons'
+import { UploadOutlined, GithubOutlined, InboxOutlined } from '@ant-design/icons'
 import type { UploadProps } from 'antd'
 import type { InstallSkillInput } from '../types/skills'
 import styles from './skills-panel.module.css'
@@ -41,7 +37,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
       }
       reader.readAsDataURL(file)
     },
-    [onInstall, onClose],
+    [onInstall, onClose]
   )
 
   const handleGithubImport = useCallback(async () => {
@@ -60,13 +56,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
   }, [githubUrl, onInstall, onClose])
 
   return (
-    <Drawer
-      title="📦 安装技能"
-      open={open}
-      onClose={onClose}
-      width={400}
-      destroyOnClose
-    >
+    <Drawer title="📦 安装技能" open={open} onClose={onClose} width={400} destroyOnClose>
       <div className={styles.installContent}>
         {/* 文件上传 */}
         <div className={styles.installSection}>
@@ -81,12 +71,8 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
               <p className="ant-upload-drag-icon">
                 <InboxOutlined />
               </p>
-              <p className="ant-upload-text">
-                点击或拖拽 .skill 文件到此区域
-              </p>
-              <p className="ant-upload-hint">
-                支持 .skill、.zip、.tar.gz 格式
-              </p>
+              <p className="ant-upload-text">点击或拖拽 .skill 文件到此区域</p>
+              <p className="ant-upload-hint">支持 .skill、.zip、.tar.gz 格式</p>
             </div>
           </Dragger>
         </div>
@@ -106,11 +92,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
               onPressEnter={() => void handleGithubImport()}
               disabled={isLoading}
             />
-            <Button
-              type="primary"
-              onClick={() => void handleGithubImport()}
-              loading={isLoading}
-            >
+            <Button type="primary" onClick={() => void handleGithubImport()} loading={isLoading}>
               导入
             </Button>
           </div>

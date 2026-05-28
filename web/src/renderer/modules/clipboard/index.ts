@@ -6,7 +6,7 @@ export type {
   ClipboardItem,
   ClipboardContentType,
   ClipboardListParams,
-  ClipboardListResponse
+  ClipboardListResponse,
 } from './types/clipboard'
 
 // Hook 导出
@@ -17,5 +17,5 @@ export {
   fetchClipboardList,
   createClipboardItem,
   deleteClipboardItem,
-  togglePinClipboardItem
+  togglePinClipboardItem,
 } from './services/clipboard-api'

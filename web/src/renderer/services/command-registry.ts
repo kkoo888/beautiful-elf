@@ -20,7 +20,7 @@ export function createNavigationCommand(
     keywords,
     module: getModuleGroup(id),
     action: () => navigate(id === 'chat' ? '/' : `/${id}`),
-    use_count: 0
+    use_count: 0,
   }
 }
 
@@ -41,7 +41,7 @@ function getModuleGroup(id: string): string {
     pet: 'system',
     performance: 'system',
     notification: 'system',
-    settings: 'system'
+    settings: 'system',
   }
   return groups[id] || 'other'
 }
@@ -62,5 +62,5 @@ export const BUILTIN_NAV_ITEMS = [
   { id: 'pet', name: '宠物', icon: '🐾', keywords: ['pet', '宠物', '桌面宠物'] },
   { id: 'performance', name: '性能监控', icon: '📊', keywords: ['performance', '性能', '监控'] },
   { id: 'notification', name: '通知', icon: '🔔', keywords: ['notification', '通知', '消息'] },
-  { id: 'settings', name: '设置', icon: '⚙️', keywords: ['settings', '设置', '配置'] }
+  { id: 'settings', name: '设置', icon: '⚙️', keywords: ['settings', '设置', '配置'] },
 ]

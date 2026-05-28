@@ -92,10 +92,7 @@ export function MemoryCard({ memory, onClick, showSimilarity = false }: MemoryCa
 
           <div className={styles.metaRight}>
             {showSimilarity && similarityPercent && (
-              <Tag
-                className={styles.similarityBadge}
-                color="geekblue"
-              >
+              <Tag className={styles.similarityBadge} color="geekblue">
                 相似度 {similarityPercent}
               </Tag>
             )}

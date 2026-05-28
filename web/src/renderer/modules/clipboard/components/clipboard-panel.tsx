@@ -30,7 +30,7 @@ export function ClipboardPanel() {
     openContextMenu,
     closeContextMenu,
     loadMore,
-    getHighlightedContent
+    getHighlightedContent,
   } = useClipboard()
 
   const pinnedCount = items.filter((i) => i.isPinned).length
@@ -54,9 +54,7 @@ export function ClipboardPanel() {
           </span>
         </Title>
         {pinnedCount > 0 && (
-          <span style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)' }}>
-            📌 {pinnedCount} 条固定
-          </span>
+          <span style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)' }}>📌 {pinnedCount} 条固定</span>
         )}
       </div>
 

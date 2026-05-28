@@ -7,7 +7,7 @@ import {
   SearchOutlined,
   SunOutlined,
   MoonOutlined,
-  BellOutlined
+  BellOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useIPC, useTheme } from '@/hooks'
@@ -41,17 +41,13 @@ export function Header({ isMaximized }: HeaderProps) {
         borderBottom: '1px solid var(--ant-color-border-secondary)',
         backgroundColor: 'var(--ant-color-bg-container)',
         height: 48,
-        lineHeight: '48px'
+        lineHeight: '48px',
       }}
     >
       {/* 左侧：搜索 */}
       <Space>
         <Tooltip title="命令面板 (Ctrl+K)">
-          <Button
-            type="text"
-            icon={<SearchOutlined />}
-            onClick={openCommandPalette}
-          />
+          <Button type="text" icon={<SearchOutlined />} onClick={openCommandPalette} />
         </Tooltip>
       </Space>
 
@@ -67,11 +63,7 @@ export function Header({ isMaximized }: HeaderProps) {
 
         <Tooltip title="通知">
           <Badge count={unreadCount} size="small">
-            <Button
-              type="text"
-              icon={<BellOutlined />}
-              onClick={() => navigate('/notification')}
-            />
+            <Button type="text" icon={<BellOutlined />} onClick={() => navigate('/notification')} />
           </Badge>
         </Tooltip>
 

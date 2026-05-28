@@ -38,7 +38,7 @@ export const TranslatePanel: React.FC = () => {
     swapLanguages,
     loadHistory,
     handleFavorite,
-    clearInput
+    clearInput,
   } = useTranslate()
 
   /** 从历史记录回填 */

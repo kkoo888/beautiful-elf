@@ -12,8 +12,8 @@ const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}${API_PREFIX}`,
   timeout: 30000,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    'Content-Type': 'application/json',
+  },
 })
 
 // 请求拦截器：camelCase → snake_case + trace_id 注入

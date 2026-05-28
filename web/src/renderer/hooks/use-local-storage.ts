@@ -4,7 +4,10 @@ import { useState, useCallback } from 'react'
  * localStorage 读写 Hook
  * 支持 JSON 序列化，自动处理 SSR 安全
  */
-export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((prev: T) => T)) => void, () => void] {
+export function useLocalStorage<T>(
+  key: string,
+  initialValue: T
+): [T, (value: T | ((prev: T) => T)) => void, () => void] {
   const [storedValue, setStoredValue] = useState<T>(() => {
     try {
       const item = window.localStorage.getItem(key)

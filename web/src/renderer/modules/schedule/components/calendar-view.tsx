@@ -2,11 +2,7 @@
 
 import { memo, useMemo, useCallback } from 'react'
 import { Button, Segmented, Tooltip } from 'antd'
-import {
-  LeftOutlined,
-  RightOutlined,
-  CalendarOutlined,
-} from '@ant-design/icons'
+import { LeftOutlined, RightOutlined, CalendarOutlined } from '@ant-design/icons'
 import dayjs, { type Dayjs } from 'dayjs'
 import type { Schedule } from '@/types'
 import type { CalendarViewMode } from '../types/schedule'
@@ -86,23 +82,13 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
             .join(' ')
 
           return (
-            <div
-              key={dateKey}
-              className={cellClass}
-              onClick={() => onDateClick(day)}
-            >
-              <span
-                className={`${styles.dayNumber} ${isToday ? styles.today : ''}`}
-              >
+            <div key={dateKey} className={cellClass} onClick={() => onDateClick(day)}>
+              <span className={`${styles.dayNumber} ${isToday ? styles.today : ''}`}>
                 {day.date()}
               </span>
               <div className={styles.eventsList}>
                 {displayEvents.map((evt) => (
-                  <EventCard
-                    key={evt.id}
-                    event={evt}
-                    onClick={onEventClick}
-                  />
+                  <EventCard key={evt.id} event={evt} onClick={onEventClick} />
                 ))}
                 {remaining > 0 && (
                   <span
@@ -145,17 +131,14 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
     [schedulesByDate]
   )
 
-  const getEventTopAndHeight = useCallback(
-    (event: Schedule): { top: number; height: number } => {
-      const start = dayjs(event.start_time)
-      const end = dayjs(event.end_time)
-      const top = (start.hour() + start.minute() / 60) * 60
-      const durationHours = end.diff(start, 'minute') / 60
-      const height = Math.max(durationHours * 60, 20)
-      return { top, height }
-    },
-    []
-  )
+  const getEventTopAndHeight = useCallback((event: Schedule): { top: number; height: number } => {
+    const start = dayjs(event.start_time)
+    const end = dayjs(event.end_time)
+    const top = (start.hour() + start.minute() / 60) * 60
+    const durationHours = end.diff(start, 'minute') / 60
+    const height = Math.max(durationHours * 60, 20)
+    return { top, height }
+  }, [])
 
   const renderTimeGridView = () => (
     <div style={{ display: 'flex', flex: 1 }}>
@@ -177,7 +160,11 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
         return (
           <div
             key={dateKey}
-            style={{ flex: 1, position: 'relative', borderLeft: '1px solid var(--color-border-secondary, #f0f0f0)' }}
+            style={{
+              flex: 1,
+              position: 'relative',
+              borderLeft: '1px solid var(--color-border-secondary, #f0f0f0)',
+            }}
           >
             {/* 日期头部 */}
             <div
@@ -260,13 +247,15 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
 
         <div className={styles.navCenter}>
           <Button type="text" icon={<LeftOutlined />} onClick={onPrev} />
-          <span className={styles.navLabel}>{selectedDate.format(
-            viewMode === 'month'
-              ? 'YYYY 年 M 月'
-              : viewMode === 'week'
+          <span className={styles.navLabel}>
+            {selectedDate.format(
+              viewMode === 'month'
                 ? 'YYYY 年 M 月'
-                : 'YYYY 年 M 月 D 日'
-          )}</span>
+                : viewMode === 'week'
+                  ? 'YYYY 年 M 月'
+                  : 'YYYY 年 M 月 D 日'
+            )}
+          </span>
           <Button type="text" icon={<RightOutlined />} onClick={onNext} />
         </div>
 

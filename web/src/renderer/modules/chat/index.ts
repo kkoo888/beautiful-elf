@@ -34,5 +34,5 @@ export type {
   FeedbackRequest,
   FeedbackResponse,
   WSEventType,
-  WSEvent
+  WSEvent,
 } from './types/chat'

@@ -1,15 +1,9 @@
 /** 设置系统 API 服务（Mock 实现） */
 
-import type {
-  AppSettings,
-  SoulConfig,
-  OllamaModel,
-  ConnectionTestResult
-} from '../types/settings'
+import type { AppSettings, SoulConfig, OllamaModel, ConnectionTestResult } from '../types/settings'
 
 /** 模拟延迟 */
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms))
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** 默认设置 */
 const DEFAULT_SETTINGS: AppSettings = {
@@ -17,25 +11,25 @@ const DEFAULT_SETTINGS: AppSettings = {
     baseUrl: 'http://localhost:11434',
     chatModel: 'qwen2.5:7b',
     embedModel: 'nomic-embed-text',
-    visionModel: 'llava:7b'
+    visionModel: 'llava:7b',
   },
   ai: {
     temperature: 0.7,
     maxTokens: 2048,
     topP: 0.9,
-    systemPrompt: '你是一个友好的 AI 助手。'
+    systemPrompt: '你是一个友好的 AI 助手。',
   },
   app: {
     language: 'zh-CN',
     autoLaunch: false,
     minimizeToTray: true,
-    closeBehavior: 'minimize'
+    closeBehavior: 'minimize',
   },
   privacy: {
     encryptData: false,
     logLevel: 'info',
-    anonymousStats: true
-  }
+    anonymousStats: true,
+  },
 }
 
 /** 默认灵魂配置 */
@@ -45,7 +39,7 @@ const DEFAULT_SOUL: SoulConfig = {
   personality: ['温柔', '聪明'],
   speakingStyle: '温柔亲切',
   emotionalTendency: 60,
-  backgroundStory: ''
+  backgroundStory: '',
 }
 
 /** Mock 模型列表 */
@@ -54,7 +48,7 @@ const MOCK_MODELS: OllamaModel[] = [
   { name: 'qwen2.5:14b', size: 8_900_000_000, modifiedAt: '2025-05-18T10:00:00Z' },
   { name: 'llama3.1:8b', size: 4_700_000_000, modifiedAt: '2025-05-15T10:00:00Z' },
   { name: 'nomic-embed-text', size: 274_000_000, modifiedAt: '2025-05-10T10:00:00Z' },
-  { name: 'llava:7b', size: 4_000_000_000, modifiedAt: '2025-05-12T10:00:00Z' }
+  { name: 'llava:7b', size: 4_000_000_000, modifiedAt: '2025-05-12T10:00:00Z' },
 ]
 
 /** localStorage 键名 */
@@ -80,16 +74,14 @@ export async function getSettings(): Promise<AppSettings> {
 /**
  * 保存应用设置（部分更新）
  */
-export async function saveSettings(
-  partial: Partial<AppSettings>
-): Promise<AppSettings> {
+export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
   await delay(100)
   const current = await getSettings()
   const merged: AppSettings = {
     ollama: { ...current.ollama, ...partial.ollama },
     ai: { ...current.ai, ...partial.ai },
     app: { ...current.app, ...partial.app },
-    privacy: { ...current.privacy, ...partial.privacy }
+    privacy: { ...current.privacy, ...partial.privacy },
   }
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged))
   return merged
@@ -123,9 +115,7 @@ export async function saveSoulConfig(config: SoulConfig): Promise<SoulConfig> {
 /**
  * 测试 Ollama 连接
  */
-export async function testConnection(
-  baseUrl: string
-): Promise<ConnectionTestResult> {
+export async function testConnection(baseUrl: string): Promise<ConnectionTestResult> {
   await delay(800 + Math.random() * 500)
   // Mock：localhost 始终成功，其他随机
   if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {

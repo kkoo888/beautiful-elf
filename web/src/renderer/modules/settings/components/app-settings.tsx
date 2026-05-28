@@ -18,14 +18,11 @@ interface AppSettingsProps {
 const LANGUAGE_OPTIONS = [
   { label: '简体中文', value: 'zh-CN' },
   { label: 'English', value: 'en-US' },
-  { label: '日本語', value: 'ja-JP' }
+  { label: '日本語', value: 'ja-JP' },
 ]
 
 export function AppSettingsPanel({ settings, onChange }: AppSettingsProps) {
-  const handleLanguage = useCallback(
-    (val: string) => onChange({ language: val }),
-    [onChange]
-  )
+  const handleLanguage = useCallback((val: string) => onChange({ language: val }), [onChange])
 
   return (
     <div>

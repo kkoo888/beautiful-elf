@@ -10,22 +10,18 @@ import {
   getSoulConfig,
   saveSoulConfig,
   testConnection,
-  fetchModels
+  fetchModels,
 } from '../services/settings-api'
 import type {
   AppSettings,
   SoulConfig,
   OllamaModel,
   ConnectionTestResult,
-  RestartRequiredField
+  RestartRequiredField,
 } from '../types/settings'
 
 /** 需要重启的字段列表 */
-const RESTART_FIELDS: RestartRequiredField[] = [
-  'ollama.baseUrl',
-  'app.language',
-  'app.autoLaunch'
-]
+const RESTART_FIELDS: RestartRequiredField[] = ['ollama.baseUrl', 'app.language', 'app.autoLaunch']
 
 interface UseSettingsReturn {
   /** 应用设置 */
@@ -55,7 +51,7 @@ export function useSettings(): UseSettingsReturn {
     ollama: { baseUrl: 'http://localhost:11434', chatModel: '', embedModel: '', visionModel: '' },
     ai: { temperature: 0.7, maxTokens: 2048, topP: 0.9, systemPrompt: '' },
     app: { language: 'zh-CN', autoLaunch: false, minimizeToTray: true, closeBehavior: 'minimize' },
-    privacy: { encryptData: false, logLevel: 'info', anonymousStats: true }
+    privacy: { encryptData: false, logLevel: 'info', anonymousStats: true },
   })
   const [soul, setSoul] = useState<SoulConfig>({
     name: '',
@@ -63,7 +59,7 @@ export function useSettings(): UseSettingsReturn {
     personality: [],
     speakingStyle: '温柔亲切',
     emotionalTendency: 60,
-    backgroundStory: ''
+    backgroundStory: '',
   })
   const [models, setModels] = useState<OllamaModel[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -110,7 +106,7 @@ export function useSettings(): UseSettingsReturn {
           ollama: { ...prev.ollama, ...partial.ollama },
           ai: { ...prev.ai, ...partial.ai },
           app: { ...prev.app, ...partial.app },
-          privacy: { ...prev.privacy, ...partial.privacy }
+          privacy: { ...prev.privacy, ...partial.privacy },
         }
         // debounce 保存
         if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -161,7 +157,7 @@ export function useSettings(): UseSettingsReturn {
       loadModels,
       models,
       restartHint,
-      clearRestartHint
+      clearRestartHint,
     }),
     [
       settings,
@@ -173,7 +169,7 @@ export function useSettings(): UseSettingsReturn {
       loadModels,
       models,
       restartHint,
-      clearRestartHint
+      clearRestartHint,
     ]
   )
 }

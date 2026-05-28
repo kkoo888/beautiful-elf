@@ -26,7 +26,10 @@ interface PromptDiffProps {
 /** 简易行级 diff：逐行比较，标记新增/删除/相同 */
 type DiffLine = { type: 'same' | 'added' | 'removed'; text: string }
 
-function computeLineDiff(oldText: string, newText: string): { left: DiffLine[]; right: DiffLine[] } {
+function computeLineDiff(
+  oldText: string,
+  newText: string
+): { left: DiffLine[]; right: DiffLine[] } {
   const oldLines = oldText.split('\n')
   const newLines = newText.split('\n')
 
@@ -38,7 +41,9 @@ function computeLineDiff(oldText: string, newText: string): { left: DiffLine[]; 
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       dp[i][j] =
-        oldLines[i - 1] === newLines[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1])
+        oldLines[i - 1] === newLines[j - 1]
+          ? dp[i - 1][j - 1] + 1
+          : Math.max(dp[i - 1][j], dp[i][j - 1])
     }
   }
 
@@ -71,13 +76,13 @@ function computeLineDiff(oldText: string, newText: string): { left: DiffLine[]; 
 const LINE_STYLES: Record<DiffLine['type'], React.CSSProperties> = {
   same: {},
   added: { background: '#e6ffed' },
-  removed: { background: '#ffeef0' }
+  removed: { background: '#ffeef0' },
 }
 
 const DARK_LINE_STYLES: Record<DiffLine['type'], React.CSSProperties> = {
   same: {},
   added: { background: '#1a3a2a' },
-  removed: { background: '#3a1a1a' }
+  removed: { background: '#3a1a1a' },
 }
 
 export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptDiffProps) {
@@ -103,7 +108,7 @@ export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptD
         .sort((a, b) => a.version - b.version)
         .map((v) => ({
           value: v.id,
-          label: `v${v.version} (${dayjs(v.createdAt).format('MM-DD HH:mm')})`
+          label: `v${v.version} (${dayjs(v.createdAt).format('MM-DD HH:mm')})`,
         })),
     [versions]
   )
@@ -112,14 +117,7 @@ export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptD
   const handleRightChange = useCallback((val: string) => setCurrentRightId(val), [])
 
   return (
-    <Modal
-      title="版本对比"
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={900}
-      destroyOnClose
-    >
+    <Modal title="版本对比" open={open} onCancel={onClose} footer={null} width={900} destroyOnClose>
       <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
         <div style={{ flex: 1 }}>
           <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>
@@ -154,7 +152,7 @@ export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptD
           borderRadius: 8,
           overflow: 'hidden',
           maxHeight: 500,
-          overflowY: 'auto'
+          overflowY: 'auto',
         }}
       >
         {/* 左侧 */}
@@ -165,7 +163,7 @@ export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptD
               background: isDark ? '#2a2a2a' : '#fafafa',
               borderBottom: '1px solid #e8e8e8',
               fontWeight: 600,
-              fontSize: 13
+              fontSize: 13,
             }}
           >
             v{leftVersion?.version ?? '?'}
@@ -181,7 +179,7 @@ export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptD
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-all',
                 minHeight: 20,
-                ...lineStyles[line.type]
+                ...lineStyles[line.type],
               }}
             >
               {line.text || '\u00A0'}
@@ -197,7 +195,7 @@ export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptD
               background: isDark ? '#2a2a2a' : '#fafafa',
               borderBottom: '1px solid #e8e8e8',
               fontWeight: 600,
-              fontSize: 13
+              fontSize: 13,
             }}
           >
             v{rightVersion?.version ?? '?'}
@@ -213,7 +211,7 @@ export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptD
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-all',
                 minHeight: 20,
-                ...lineStyles[line.type]
+                ...lineStyles[line.type],
               }}
             >
               {line.text || '\u00A0'}

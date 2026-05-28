@@ -10,11 +10,7 @@ import {
   DatabaseOutlined,
 } from '@ant-design/icons'
 import type { OfflineMessage, OfflineStorageStats } from '../types/offline'
-import {
-  getMessages,
-  clearAll,
-  getStorageStats,
-} from '../services/offline-storage'
+import { getMessages, clearAll, getStorageStats } from '../services/offline-storage'
 import { formatFileSize } from '@/utils'
 
 interface StatusCounts {

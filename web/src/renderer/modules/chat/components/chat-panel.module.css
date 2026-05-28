@@ -163,9 +163,15 @@
   font-weight: 600;
 }
 
-.markdownContent h1 { font-size: 18px; }
-.markdownContent h2 { font-size: 16px; }
-.markdownContent h3 { font-size: 15px; }
+.markdownContent h1 {
+  font-size: 18px;
+}
+.markdownContent h2 {
+  font-size: 16px;
+}
+.markdownContent h3 {
+  font-size: 15px;
+}
 
 .markdownContent hr {
   border: none;

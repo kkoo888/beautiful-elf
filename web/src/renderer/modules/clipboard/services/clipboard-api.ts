@@ -1,8 +1,4 @@
-import type {
-  ClipboardItem,
-  ClipboardListParams,
-  ClipboardListResponse
-} from '../types/clipboard'
+import type { ClipboardItem, ClipboardListParams, ClipboardListResponse } from '../types/clipboard'
 
 // ============================================================
 // Mock 数据
@@ -16,7 +12,7 @@ const MOCK_ITEMS: ClipboardItem[] = [
     language: 'bash',
     isPinned: true,
     copiedAt: '2026-05-28T10:30:00Z',
-    createdAt: '2026-05-28T10:30:00Z'
+    createdAt: '2026-05-28T10:30:00Z',
   },
   {
     id: '2',
@@ -24,7 +20,7 @@ const MOCK_ITEMS: ClipboardItem[] = [
     contentType: 'text',
     isPinned: false,
     copiedAt: '2026-05-28T10:25:00Z',
-    createdAt: '2026-05-28T10:25:00Z'
+    createdAt: '2026-05-28T10:25:00Z',
   },
   {
     id: '3',
@@ -32,7 +28,7 @@ const MOCK_ITEMS: ClipboardItem[] = [
     contentType: 'link',
     isPinned: false,
     copiedAt: '2026-05-28T10:20:00Z',
-    createdAt: '2026-05-28T10:20:00Z'
+    createdAt: '2026-05-28T10:20:00Z',
   },
   {
     id: '4',
@@ -46,7 +42,7 @@ console.log(fibonacci(10)) // 55`,
     language: 'typescript',
     isPinned: true,
     copiedAt: '2026-05-28T10:15:00Z',
-    createdAt: '2026-05-28T10:15:00Z'
+    createdAt: '2026-05-28T10:15:00Z',
   },
   {
     id: '5',
@@ -54,7 +50,7 @@ console.log(fibonacci(10)) // 55`,
     contentType: 'text',
     isPinned: false,
     copiedAt: '2026-05-28T10:10:00Z',
-    createdAt: '2026-05-28T10:10:00Z'
+    createdAt: '2026-05-28T10:10:00Z',
   },
   {
     id: '6',
@@ -62,7 +58,7 @@ console.log(fibonacci(10)) // 55`,
     contentType: 'link',
     isPinned: false,
     copiedAt: '2026-05-28T10:05:00Z',
-    createdAt: '2026-05-28T10:05:00Z'
+    createdAt: '2026-05-28T10:05:00Z',
   },
   {
     id: '7',
@@ -82,7 +78,7 @@ const useStore = create()(
     language: 'typescript',
     isPinned: false,
     copiedAt: '2026-05-28T10:00:00Z',
-    createdAt: '2026-05-28T10:00:00Z'
+    createdAt: '2026-05-28T10:00:00Z',
   },
   {
     id: '8',
@@ -90,7 +86,7 @@ const useStore = create()(
     contentType: 'text',
     isPinned: false,
     copiedAt: '2026-05-28T09:55:00Z',
-    createdAt: '2026-05-28T09:55:00Z'
+    createdAt: '2026-05-28T09:55:00Z',
   },
   {
     id: '9',
@@ -105,16 +101,17 @@ ORDER BY order_count DESC;`,
     language: 'sql',
     isPinned: false,
     copiedAt: '2026-05-28T09:50:00Z',
-    createdAt: '2026-05-28T09:50:00Z'
+    createdAt: '2026-05-28T09:50:00Z',
   },
   {
     id: '10',
-    content: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+    content:
+      'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
     contentType: 'text',
     isPinned: false,
     copiedAt: '2026-05-28T09:45:00Z',
-    createdAt: '2026-05-28T09:45:00Z'
-  }
+    createdAt: '2026-05-28T09:45:00Z',
+  },
 ]
 
 // 生成更多 mock 数据
@@ -133,7 +130,7 @@ for (let i = 11; i <= 50; i++) {
     language: type === 'code' ? 'javascript' : undefined,
     isPinned: false,
     copiedAt: new Date(Date.now() - i * 300_000).toISOString(),
-    createdAt: new Date(Date.now() - i * 300_000).toISOString()
+    createdAt: new Date(Date.now() - i * 300_000).toISOString(),
   })
 }
 
@@ -154,9 +151,7 @@ export async function fetchClipboardList(
   let filtered = [...MOCK_ITEMS]
   if (keyword) {
     const lower = keyword.toLowerCase()
-    filtered = filtered.filter((item) =>
-      item.content.toLowerCase().includes(lower)
-    )
+    filtered = filtered.filter((item) => item.content.toLowerCase().includes(lower))
   }
 
   // 固定项排在最前
@@ -170,7 +165,7 @@ export async function fetchClipboardList(
     items: filtered.slice(start, start + pageSize),
     total: filtered.length,
     page,
-    pageSize
+    pageSize,
   }
 }
 
@@ -187,7 +182,7 @@ export async function createClipboardItem(
     language: data.language,
     isPinned: false,
     copiedAt: now,
-    createdAt: now
+    createdAt: now,
   }
   MOCK_ITEMS.unshift(item)
   return item
@@ -201,9 +196,7 @@ export async function deleteClipboardItem(id: string): Promise<void> {
 }
 
 /** 固定/取消固定 */
-export async function togglePinClipboardItem(
-  id: string
-): Promise<ClipboardItem> {
+export async function togglePinClipboardItem(id: string): Promise<ClipboardItem> {
   await delay()
   const item = MOCK_ITEMS.find((i) => i.id === id)
   if (!item) throw new Error(`ClipboardItem ${id} not found`)

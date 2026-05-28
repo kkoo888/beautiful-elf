@@ -29,7 +29,7 @@ export function formatRelativeTime(date: string | number | Date): string {
 export function formatNumber(num: number, decimals = 0): string {
   return num.toLocaleString('zh-CN', {
     minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals
+    maximumFractionDigits: decimals,
   })
 }
 

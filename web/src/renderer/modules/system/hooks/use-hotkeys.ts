@@ -16,8 +16,7 @@ export function useHotkeys() {
   })
 
   const updateMut = useMutation({
-    mutationFn: ({ id, shortcut }: { id: string; shortcut: string }) =>
-      updateHotkey(id, shortcut),
+    mutationFn: ({ id, shortcut }: { id: string; shortcut: string }) => updateHotkey(id, shortcut),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
     },
@@ -33,9 +32,7 @@ export function useHotkeys() {
   /** 检查快捷键冲突 */
   const checkConflict = useCallback(
     (shortcut: string, excludeId?: string): HotkeyConfig | undefined => {
-      return hotkeys.find(
-        (h) => h.shortcut === shortcut && h.id !== excludeId && h.enabled
-      )
+      return hotkeys.find((h) => h.shortcut === shortcut && h.id !== excludeId && h.enabled)
     },
     [hotkeys]
   )
@@ -45,10 +42,7 @@ export function useHotkeys() {
     [updateMut]
   )
 
-  const resetToDefault = useCallback(
-    () => resetMut.mutateAsync(),
-    [resetMut]
-  )
+  const resetToDefault = useCallback(() => resetMut.mutateAsync(), [resetMut])
 
   return {
     hotkeys,

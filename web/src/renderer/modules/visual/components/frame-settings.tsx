@@ -25,10 +25,7 @@ export const FrameSettings: React.FC<FrameSettingsProps> = ({ config, onChange }
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         <Space style={{ justifyContent: 'space-between', width: '100%' }}>
           <Text>帧变化检测</Text>
-          <Switch
-            checked={config.enabled}
-            onChange={(checked) => update({ enabled: checked })}
-          />
+          <Switch checked={config.enabled} onChange={(checked) => update({ enabled: checked })} />
         </Space>
 
         {config.enabled && (
@@ -47,7 +44,9 @@ export const FrameSettings: React.FC<FrameSettingsProps> = ({ config, onChange }
             </div>
 
             <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>灵敏度</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                灵敏度
+              </Text>
               <Select
                 value={config.sensitivity}
                 options={sensitivityOptions}

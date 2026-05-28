@@ -1,11 +1,7 @@
 /** 记忆详情 Drawer 组件 */
 
 import { Drawer, Typography, Tag, Space, Progress, Descriptions, Button, Popconfirm } from 'antd'
-import {
-  MessageOutlined,
-  ClockCircleOutlined,
-  DeleteOutlined,
-} from '@ant-design/icons'
+import { MessageOutlined, ClockCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { formatDate } from '@/utils'
 import type { MemoryEntry } from '../types/memory'
 import styles from './memory-panel.module.css'
@@ -30,9 +26,7 @@ interface MemoryDetailProps {
 export function MemoryDetail({ memory, open, onClose, onDelete }: MemoryDetailProps) {
   if (!memory) return null
 
-  const similarityPercent = memory.similarity
-    ? Math.round(memory.similarity * 100)
-    : undefined
+  const similarityPercent = memory.similarity ? Math.round(memory.similarity * 100) : undefined
 
   return (
     <Drawer
@@ -99,10 +93,22 @@ export function MemoryDetail({ memory, open, onClose, onDelete }: MemoryDetailPr
         <div className={styles.detailSection}>
           <Text className={styles.detailSectionTitle}>信息</Text>
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label={<><MessageOutlined /> 来源会话</>}>
+            <Descriptions.Item
+              label={
+                <>
+                  <MessageOutlined /> 来源会话
+                </>
+              }
+            >
               {memory.conversationId}
             </Descriptions.Item>
-            <Descriptions.Item label={<><ClockCircleOutlined /> 创建时间</>}>
+            <Descriptions.Item
+              label={
+                <>
+                  <ClockCircleOutlined /> 创建时间
+                </>
+              }
+            >
               {formatDate(memory.createdAt)}
             </Descriptions.Item>
           </Descriptions>

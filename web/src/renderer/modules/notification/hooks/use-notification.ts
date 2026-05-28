@@ -31,7 +31,12 @@ export function useNotification() {
   // 订阅 WebSocket 通知消息
   useEffect(() => {
     const unsub = subscribe('notification', (msg: WSMessage) => {
-      const { title, message: body, type, action_url } = msg.payload as {
+      const {
+        title,
+        message: body,
+        type,
+        action_url,
+      } = msg.payload as {
         title?: string
         message?: string
         type?: NotificationType
@@ -83,7 +88,7 @@ export function useNotification() {
 
       return result
     },
-    [store.notifications],
+    [store.notifications]
   )
 
   /** 按类型筛选通知 */
@@ -91,7 +96,7 @@ export function useNotification() {
     (type: NotificationType | 'all') => {
       return getFiltered(type)
     },
-    [getFiltered],
+    [getFiltered]
   )
 
   return {

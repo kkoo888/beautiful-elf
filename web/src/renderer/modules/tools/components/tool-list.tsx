@@ -27,8 +27,12 @@ export function ToolList({ tools, loading }: ToolListProps) {
       key: 'name',
       render: (name: string, record) => (
         <Space direction="vertical" size={0}>
-          <Text code strong>{name}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>{record.description}</Text>
+          <Text code strong>
+            {name}
+          </Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {record.description}
+          </Text>
         </Space>
       ),
     },
@@ -71,13 +75,23 @@ export function ToolList({ tools, loading }: ToolListProps) {
       render: (_: unknown, record) => {
         const rate = record.successRate
         if (rate === undefined) return '-'
-        const color = rate >= 95 ? 'var(--ant-color-success)' : rate >= 85 ? 'var(--ant-color-warning)' : 'var(--ant-color-error)'
+        const color =
+          rate >= 95
+            ? 'var(--ant-color-success)'
+            : rate >= 85
+              ? 'var(--ant-color-warning)'
+              : 'var(--ant-color-error)'
         return (
           <div className={styles.successRateBar}>
             <div className={styles.rateBar}>
-              <div className={styles.rateBarFill} style={{ width: `${rate}%`, background: color }} />
+              <div
+                className={styles.rateBarFill}
+                style={{ width: `${rate}%`, background: color }}
+              />
             </div>
-            <span className={styles.rateText} style={{ color }}>{rate}%</span>
+            <span className={styles.rateText} style={{ color }}>
+              {rate}%
+            </span>
           </div>
         )
       },

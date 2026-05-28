@@ -10,12 +10,7 @@ import styles from './tools-panel.module.css'
 
 /** 工具管理面板 */
 export default function ToolsPanel() {
-  const {
-    toolsWithStats,
-    isLoading,
-    summary,
-    isSummaryLoading,
-  } = useTools()
+  const { toolsWithStats, isLoading, summary, isSummaryLoading } = useTools()
 
   return (
     <div className={styles.panel}>

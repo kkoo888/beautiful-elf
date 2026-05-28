@@ -14,7 +14,7 @@ const languageExtensions: Record<string, () => ReturnType<typeof javascript>> = 
   typescript: () => javascript({ jsx: true, typescript: true }),
   python: () => python(),
   html: () => html(),
-  css: () => css()
+  css: () => css(),
 }
 
 function getLanguageExtension(lang: string) {
@@ -35,7 +35,7 @@ export function SnippetEditor({
   onChange,
   language = 'typescript',
   readOnly = false,
-  height = '100%'
+  height = '100%',
 }: SnippetEditorProps) {
   const { isDark } = useTheme()
 
@@ -63,7 +63,7 @@ export function SnippetEditor({
           autocompletion: true,
           bracketMatching: true,
           closeBrackets: true,
-          indentOnInput: true
+          indentOnInput: true,
         }}
       />
     </div>

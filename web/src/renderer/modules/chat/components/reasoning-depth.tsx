@@ -11,7 +11,7 @@ import type { ReasoningDepth } from '../types/chat'
 const DEPTH_OPTIONS: { value: ReasoningDepth; label: string; description: string }[] = [
   { value: 'fast', label: '⚡ 快速', description: '快速回答，适合简单问题' },
   { value: 'deep', label: '🔍 深度', description: '深度思考，适合复杂问题' },
-  { value: 'full', label: '🧠 全面', description: '全面分析，适合决策参考' }
+  { value: 'full', label: '🧠 全面', description: '全面分析，适合决策参考' },
 ]
 
 interface ReasoningDepthSwitchProps {
@@ -21,10 +21,7 @@ interface ReasoningDepthSwitchProps {
   onChange: (depth: ReasoningDepth) => void
 }
 
-export const ReasoningDepthSwitch: React.FC<ReasoningDepthSwitchProps> = ({
-  value,
-  onChange
-}) => {
+export const ReasoningDepthSwitch: React.FC<ReasoningDepthSwitchProps> = ({ value, onChange }) => {
   const handleClick = useCallback(
     (depth: ReasoningDepth) => {
       if (depth !== value) {

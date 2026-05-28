@@ -34,43 +34,37 @@ vi.mock('../hooks/use-translate', () => ({
     languages: [
       { code: 'auto', name: '自动检测', nameEn: 'Auto Detect' },
       { code: 'zh', name: '中文', nameEn: 'Chinese' },
-      { code: 'en', name: '英语', nameEn: 'English' }
+      { code: 'en', name: '英语', nameEn: 'English' },
     ],
     detectedLang: null,
     doTranslate: mockDoTranslate,
     swapLanguages: mockSwapLanguages,
     loadHistory: mockLoadHistory,
     handleFavorite: mockHandleFavorite,
-    clearInput: mockClearInput
-  })
+    clearInput: mockClearInput,
+  }),
 }))
 
 // Mock child components
 vi.mock('../components/language-selector', () => ({
-  LanguageSelector: () => <div data-testid="language-selector" />
+  LanguageSelector: () => <div data-testid="language-selector" />,
 }))
 
 vi.mock('../components/translate-input', () => ({
-  TranslateInput: ({
-    onTranslate,
-    onClear
-  }: {
-    onTranslate: () => void
-    onClear: () => void
-  }) => (
+  TranslateInput: ({ onTranslate, onClear }: { onTranslate: () => void; onClear: () => void }) => (
     <div data-testid="translate-input">
       <button onClick={onTranslate}>Translate</button>
       <button onClick={onClear}>Clear</button>
     </div>
-  )
+  ),
 }))
 
 vi.mock('../components/translate-output', () => ({
-  TranslateOutput: () => <div data-testid="translate-output" />
+  TranslateOutput: () => <div data-testid="translate-output" />,
 }))
 
 vi.mock('../components/translate-history', () => ({
-  TranslateHistory: () => <div data-testid="translate-history" />
+  TranslateHistory: () => <div data-testid="translate-history" />,
 }))
 
 describe('TranslatePanel', () => {

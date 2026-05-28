@@ -9,12 +9,12 @@ import type { ChatMessage } from '../types/chat'
 
 // Mock react-markdown
 vi.mock('react-markdown', () => ({
-  default: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div>
+  default: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div>,
 }))
 
 // Mock remark-gfm
 vi.mock('remark-gfm', () => ({
-  default: () => null
+  default: () => null,
 }))
 
 // Mock prismjs
@@ -22,8 +22,8 @@ vi.mock('prismjs', () => ({
   default: {
     languages: { plaintext: {} },
     highlight: (code: string) => code,
-    highlightAll: vi.fn()
-  }
+    highlightAll: vi.fn(),
+  },
 }))
 
 vi.mock('prismjs/components/prism-typescript', () => ({}))
@@ -44,7 +44,7 @@ describe('MessageBubble', () => {
     conversationId: 'conv-1',
     role: 'user',
     content: '你好',
-    createdAt: Date.now()
+    createdAt: Date.now(),
   }
 
   it('renders user message correctly', () => {
@@ -57,7 +57,7 @@ describe('MessageBubble', () => {
       ...baseMessage,
       id: 'test-2',
       role: 'assistant',
-      content: '**加粗文本**'
+      content: '**加粗文本**',
     }
     render(<MessageBubble message={aiMessage} />)
     expect(screen.getByTestId('markdown')).toBeDefined()
@@ -69,7 +69,7 @@ describe('MessageBubble', () => {
       id: 'test-3',
       role: 'assistant',
       content: '快速回答',
-      metadata: { isCached: true }
+      metadata: { isCached: true },
     }
     render(<MessageBubble message={cachedMessage} />)
     expect(screen.getByText('快速回答')).toBeDefined()
@@ -82,8 +82,8 @@ describe('MessageBubble', () => {
       role: 'assistant',
       content: '路由回答',
       metadata: {
-        intentRoute: { module: 'schedule', confidence: 0.95 }
-      }
+        intentRoute: { module: 'schedule', confidence: 0.95 },
+      },
     }
     render(<MessageBubble message={routedMessage} />)
     expect(screen.getByText(/schedule/)).toBeDefined()
@@ -94,7 +94,7 @@ describe('MessageBubble', () => {
       ...baseMessage,
       id: 'test-5',
       role: 'assistant',
-      content: '反馈测试'
+      content: '反馈测试',
     }
     const onFeedback = vi.fn()
     render(<MessageBubble message={aiMessage} onFeedback={onFeedback} />)

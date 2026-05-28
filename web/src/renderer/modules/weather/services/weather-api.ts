@@ -5,12 +5,54 @@ import { WEATHER_ICONS } from '../types/weather'
 
 /** 城市 mock 数据库 */
 const CITY_WEATHER: Record<string, Omit<WeatherData, 'forecast'>> = {
-  北京: { city: '北京', temperature: 28, humidity: 45, windSpeed: 12, condition: 'sunny', icon: WEATHER_ICONS.sunny },
-  上海: { city: '上海', temperature: 26, humidity: 72, windSpeed: 8, condition: 'cloudy', icon: WEATHER_ICONS.cloudy },
-  广州: { city: '广州', temperature: 32, humidity: 85, windSpeed: 6, condition: 'rainy', icon: WEATHER_ICONS.rainy },
-  深圳: { city: '深圳', temperature: 31, humidity: 80, windSpeed: 10, condition: 'cloudy', icon: WEATHER_ICONS.cloudy },
-  杭州: { city: '杭州', temperature: 25, humidity: 68, windSpeed: 7, condition: 'overcast', icon: WEATHER_ICONS.overcast },
-  成都: { city: '成都', temperature: 24, humidity: 60, windSpeed: 5, condition: 'cloudy', icon: WEATHER_ICONS.cloudy },
+  北京: {
+    city: '北京',
+    temperature: 28,
+    humidity: 45,
+    windSpeed: 12,
+    condition: 'sunny',
+    icon: WEATHER_ICONS.sunny,
+  },
+  上海: {
+    city: '上海',
+    temperature: 26,
+    humidity: 72,
+    windSpeed: 8,
+    condition: 'cloudy',
+    icon: WEATHER_ICONS.cloudy,
+  },
+  广州: {
+    city: '广州',
+    temperature: 32,
+    humidity: 85,
+    windSpeed: 6,
+    condition: 'rainy',
+    icon: WEATHER_ICONS.rainy,
+  },
+  深圳: {
+    city: '深圳',
+    temperature: 31,
+    humidity: 80,
+    windSpeed: 10,
+    condition: 'cloudy',
+    icon: WEATHER_ICONS.cloudy,
+  },
+  杭州: {
+    city: '杭州',
+    temperature: 25,
+    humidity: 68,
+    windSpeed: 7,
+    condition: 'overcast',
+    icon: WEATHER_ICONS.overcast,
+  },
+  成都: {
+    city: '成都',
+    temperature: 24,
+    humidity: 60,
+    windSpeed: 5,
+    condition: 'cloudy',
+    icon: WEATHER_ICONS.cloudy,
+  },
 }
 
 /** 生成随机波动 */
@@ -28,7 +70,8 @@ function generateForecast(baseTemp: number, baseCondition: WeatherCondition): Fo
     date.setDate(date.getDate() + i + 1)
 
     // 随机微调天气
-    const condition = i === 0 ? baseCondition : conditions[Math.floor(Math.random() * conditions.length)]
+    const condition =
+      i === 0 ? baseCondition : conditions[Math.floor(Math.random() * conditions.length)]
 
     return {
       date: date.toISOString().split('T')[0],

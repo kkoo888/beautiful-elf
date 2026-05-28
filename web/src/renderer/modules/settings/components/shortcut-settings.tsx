@@ -20,7 +20,7 @@ const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   { action: 'quickSnippet', description: '快速片段', keys: 'Ctrl+Shift+S', editable: true },
   { action: 'clipboardHistory', description: '剪贴板历史', keys: 'Ctrl+Shift+V', editable: true },
   { action: 'send', description: '发送消息', keys: 'Enter', editable: false },
-  { action: 'newLine', description: '换行', keys: 'Shift+Enter', editable: false }
+  { action: 'newLine', description: '换行', keys: 'Shift+Enter', editable: false },
 ]
 
 /** 检测快捷键冲突 */
@@ -29,9 +29,7 @@ function findConflict(
   newKeys: string,
   excludeAction: string
 ): string | null {
-  const conflict = shortcuts.find(
-    (s) => s.action !== excludeAction && s.keys === newKeys
-  )
+  const conflict = shortcuts.find((s) => s.action !== excludeAction && s.keys === newKeys)
   return conflict ? conflict.description : null
 }
 
@@ -69,9 +67,7 @@ export function ShortcutSettings() {
       return
     }
     setShortcuts((prev) =>
-      prev.map((s) =>
-        s.action === editing.action ? { ...s, keys: newKeys.trim() } : s
-      )
+      prev.map((s) => (s.action === editing.action ? { ...s, keys: newKeys.trim() } : s))
     )
     setEditing(null)
   }, [editing, newKeys, shortcuts])
@@ -80,13 +76,13 @@ export function ShortcutSettings() {
     {
       title: '功能',
       dataIndex: 'description',
-      key: 'description'
+      key: 'description',
     },
     {
       title: '快捷键',
       dataIndex: 'keys',
       key: 'keys',
-      render: (keys: string) => renderKeys(keys)
+      render: (keys: string) => renderKeys(keys),
     },
     {
       title: '',
@@ -102,8 +98,8 @@ export function ShortcutSettings() {
           />
         ) : (
           <Tag color="default">固定</Tag>
-        )
-    }
+        ),
+    },
   ]
 
   return (
@@ -125,9 +121,7 @@ export function ShortcutSettings() {
         cancelText="取消"
       >
         <div style={{ marginBottom: 8 }}>
-          <Text type="secondary">
-            当前功能：{editing?.description}
-          </Text>
+          <Text type="secondary">当前功能：{editing?.description}</Text>
         </div>
         <Input
           value={newKeys}

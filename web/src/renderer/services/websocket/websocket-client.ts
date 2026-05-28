@@ -247,7 +247,9 @@ export class WebSocketClient {
     const jitter = delay * this.config.reconnectJitter * Math.random()
     const finalDelay = delay + jitter
 
-    console.log(`[WebSocket] Reconnecting in ${Math.round(finalDelay)}ms (attempt ${this.reconnectAttempts + 1})`)
+    console.log(
+      `[WebSocket] Reconnecting in ${Math.round(finalDelay)}ms (attempt ${this.reconnectAttempts + 1})`
+    )
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectAttempts++

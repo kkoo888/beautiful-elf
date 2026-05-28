@@ -22,7 +22,11 @@ export default function PetStatusTab() {
   const { attributes, isLoading, interact, interactions } = usePet()
 
   if (isLoading) {
-    return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+    return (
+      <div style={{ textAlign: 'center', padding: 40 }}>
+        <Spin />
+      </div>
+    )
   }
 
   return (
@@ -31,12 +35,7 @@ export default function PetStatusTab() {
         <Row gutter={[16, 8]}>
           {ATTR_CONFIG.map(({ key, label, icon, color }) => (
             <Col span={12} key={key}>
-              <AttributeBar
-                label={label}
-                value={attributes[key]}
-                icon={icon}
-                color={color}
-              />
+              <AttributeBar label={label} value={attributes[key]} icon={icon} color={color} />
             </Col>
           ))}
         </Row>

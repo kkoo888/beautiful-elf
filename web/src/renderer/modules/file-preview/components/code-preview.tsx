@@ -9,12 +9,7 @@ interface CodePreviewProps {
 export function CodePreview({ content, language }: CodePreviewProps) {
   return (
     <div style={{ maxHeight: '70vh', overflow: 'auto' }}>
-      <CodeMirror
-        value={content}
-        theme={oneDark}
-        editable={false}
-        style={{ fontSize: '14px' }}
-      />
+      <CodeMirror value={content} theme={oneDark} editable={false} style={{ fontSize: '14px' }} />
     </div>
   )
 }

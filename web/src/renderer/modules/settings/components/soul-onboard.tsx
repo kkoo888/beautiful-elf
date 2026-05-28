@@ -5,17 +5,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import {
-  Steps,
-  Button,
-  Input,
-  Select,
-  Slider,
-  Tag,
-  Typography,
-  Upload,
-  Space
-} from 'antd'
+import { Steps, Button, Input, Select, Slider, Tag, Typography, Upload, Space } from 'antd'
 import {
   UserOutlined,
   SmileOutlined,
@@ -24,12 +14,9 @@ import {
   ArrowLeftOutlined,
   ArrowRightOutlined,
   CheckOutlined,
-  SkipOutlined
+  SkipOutlined,
 } from '@ant-design/icons'
-import {
-  PERSONALITY_PRESETS,
-  SPEAKING_STYLES
-} from '../types/settings'
+import { PERSONALITY_PRESETS, SPEAKING_STYLES } from '../types/settings'
 import type { SoulOnboardData, SoulOnboardProps } from '../types/soul-onboard'
 import styles from './settings-panel.module.css'
 
@@ -43,13 +30,13 @@ const INITIAL_DATA: SoulOnboardData = {
   personality: [],
   speakingStyle: '温柔亲切',
   emotionalTendency: 60,
-  backgroundStory: ''
+  backgroundStory: '',
 }
 
 const STEP_ITEMS = [
   { title: '基本信息', icon: <UserOutlined /> },
   { title: '性格塑造', icon: <SmileOutlined /> },
-  { title: '完成', icon: <RocketOutlined /> }
+  { title: '完成', icon: <RocketOutlined /> },
 ]
 
 export function SoulOnboard({ onComplete, onSkip }: SoulOnboardProps) {
@@ -174,7 +161,7 @@ export function SoulOnboard({ onComplete, onSkip }: SoulOnboardProps) {
                       color={selected ? preset.color : 'default'}
                       style={{
                         opacity: selected ? 1 : 0.6,
-                        transform: selected ? 'scale(1.05)' : 'scale(1)'
+                        transform: selected ? 'scale(1.05)' : 'scale(1)',
                       }}
                       onClick={() => togglePersonality(preset.label)}
                     >
@@ -237,14 +224,19 @@ export function SoulOnboard({ onComplete, onSkip }: SoulOnboardProps) {
 
             <div className={styles.soulPreview}>
               <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                <div className={styles.avatarPreview} style={{ margin: '0 auto 12px', width: 96, height: 96 }}>
+                <div
+                  className={styles.avatarPreview}
+                  style={{ margin: '0 auto 12px', width: 96, height: 96 }}
+                >
                   {data.avatar ? (
                     <img src={data.avatar} alt="avatar" />
                   ) : (
                     <UserOutlined style={{ color: '#bfbfbf', fontSize: 48 }} />
                   )}
                 </div>
-                <Title level={4} style={{ marginBottom: 4 }}>{data.name}</Title>
+                <Title level={4} style={{ marginBottom: 4 }}>
+                  {data.name}
+                </Title>
                 <Space>
                   {data.personality.map((p) => {
                     const preset = PERSONALITY_PRESETS.find((pp) => pp.label === p)
@@ -268,11 +260,7 @@ export function SoulOnboard({ onComplete, onSkip }: SoulOnboardProps) {
 
   return (
     <div className={styles.onboardContainer}>
-      <Steps
-        current={data.step}
-        items={STEP_ITEMS}
-        style={{ marginBottom: 32 }}
-      />
+      <Steps current={data.step} items={STEP_ITEMS} style={{ marginBottom: 32 }} />
 
       {renderStep()}
 

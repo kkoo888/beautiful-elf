@@ -5,11 +5,7 @@
 
 import { useCallback, useState } from 'react'
 import { Button, Typography, Space, Tag, Spin } from 'antd'
-import {
-  GithubOutlined,
-  SyncOutlined,
-  CheckCircleOutlined
-} from '@ant-design/icons'
+import { GithubOutlined, SyncOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import styles from './settings-panel.module.css'
 
 const { Text, Link } = Typography
@@ -53,7 +49,11 @@ export function AboutSettings() {
         >
           检查更新
         </Button>
-        <Button icon={<GithubOutlined />} href="https://github.com/kkoo888/beautiful-elf" target="_blank">
+        <Button
+          icon={<GithubOutlined />}
+          href="https://github.com/kkoo888/beautiful-elf"
+          target="_blank"
+        >
           GitHub
         </Button>
       </Space>

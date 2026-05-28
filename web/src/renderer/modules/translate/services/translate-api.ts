@@ -5,12 +5,11 @@ import type {
   TranslateResult,
   FavoriteRequest,
   DetectResult,
-  Language
+  Language,
 } from '../types/translate'
 
 /** 模拟延迟 */
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms))
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** 生成唯一 ID */
 const generateId = (): string => crypto.randomUUID()
@@ -29,7 +28,7 @@ const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'ru', name: '俄语', nameEn: 'Russian' },
   { code: 'pt', name: '葡萄牙语', nameEn: 'Portuguese' },
   { code: 'ar', name: '阿拉伯语', nameEn: 'Arabic' },
-  { code: 'it', name: '意大利语', nameEn: 'Italian' }
+  { code: 'it', name: '意大利语', nameEn: 'Italian' },
 ]
 
 // ─── Mock 术语库 ─────────────────────────────────────────
@@ -45,7 +44,7 @@ const MOCK_TERM_DB: Record<string, { term: string; translation: string }[]> = {
     { term: '向量数据库', translation: 'Vector Database' },
     { term: '微调', translation: 'Fine-tuning' },
     { term: '提示词工程', translation: 'Prompt Engineering' },
-    { term: '多模态', translation: 'Multimodal' }
+    { term: '多模态', translation: 'Multimodal' },
   ],
   en: [
     { term: 'Machine Learning', translation: '机器学习' },
@@ -57,25 +56,32 @@ const MOCK_TERM_DB: Record<string, { term: string; translation: string }[]> = {
     { term: 'Retrieval-Augmented Generation', translation: '检索增强生成' },
     { term: 'Transformer', translation: 'Transformer 架构' },
     { term: 'Embedding', translation: '向量嵌入' },
-    { term: 'Token', translation: '词元' }
-  ]
+    { term: 'Token', translation: '词元' },
+  ],
 }
 
 // ─── Mock 翻译响应 ──────────────────────────────────────
 
 const MOCK_TRANSLATIONS: Record<string, Record<string, string>> = {
-  'zh-en': 'Hello! This is a mock translation result. The system uses advanced AI models for high-quality translation.',
+  'zh-en':
+    'Hello! This is a mock translation result. The system uses advanced AI models for high-quality translation.',
   'en-zh': '你好！这是一个模拟翻译结果。系统使用先进的 AI 模型进行高质量翻译。',
-  'zh-ja': 'こんにちは！これはモック翻訳結果です。システムは高度なAIモデルを使用して高品質な翻訳を行います。',
+  'zh-ja':
+    'こんにちは！これはモック翻訳結果です。システムは高度なAIモデルを使用して高品質な翻訳を行います。',
   'ja-zh': '你好！这是模拟翻译结果。系统使用先进的AI模型进行高质量翻译。',
-  'zh-ko': '안녕하세요! 이것은 모의 번역 결과입니다. 시스템은 첨단 AI 모델을 사용하여 고품질 번역을 제공합니다.',
+  'zh-ko':
+    '안녕하세요! 이것은 모의 번역 결과입니다. 시스템은 첨단 AI 모델을 사용하여 고품질 번역을 제공합니다.',
   'ko-zh': '你好！这是模拟翻译结果。系统使用先进的AI模型进行高质量翻译。',
   'en-ja': 'こんにちは！これはモック翻訳結果です。システムは高度なAIモデルを使用しています。',
   'ja-en': 'Hello! This is a mock translation result. The system uses advanced AI models.',
-  'en-fr': "Bonjour ! Ceci est un résultat de traduction simulé. Le système utilise des modèles d'IA avancés pour une traduction de haute qualité.",
-  'fr-en': 'Hello! This is a mock translation result. The system uses advanced AI models for high-quality translation.',
-  'en-de': 'Hallo! Dies ist ein simuliertes Übersetzungsergebnis. Das System verwendet fortschrittliche KI-Modelle für qualitativ hochwertige Übersetzungen.',
-  'de-en': 'Hello! This is a mock translation result. The system uses advanced AI models for high-quality translation.'
+  'en-fr':
+    "Bonjour ! Ceci est un résultat de traduction simulé. Le système utilise des modèles d'IA avancés pour une traduction de haute qualité.",
+  'fr-en':
+    'Hello! This is a mock translation result. The system uses advanced AI models for high-quality translation.',
+  'en-de':
+    'Hallo! Dies ist ein simuliertes Übersetzungsergebnis. Das System verwendet fortschrittliche KI-Modelle für qualitativ hochwertige Übersetzungen.',
+  'de-en':
+    'Hello! This is a mock translation result. The system uses advanced AI models for high-quality translation.',
 }
 
 /** Mock 翻译历史 */
@@ -83,13 +89,12 @@ let mockHistory: TranslateResult[] = [
   {
     id: generateId(),
     sourceText: '机器学习是人工智能的一个重要分支',
-    targetText:
-      'Machine Learning is an important branch of artificial intelligence',
+    targetText: 'Machine Learning is an important branch of artificial intelligence',
     sourceLang: 'zh',
     targetLang: 'en',
     mode: 'terminology',
     termHits: [{ term: '机器学习', translation: 'Machine Learning' }],
-    createdAt: new Date(Date.now() - 3600_000).toISOString()
+    createdAt: new Date(Date.now() - 3600_000).toISOString(),
   },
   {
     id: generateId(),
@@ -98,19 +103,18 @@ let mockHistory: TranslateResult[] = [
     sourceLang: 'en',
     targetLang: 'zh',
     mode: 'general',
-    createdAt: new Date(Date.now() - 7200_000).toISOString()
+    createdAt: new Date(Date.now() - 7200_000).toISOString(),
   },
   {
     id: generateId(),
     sourceText: '深度学习模型需要大量的训练数据',
-    targetText:
-      'Deep learning models require a large amount of training data',
+    targetText: 'Deep learning models require a large amount of training data',
     sourceLang: 'zh',
     targetLang: 'en',
     mode: 'terminology',
     termHits: [{ term: '深度学习', translation: 'Deep Learning' }],
-    createdAt: new Date(Date.now() - 86400_000).toISOString()
-  }
+    createdAt: new Date(Date.now() - 86400_000).toISOString(),
+  },
 ]
 
 // ─── API 函数 ────────────────────────────────────────────
@@ -143,24 +147,18 @@ export async function detectLanguage(text: string): Promise<DetectResult> {
 }
 
 /** 执行翻译 */
-export async function translate(
-  request: TranslateRequest
-): Promise<TranslateResult> {
+export async function translate(request: TranslateRequest): Promise<TranslateResult> {
   await delay(600 + Math.random() * 1200)
 
   const { sourceText, sourceLang, targetLang, mode } = request
 
   // 处理 auto 检测
   const actualSourceLang =
-    sourceLang === 'auto'
-      ? (await detectLanguage(sourceText)).lang
-      : sourceLang
+    sourceLang === 'auto' ? (await detectLanguage(sourceText)).lang : sourceLang
 
   // 查找翻译
   const key = `${actualSourceLang}-${targetLang}`
-  let targetText =
-    MOCK_TRANSLATIONS[key] ??
-    `[${targetLang}] ${sourceText}`
+  let targetText = MOCK_TRANSLATIONS[key] ?? `[${targetLang}] ${sourceText}`
 
   // 如果原文较短，直接拼接模拟
   if (sourceText.length < 20 && !MOCK_TRANSLATIONS[key]) {
@@ -186,7 +184,7 @@ export async function translate(
     targetLang,
     mode,
     termHits: termHits.length > 0 ? termHits : undefined,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   }
 
   // 存入历史
@@ -202,9 +200,7 @@ export async function fetchHistory(): Promise<TranslateResult[]> {
 }
 
 /** 收藏/取消收藏翻译结果 */
-export async function toggleFavorite(
-  request: FavoriteRequest
-): Promise<{ success: boolean }> {
+export async function toggleFavorite(request: FavoriteRequest): Promise<{ success: boolean }> {
   await delay(200 + Math.random() * 200)
   console.log('[Mock] Toggle favorite:', request)
   return { success: true }

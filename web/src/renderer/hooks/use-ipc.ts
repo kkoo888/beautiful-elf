@@ -47,6 +47,6 @@ export function useIPC() {
     maximizeWindow,
     closeWindow,
     isMaximized,
-    getAppVersion
+    getAppVersion,
   }
 }

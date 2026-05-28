@@ -108,7 +108,10 @@ export async function installSkill(input: InstallSkillInput): Promise<Skill> {
   } catch {
     const skill: Skill = {
       id: generateId(),
-      name: input.source === 'github' ? input.content.split('/').pop() ?? 'unknown' : 'imported-skill',
+      name:
+        input.source === 'github'
+          ? (input.content.split('/').pop() ?? 'unknown')
+          : 'imported-skill',
       description: '从 ' + (input.source === 'file' ? '文件' : 'GitHub') + ' 导入的技能',
       version: '0.1.0',
       enabled: true,

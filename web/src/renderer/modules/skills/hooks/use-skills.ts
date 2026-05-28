@@ -3,12 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo, useState } from 'react'
 import type { Skill, InstallSkillInput, RefineResult } from '../types/skills'
-import {
-  fetchSkills,
-  installSkill,
-  toggleSkill,
-  refineSkill,
-} from '../services/skills-api'
+import { fetchSkills, installSkill, toggleSkill, refineSkill } from '../services/skills-api'
 
 const QUERY_KEY = ['skills']
 
@@ -57,37 +52,32 @@ export function useSkills(): UseSkillsReturn {
   })
 
   const toggleMut = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      toggleSkill(id, enabled),
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => toggleSkill(id, enabled),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
     },
   })
 
   const refineMut = useMutation({
-    mutationFn: ({ id, prompt }: { id: string; prompt?: string }) =>
-      refineSkill(id, prompt),
+    mutationFn: ({ id, prompt }: { id: string; prompt?: string }) => refineSkill(id, prompt),
   })
 
   const installSkillMut = useCallback(
     (input: InstallSkillInput) => installMut.mutateAsync(input),
-    [installMut],
+    [installMut]
   )
 
   const toggleSkillMut = useCallback(
     (id: string, enabled: boolean) => toggleMut.mutateAsync({ id, enabled }),
-    [toggleMut],
+    [toggleMut]
   )
 
   const refineSkillMut = useCallback(
     (id: string, prompt?: string) => refineMut.mutateAsync({ id, prompt }),
-    [refineMut],
+    [refineMut]
   )
 
-  const enabledSkills = useMemo(
-    () => skills.filter((s) => s.enabled),
-    [skills],
-  )
+  const enabledSkills = useMemo(() => skills.filter((s) => s.enabled), [skills])
 
   const filteredSkills = useMemo(() => {
     if (!keyword) return skills
@@ -96,7 +86,7 @@ export function useSkills(): UseSkillsReturn {
       (s) =>
         s.name.toLowerCase().includes(kw) ||
         s.description.toLowerCase().includes(kw) ||
-        s.triggerWords.some((t) => t.toLowerCase().includes(kw)),
+        s.triggerWords.some((t) => t.toLowerCase().includes(kw))
     )
   }, [skills, keyword])
 

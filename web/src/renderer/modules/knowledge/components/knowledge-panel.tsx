@@ -121,10 +121,7 @@ export function KnowledgePanel() {
           onRestore={handleRestore}
         />
       ) : !loading && documents.length === 0 ? (
-        <EmptyState
-          icon="📚"
-          description="导入文档，让 AI 学习你的知识"
-        />
+        <EmptyState icon="📚" description="导入文档，让 AI 学习你的知识" />
       ) : (
         <DocumentList
           documents={documents}

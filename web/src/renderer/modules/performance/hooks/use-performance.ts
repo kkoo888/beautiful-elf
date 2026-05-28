@@ -71,7 +71,11 @@ export function usePerformance(
   thresholds: AlertThresholds = DEFAULT_THRESHOLDS,
   pollInterval = 5000
 ): UsePerformanceReturn {
-  const { data: metrics = [], isLoading, error } = useQuery({
+  const {
+    data: metrics = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: METRICS_KEY,
     queryFn: fetchPerformanceMetrics,
     refetchInterval: pollInterval,

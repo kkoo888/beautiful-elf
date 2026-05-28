@@ -34,7 +34,7 @@ const formatTime = (timestamp: number): string => {
 /** 代码块组件 */
 const CodeBlock: React.FC<{ className?: string; children: React.ReactNode }> = ({
   className,
-  children
+  children,
 }) => {
   const [copied, setCopied] = useState(false)
   const language = className?.replace('language-', '') ?? 'text'
@@ -100,11 +100,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedbac
         isUser ? styles.messageRowUser : styles.messageRowAssistant
       }`}
     >
-      <div
-        className={`${styles.bubble} ${
-          isUser ? styles.bubbleUser : styles.bubbleAssistant
-        }`}
-      >
+      <div className={`${styles.bubble} ${isUser ? styles.bubbleUser : styles.bubbleAssistant}`}>
         {isUser ? (
           <div className={styles.markdownContent}>
             {message.content.split('\n').map((line, i) => (
@@ -124,10 +120,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedbac
                   if (isInline) {
                     return <code {...props}>{children}</code>
                   }
-                  return (
-                    <CodeBlock className={className}>{children}</CodeBlock>
-                  )
-                }
+                  return <CodeBlock className={className}>{children}</CodeBlock>
+                },
               }}
             >
               {message.content}
@@ -141,9 +135,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedbac
             <span>{formatTime(message.createdAt)}</span>
             {message.metadata?.isCached && <QuickAnswerBadge visible />}
             {message.metadata?.intentRoute && (
-              <span className={styles.intentBadge}>
-                🧭 {message.metadata.intentRoute.module}
-              </span>
+              <span className={styles.intentBadge}>🧭 {message.metadata.intentRoute.module}</span>
             )}
           </div>
         )}

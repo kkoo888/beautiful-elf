@@ -9,7 +9,7 @@ export {
   formatNumber,
   formatFileSize,
   formatPercent,
-  formatDuration
+  formatDuration,
 } from './format'
 export { encrypt, decrypt } from './crypto'
 

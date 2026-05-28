@@ -3,6 +3,7 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createMainWindow, getMainWindow } from './window-manager'
 import { createTray } from './tray'
 import { registerIpcHandlers } from './ipc-handlers'
+import './pet-window'
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.beautiful-elf')

@@ -15,10 +15,7 @@ export function NotificationBell({ onClick }: NotificationBellProps) {
 
   return (
     <Badge count={unreadCount} size="small" offset={[-2, 2]}>
-      <BellOutlined
-        style={{ fontSize: 20, cursor: 'pointer' }}
-        onClick={onClick}
-      />
+      <BellOutlined style={{ fontSize: 20, cursor: 'pointer' }} onClick={onClick} />
     </Badge>
   )
 }

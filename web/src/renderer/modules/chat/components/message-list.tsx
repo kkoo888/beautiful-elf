@@ -51,11 +51,7 @@ const Row: React.FC<RowProps> = React.memo(({ index, style, data }) => {
 
 Row.displayName = 'MessageRow'
 
-export const MessageList: React.FC<MessageListProps> = ({
-  messages,
-  isLoading,
-  onFeedback
-}) => {
+export const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, onFeedback }) => {
   const listRef = useRef<VirtualList>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -119,7 +115,7 @@ export const MessageList: React.FC<MessageListProps> = ({
 export const SimpleMessageList: React.FC<MessageListProps> = ({
   messages,
   isLoading,
-  onFeedback
+  onFeedback,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)

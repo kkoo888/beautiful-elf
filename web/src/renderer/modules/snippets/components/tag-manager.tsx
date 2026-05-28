@@ -14,7 +14,7 @@ export function TagManager({
   onTagClick,
   activeTags = [],
   closable = false,
-  onClose
+  onClose,
 }: TagManagerProps) {
   return (
     <>
@@ -27,7 +27,7 @@ export function TagManager({
               style={{
                 cursor: onTagClick ? 'pointer' : 'default',
                 opacity: activeTags.length > 0 && !isActive ? 0.5 : 1,
-                border: isActive ? '2px solid currentColor' : undefined
+                border: isActive ? '2px solid currentColor' : undefined,
               }}
               closable={closable}
               onClose={(e) => {

@@ -56,7 +56,9 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
                 />
               </div>
               {index % 4 === 0 && (
-                <span className={styles.chartLabel}>{point.time.split(':').slice(1).join(':')}</span>
+                <span className={styles.chartLabel}>
+                  {point.time.split(':').slice(1).join(':')}
+                </span>
               )}
             </div>
           )

@@ -10,18 +10,18 @@ import type { ThemeMode } from '@/types'
 const lightToken: ThemeConfig = {
   algorithm: theme.defaultAlgorithm,
   token: {
-    colorPrimary: '#E8913A',     // 温暖橙色
+    colorPrimary: '#E8913A', // 温暖橙色
     colorSuccess: '#52C41A',
     colorWarning: '#FAAD14',
     colorError: '#FF4D4F',
-    colorInfo: '#3BA0E8',        // 柔和蓝色
+    colorInfo: '#3BA0E8', // 柔和蓝色
     borderRadius: 8,
     fontSize: 14,
     colorBgContainer: '#FAFAFA',
     colorBgLayout: '#F5F5F5',
     fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Inter', sans-serif"
-  }
+      "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Inter', sans-serif",
+  },
 }
 
 const darkToken: ThemeConfig = {
@@ -37,8 +37,8 @@ const darkToken: ThemeConfig = {
     colorBgContainer: '#1A1A1A',
     colorBgLayout: '#141414',
     fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Inter', sans-serif"
-  }
+      "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Inter', sans-serif",
+  },
 }
 
 /**
@@ -56,8 +56,8 @@ function getThemeConfig(mode: ThemeMode): ThemeConfig {
           ...lightToken.token,
           colorPrimary: '#0050B3',
           colorBgContainer: '#FFFFFF',
-          colorTextBase: '#000000'
-        }
+          colorTextBase: '#000000',
+        },
       }
     default:
       return lightToken

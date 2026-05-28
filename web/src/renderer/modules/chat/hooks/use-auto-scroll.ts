@@ -41,7 +41,7 @@ export function useAutoScroll(options: UseAutoScrollOptions = {}): UseAutoScroll
 
     el.scrollTo({
       top: el.scrollHeight,
-      behavior: 'smooth'
+      behavior: 'smooth',
     })
   }, [])
 
@@ -77,7 +77,7 @@ export function useAutoScroll(options: UseAutoScrollOptions = {}): UseAutoScroll
     observer.observe(el, {
       childList: true,
       subtree: true,
-      characterData: true
+      characterData: true,
     })
 
     return () => observer.disconnect()
@@ -86,6 +86,6 @@ export function useAutoScroll(options: UseAutoScrollOptions = {}): UseAutoScroll
   return {
     containerRef,
     isAtBottom,
-    scrollToBottom
+    scrollToBottom,
   }
 }

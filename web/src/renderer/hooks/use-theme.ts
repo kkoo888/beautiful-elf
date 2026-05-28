@@ -33,6 +33,6 @@ export function useTheme() {
     theme,
     isDark: theme === 'dark',
     setTheme: switchTheme,
-    toggleTheme
+    toggleTheme,
   }
 }

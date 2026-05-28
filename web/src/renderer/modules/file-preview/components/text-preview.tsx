@@ -9,9 +9,7 @@ interface TextPreviewProps {
 export function TextPreview({ content }: TextPreviewProps) {
   return (
     <div style={{ maxHeight: '70vh', overflow: 'auto', padding: '12px' }}>
-      <Paragraph style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
-        {content}
-      </Paragraph>
+      <Paragraph style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{content}</Paragraph>
     </div>
   )
 }

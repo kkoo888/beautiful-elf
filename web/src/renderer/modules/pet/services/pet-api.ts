@@ -12,15 +12,48 @@ const MOCK_ATTRIBUTES: PetAttributes = {
 }
 
 const MOCK_INTERACTIONS: PetInteraction[] = [
-  { id: '1', type: 'feed', effect: '饥饿度 +15', createdAt: dayjs().subtract(10, 'minute').toISOString() },
-  { id: '2', type: 'chat', effect: '心情 +10', createdAt: dayjs().subtract(30, 'minute').toISOString() },
-  { id: '3', type: 'clean', effect: '清洁度 +20', createdAt: dayjs().subtract(1, 'hour').toISOString() },
-  { id: '4', type: 'play', effect: '亲密 +5, 心情 +8', createdAt: dayjs().subtract(2, 'hour').toISOString() },
-  { id: '5', type: 'feed', effect: '饥饿度 +12', createdAt: dayjs().subtract(3, 'hour').toISOString() },
-  { id: '6', type: 'chat', effect: '心情 +6', createdAt: dayjs().subtract(5, 'hour').toISOString() },
+  {
+    id: '1',
+    type: 'feed',
+    effect: '饥饿度 +15',
+    createdAt: dayjs().subtract(10, 'minute').toISOString(),
+  },
+  {
+    id: '2',
+    type: 'chat',
+    effect: '心情 +10',
+    createdAt: dayjs().subtract(30, 'minute').toISOString(),
+  },
+  {
+    id: '3',
+    type: 'clean',
+    effect: '清洁度 +20',
+    createdAt: dayjs().subtract(1, 'hour').toISOString(),
+  },
+  {
+    id: '4',
+    type: 'play',
+    effect: '亲密 +5, 心情 +8',
+    createdAt: dayjs().subtract(2, 'hour').toISOString(),
+  },
+  {
+    id: '5',
+    type: 'feed',
+    effect: '饥饿度 +12',
+    createdAt: dayjs().subtract(3, 'hour').toISOString(),
+  },
+  {
+    id: '6',
+    type: 'chat',
+    effect: '心情 +6',
+    createdAt: dayjs().subtract(5, 'hour').toISOString(),
+  },
 ]
 
-const INTERACT_EFFECTS: Record<PetInteractionType, { effect: string; delta: Partial<PetAttributes> }> = {
+const INTERACT_EFFECTS: Record<
+  PetInteractionType,
+  { effect: string; delta: Partial<PetAttributes> }
+> = {
   feed: { effect: '饥饿度 +15', delta: { hunger: 15 } },
   clean: { effect: '清洁度 +20', delta: { clean: 20 } },
   chat: { effect: '心情 +10, 亲密 +3', delta: { mood: 10, intimacy: 3 } },
@@ -37,7 +70,9 @@ export async function fetchPetAttributes(): Promise<PetAttributes> {
   }
 }
 
-export async function interact(type: PetInteractionType): Promise<{ attributes: PetAttributes; interaction: PetInteraction }> {
+export async function interact(
+  type: PetInteractionType
+): Promise<{ attributes: PetAttributes; interaction: PetInteraction }> {
   try {
     // const res = await apiClient.post('/pet/interact', { type })
     // return res.data

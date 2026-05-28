@@ -348,7 +348,9 @@
   border-radius: 50%;
   cursor: pointer;
   border: 2px solid transparent;
-  transition: border-color 0.15s, transform 0.15s;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
 }
 
 .colorDot:hover {

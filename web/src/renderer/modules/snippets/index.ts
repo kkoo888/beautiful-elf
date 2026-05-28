@@ -5,6 +5,18 @@ export { SnippetForm } from './components/snippet-form'
 export { SnippetSearch } from './components/snippet-search'
 export { TagManager } from './components/tag-manager'
 
-export { useSnippets, useSnippetTags, useCreateSnippet, useUpdateSnippet, useDeleteSnippet, useRecordSnippetUse } from './hooks/use-snippets'
+export {
+  useSnippets,
+  useSnippetTags,
+  useCreateSnippet,
+  useUpdateSnippet,
+  useDeleteSnippet,
+  useRecordSnippetUse,
+} from './hooks/use-snippets'
 
-export type { Snippet, SnippetFormData, SnippetQueryParams, SnippetListResponse } from './types/snippets'
+export type {
+  Snippet,
+  SnippetFormData,
+  SnippetQueryParams,
+  SnippetListResponse,
+} from './types/snippets'

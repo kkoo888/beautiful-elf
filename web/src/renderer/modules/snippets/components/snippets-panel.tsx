@@ -1,13 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import {
-  Typography,
-  Button,
-  Drawer,
-  Space,
-  Spin,
-  Empty,
-  message
-} from 'antd'
+import { Typography, Button, Drawer, Space, Spin, Empty, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { SnippetCard } from './snippet-card'
 import { SnippetForm } from './snippet-form'
@@ -18,7 +10,7 @@ import {
   useCreateSnippet,
   useUpdateSnippet,
   useDeleteSnippet,
-  useRecordSnippetUse
+  useRecordSnippetUse,
 } from '../hooks/use-snippets'
 import type { Snippet, SnippetFormData, SnippetQueryParams } from '../types/snippets'
 import styles from './snippets-panel.module.css'
@@ -38,7 +30,7 @@ export function SnippetsPanel() {
   const queryParams = useMemo<SnippetQueryParams>(
     () => ({
       keyword: keyword || undefined,
-      tags: selectedTags.length > 0 ? selectedTags : undefined
+      tags: selectedTags.length > 0 ? selectedTags : undefined,
     }),
     [keyword, selectedTags]
   )
@@ -78,10 +70,7 @@ export function SnippetsPanel() {
   const handleSubmit = useCallback(
     (data: SnippetFormData) => {
       if (editingSnippet) {
-        updateMutation.mutate(
-          { id: editingSnippet.id, data },
-          { onSuccess: handleCloseDrawer }
-        )
+        updateMutation.mutate({ id: editingSnippet.id, data }, { onSuccess: handleCloseDrawer })
       } else {
         createMutation.mutate(data, { onSuccess: handleCloseDrawer })
       }
@@ -137,9 +126,7 @@ export function SnippetsPanel() {
         <div className={styles.emptyState}>
           <div className={styles.emptyIcon}>💻</div>
           <Text className={styles.emptyText}>暂无代码片段</Text>
-          <Text className={styles.emptyHint}>
-            保存你的代码片段，方便快速复用
-          </Text>
+          <Text className={styles.emptyHint}>保存你的代码片段，方便快速复用</Text>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -178,9 +165,7 @@ export function SnippetsPanel() {
               loading={isSaving}
               onClick={() => {
                 // 触发表单提交 - 通过 form 的 id 关联
-                document
-                  .querySelector<HTMLFormElement>('#snippet-form')
-                  ?.requestSubmit()
+                document.querySelector<HTMLFormElement>('#snippet-form')?.requestSubmit()
               }}
             >
               {editingSnippet ? '保存' : '创建'}
@@ -188,11 +173,7 @@ export function SnippetsPanel() {
           </Space>
         }
       >
-        <SnippetForm
-          snippet={editingSnippet}
-          onSubmit={handleSubmit}
-          loading={isSaving}
-        />
+        <SnippetForm snippet={editingSnippet} onSubmit={handleSubmit} loading={isSaving} />
       </Drawer>
     </div>
   )

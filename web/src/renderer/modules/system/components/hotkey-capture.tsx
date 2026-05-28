@@ -99,7 +99,9 @@ export function HotkeyCapture({ value, onChange }: HotkeyCaptureProps) {
         pressedKeys.length > 0 ? (
           <Space size={2}>
             {pressedKeys.map((k, i) => (
-              <Tag key={i} color="blue">{k}</Tag>
+              <Tag key={i} color="blue">
+                {k}
+              </Tag>
             ))}
           </Space>
         ) : (

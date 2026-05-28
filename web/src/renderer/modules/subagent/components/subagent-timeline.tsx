@@ -1,7 +1,13 @@
 /** 子代理执行步骤 Timeline */
 
 import { Timeline, Tag, Typography, Empty } from 'antd'
-import { CheckCircleFilled, CloseCircleFilled, LoadingOutlined, ClockCircleOutlined, MinusCircleFilled } from '@ant-design/icons'
+import {
+  CheckCircleFilled,
+  CloseCircleFilled,
+  LoadingOutlined,
+  ClockCircleOutlined,
+  MinusCircleFilled,
+} from '@ant-design/icons'
 import type { SubagentRun, SubagentStep, StepStatus } from '../types/subagent'
 import styles from './subagent-panel.module.css'
 
@@ -43,8 +49,24 @@ export function SubagentTimeline({ run }: SubagentTimelineProps) {
     <div className={styles.timelineContainer}>
       <div className={styles.timelineHeader}>
         <span className={styles.timelineTitle}>{run.taskName}</span>
-        <Tag color={run.status === 'running' ? 'processing' : run.status === 'completed' ? 'success' : run.status === 'failed' ? 'error' : 'warning'}>
-          {run.status === 'running' ? '运行中' : run.status === 'completed' ? '已完成' : run.status === 'failed' ? '失败' : '已终止'}
+        <Tag
+          color={
+            run.status === 'running'
+              ? 'processing'
+              : run.status === 'completed'
+                ? 'success'
+                : run.status === 'failed'
+                  ? 'error'
+                  : 'warning'
+          }
+        >
+          {run.status === 'running'
+            ? '运行中'
+            : run.status === 'completed'
+              ? '已完成'
+              : run.status === 'failed'
+                ? '失败'
+                : '已终止'}
         </Tag>
       </div>
       <Timeline
@@ -57,12 +79,8 @@ export function SubagentTimeline({ run }: SubagentTimelineProps) {
               {step.duration !== undefined && (
                 <span className={styles.elapsedTime}> · {formatDuration(step.duration)}</span>
               )}
-              {step.output && (
-                <div className={styles.stepOutput}>{step.output}</div>
-              )}
-              {step.error && (
-                <div className={styles.stepError}>{step.error}</div>
-              )}
+              {step.output && <div className={styles.stepOutput}>{step.output}</div>}
+              {step.error && <div className={styles.stepError}>{step.error}</div>}
             </div>
           ),
         }))}

@@ -64,13 +64,7 @@ export function SkillDetail({ open, skill, onClose, onRefine }: SkillDetailProps
   const skillMd = getMockSkillMd(skill)
 
   return (
-    <Drawer
-      title={`🔧 ${skill.name}`}
-      open={open}
-      onClose={onClose}
-      width={500}
-      destroyOnClose
-    >
+    <Drawer title={`🔧 ${skill.name}`} open={open} onClose={onClose} width={500} destroyOnClose>
       <div className={styles.detailContent}>
         {/* 基本信息 */}
         <div className={styles.detailSection}>
@@ -104,17 +98,13 @@ export function SkillDetail({ open, skill, onClose, onRefine }: SkillDetailProps
               </div>
             </div>
             <div className={styles.statCard}>
-              <div className={styles.statValue}>
-                {(skill.stats.successRate * 100).toFixed(0)}%
-              </div>
+              <div className={styles.statValue}>{(skill.stats.successRate * 100).toFixed(0)}%</div>
               <div className={styles.statLabel}>
                 <CheckCircleOutlined /> 成功率
               </div>
             </div>
             <div className={styles.statCard}>
-              <div className={styles.statValue}>
-                {formatDuration(skill.stats.avgDuration)}
-              </div>
+              <div className={styles.statValue}>{formatDuration(skill.stats.avgDuration)}</div>
               <div className={styles.statLabel}>
                 <ClockCircleOutlined /> 平均耗时
               </div>

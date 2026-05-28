@@ -18,7 +18,7 @@ const LOG_LEVEL_OPTIONS = [
   { label: 'Debug（调试）', value: 'debug' },
   { label: 'Info（信息）', value: 'info' },
   { label: 'Warn（警告）', value: 'warn' },
-  { label: 'Error（错误）', value: 'error' }
+  { label: 'Error（错误）', value: 'error' },
 ]
 
 export function PrivacySettings({ settings, onChange }: PrivacySettingsProps) {

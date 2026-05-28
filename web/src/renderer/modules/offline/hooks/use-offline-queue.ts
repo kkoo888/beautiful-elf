@@ -111,10 +111,7 @@ export function useOfflineQueue(): UseOfflineQueueReturn {
  * 生成可重试的消息迭代器
  * 跳过已超过最大重试次数的消息（标记为 failed）
  */
-function* retryable(
-  messages: OfflineMessage[],
-  maxRetry: number
-): Generator<OfflineMessage> {
+function* retryable(messages: OfflineMessage[], maxRetry: number): Generator<OfflineMessage> {
   for (const msg of messages) {
     if (msg.retryCount < maxRetry) {
       yield msg

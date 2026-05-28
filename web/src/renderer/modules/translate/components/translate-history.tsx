@@ -55,7 +55,7 @@ export const TranslateHistory: React.FC<TranslateHistoryProps> = ({
   languages,
   onLoad,
   onSelect,
-  onFavorite
+  onFavorite,
 }) => {
   useEffect(() => {
     onLoad()
@@ -85,7 +85,7 @@ export const TranslateHistory: React.FC<TranslateHistoryProps> = ({
             style={{
               display: 'flex',
               justifyContent: 'center',
-              padding: 32
+              padding: 32,
             }}
           >
             <Spin size="small" />
@@ -98,18 +98,13 @@ export const TranslateHistory: React.FC<TranslateHistoryProps> = ({
           />
         ) : (
           history.map((item) => (
-            <div
-              key={item.id}
-              className={styles.historyItem}
-              onClick={() => onSelect(item)}
-            >
+            <div key={item.id} className={styles.historyItem} onClick={() => onSelect(item)}>
               <span className={styles.historySource}>{item.sourceText}</span>
               <span className={styles.historyTarget}>{item.targetText}</span>
               <div className={styles.historyMeta}>
                 <span className={styles.historyLang}>
                   {getLangName(languages, item.sourceLang)} →{' '}
-                  {getLangName(languages, item.targetLang)} ·{' '}
-                  {formatRelativeTime(item.createdAt)}
+                  {getLangName(languages, item.targetLang)} · {formatRelativeTime(item.createdAt)}
                 </span>
                 <span
                   className={`${styles.historyMode} ${

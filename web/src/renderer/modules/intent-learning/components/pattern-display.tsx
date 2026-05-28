@@ -15,9 +15,7 @@ export default function PatternDisplay() {
             {pattern.description}
           </Typography.Paragraph>
           <div style={{ marginBottom: 8 }}>
-            <Typography.Text type="secondary">
-              触发频率：{pattern.frequency} 次
-            </Typography.Text>
+            <Typography.Text type="secondary">触发频率：{pattern.frequency} 次</Typography.Text>
           </div>
           <Space wrap size={[4, 4]}>
             {pattern.actions.map((action, index) => (

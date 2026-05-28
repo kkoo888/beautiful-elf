@@ -78,9 +78,7 @@ export function MemorySearch({
       {isSearchMode && (
         <div className={styles.searchInfo}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {loading
-              ? '正在语义检索…'
-              : `找到 ${resultCount ?? 0} 条相关记忆`}
+            {loading ? '正在语义检索…' : `找到 ${resultCount ?? 0} 条相关记忆`}
           </Text>
           <Button type="link" size="small" onClick={handleClear}>
             清除搜索

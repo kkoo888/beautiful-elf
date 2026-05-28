@@ -45,9 +45,7 @@ export default function PetControlTab() {
           <Button icon={<CloseOutlined />} danger>
             关闭窗口
           </Button>
-          <Button icon={<SyncOutlined />}>
-            刷新
-          </Button>
+          <Button icon={<SyncOutlined />}>刷新</Button>
           <Button icon={<ReloadOutlined />} type="primary">
             重载模型
           </Button>

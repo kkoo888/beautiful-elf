@@ -117,7 +117,7 @@ export const SPEAKING_STYLES = [
   '简洁干练',
   '文艺诗意',
   '毒舌傲娇',
-  '治愈暖心'
+  '治愈暖心',
 ] as const
 
 export type SpeakingStyle = (typeof SPEAKING_STYLES)[number]
@@ -179,5 +179,5 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
   { label: '毒舌', color: '#ff4d4f' },
   { label: '治愈', color: '#95de64' },
   { label: '文艺', color: '#597ef7' },
-  { label: '热血', color: '#ff7a45' }
+  { label: '热血', color: '#ff7a45' },
 ]

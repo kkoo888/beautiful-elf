@@ -29,7 +29,7 @@ export function confirmDialog({
   okText = '确认',
   cancelText = '取消',
   okType = 'primary',
-  danger = false
+  danger = false,
 }: ConfirmDialogOptions): Promise<boolean> {
   return new Promise((resolve) => {
     Modal.confirm({
@@ -41,7 +41,7 @@ export function confirmDialog({
       okType: danger ? 'primary' : okType,
       okButtonProps: danger ? { danger: true } : undefined,
       onOk: () => resolve(true),
-      onCancel: () => resolve(false)
+      onCancel: () => resolve(false),
     })
   })
 }

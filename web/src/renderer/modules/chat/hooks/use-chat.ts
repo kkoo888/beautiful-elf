@@ -11,7 +11,7 @@ import type {
   FeedbackData,
   FeedbackReason,
   ReasoningDepth,
-  StreamToken
+  StreamToken,
 } from '../types/chat'
 
 /** 生成唯一 ID */
@@ -50,7 +50,7 @@ export function useChat(): UseChatReturn {
     setMessages,
     setReasoningDepth: storeSetReasoningDepth,
     setIsLoading,
-    clearMessages: storeClearMessages
+    clearMessages: storeClearMessages,
   } = useChatStore()
 
   const abortRef = useRef<{ abort: () => void } | null>(null)
@@ -76,7 +76,7 @@ export function useChat(): UseChatReturn {
         conversationId: convId,
         role: 'user',
         content: content.trim(),
-        createdAt: Date.now()
+        createdAt: Date.now(),
       }
       addMessage(userMessage)
 
@@ -87,7 +87,7 @@ export function useChat(): UseChatReturn {
         conversationId: convId,
         role: 'assistant',
         content: '',
-        createdAt: Date.now()
+        createdAt: Date.now(),
       }
       addMessage(aiMessage)
       setIsLoading(true)
@@ -105,9 +105,7 @@ export function useChat(): UseChatReturn {
           // 更新 AI 消息内容（追加 token）
           const currentMessages = useChatStore.getState().messages
           const updatedMessages = currentMessages.map((msg) =>
-            msg.id === aiMessageId
-              ? { ...msg, content: msg.content + token.content }
-              : msg
+            msg.id === aiMessageId ? { ...msg, content: msg.content + token.content } : msg
           )
           setMessages(updatedMessages)
         },
@@ -141,7 +139,7 @@ export function useChat(): UseChatReturn {
         conversationId: convId,
         role: 'user',
         content: content.trim(),
-        createdAt: Date.now()
+        createdAt: Date.now(),
       }
       addMessage(userMessage)
       setIsLoading(true)
@@ -150,7 +148,7 @@ export function useChat(): UseChatReturn {
         const response = await chat({
           conversationId: convId,
           message: content.trim(),
-          reasoningDepth
+          reasoningDepth,
         })
 
         const aiMessage: ChatMessage = {
@@ -162,8 +160,8 @@ export function useChat(): UseChatReturn {
           metadata: {
             isCached: response.isCached,
             intentRoute: response.intentRoute,
-            model: response.model
-          }
+            model: response.model,
+          },
         }
         addMessage(aiMessage)
       } catch (error) {
@@ -173,7 +171,7 @@ export function useChat(): UseChatReturn {
           conversationId: convId,
           role: 'assistant',
           content: '⚠️ 请求失败，请检查网络后重试',
-          createdAt: Date.now()
+          createdAt: Date.now(),
         }
         addMessage(errorMessage)
       } finally {
@@ -199,7 +197,7 @@ export function useChat(): UseChatReturn {
           messageId: data.messageId,
           type: data.type,
           reasons: data.reasons,
-          comment: data.comment
+          comment: data.comment,
         })
 
         // 更新本地消息的反馈状态
@@ -240,6 +238,6 @@ export function useChat(): UseChatReturn {
     setReasoningDepth,
     submitFeedback: handleFeedback,
     clearMessages,
-    stopGeneration
+    stopGeneration,
   }
 }

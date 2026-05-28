@@ -38,7 +38,10 @@ export default function WorkflowPanel() {
 
   const handleStepsChange = (steps: WorkflowStep[]) => {
     if (selectedId) {
-      void reorderStepsMut(selectedId, steps.map((s) => s.id))
+      void reorderStepsMut(
+        selectedId,
+        steps.map((s) => s.id)
+      )
     }
   }
 
@@ -63,10 +66,7 @@ export default function WorkflowPanel() {
       key: 'editor',
       label: '步骤编辑',
       children: selectedWorkflow ? (
-        <WorkflowEditor
-          steps={selectedWorkflow.steps}
-          onStepsChange={handleStepsChange}
-        />
+        <WorkflowEditor steps={selectedWorkflow.steps} onStepsChange={handleStepsChange} />
       ) : (
         <div style={{ textAlign: 'center', padding: 48, color: 'var(--ant-color-text-secondary)' }}>
           请先在列表中选择一个工作流

@@ -40,9 +40,9 @@ export const useChatStore = create<ChatState>((set) => ({
   setMessages: (messages) => set({ messages }),
   addMessage: (message) =>
     set((state) => ({
-      messages: [...state.messages, message]
+      messages: [...state.messages, message],
     })),
   setReasoningDepth: (reasoningDepth) => set({ reasoningDepth }),
   setIsLoading: (isLoading) => set({ isLoading }),
-  clearMessages: () => set({ messages: [] })
+  clearMessages: () => set({ messages: [] }),
 }))

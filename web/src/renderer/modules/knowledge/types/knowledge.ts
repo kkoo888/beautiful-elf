@@ -1,5 +1,15 @@
 /** 知识库文档类型 */
-export type KnowledgeFileType = 'pdf' | 'docx' | 'md' | 'txt' | 'json' | 'csv' | 'yaml' | 'html' | 'xml' | 'zip'
+export type KnowledgeFileType =
+  | 'pdf'
+  | 'docx'
+  | 'md'
+  | 'txt'
+  | 'json'
+  | 'csv'
+  | 'yaml'
+  | 'html'
+  | 'xml'
+  | 'zip'
 
 /** 文档状态 */
 export type DocumentStatus = 'indexing' | 'ready' | 'error'

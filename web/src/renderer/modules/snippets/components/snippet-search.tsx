@@ -15,7 +15,7 @@ export function SnippetSearch({
   onKeywordChange,
   selectedTags,
   onTagsChange,
-  allTags
+  allTags,
 }: SnippetSearchProps) {
   return (
     <Space className={styles.searchBar} size={12} wrap>

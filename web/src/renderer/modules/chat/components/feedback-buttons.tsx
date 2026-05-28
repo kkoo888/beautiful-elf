@@ -23,9 +23,7 @@ export const FeedbackButtons: React.FC<FeedbackButtonsProps> = ({
   feedback,
   onFeedback,
 }) => {
-  const [selectedType, setSelectedType] = useState<FeedbackType | null>(
-    feedback?.type ?? null
-  )
+  const [selectedType, setSelectedType] = useState<FeedbackType | null>(feedback?.type ?? null)
   const [modalVisible, setModalVisible] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 

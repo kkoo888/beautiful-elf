@@ -33,7 +33,11 @@ export function useSubagent(): UseSubagentReturn {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  const { data: runs = [], isLoading, error } = useQuery({
+  const {
+    data: runs = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: fetchSubagentRuns,
     refetchInterval: 5000, // 每 5 秒刷新

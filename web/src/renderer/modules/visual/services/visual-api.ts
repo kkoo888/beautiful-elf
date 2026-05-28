@@ -74,15 +74,13 @@ export async function captureScreen(mode: CaptureMode): Promise<CaptureResult> {
 /**
  * Mock 分析图片内容
  */
-export async function analyzeImage(
-  imageData: string,
-  mode: AnalysisMode
-): Promise<AnalysisResult> {
+export async function analyzeImage(imageData: string, mode: AnalysisMode): Promise<AnalysisResult> {
   await delay(1500)
 
   const mockResults: Record<AnalysisMode, { result: string; confidence: number }> = {
     general: {
-      result: '屏幕上显示了一个代码编辑器，正在编写 React 组件。代码结构清晰，使用了 TypeScript 泛型和 JSX 语法。',
+      result:
+        '屏幕上显示了一个代码编辑器，正在编写 React 组件。代码结构清晰，使用了 TypeScript 泛型和 JSX 语法。',
       confidence: 0.92,
     },
     text: {
@@ -90,7 +88,8 @@ export async function analyzeImage(
       confidence: 0.97,
     },
     code: {
-      result: '检测到 TypeScript 代码，正在实现一个列表组件。使用了 React 函数组件 + Hooks 模式，props 类型使用泛型定义，渲染逻辑简洁。',
+      result:
+        '检测到 TypeScript 代码，正在实现一个列表组件。使用了 React 函数组件 + Hooks 模式，props 类型使用泛型定义，渲染逻辑简洁。',
       confidence: 0.89,
     },
   }

@@ -61,7 +61,8 @@ export const MetricCard: React.FC<MetricCardProps> = ({
       </div>
       <Tooltip title={`告警阈值: ${threshold}${unit}`}>
         <div className={styles.metricFooter}>
-          阈值: {threshold}{unit}
+          阈值: {threshold}
+          {unit}
         </div>
       </Tooltip>
     </div>

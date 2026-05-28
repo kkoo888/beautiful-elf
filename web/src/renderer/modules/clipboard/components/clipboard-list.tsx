@@ -10,10 +10,7 @@ interface ClipboardListProps {
   loading: boolean
   getHighlightedContent: (content: string) => string
   onCopy: (item: ClipboardItem) => void
-  onContextMenu: (
-    item: ClipboardItem,
-    position: { x: number; y: number }
-  ) => void
+  onContextMenu: (item: ClipboardItem, position: { x: number; y: number }) => void
   onOpenDetail: (item: ClipboardItem) => void
   onLoadMore: () => void
 }
@@ -32,18 +29,13 @@ export function ClipboardList({
   onCopy,
   onContextMenu,
   onOpenDetail,
-  onLoadMore
+  onLoadMore,
 }: ClipboardListProps) {
   const listRef = useRef<VirtualList>(null)
 
   // 滚动到底部时触发加载更多
   const handleItemsRendered = useCallback(
-    ({
-      visibleStopIndex
-    }: {
-      visibleStartIndex: number
-      visibleStopIndex: number
-    }) => {
+    ({ visibleStopIndex }: { visibleStartIndex: number; visibleStopIndex: number }) => {
       if (visibleStopIndex >= items.length - 5) {
         onLoadMore()
       }
@@ -59,10 +51,7 @@ export function ClipboardList({
   if (!loading && items.length === 0) {
     return (
       <div className={styles.emptyState}>
-        <Empty
-          description="复制内容会自动记录在这里 📋"
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
+        <Empty description="复制内容会自动记录在这里 📋" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </div>
     )
   }

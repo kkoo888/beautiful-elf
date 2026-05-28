@@ -2,11 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { Button, Input, Spin, Empty, Drawer, message } from 'antd'
-import {
-  PlusOutlined,
-  SearchOutlined,
-  ApiOutlined,
-} from '@ant-design/icons'
+import { PlusOutlined, SearchOutlined, ApiOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSkills } from '../hooks/use-skills'
 import type { Skill, ChainNode, InstallSkillInput, RefineResult } from '../types/skills'
@@ -64,21 +60,21 @@ export default function SkillsPanel() {
         message.error('切换失败，请重试')
       }
     },
-    [toggleSkillMut],
+    [toggleSkillMut]
   )
 
   const handleInstall = useCallback(
     async (input: InstallSkillInput) => {
       await installSkillMut(input)
     },
-    [installSkillMut],
+    [installSkillMut]
   )
 
   const handleRefine = useCallback(
     async (id: string, prompt?: string): Promise<RefineResult> => {
       return refineSkillMut(id, prompt)
     },
-    [refineSkillMut],
+    [refineSkillMut]
   )
 
   const handleOpenRefine = useCallback((skill: Skill) => {
@@ -99,17 +95,10 @@ export default function SkillsPanel() {
         description={`已安装 ${skills.length} 个技能，${enabledSkills.length} 个已启用`}
         extra={
           <>
-            <Button
-              icon={<ApiOutlined />}
-              onClick={() => setChainOpen(true)}
-            >
+            <Button icon={<ApiOutlined />} onClick={() => setChainOpen(true)}>
               链式配置
             </Button>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => setInstallOpen(true)}
-            >
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setInstallOpen(true)}>
               安装技能
             </Button>
           </>
@@ -127,9 +116,7 @@ export default function SkillsPanel() {
           prefix={<SearchOutlined />}
           size="middle"
         />
-        <span className={styles.statsTag}>
-          {filteredSkills.length} 个技能
-        </span>
+        <span className={styles.statsTag}>{filteredSkills.length} 个技能</span>
       </div>
 
       {/* 技能卡片网格 */}
@@ -141,11 +128,7 @@ export default function SkillsPanel() {
         <div className={styles.empty}>
           <Empty description={keyword ? '没有匹配的技能' : '暂无已安装的技能'}>
             {!keyword && (
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => setInstallOpen(true)}
-              >
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setInstallOpen(true)}>
                 安装第一个技能
               </Button>
             )}
@@ -197,11 +180,7 @@ export default function SkillsPanel() {
         width={480}
         destroyOnClose
       >
-        <SkillChain
-          skills={skills}
-          chainNodes={chainNodes}
-          onChange={handleChainChange}
-        />
+        <SkillChain skills={skills} chainNodes={chainNodes} onChange={handleChainChange} />
       </Drawer>
     </div>
   )

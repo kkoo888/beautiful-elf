@@ -15,7 +15,14 @@ export default function AttributeBar({ label, value, max = 100, icon, color }: A
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 4,
+        }}
+      >
         <Typography.Text>
           {icon} {label}
         </Typography.Text>

@@ -13,7 +13,7 @@ import {
   DashboardOutlined,
   SettingOutlined,
   BellOutlined,
-  PawPrintOutlined
+  PawPrintOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppStore } from '@/stores/use-app-store'
@@ -30,8 +30,8 @@ const menuItems = [
       { key: '/', icon: <MessageOutlined />, label: '对话' },
       { key: '/schedule', icon: <CalendarOutlined />, label: '日程' },
       { key: '/clipboard', icon: <CopyOutlined />, label: '剪贴板' },
-      { key: '/snippets', icon: <CodeOutlined />, label: '代码片段' }
-    ]
+      { key: '/snippets', icon: <CodeOutlined />, label: '代码片段' },
+    ],
   },
   {
     key: 'knowledge',
@@ -41,8 +41,8 @@ const menuItems = [
       { key: '/knowledge', icon: <BookOutlined />, label: '知识库' },
       { key: '/memory', icon: <BrainOutlined />, label: '记忆' },
       { key: '/translate', icon: <TranslationOutlined />, label: '翻译' },
-      { key: '/skills', icon: <ToolOutlined />, label: '技能' }
-    ]
+      { key: '/skills', icon: <ToolOutlined />, label: '技能' },
+    ],
   },
   {
     key: 'automation',
@@ -51,8 +51,8 @@ const menuItems = [
     children: [
       { key: '/workflow', icon: <BranchesOutlined />, label: '工作流' },
       { key: '/subagent', icon: <RobotOutlined />, label: '子代理' },
-      { key: '/tools', icon: <DashboardOutlined />, label: '工具管理' }
-    ]
+      { key: '/tools', icon: <DashboardOutlined />, label: '工具管理' },
+    ],
   },
   {
     key: 'system',
@@ -62,9 +62,9 @@ const menuItems = [
       { key: '/pet', icon: <PawPrintOutlined />, label: '宠物' },
       { key: '/performance', icon: <DashboardOutlined />, label: '性能监控' },
       { key: '/notification', icon: <BellOutlined />, label: '通知' },
-      { key: '/settings', icon: <SettingOutlined />, label: '设置' }
-    ]
-  }
+      { key: '/settings', icon: <SettingOutlined />, label: '设置' },
+    ],
+  },
 ]
 
 /**
@@ -89,7 +89,7 @@ export function Sidebar() {
       width={200}
       style={{
         height: '100vh',
-        borderRight: '1px solid var(--ant-color-border-secondary)'
+        borderRight: '1px solid var(--ant-color-border-secondary)',
       }}
     >
       <div
@@ -100,7 +100,7 @@ export function Sidebar() {
           justifyContent: 'center',
           fontSize: collapsed ? 16 : 20,
           fontWeight: 'bold',
-          color: 'var(--ant-color-primary)'
+          color: 'var(--ant-color-primary)',
         }}
       >
         {collapsed ? 'BE' : 'Beautiful-Elf'}

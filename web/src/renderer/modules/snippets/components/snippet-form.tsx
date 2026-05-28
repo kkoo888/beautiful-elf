@@ -11,7 +11,7 @@ const snippetSchema = z.object({
   title: z.string().min(1, '请输入标题').max(100, '标题不超过 100 字'),
   content: z.string().min(1, '请输入代码内容'),
   language: z.string().min(1, '请选择语言'),
-  tags: z.array(z.string()).default([])
+  tags: z.array(z.string()).default([]),
 })
 
 type SnippetFormValues = z.infer<typeof snippetSchema>
@@ -29,15 +29,15 @@ export function SnippetForm({ snippet, onSubmit, loading }: SnippetFormProps) {
     setValue,
     watch,
     reset,
-    formState: { errors }
+    formState: { errors },
   } = useForm<SnippetFormValues>({
     resolver: zodResolver(snippetSchema),
     defaultValues: {
       title: '',
       content: '',
       language: 'typescript',
-      tags: []
-    }
+      tags: [],
+    },
   })
 
   const content = watch('content')
@@ -50,14 +50,14 @@ export function SnippetForm({ snippet, onSubmit, loading }: SnippetFormProps) {
         title: snippet.title,
         content: snippet.content,
         language: snippet.language,
-        tags: snippet.tags
+        tags: snippet.tags,
       })
     } else {
       reset({
         title: '',
         content: '',
         language: 'typescript',
-        tags: []
+        tags: [],
       })
     }
   }, [snippet, reset])
@@ -67,7 +67,7 @@ export function SnippetForm({ snippet, onSubmit, loading }: SnippetFormProps) {
       title: values.title,
       content: values.content,
       language: values.language,
-      tags: values.tags
+      tags: values.tags,
     })
   }
 
@@ -88,9 +88,7 @@ export function SnippetForm({ snippet, onSubmit, loading }: SnippetFormProps) {
         <Controller
           name="title"
           control={control}
-          render={({ field }) => (
-            <Input {...field} placeholder="给片段起个名字" maxLength={100} />
-          )}
+          render={({ field }) => <Input {...field} placeholder="给片段起个名字" maxLength={100} />}
         />
       </Form.Item>
 

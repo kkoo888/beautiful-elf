@@ -43,9 +43,7 @@ export default function SubagentPanel() {
           <Space>
             {runningCount > 0 && (
               <Badge count={runningCount} size="small">
-                <span className={styles.runningBadge}>
-                  运行中
-                </span>
+                <span className={styles.runningBadge}>运行中</span>
               </Badge>
             )}
             <Button

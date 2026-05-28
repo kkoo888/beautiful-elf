@@ -1,11 +1,6 @@
 import { useMemo } from 'react'
 import { Card, Tag, Typography, Space, Button, Tooltip, Popconfirm } from 'antd'
-import {
-  CopyOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  FireOutlined
-} from '@ant-design/icons'
+import { CopyOutlined, EditOutlined, DeleteOutlined, FireOutlined } from '@ant-design/icons'
 import { getTagColor, type Snippet } from '../types/snippets'
 import styles from './snippets-panel.module.css'
 
@@ -32,19 +27,12 @@ function CodePreview({ content }: { content: string }) {
           <span className={styles.lineContent}>{line || ' '}</span>
         </div>
       ))}
-      {content.split('\n').length > 5 && (
-        <div className={styles.codeMore}>...</div>
-      )}
+      {content.split('\n').length > 5 && <div className={styles.codeMore}>...</div>}
     </div>
   )
 }
 
-export function SnippetCard({
-  snippet,
-  onEdit,
-  onDelete,
-  onCopy
-}: SnippetCardProps) {
+export function SnippetCard({ snippet, onEdit, onDelete, onCopy }: SnippetCardProps) {
   const tagColor = (tag: string) => getTagColor(tag)
 
   return (
@@ -53,18 +41,10 @@ export function SnippetCard({
       hoverable
       actions={[
         <Tooltip title="复制代码" key="copy">
-          <Button
-            type="text"
-            icon={<CopyOutlined />}
-            onClick={() => onCopy(snippet)}
-          />
+          <Button type="text" icon={<CopyOutlined />} onClick={() => onCopy(snippet)} />
         </Tooltip>,
         <Tooltip title="编辑" key="edit">
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            onClick={() => onEdit(snippet)}
-          />
+          <Button type="text" icon={<EditOutlined />} onClick={() => onEdit(snippet)} />
         </Tooltip>,
         <Popconfirm
           key="delete"
@@ -78,7 +58,7 @@ export function SnippetCard({
           <Tooltip title="删除">
             <Button type="text" danger icon={<DeleteOutlined />} />
           </Tooltip>
-        </Popconfirm>
+        </Popconfirm>,
       ]}
     >
       <div className={styles.cardHeader}>

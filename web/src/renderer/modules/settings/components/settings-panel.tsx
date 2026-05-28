@@ -13,7 +13,7 @@ import {
   SafetyOutlined,
   InfoCircleOutlined,
   HeartOutlined,
-  FileTextOutlined
+  FileTextOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSettings } from '../hooks/use-settings'
@@ -31,43 +31,43 @@ const TAB_ITEMS = [
   {
     key: 'ollama',
     label: 'Ollama',
-    icon: <CloudServerOutlined />
+    icon: <CloudServerOutlined />,
   },
   {
     key: 'ai',
     label: 'AI 参数',
-    icon: <RobotOutlined />
+    icon: <RobotOutlined />,
   },
   {
     key: 'app',
     label: '应用',
-    icon: <SettingOutlined />
+    icon: <SettingOutlined />,
   },
   {
     key: 'shortcut',
     label: '快捷键',
-    icon: <KeyOutlined />
+    icon: <KeyOutlined />,
   },
   {
     key: 'privacy',
     label: '隐私安全',
-    icon: <SafetyOutlined />
+    icon: <SafetyOutlined />,
   },
   {
     key: 'about',
     label: '关于',
-    icon: <InfoCircleOutlined />
+    icon: <InfoCircleOutlined />,
   },
   {
     key: 'soul',
     label: '灵魂',
-    icon: <HeartOutlined />
+    icon: <HeartOutlined />,
   },
   {
     key: 'prompt',
     label: 'Prompt 管理',
-    icon: <FileTextOutlined />
-  }
+    icon: <FileTextOutlined />,
+  },
 ]
 
 /** 设置主面板 */
@@ -82,7 +82,7 @@ export default function SettingsPanel() {
     loadModels,
     models,
     restartHint,
-    clearRestartHint
+    clearRestartHint,
   } = useSettings()
 
   const renderTabContent = useCallback(
@@ -99,12 +99,7 @@ export default function SettingsPanel() {
             />
           )
         case 'ai':
-          return (
-            <AiSettings
-              settings={settings.ai}
-              onChange={(p) => updateSettings({ ai: p })}
-            />
-          )
+          return <AiSettings settings={settings.ai} onChange={(p) => updateSettings({ ai: p })} />
         case 'app':
           return (
             <AppSettingsPanel
@@ -131,15 +126,7 @@ export default function SettingsPanel() {
           return null
       }
     },
-    [
-      settings,
-      soul,
-      models,
-      updateSettings,
-      updateSoul,
-      testOllamaConnection,
-      loadModels
-    ]
+    [settings, soul, models, updateSettings, updateSoul, testOllamaConnection, loadModels]
   )
 
   if (isLoading) {
@@ -177,7 +164,7 @@ export default function SettingsPanel() {
                 <span style={{ marginLeft: 8 }}>{item.label}</span>
               </span>
             ),
-            children: renderTabContent(item.key)
+            children: renderTabContent(item.key),
           }))}
         />
       </div>

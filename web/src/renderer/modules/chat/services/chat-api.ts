@@ -5,7 +5,7 @@ import type {
   ChatResponse,
   FeedbackRequest,
   FeedbackResponse,
-  StreamToken
+  StreamToken,
 } from '../types/chat'
 
 /** 模拟延迟 */
@@ -17,7 +17,7 @@ const MOCK_RESPONSES: string[] = [
   '这是一个很好的问题！让我来帮你分析一下。\n\n**关键点：**\n1. 首先需要理解需求\n2. 然后拆解任务\n3. 最后逐步实现',
   '根据我的理解，这里有几个方案：\n\n- **方案 A**：简单直接\n- **方案 B**：更灵活但复杂\n- **方案 C**：平衡方案\n\n推荐方案 C，兼顾了简洁和灵活性。',
   '```typescript\nfunction greet(name: string): string {\n  return `Hello, ${name}!`\n}\n\nconsole.log(greet("Beautiful-Elf"))\n```\n\n这段代码展示了基本的 TypeScript 函数定义。',
-  '让我想想... 🤔\n\n这个问题涉及到几个方面：\n\n> 设计原则：单一职责、开闭原则、依赖倒置\n\n建议先从最简单的实现开始，逐步迭代优化。'
+  '让我想想... 🤔\n\n这个问题涉及到几个方面：\n\n> 设计原则：单一职责、开闭原则、依赖倒置\n\n建议先从最简单的实现开始，逐步迭代优化。',
 ]
 
 /** Mock 意图路由模块池 */
@@ -35,7 +35,7 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
     Math.random() > 0.6
       ? {
           module: MOCK_MODULES[Math.floor(Math.random() * MOCK_MODULES.length)],
-          confidence: 0.7 + Math.random() * 0.3
+          confidence: 0.7 + Math.random() * 0.3,
         }
       : undefined
 
@@ -44,7 +44,7 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
     content: MOCK_RESPONSES[responseIndex],
     isCached,
     intentRoute,
-    model: 'qwen2.5:7b'
+    model: 'qwen2.5:7b',
   }
 }
 
@@ -74,7 +74,7 @@ export function chatStream(
         onToken({
           content: chars[i],
           done: false,
-          messageId: i === 0 ? messageId : undefined
+          messageId: i === 0 ? messageId : undefined,
         })
 
         // 模拟逐字延迟
@@ -85,7 +85,7 @@ export function chatStream(
         onToken({
           content: '',
           done: true,
-          messageId: undefined
+          messageId: undefined,
         })
       }
     } catch (err) {
@@ -100,16 +100,14 @@ export function chatStream(
   return {
     abort: () => {
       aborted = true
-    }
+    },
   }
 }
 
 /**
  * 提交反馈（Mock）
  */
-export async function submitFeedback(
-  request: FeedbackRequest
-): Promise<FeedbackResponse> {
+export async function submitFeedback(request: FeedbackRequest): Promise<FeedbackResponse> {
   await delay(300 + Math.random() * 500)
   console.log('[Mock] Feedback submitted:', request)
   return { success: true }

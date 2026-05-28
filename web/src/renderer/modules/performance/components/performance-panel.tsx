@@ -5,11 +5,7 @@
 
 import React from 'react'
 import { Alert, Row, Col, Spin } from 'antd'
-import {
-  CpuOutlined,
-  DatabaseOutlined,
-  HddOutlined,
-} from '@ant-design/icons'
+import { CpuOutlined, DatabaseOutlined, HddOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { usePerformance } from '../hooks/use-performance'
 import { MetricCard } from './metric-card'

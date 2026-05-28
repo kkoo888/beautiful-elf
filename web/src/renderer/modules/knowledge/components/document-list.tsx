@@ -74,9 +74,7 @@ export function DocumentList({
       dataIndex: 'fileType',
       key: 'fileType',
       width: 80,
-      render: (type: string) => (
-        <Tag>{type.toUpperCase()}</Tag>
-      ),
+      render: (type: string) => <Tag>{type.toUpperCase()}</Tag>,
     },
     {
       title: '分块数',
@@ -94,7 +92,9 @@ export function DocumentList({
         const config = STATUS_CONFIG[status]
         return (
           <span className={styles.statusTag}>
-            <span className={`${styles.statusDot} ${styles[`statusDot${status.charAt(0).toUpperCase() + status.slice(1)}`]}`} />
+            <span
+              className={`${styles.statusDot} ${styles[`statusDot${status.charAt(0).toUpperCase() + status.slice(1)}`]}`}
+            />
             <Tag color={config.color}>{config.label}</Tag>
           </span>
         )

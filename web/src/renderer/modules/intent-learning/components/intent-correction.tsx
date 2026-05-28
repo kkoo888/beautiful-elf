@@ -20,7 +20,12 @@ const MODULE_OPTIONS = [
   { value: '工作流', label: '工作流' },
 ]
 
-export default function IntentCorrection({ open, onClose, originalIntent, onConfirm }: IntentCorrectionProps) {
+export default function IntentCorrection({
+  open,
+  onClose,
+  originalIntent,
+  onConfirm,
+}: IntentCorrectionProps) {
   const [selectedModule, setSelectedModule] = useState<string>()
 
   const handleOk = () => {

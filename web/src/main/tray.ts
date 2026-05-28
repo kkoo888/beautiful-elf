@@ -13,15 +13,15 @@ export function createTray(mainWindow: BrowserWindow | null): void {
       click: () => {
         mainWindow?.show()
         mainWindow?.focus()
-      }
+      },
     },
     { type: 'separator' },
     {
       label: '退出',
       click: () => {
         app.quit()
-      }
-    }
+      },
+    },
   ])
 
   tray.setToolTip('Beautiful-Elf 智能桌面助手')

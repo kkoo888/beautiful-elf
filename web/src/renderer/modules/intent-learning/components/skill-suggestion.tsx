@@ -3,7 +3,12 @@ import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import { useSkillSuggestions } from '../hooks/use-intent-learning'
 
 export default function SkillSuggestion() {
-  const { data: suggestions = [], isLoading, acceptSuggestion, ignoreSuggestion } = useSkillSuggestions()
+  const {
+    data: suggestions = [],
+    isLoading,
+    acceptSuggestion,
+    ignoreSuggestion,
+  } = useSkillSuggestions()
 
   if (isLoading) return null
   if (suggestions.length === 0) return <Empty description="暂无技能建议" />

@@ -17,14 +17,14 @@ export const WS_RECONNECT_MAX = 30000 // 最大重连间隔 30秒
 export const STORAGE_KEYS = {
   THEME: 'beautiful-elf:theme',
   SETTINGS: 'beautiful-elf:settings',
-  CONVERSATIONS: 'beautiful-elf:conversations'
+  CONVERSATIONS: 'beautiful-elf:conversations',
 } as const
 
 // 主题
 export const THEMES = {
   LIGHT: 'light',
   DARK: 'dark',
-  HIGH_CONTRAST: 'high-contrast'
+  HIGH_CONTRAST: 'high-contrast',
 } as const
 
 // 事件类型
@@ -33,5 +33,5 @@ export const IPC_CHANNELS = {
   WINDOW_MAXIMIZE: 'window:maximize',
   WINDOW_CLOSE: 'window:close',
   WINDOW_IS_MAXIMIZED: 'window:isMaximized',
-  APP_GET_VERSION: 'app:getVersion'
+  APP_GET_VERSION: 'app:getVersion',
 } as const

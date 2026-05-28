@@ -5,7 +5,7 @@ import type { ClipboardItem, ClipboardContentType } from '../types/clipboard'
 import {
   fetchClipboardList,
   deleteClipboardItem,
-  togglePinClipboardItem
+  togglePinClipboardItem,
 } from '../services/clipboard-api'
 
 /** 剪贴板状态 */
@@ -40,7 +40,7 @@ export function useClipboard() {
     contextMenuItem: null,
     contextMenuPosition: null,
     page: 1,
-    hasMore: true
+    hasMore: true,
   })
 
   const debouncedKeyword = useDebounce(state.keyword, 300)
@@ -58,7 +58,7 @@ export function useClipboard() {
         const res = await fetchClipboardList({
           page,
           pageSize: 50,
-          keyword: debouncedKeyword || undefined
+          keyword: debouncedKeyword || undefined,
         })
 
         setState((s) => ({
@@ -66,7 +66,7 @@ export function useClipboard() {
           items: reset ? res.items : [...s.items, ...res.items],
           loading: false,
           page,
-          hasMore: s.items.length + res.items.length < res.total
+          hasMore: s.items.length + res.items.length < res.total,
         }))
       } catch {
         setState((s) => ({ ...s, loading: false }))
@@ -112,7 +112,7 @@ export function useClipboard() {
       setState((s) => ({
         ...s,
         items: s.items.filter((i) => i.id !== id),
-        detailItem: s.detailItem?.id === id ? null : s.detailItem
+        detailItem: s.detailItem?.id === id ? null : s.detailItem,
       }))
       message.success('已删除')
     } catch {
@@ -129,14 +129,12 @@ export function useClipboard() {
         // 重新排序：固定项在前，其余按时间倒序
         items.sort((a, b) => {
           if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
-          return (
-            new Date(b.copiedAt).getTime() - new Date(a.copiedAt).getTime()
-          )
+          return new Date(b.copiedAt).getTime() - new Date(a.copiedAt).getTime()
         })
         return {
           ...s,
           items,
-          detailItem: s.detailItem?.id === id ? updated : s.detailItem
+          detailItem: s.detailItem?.id === id ? updated : s.detailItem,
         }
       })
       message.success(updated.isPinned ? '已固定' : '已取消固定')
@@ -156,23 +154,20 @@ export function useClipboard() {
   }, [])
 
   /** 打开右键菜单 */
-  const openContextMenu = useCallback(
-    (item: ClipboardItem, position: { x: number; y: number }) => {
-      setState((s) => ({
-        ...s,
-        contextMenuItem: item,
-        contextMenuPosition: position
-      }))
-    },
-    []
-  )
+  const openContextMenu = useCallback((item: ClipboardItem, position: { x: number; y: number }) => {
+    setState((s) => ({
+      ...s,
+      contextMenuItem: item,
+      contextMenuPosition: position,
+    }))
+  }, [])
 
   /** 关闭右键菜单 */
   const closeContextMenu = useCallback(() => {
     setState((s) => ({
       ...s,
       contextMenuItem: null,
-      contextMenuPosition: null
+      contextMenuPosition: null,
     }))
   }, [])
 
@@ -192,10 +187,7 @@ export function useClipboard() {
     (content: string): string => {
       if (!debouncedKeyword) return truncateContent(content)
       const truncated = truncateContent(content)
-      const regex = new RegExp(
-        `(${debouncedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`,
-        'gi'
-      )
+      const regex = new RegExp(`(${debouncedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
       return truncated.replace(regex, '<mark>$1</mark>')
     },
     [debouncedKeyword]
@@ -214,7 +206,7 @@ export function useClipboard() {
     openContextMenu,
     closeContextMenu,
     loadMore,
-    getHighlightedContent
+    getHighlightedContent,
   }
 }
 
@@ -227,9 +219,7 @@ function truncateContent(content: string, maxLen = 100): string {
 /**
  * 根据内容判断类型图标
  */
-export function getContentTypeIcon(
-  contentType: ClipboardContentType
-): string {
+export function getContentTypeIcon(contentType: ClipboardContentType): string {
   switch (contentType) {
     case 'code':
       return '💻'
@@ -245,9 +235,7 @@ export function getContentTypeIcon(
 /**
  * 获取内容类型标签文本
  */
-export function getContentTypeLabel(
-  contentType: ClipboardContentType
-): string {
+export function getContentTypeLabel(contentType: ClipboardContentType): string {
   switch (contentType) {
     case 'code':
       return '代码'

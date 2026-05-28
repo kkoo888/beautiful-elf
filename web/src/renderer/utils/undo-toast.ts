@@ -9,11 +9,7 @@ import React from 'react'
  * @param onUndo - 撤销回调
  * @param duration - 显示时长（秒），默认 30
  */
-export function showUndoToast(
-  msg: string,
-  onUndo: () => void,
-  duration: number = 30
-): void {
+export function showUndoToast(msg: string, onUndo: () => void, duration: number = 30): void {
   const key = `undo_${Date.now()}`
   message.info({
     content: React.createElement('span', {}, [

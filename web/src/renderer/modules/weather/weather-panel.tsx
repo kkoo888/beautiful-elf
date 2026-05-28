@@ -35,9 +35,7 @@ export default function WeatherPanel() {
           {/* 3 天预报 */}
           {data && (
             <div className={styles.forecastSection}>
-              <h4 style={{ marginBottom: 12, color: 'var(--ant-color-text)' }}>
-                📅 未来 3 天预报
-              </h4>
+              <h4 style={{ marginBottom: 12, color: 'var(--ant-color-text)' }}>📅 未来 3 天预报</h4>
               <WeatherForecast forecast={data.forecast} />
             </div>
           )}

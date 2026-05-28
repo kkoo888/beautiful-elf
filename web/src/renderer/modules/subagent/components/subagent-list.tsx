@@ -48,7 +48,11 @@ export function SubagentList({ runs, loading, onStop, onSelect, selectedId }: Su
       dataIndex: 'id',
       key: 'id',
       width: 90,
-      render: (id: string) => <Text code style={{ fontSize: 12 }}>{id}</Text>,
+      render: (id: string) => (
+        <Text code style={{ fontSize: 12 }}>
+          {id}
+        </Text>
+      ),
     },
     {
       title: '任务名',
@@ -89,7 +93,12 @@ export function SubagentList({ runs, loading, onStop, onSelect, selectedId }: Su
       width: 140,
       render: (_: unknown, record: SubagentRun) => (
         <Text type="secondary" style={{ fontSize: 12 }}>
-          {record.currentStep ?? (record.status === 'completed' ? '已完成' : record.status === 'failed' ? '已失败' : '-')}
+          {record.currentStep ??
+            (record.status === 'completed'
+              ? '已完成'
+              : record.status === 'failed'
+                ? '已失败'
+                : '-')}
         </Text>
       ),
     },
@@ -98,18 +107,21 @@ export function SubagentList({ runs, loading, onStop, onSelect, selectedId }: Su
       dataIndex: 'model',
       key: 'model',
       width: 120,
-      render: (model?: string) => model ? <Text code style={{ fontSize: 12 }}>{model}</Text> : '-',
+      render: (model?: string) =>
+        model ? (
+          <Text code style={{ fontSize: 12 }}>
+            {model}
+          </Text>
+        ) : (
+          '-'
+        ),
     },
     {
       title: '操作',
       key: 'actions',
       width: 80,
       render: (_: unknown, record: SubagentRun) => (
-        <SubagentStop
-          runId={record.id}
-          status={record.status}
-          onStop={onStop}
-        />
+        <SubagentStop runId={record.id} status={record.status} onStop={onStop} />
       ),
     },
   ]
@@ -128,7 +140,10 @@ export function SubagentList({ runs, loading, onStop, onSelect, selectedId }: Su
       size="middle"
       onRow={(record) => ({
         onClick: () => onSelect(record.id),
-        style: { cursor: 'pointer', background: record.id === selectedId ? 'var(--ant-color-primary-bg)' : undefined },
+        style: {
+          cursor: 'pointer',
+          background: record.id === selectedId ? 'var(--ant-color-primary-bg)' : undefined,
+        },
       })}
     />
   )

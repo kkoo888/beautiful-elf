@@ -1,7 +1,12 @@
 /** 工作流列表组件 */
 
 import { Table, Tag, Space, Button, Popconfirm, Typography } from 'antd'
-import { PlayCircleOutlined, PauseCircleOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import {
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  EditOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { Workflow, WorkflowStatus, TriggerType } from '../types/workflow'
 import { EmptyState } from '@/components/empty-state'
@@ -48,7 +53,9 @@ export function WorkflowList({ workflows, loading, onEdit, onDelete, onRun }: Wo
         <Space direction="vertical" size={0}>
           <Text strong>{name}</Text>
           {record.description && (
-            <Text type="secondary" style={{ fontSize: 12 }}>{record.description}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.description}
+            </Text>
           )}
         </Space>
       ),
@@ -70,7 +77,11 @@ export function WorkflowList({ workflows, loading, onEdit, onDelete, onRun }: Wo
       width: 120,
       render: (type: TriggerType) => {
         const { label, icon } = TRIGGER_MAP[type]
-        return <span>{icon} {label}</span>
+        return (
+          <span>
+            {icon} {label}
+          </span>
+        )
       },
     },
     {
@@ -82,10 +93,19 @@ export function WorkflowList({ workflows, loading, onEdit, onDelete, onRun }: Wo
         return (
           <Space size={4}>
             <Tag color={NODE_STATUS_COLOR[record.lastRunStatus ?? 'default']}>
-              {record.lastRunStatus === 'success' ? '成功' : record.lastRunStatus === 'failed' ? '失败' : '运行中'}
+              {record.lastRunStatus === 'success'
+                ? '成功'
+                : record.lastRunStatus === 'failed'
+                  ? '失败'
+                  : '运行中'}
             </Tag>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              {new Date(record.lastRunAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              {new Date(record.lastRunAt).toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
             </Text>
           </Space>
         )
@@ -104,9 +124,26 @@ export function WorkflowList({ workflows, loading, onEdit, onDelete, onRun }: Wo
       width: 160,
       render: (_: unknown, record: Workflow) => (
         <Space size={4}>
-          <Button type="text" size="small" icon={<PlayCircleOutlined />} onClick={() => onRun(record.id)} title="运行" />
-          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => onEdit(record.id)} title="编辑" />
-          <Popconfirm title="确定删除此工作流？" onConfirm={() => onDelete(record.id)} okText="删除" cancelText="取消">
+          <Button
+            type="text"
+            size="small"
+            icon={<PlayCircleOutlined />}
+            onClick={() => onRun(record.id)}
+            title="运行"
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => onEdit(record.id)}
+            title="编辑"
+          />
+          <Popconfirm
+            title="确定删除此工作流？"
+            onConfirm={() => onDelete(record.id)}
+            okText="删除"
+            cancelText="取消"
+          >
             <Button type="text" size="small" danger icon={<DeleteOutlined />} title="删除" />
           </Popconfirm>
         </Space>

@@ -5,11 +5,23 @@ import type { HotkeyConfig } from '../types/system'
 
 const defaultHotkeys: HotkeyConfig[] = [
   { id: generateId(), name: '命令面板', shortcut: 'Ctrl+K', module: 'global', enabled: true },
-  { id: generateId(), name: '命令面板(备选)', shortcut: 'Ctrl+Shift+B', module: 'global', enabled: true },
+  {
+    id: generateId(),
+    name: '命令面板(备选)',
+    shortcut: 'Ctrl+Shift+B',
+    module: 'global',
+    enabled: true,
+  },
   { id: generateId(), name: '新建对话', shortcut: 'Ctrl+N', module: 'chat', enabled: true },
   { id: generateId(), name: '打开设置', shortcut: 'Ctrl+,', module: 'settings', enabled: true },
   { id: generateId(), name: '截图', shortcut: 'Ctrl+Shift+S', module: 'visual', enabled: true },
-  { id: generateId(), name: '打开宠物窗口', shortcut: 'Ctrl+Shift+P', module: 'pet', enabled: true },
+  {
+    id: generateId(),
+    name: '打开宠物窗口',
+    shortcut: 'Ctrl+Shift+P',
+    module: 'pet',
+    enabled: true,
+  },
   { id: generateId(), name: '切换主题', shortcut: 'Ctrl+Shift+T', module: 'global', enabled: true },
 ]
 

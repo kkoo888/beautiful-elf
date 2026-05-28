@@ -48,7 +48,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            height: '100vh'
+            height: '100vh',
           }}
         >
           <Result
@@ -58,7 +58,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
             extra={[
               <Button type="primary" key="reload" onClick={this.handleReload}>
                 重新加载
-              </Button>
+              </Button>,
             ]}
           />
         </div>

@@ -37,7 +37,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   detectedLang,
   onSourceLangChange,
   onTargetLangChange,
-  onSwap
+  onSwap,
 }) => {
   const sourceLanguages = languages
   const targetLanguages = languages.filter((l) => l.code !== 'auto')
@@ -57,14 +57,12 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
           onChange={onSourceLangChange}
           options={sourceLanguages.map((l) => ({
             value: l.code,
-            label: l.name
+            label: l.name,
           }))}
           size="small"
         />
         {sourceLang === 'auto' && detectedName && (
-          <span className={styles.detectedBadge}>
-            🔍 {detectedName}
-          </span>
+          <span className={styles.detectedBadge}>🔍 {detectedName}</span>
         )}
       </div>
 
@@ -86,7 +84,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
           onChange={onTargetLangChange}
           options={targetLanguages.map((l) => ({
             value: l.code,
-            label: l.name
+            label: l.name,
           }))}
           size="small"
         />

@@ -39,7 +39,7 @@ export function AppLayout() {
           style={{
             padding: '16px',
             overflow: 'auto',
-            backgroundColor: 'var(--ant-color-bg-layout)'
+            backgroundColor: 'var(--ant-color-bg-layout)',
           }}
         >
           <Outlet />

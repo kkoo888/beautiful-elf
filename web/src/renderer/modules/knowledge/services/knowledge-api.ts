@@ -72,18 +72,63 @@ const mockDocuments: KnowledgeDocument[] = [
 
 const mockChunks: Record<string, KnowledgeChunk[]> = {
   '1': [
-    { id: 'c1', documentId: '1', chunkIndex: 0, content: '## 1. 项目概述\n\n本项目旨在构建一个智能桌面助手应用，集成 AI 对话、日程管理、知识库等功能。' },
-    { id: 'c2', documentId: '1', chunkIndex: 1, content: '## 2. 核心功能\n\n- AI 对话：支持多轮对话、流式输出\n- 日程管理：日历视图、提醒通知\n- 知识库：文档导入、语义搜索' },
-    { id: 'c3', documentId: '1', chunkIndex: 2, content: '## 3. 技术架构\n\n前端采用 Electron + React，后端使用 Node.js + PostgreSQL，AI 部分集成 Ollama 本地模型。' },
-    { id: 'c4', documentId: '1', chunkIndex: 3, content: '## 4. 用户故事\n\n作为一名用户，我希望能够导入自己的文档到知识库中，这样 AI 就能基于我的私有知识回答问题。' },
+    {
+      id: 'c1',
+      documentId: '1',
+      chunkIndex: 0,
+      content:
+        '## 1. 项目概述\n\n本项目旨在构建一个智能桌面助手应用，集成 AI 对话、日程管理、知识库等功能。',
+    },
+    {
+      id: 'c2',
+      documentId: '1',
+      chunkIndex: 1,
+      content:
+        '## 2. 核心功能\n\n- AI 对话：支持多轮对话、流式输出\n- 日程管理：日历视图、提醒通知\n- 知识库：文档导入、语义搜索',
+    },
+    {
+      id: 'c3',
+      documentId: '1',
+      chunkIndex: 2,
+      content:
+        '## 3. 技术架构\n\n前端采用 Electron + React，后端使用 Node.js + PostgreSQL，AI 部分集成 Ollama 本地模型。',
+    },
+    {
+      id: 'c4',
+      documentId: '1',
+      chunkIndex: 3,
+      content:
+        '## 4. 用户故事\n\n作为一名用户，我希望能够导入自己的文档到知识库中，这样 AI 就能基于我的私有知识回答问题。',
+    },
   ],
   '2': [
-    { id: 'c5', documentId: '2', chunkIndex: 0, content: '# API 接口文档\n\n## 基础信息\n- Base URL: `/api/v1`\n- 认证方式: Bearer Token' },
-    { id: 'c6', documentId: '2', chunkIndex: 1, content: '## 对话接口\n\n### POST /chat/completions\n创建新的对话补全请求。\n\n**参数：**\n- `messages`: 消息列表\n- `model`: 模型名称' },
+    {
+      id: 'c5',
+      documentId: '2',
+      chunkIndex: 0,
+      content: '# API 接口文档\n\n## 基础信息\n- Base URL: `/api/v1`\n- 认证方式: Bearer Token',
+    },
+    {
+      id: 'c6',
+      documentId: '2',
+      chunkIndex: 1,
+      content:
+        '## 对话接口\n\n### POST /chat/completions\n创建新的对话补全请求。\n\n**参数：**\n- `messages`: 消息列表\n- `model`: 模型名称',
+    },
   ],
   '3': [
-    { id: 'c7', documentId: '3', chunkIndex: 0, content: '# 用户手册\n\n欢迎使用 Beautiful-Elf 桌面助手！本手册将帮助您快速上手。' },
-    { id: 'c8', documentId: '3', chunkIndex: 1, content: '## 快速开始\n\n1. 下载安装包\n2. 双击运行\n3. 完成初始设置\n4. 开始使用 AI 助手' },
+    {
+      id: 'c7',
+      documentId: '3',
+      chunkIndex: 0,
+      content: '# 用户手册\n\n欢迎使用 Beautiful-Elf 桌面助手！本手册将帮助您快速上手。',
+    },
+    {
+      id: 'c8',
+      documentId: '3',
+      chunkIndex: 1,
+      content: '## 快速开始\n\n1. 下载安装包\n2. 双击运行\n3. 完成初始设置\n4. 开始使用 AI 助手',
+    },
   ],
 }
 

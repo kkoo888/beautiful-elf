@@ -12,7 +12,7 @@ interface ThinkingIndicatorProps {
 
 export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
   visible,
-  text = '思考中'
+  text = '思考中',
 }) => {
   if (!visible) return null
 

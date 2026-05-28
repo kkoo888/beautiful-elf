@@ -5,11 +5,7 @@
 
 import { useState } from 'react'
 import { Modal, Timeline, Tag, Button, Space, Typography } from 'antd'
-import {
-  CheckCircleFilled,
-  SwapOutlined,
-  RocketOutlined
-} from '@ant-design/icons'
+import { CheckCircleFilled, SwapOutlined, RocketOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { PromptConfig } from '../types/settings'
 import { PromptDiff } from './prompt-diff'
@@ -31,7 +27,7 @@ export function PromptVersionHistory({
   prompt,
   open,
   onClose,
-  onSetActive
+  onSetActive,
 }: PromptVersionHistoryProps) {
   const [diffOpen, setDiffOpen] = useState(false)
   const [diffVersions, setDiffVersions] = useState<{
@@ -84,7 +80,7 @@ export function PromptVersionHistory({
                     background: '#fafafa',
                     borderRadius: 6,
                     fontSize: 13,
-                    whiteSpace: 'pre-wrap'
+                    whiteSpace: 'pre-wrap',
                   }}
                 >
                   {version.content || '（空内容）'}
@@ -118,7 +114,7 @@ export function PromptVersionHistory({
                   )}
                 </Space>
               </div>
-            )
+            ),
           }))}
         />
       </Modal>

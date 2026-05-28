@@ -2,11 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Button, Input, Spin, Empty, Badge } from 'antd'
-import {
-  PlusOutlined,
-  SearchOutlined,
-  BellOutlined,
-} from '@ant-design/icons'
+import { PlusOutlined, SearchOutlined, BellOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Schedule } from '@/types'
 import { useCalendar } from '../hooks/use-calendar'
@@ -59,14 +55,11 @@ export function SchedulePanel() {
 
   // ─── 事件处理 ──────────────────────────────────────
 
-  const handleCreate = useCallback(
-    (date?: dayjs.Dayjs) => {
-      setEditingEvent(null)
-      setInitialDate(date)
-      setFormOpen(true)
-    },
-    []
-  )
+  const handleCreate = useCallback((date?: dayjs.Dayjs) => {
+    setEditingEvent(null)
+    setInitialDate(date)
+    setFormOpen(true)
+  }, [])
 
   const handleEdit = useCallback((event: Schedule) => {
     setDetailOpen(false)

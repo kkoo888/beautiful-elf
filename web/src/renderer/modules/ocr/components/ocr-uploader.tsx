@@ -31,7 +31,7 @@ const OcrUploader: React.FC<OcrUploaderProps> = ({ onImageReady, disabled }) => 
       onImageReady(base64, file.name)
       return false // 阻止自动上传
     },
-    [onImageReady],
+    [onImageReady]
   )
 
   const handlePaste = useCallback(
@@ -49,7 +49,7 @@ const OcrUploader: React.FC<OcrUploaderProps> = ({ onImageReady, disabled }) => 
         }
       }
     },
-    [onImageReady],
+    [onImageReady]
   )
 
   return (

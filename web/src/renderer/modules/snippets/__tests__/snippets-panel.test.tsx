@@ -17,12 +17,12 @@ vi.mock('../services/snippets-api', () => ({
         tags: ['test'],
         useCount: 5,
         createdAt: '2026-05-01T10:00:00Z',
-        updatedAt: '2026-05-20T14:30:00Z'
-      }
+        updatedAt: '2026-05-20T14:30:00Z',
+      },
     ],
     total: 1,
     page: 1,
-    pageSize: 20
+    pageSize: 20,
   }),
   fetchAllTags: vi.fn().mockResolvedValue(['test', 'react']),
   createSnippet: vi.fn().mockResolvedValue({
@@ -33,28 +33,28 @@ vi.mock('../services/snippets-api', () => ({
     tags: [],
     useCount: 0,
     createdAt: '2026-05-28T10:00:00Z',
-    updatedAt: '2026-05-28T10:00:00Z'
+    updatedAt: '2026-05-28T10:00:00Z',
   }),
   updateSnippet: vi.fn().mockResolvedValue({}),
   deleteSnippet: vi.fn().mockResolvedValue(undefined),
-  recordSnippetUse: vi.fn().mockResolvedValue(undefined)
+  recordSnippetUse: vi.fn().mockResolvedValue(undefined),
 }))
 
 // Mock theme hook
 vi.mock('@/hooks/use-theme', () => ({
-  useTheme: () => ({ theme: 'light', isDark: false, toggleTheme: vi.fn() })
+  useTheme: () => ({ theme: 'light', isDark: false, toggleTheme: vi.fn() }),
 }))
 
 // Mock clipboard
 Object.assign(navigator, {
   clipboard: {
-    writeText: vi.fn().mockResolvedValue(undefined)
-  }
+    writeText: vi.fn().mockResolvedValue(undefined),
+  },
 })
 
 function renderWithProviders(ui: React.ReactElement) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } }
+    defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>

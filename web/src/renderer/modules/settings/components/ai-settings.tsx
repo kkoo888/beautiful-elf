@@ -23,7 +23,7 @@ function SliderRow({
   min,
   max,
   step,
-  onChange
+  onChange,
 }: {
   label: string
   value: number
