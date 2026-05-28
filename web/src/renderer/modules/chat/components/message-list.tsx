@@ -1,9 +1,15 @@
 /**
  * 消息列表组件
  * 使用 react-window 虚拟滚动，支持 1000+ 消息不卡顿
+ *
+ * 优化点：
+ * 1. 动态计算列表高度（ResizeObserver + window resize）
+ * 2. 新消息自动滚到底部（仅在用户处于底部时）
+ * 3. 滚动到顶部自动加载更多历史消息
+ * 4. 加载历史消息时保持当前滚动位置不跳动
  */
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FixedSizeList as VirtualList } from 'react-window'
 import styles from './chat-panel.module.css'
 import { MessageBubble } from './message-bubble'
@@ -11,10 +17,16 @@ import { ThinkingIndicator } from './thinking-indicator'
 import type { ChatMessage, FeedbackData } from '../types/chat'
 
 /** 消息行高（需要与实际渲染高度一致） */
-const _MESSAGE_ROW_HEIGHT = 120
+const MESSAGE_ROW_HEIGHT = 120
 
-/** 预估高度（用于动态计算） */
-const ESTIMATED_ITEM_SIZE = 120
+/** 预渲染数量 */
+const OVERSCAN_COUNT = 5
+
+/** 触发加载更多的距离阈值（px） */
+const LOAD_MORE_THRESHOLD = 200
+
+/** 自动滚到底部的距离阈值（px） */
+const AUTO_SCROLL_THRESHOLD = 150
 
 interface MessageListProps {
   /** 消息列表 */
@@ -23,6 +35,12 @@ interface MessageListProps {
   isLoading: boolean
   /** 提交反馈回调 */
   onFeedback?: (data: FeedbackData) => Promise<void>
+  /** 加载更多历史消息 */
+  onLoadMore?: () => void
+  /** 是否还有更多历史消息 */
+  hasMore?: boolean
+  /** 是否正在加载历史消息 */
+  isLoadingMore?: boolean
 }
 
 /** 虚拟列表行组件 */
@@ -31,13 +49,12 @@ interface RowProps {
   style: React.CSSProperties
   data: {
     messages: ChatMessage[]
-    isLoading: boolean
     onFeedback?: (data: FeedbackData) => Promise<void>
   }
 }
 
 const Row: React.FC<RowProps> = React.memo(({ index, style, data }) => {
-  const { messages, isLoading, onFeedback } = data
+  const { messages, onFeedback } = data
   const message = messages[index]
 
   if (!message) return null
@@ -51,35 +68,160 @@ const Row: React.FC<RowProps> = React.memo(({ index, style, data }) => {
 
 Row.displayName = 'MessageRow'
 
-export const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, onFeedback }) => {
+export const MessageList: React.FC<MessageListProps> = ({
+  messages,
+  isLoading,
+  onFeedback,
+  onLoadMore,
+  hasMore = false,
+  isLoadingMore = false,
+}) => {
   const listRef = useRef<VirtualList>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [listHeight, setListHeight] = useState(600)
 
-  // 传递给虚拟行的数据
-  const itemData = useMemo(
-    () => ({ messages, isLoading, onFeedback }),
-    [messages, isLoading, onFeedback]
+  // 追踪用户是否在底部附近
+  const isNearBottomRef = useRef(true)
+  // 加载前的滚动快照（用于保持位置）
+  const scrollSnapshotRef = useRef<{ scrollOffset: number; scrollHeight: number } | null>(null)
+  // 上一次消息数量（用于判断是追加还是前置）
+  const prevCountRef = useRef(messages.length)
+  // 防止重复触发加载
+  const loadingMoreRef = useRef(false)
+
+  // ---- 1. 动态计算列表高度 ----
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const updateHeight = (): void => {
+      const rect = container.getBoundingClientRect()
+      if (rect.height > 0) {
+        setListHeight(rect.height)
+      }
+    }
+
+    // 初始计算
+    updateHeight()
+
+    // 使用 ResizeObserver 监听容器尺寸变化
+    const resizeObserver = new ResizeObserver(() => {
+      updateHeight()
+    })
+    resizeObserver.observe(container)
+
+    // 同时监听 window resize 作为 fallback
+    window.addEventListener('resize', updateHeight)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateHeight)
+    }
+  }, [])
+
+  // ---- 2. 判断用户是否在底部附近 ----
+  const checkNearBottom = useCallback((): boolean => {
+    const list = listRef.current
+    if (!list) return true
+
+    // react-window 内部滚动容器
+    const outerRef = list.outerRef
+    if (!outerRef || !outerRef.current) return true
+
+    const el = outerRef.current as unknown as HTMLElement
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    return distanceFromBottom < AUTO_SCROLL_THRESHOLD
+  }, [])
+
+  // ---- 3. 滚动事件处理 ----
+  const handleScroll = useCallback(
+    ({ scrollOffset }: { scrollDirection: string; scrollOffset: number }) => {
+      const list = listRef.current
+      if (!list) return
+
+      const outerRef = list.outerRef
+      if (!outerRef || !outerRef.current) return
+
+      const el = outerRef.current as unknown as HTMLElement
+      const isNearBottom = el.scrollHeight - scrollOffset - el.clientHeight < AUTO_SCROLL_THRESHOLD
+      isNearBottomRef.current = isNearBottom
+
+      // 滚动到顶部附近时加载更多
+      if (
+        scrollOffset < LOAD_MORE_THRESHOLD &&
+        hasMore &&
+        !isLoadingMore &&
+        !loadingMoreRef.current &&
+        onLoadMore
+      ) {
+        loadingMoreRef.current = true
+
+        // 快照当前滚动位置
+        scrollSnapshotRef.current = {
+          scrollOffset,
+          scrollHeight: el.scrollHeight,
+        }
+
+        onLoadMore()
+      }
+    },
+    [hasMore, isLoadingMore, onLoadMore]
   )
 
-  // 新消息到来时滚动到底部
+  // ---- 4. 新消息自动滚到底部 ----
   useEffect(() => {
-    if (listRef.current && messages.length > 0) {
-      listRef.current.scrollToItem(messages.length - 1, 'end')
+    const newCount = messages.length
+    const prevCount = prevCountRef.current
+
+    if (newCount > prevCount && isNearBottomRef.current) {
+      // 追加了新消息且用户在底部 → 自动滚动
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToItem(newCount - 1, 'end')
+      })
     }
+
+    prevCountRef.current = newCount
   }, [messages.length])
 
-  // 内容更新时也滚动（流式更新）
+  // ---- 5. 流式更新时滚动 ----
   useEffect(() => {
-    if (listRef.current && messages.length > 0) {
-      // 使用 requestAnimationFrame 确保 DOM 已更新
+    if (isLoading && isNearBottomRef.current) {
       requestAnimationFrame(() => {
         listRef.current?.scrollToItem(messages.length - 1, 'end')
       })
     }
-  }, [messages])
+  }, [messages, isLoading])
+
+  // ---- 6. 加载历史消息后恢复滚动位置 ----
+  useEffect(() => {
+    if (!isLoadingMore && scrollSnapshotRef.current) {
+      const snapshot = scrollSnapshotRef.current
+      scrollSnapshotRef.current = null
+      loadingMoreRef.current = false
+
+      // 等 DOM 更新后恢复位置
+      requestAnimationFrame(() => {
+        const list = listRef.current
+        if (!list) return
+
+        const outerRef = list.outerRef
+        if (!outerRef || !outerRef.current) return
+
+        const el = outerRef.current as unknown as HTMLElement
+        const heightDiff = el.scrollHeight - snapshot.scrollHeight
+        list.scrollTo(snapshot.scrollOffset + heightDiff)
+      })
+    }
+  }, [isLoadingMore, messages.length])
+
+  // ---- 传递给虚拟行的数据 ----
+  const itemData = useMemo(
+    () => ({ messages, onFeedback }),
+    [messages, onFeedback]
+  )
 
   // 空状态
-  if (messages.length === 0) {
+  if (messages.length === 0 && !isLoading) {
     return (
       <div className={styles.emptyState}>
         <div className={styles.emptyIcon}>💬</div>
@@ -91,18 +233,38 @@ export const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, o
 
   return (
     <div className={styles.virtualListContainer} ref={containerRef}>
+      {/* 加载更多指示器 */}
+      {isLoadingMore && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 5,
+            display: 'flex',
+            justifyContent: 'center',
+            padding: '8px 0',
+          }}
+        >
+          <ThinkingIndicator visible />
+        </div>
+      )}
+
       <VirtualList
         ref={listRef}
-        height={600} // 容器高度，实际由 CSS flex 控制
+        height={listHeight}
         width="100%"
         itemCount={messages.length}
-        itemSize={ESTIMATED_ITEM_SIZE}
+        itemSize={MESSAGE_ROW_HEIGHT}
         itemData={itemData}
-        overscanCount={5}
+        overscanCount={OVERSCAN_COUNT}
+        onScroll={handleScroll}
         style={{ overflowX: 'hidden' }}
       >
         {Row}
       </VirtualList>
+
       {isLoading && <ThinkingIndicator visible />}
     </div>
   )

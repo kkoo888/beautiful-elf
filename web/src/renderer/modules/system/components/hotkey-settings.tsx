@@ -1,7 +1,7 @@
 /** 快捷键设置面板 */
 
 import { useState, useCallback } from 'react'
-import { Table, Button, message, Popconfirm, Space, Tag } from 'antd'
+import { Table, Button, Tag, message, Popconfirm, Space } from 'antd'
 import { EditOutlined, UndoOutlined } from '@ant-design/icons'
 import { useHotkeys } from '../hooks/use-hotkeys'
 import { HotkeyCapture } from './hotkey-capture'
@@ -25,7 +25,7 @@ export function HotkeySettings() {
         setEditingId(null)
         void message.success('快捷键已更新')
       } catch {
-        void message.error('更新失败')
+        // conflict error already shown in updateHotkeyShortcut
       }
     },
     [checkConflict, updateHotkeyShortcut]

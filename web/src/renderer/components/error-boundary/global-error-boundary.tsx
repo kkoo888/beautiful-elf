@@ -1,5 +1,6 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Result, Button } from 'antd'
+import { reportError } from '@/services/error-reporter'
 
 interface Props {
   children: ReactNode
@@ -14,7 +15,7 @@ interface State {
 
 /**
  * 应用级 ErrorBoundary
- * 全局兜底，捕获未处理的 React 错误
+ * 全局兜底，捕获未处理的 React 错误并自动上报
  */
 export class GlobalErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -28,6 +29,10 @@ export class GlobalErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[GlobalErrorBoundary]', error, errorInfo)
+
+    // 自动上报错误到后端
+    reportError(error, errorInfo)
+
     this.props.onError?.(error, errorInfo)
   }
 
