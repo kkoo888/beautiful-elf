@@ -4,7 +4,7 @@
  */
 
 import React from 'react'
-import { Row, Col, Spin } from 'antd'
+import { Spin } from 'antd'
 import { PageHeader } from '@/components/page-header'
 import { useWeather } from '../hooks/use-weather'
 import { WeatherCard } from './weather-card'

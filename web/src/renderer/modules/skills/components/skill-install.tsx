@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { Drawer, Upload, Input, Button, Typography, Divider, message } from 'antd'
-import { UploadOutlined, GithubOutlined, InboxOutlined } from '@ant-design/icons'
+import { GithubOutlined, InboxOutlined } from '@ant-design/icons'
 import type { UploadProps } from 'antd'
 import type { InstallSkillInput } from '../types/skills'
 import styles from './skills-panel.module.css'

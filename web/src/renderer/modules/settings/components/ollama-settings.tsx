@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useState } from 'react'
-import { Input, Button, Select, Space, Typography, Spin, Tag } from 'antd'
+import { Input, Button, Select, Space, Typography } from 'antd'
 import { ThunderboltOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { AppSettings, OllamaModel, ConnectionTestResult } from '../types/settings'
 import styles from './settings-panel.module.css'

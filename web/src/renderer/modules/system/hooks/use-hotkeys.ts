@@ -1,7 +1,7 @@
 /** 快捷键管理 Hook */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import type { HotkeyConfig } from '../types/system'
 import { fetchHotkeys, updateHotkey, resetHotkeys } from '../services/hotkey-api'
 

@@ -1,6 +1,6 @@
 /** 工具管理 API 服务（mock 实现） */
 
-import { generateId } from '@/utils'
+import {} from '@/utils'
 import type { ToolInfo, ToolStats, ToolStatsSummary } from '../types/tools'
 
 function delay(ms = 300): Promise<void> {

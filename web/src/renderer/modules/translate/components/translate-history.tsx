@@ -5,7 +5,7 @@
 
 import React, { useEffect } from 'react'
 import { Button, Tooltip, Spin, Empty } from 'antd'
-import { HistoryOutlined, StarOutlined, StarFilled } from '@ant-design/icons'
+import { HistoryOutlined } from '@ant-design/icons'
 import styles from './translate-panel.module.css'
 import type { TranslateResult, Language } from '../types/translate'
 

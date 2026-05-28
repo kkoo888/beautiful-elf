@@ -5,7 +5,7 @@
 
 import React, { useCallback } from 'react'
 import { Button, Tooltip } from 'antd'
-import { ClearOutlined, ReloadOutlined } from '@ant-design/icons'
+import { ClearOutlined } from '@ant-design/icons'
 import styles from './chat-panel.module.css'
 import { SimpleMessageList } from './message-list'
 import { MessageInput } from './message-input'

@@ -118,7 +118,7 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
     return Array.from({ length: 7 }, (_, i) => start.add(i, 'day'))
   }, [selectedDate, viewMode])
 
-  const getEventsForHour = useCallback(
+  const _getEventsForHour = useCallback(
     (day: Dayjs, hour: number): Schedule[] => {
       const dateKey = day.format('YYYY-MM-DD')
       const events = schedulesByDate.get(dateKey) ?? []

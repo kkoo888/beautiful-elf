@@ -11,7 +11,7 @@ import { ThinkingIndicator } from './thinking-indicator'
 import type { ChatMessage, FeedbackData } from '../types/chat'
 
 /** 消息行高（需要与实际渲染高度一致） */
-const MESSAGE_ROW_HEIGHT = 120
+const _MESSAGE_ROW_HEIGHT = 120
 
 /** 预估高度（用于动态计算） */
 const ESTIMATED_ITEM_SIZE = 120

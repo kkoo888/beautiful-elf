@@ -16,9 +16,9 @@
  * ```
  */
 
-import { useContext, useEffect, useRef, useCallback, useState } from 'react'
+import { useContext, useEffect, useRef, useCallback } from 'react'
 import { WebSocketContext } from './websocket-provider'
-import type { WSMessage, WSMessageType, Unsubscribe, MessageHandler } from './types'
+import type { WSMessage, WSMessageType, MessageHandler } from './types'
 import { EventDeduplicator } from './types'
 
 /**

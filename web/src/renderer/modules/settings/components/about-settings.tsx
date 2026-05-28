@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useState } from 'react'
-import { Button, Typography, Space, Tag, Spin } from 'antd'
+import { Button, Typography, Space, Tag } from 'antd'
 import { GithubOutlined, SyncOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import styles from './settings-panel.module.css'
 

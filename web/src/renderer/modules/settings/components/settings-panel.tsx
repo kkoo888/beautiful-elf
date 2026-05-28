@@ -4,7 +4,7 @@
  */
 
 import { useCallback } from 'react'
-import { Tabs, Alert, Spin, Typography } from 'antd'
+import { Tabs, Alert, Spin } from 'antd'
 import {
   CloudServerOutlined,
   RobotOutlined,

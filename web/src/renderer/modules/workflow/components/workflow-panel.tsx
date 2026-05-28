@@ -1,6 +1,6 @@
 /** 工作流主面板 - 三栏布局 + 底部监控 */
 
-import { Tabs, Button, Space, Typography, Divider, Input, Empty, Spin, Popconfirm } from 'antd'
+import { Tabs, Button, Space, Typography, Divider, Empty, Spin, Popconfirm } from 'antd'
 import {
   PlusOutlined,
   SaveOutlined,
@@ -85,7 +85,7 @@ export default function WorkflowPanel() {
   }, [createWorkflowMut, setSelectedId, setActiveTab])
 
   // 选择模板
-  const handleUseTemplate = useCallback(
+  const _handleUseTemplate = useCallback(
     (templateId: string) => {
       // 模板加载到编辑器
       const tpl = templates.find((t) => t.id === templateId)

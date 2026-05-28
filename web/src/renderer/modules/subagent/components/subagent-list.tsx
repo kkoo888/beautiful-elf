@@ -1,6 +1,6 @@
 /** 子代理运行列表组件（Table） */
 
-import { Table, Tag, Space, Typography } from 'antd'
+import { Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { SubagentRun, SubagentStatus } from '../types/subagent'
 import { SubagentStop } from './subagent-stop'

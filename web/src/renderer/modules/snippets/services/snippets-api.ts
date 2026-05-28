@@ -1,5 +1,5 @@
-import { apiClient } from '@/services/api-client'
-import type { ApiResponse, PaginatedResponse } from '@/types'
+import {} from '@/services/api-client'
+import type { PaginatedResponse } from '@/types'
 import type { Snippet, SnippetFormData, SnippetQueryParams } from '../types/snippets'
 
 /** Mock 数据 */
@@ -64,7 +64,7 @@ export async function fetchSnippets(
   params?: SnippetQueryParams
 ): Promise<PaginatedResponse<Snippet>> {
   // 实际请求：
-  // const { data } = await apiClient.get<ApiResponse<PaginatedResponse<Snippet>>>('/snippets', { params })
+  // const { data } = await .get<<PaginatedResponse<Snippet>>>('/snippets', { params })
   // return data.data
 
   await delay()
@@ -100,7 +100,7 @@ export async function fetchSnippets(
 
 /** 创建片段 */
 export async function createSnippet(data: SnippetFormData): Promise<Snippet> {
-  // const { data: res } = await apiClient.post<ApiResponse<Snippet>>('/snippets', data)
+  // const { data: res } = await .post<<Snippet>>('/snippets', data)
   // return res.data
 
   await delay()
@@ -118,7 +118,7 @@ export async function createSnippet(data: SnippetFormData): Promise<Snippet> {
 
 /** 更新片段 */
 export async function updateSnippet(id: string, data: SnippetFormData): Promise<Snippet> {
-  // const { data: res } = await apiClient.put<ApiResponse<Snippet>>(`/snippets/${id}`, data)
+  // const { data: res } = await .put<<Snippet>>(`/snippets/${id}`, data)
   // return res.data
 
   await delay()
@@ -134,7 +134,7 @@ export async function updateSnippet(id: string, data: SnippetFormData): Promise<
 
 /** 删除片段 */
 export async function deleteSnippet(id: string): Promise<void> {
-  // await apiClient.delete(`/snippets/${id}`)
+  // await .delete(`/snippets/${id}`)
 
   await delay()
   const idx = MOCK_SNIPPETS.findIndex((s) => s.id === id)
@@ -143,7 +143,7 @@ export async function deleteSnippet(id: string): Promise<void> {
 
 /** 记录使用 */
 export async function recordSnippetUse(id: string): Promise<void> {
-  // await apiClient.post(`/snippets/${id}/use`)
+  // await .post(`/snippets/${id}/use`)
 
   await delay(100)
   const snippet = MOCK_SNIPPETS.find((s) => s.id === id)

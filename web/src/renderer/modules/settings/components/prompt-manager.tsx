@@ -26,7 +26,7 @@ import {
   ExperimentOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import type { PromptConfig, PromptVersion, ABTestConfig } from '../types/settings'
+import type { PromptConfig, ABTestConfig } from '../types/settings'
 import { PromptVersionHistory } from './prompt-version-history'
 
 const { TextArea } = Input

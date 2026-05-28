@@ -22,7 +22,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [searchText, setSearchText] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
-  const navigate = useNavigate()
+  const _navigate = useNavigate()
   const debouncedSearch = useDebounce(searchText, 100)
   const commands = useCommandStore((state) => state.commands)
   const recordUsage = useCommandStore((state) => state.recordUsage)

@@ -1,6 +1,6 @@
 /** 子代理主面板 */
 
-import { Button, Space, Badge, Spin } from 'antd'
+import { Button, Space, Badge } from 'antd'
 import { StopOutlined, ReloadOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { confirmDialog } from '@/components/confirm-dialog'

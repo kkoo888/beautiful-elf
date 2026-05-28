@@ -4,8 +4,8 @@
  */
 
 import React, { useCallback } from 'react'
-import { Button, Tooltip } from 'antd'
-import { HistoryOutlined } from '@ant-design/icons'
+import {} from 'antd'
+import {} from '@ant-design/icons'
 import styles from './translate-panel.module.css'
 import { LanguageSelector } from './language-selector'
 import { TranslateInput } from './translate-input'

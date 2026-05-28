@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import { Segmented, Card, Space, Spin } from 'antd'
+import { Segmented, Card, Spin } from 'antd'
 import { DesktopOutlined, ScanOutlined } from '@ant-design/icons'
 import { CapturePreview } from './components/capture-preview'
 import { AnalysisPanel } from './components/analysis-panel'

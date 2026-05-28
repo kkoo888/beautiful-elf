@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useState } from 'react'
-import { Button, Tooltip, message } from 'antd'
+import { Tooltip, message } from 'antd'
 import { CopyOutlined, CheckOutlined } from '@ant-design/icons'
 import styles from './translate-panel.module.css'
 import { TermBadgeList, TermHighlightText } from './term-badge'

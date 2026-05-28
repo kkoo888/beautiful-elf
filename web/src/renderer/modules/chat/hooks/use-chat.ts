@@ -6,13 +6,7 @@
 import { useCallback, useRef } from 'react'
 import { useChatStore } from '@/stores/useChatStore'
 import { chat, chatStream, submitFeedback } from '../services/chat-api'
-import type {
-  ChatMessage,
-  FeedbackData,
-  FeedbackReason,
-  ReasoningDepth,
-  StreamToken,
-} from '../types/chat'
+import type { ChatMessage, FeedbackData, ReasoningDepth, StreamToken } from '../types/chat'
 
 /** 生成唯一 ID */
 const generateId = (): string => crypto.randomUUID()

@@ -7,7 +7,7 @@ import { formatRelativeTime } from '@/utils'
 import type { MemoryEntry } from '../types/memory'
 import styles from './memory-panel.module.css'
 
-const { Text, Paragraph } = Typography
+const { Paragraph } = Typography
 
 /** 标签颜色映射 */
 const TAG_COLORS: string[] = [

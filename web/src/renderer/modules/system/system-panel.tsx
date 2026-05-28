@@ -1,7 +1,7 @@
 /** 系统面板 */
 
 import { Tabs } from 'antd'
-import { SettingOutlined } from '@ant-design/icons'
+import {} from '@ant-design/icons'
 import { HotkeySettings } from './components/hotkey-settings'
 import styles from './system-panel.module.css'
 

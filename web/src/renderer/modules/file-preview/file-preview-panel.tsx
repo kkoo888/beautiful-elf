@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Upload, message } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
-import type { UploadFile } from 'antd'
+import type {} from 'antd'
 import type { FilePreviewData } from './types/file-preview'
 import { getFilePreviewType } from './utils/file-type'
 import { FilePreviewModal } from './components/file-preview-modal'

@@ -1,6 +1,6 @@
 /** 网络状态 Hook */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { NetworkStatusType } from '../types/offline'
 
 interface UseNetworkStatusReturn {

@@ -1,7 +1,7 @@
 /** 日程主面板 */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Button, Input, Spin, Empty, Badge } from 'antd'
+import { useState, useCallback, useEffect } from 'react'
+import { Button, Input, Spin, Badge } from 'antd'
 import { PlusOutlined, SearchOutlined, BellOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Schedule } from '@/types'

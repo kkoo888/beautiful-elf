@@ -146,7 +146,7 @@ export function WebSocketProvider({
       client.destroy()
       clientRef.current = null
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const send = useCallback((message: WSMessage) => {
     clientRef.current?.send(message)

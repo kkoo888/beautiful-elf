@@ -1,6 +1,6 @@
 /** 技能详情组件（Drawer） */
 
-import { Drawer, Tag, Divider, Spin } from 'antd'
+import { Drawer, Tag, Divider } from 'antd'
 import {
   ThunderboltOutlined,
   CheckCircleOutlined,

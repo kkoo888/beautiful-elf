@@ -1,7 +1,7 @@
 /** 离线存储统计组件 */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Card, Statistic, Button, message, Popconfirm, Space, Row, Col } from 'antd'
+import { Card, Statistic, Button, message, Popconfirm, Row, Col } from 'antd'
 import {
   DeleteOutlined,
   ClockCircleOutlined,

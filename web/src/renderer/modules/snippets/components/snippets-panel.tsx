@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { Typography, Button, Drawer, Space, Spin, Empty, message } from 'antd'
+import { Typography, Button, Drawer, Space, Spin, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { SnippetCard } from './snippet-card'
 import { SnippetForm } from './snippet-form'

@@ -4,7 +4,7 @@
  */
 
 import React from 'react'
-import { Select, Space } from 'antd'
+import { Select } from 'antd'
 import { SwapOutlined } from '@ant-design/icons'
 import styles from './translate-panel.module.css'
 import type { Language, DetectResult } from '../types/translate'
