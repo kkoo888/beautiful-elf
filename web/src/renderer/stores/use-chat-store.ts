@@ -59,9 +59,7 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => {
       const filtered = state.conversations.filter((c) => c.id !== id)
       const newCurrentId =
-        state.currentConversationId === id
-          ? (filtered[0]?.id ?? null)
-          : state.currentConversationId
+        state.currentConversationId === id ? (filtered[0]?.id ?? null) : state.currentConversationId
       return {
         conversations: filtered,
         currentConversationId: newCurrentId,
@@ -69,8 +67,6 @@ export const useChatStore = create<ChatState>((set) => ({
     }),
   updateConversation: (id, updates) =>
     set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c.id === id ? { ...c, ...updates } : c
-      ),
+      conversations: state.conversations.map((c) => (c.id === id ? { ...c, ...updates } : c)),
     })),
 }))

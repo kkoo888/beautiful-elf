@@ -13,7 +13,7 @@ export interface HotkeyConfig {
 export const DEFAULT_HOTKEYS: Record<string, string> = {
   'open-main-window': 'Ctrl+Shift+B',
   'open-command-palette': 'Ctrl+K',
-  'screenshot': 'Ctrl+Shift+S',
+  screenshot: 'Ctrl+Shift+S',
   'toggle-pet': 'Ctrl+Shift+P',
 }
 

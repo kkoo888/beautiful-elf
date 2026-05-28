@@ -6,7 +6,13 @@
 import { useCallback, useRef } from 'react'
 import { useChatStore } from '@/stores/useChatStore'
 import { chat, chatStream, submitFeedback } from '../services/chat-api'
-import type { ChatMessage, Conversation, FeedbackData, ReasoningDepth, StreamToken } from '../types/chat'
+import type {
+  ChatMessage,
+  Conversation,
+  FeedbackData,
+  ReasoningDepth,
+  StreamToken,
+} from '../types/chat'
 
 /** 生成唯一 ID */
 const generateId = (): string => crypto.randomUUID()
@@ -96,7 +102,9 @@ export function useChat(): UseChatReturn {
       useChatStore.getState().updateConversation(convId, {
         updatedAt: Date.now(),
         lastMessage: content.trim(),
-        messageCount: (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) + 1,
+        messageCount:
+          (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) +
+          1,
       })
 
       // 创建 AI 占位消息
@@ -124,7 +132,9 @@ export function useChat(): UseChatReturn {
             if (lastAiMsg) {
               useChatStore.getState().updateConversation(convId, {
                 lastMessage: lastAiMsg.content.slice(0, 100),
-                messageCount: (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) + 1,
+                messageCount:
+                  (useChatStore.getState().conversations.find((c) => c.id === convId)
+                    ?.messageCount ?? 0) + 1,
               })
             }
             return
@@ -175,7 +185,9 @@ export function useChat(): UseChatReturn {
       useChatStore.getState().updateConversation(convId, {
         updatedAt: Date.now(),
         lastMessage: content.trim(),
-        messageCount: (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) + 1,
+        messageCount:
+          (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) +
+          1,
       })
 
       setIsLoading(true)
@@ -204,7 +216,9 @@ export function useChat(): UseChatReturn {
         // 更新会话
         useChatStore.getState().updateConversation(convId, {
           lastMessage: response.content.slice(0, 100),
-          messageCount: (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) + 1,
+          messageCount:
+            (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ??
+              0) + 1,
         })
       } catch (error) {
         console.error('[Chat] Request error:', error)

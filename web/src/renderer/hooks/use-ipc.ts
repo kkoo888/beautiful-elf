@@ -6,23 +6,15 @@ import { z } from 'zod'
  * 使用 Zod schema 校验返回值类型
  */
 export function useIPC() {
-  const isElectron =
-    typeof window !== 'undefined' && window.electronAPI !== undefined
+  const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 
   const invoke = useCallback(
-    async <T>(
-      channel: string,
-      schema: z.ZodType<T>,
-      ...args: unknown[]
-    ): Promise<T> => {
+    async <T>(channel: string, schema: z.ZodType<T>, ...args: unknown[]): Promise<T> => {
       if (!isElectron) {
         throw new Error('[useIPC] Not in Electron environment')
       }
 
-      const api = window.electronAPI as Record<
-        string,
-        Record<string, (...a: unknown[]) => unknown>
-      >
+      const api = window.electronAPI as Record<string, Record<string, (...a: unknown[]) => unknown>>
       const [namespace, method] = channel.split(':')
 
       if (!api[namespace] || typeof api[namespace][method] !== 'function') {
@@ -42,10 +34,7 @@ export function useIPC() {
         return
       }
 
-      const api = window.electronAPI as Record<
-        string,
-        Record<string, (...a: unknown[]) => unknown>
-      >
+      const api = window.electronAPI as Record<string, Record<string, (...a: unknown[]) => unknown>>
       const [namespace, method] = channel.split(':')
 
       if (api[namespace] && typeof api[namespace][method] === 'function') {
@@ -56,10 +45,7 @@ export function useIPC() {
   )
 
   const on = useCallback(
-    (
-      channel: string,
-      callback: (...args: unknown[]) => void
-    ): (() => void) => {
+    (channel: string, callback: (...args: unknown[]) => void): (() => void) => {
       if (!isElectron) {
         console.warn('[useIPC] Not in Electron environment')
         return () => {}
@@ -71,13 +57,8 @@ export function useIPC() {
       >
       const [namespace, method] = channel.split(':')
 
-      if (
-        api[namespace] &&
-        typeof api[namespace][method] === 'function'
-      ) {
-        return (api[namespace][method] as (...a: unknown[]) => unknown)(
-          callback
-        ) as () => void
+      if (api[namespace] && typeof api[namespace][method] === 'function') {
+        return (api[namespace][method] as (...a: unknown[]) => unknown)(callback) as () => void
       }
 
       return () => {}

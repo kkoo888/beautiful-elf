@@ -60,9 +60,7 @@ const ConversationItem: React.FC<{
   >
     <div className={styles.itemContent}>
       <div className={styles.itemTitle}>{conv.title}</div>
-      {conv.lastMessage && (
-        <div className={styles.itemPreview}>{conv.lastMessage}</div>
-      )}
+      {conv.lastMessage && <div className={styles.itemPreview}>{conv.lastMessage}</div>}
     </div>
     <div className={styles.itemMeta}>
       <span className={styles.itemTime}>{formatTime(conv.updatedAt)}</span>
@@ -141,9 +139,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
     if (!debouncedSearch.trim()) return conversations
     const q = debouncedSearch.toLowerCase()
     return conversations.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.lastMessage?.toLowerCase().includes(q)
+      (c) => c.title.toLowerCase().includes(q) || c.lastMessage?.toLowerCase().includes(q)
     )
   }, [conversations, debouncedSearch])
 

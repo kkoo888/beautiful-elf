@@ -215,10 +215,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   }, [isLoadingMore, messages.length])
 
   // ---- 传递给虚拟行的数据 ----
-  const itemData = useMemo(
-    () => ({ messages, onFeedback }),
-    [messages, onFeedback]
-  )
+  const itemData = useMemo(() => ({ messages, onFeedback }), [messages, onFeedback])
 
   // 空状态
   if (messages.length === 0 && !isLoading) {

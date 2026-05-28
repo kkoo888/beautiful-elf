@@ -30,10 +30,7 @@ export function useThemePersist() {
 
   // 主题变更时持久化
   useEffect(() => {
-    localStorage.setItem(
-      THEME_STORAGE_KEY,
-      JSON.stringify({ mode: theme })
-    )
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify({ mode: theme }))
   }, [theme])
 
   // 监听其他窗口的主题变更
