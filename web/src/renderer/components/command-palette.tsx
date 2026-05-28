@@ -54,10 +54,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         if (!aPrefix && bPrefix) return 1
 
         // 使用频率排序
-        if (b.use_count !== a.use_count) return b.use_count - a.use_count
+        if (b.useCount !== a.useCount) return b.useCount - a.useCount
 
         // 最近使用时间排序
-        return (b.last_used_at || 0) - (a.last_used_at || 0)
+        return (b.lastUsedAt || 0) - (a.lastUsedAt || 0)
       })
       .slice(0, 20)
   }, [debouncedSearch, commands])

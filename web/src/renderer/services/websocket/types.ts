@@ -21,7 +21,7 @@ export interface WSMessage {
   type: WSMessageType
   payload: Record<string, unknown>
   timestamp: number
-  event_id?: string
+  eventId?: string
 }
 
 /** 消息处理器 */

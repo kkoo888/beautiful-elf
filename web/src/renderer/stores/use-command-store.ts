@@ -50,7 +50,7 @@ export const useCommandStore = create<CommandState>((set, get) => ({
   recordUsage: (commandId) => {
     set((state) => ({
       commands: state.commands.map((c) =>
-        c.id === commandId ? { ...c, use_count: c.use_count + 1, last_used_at: Date.now() } : c
+        c.id === commandId ? { ...c, useCount: c.useCount + 1, lastUsedAt: Date.now() } : c
       ),
     }))
   },

@@ -15,11 +15,12 @@ import type { Schedule } from '@/types'
 import { ReminderBadge } from './reminder-badge'
 import styles from './schedule-panel.module.css'
 
-const REPEAT_LABELS: Record<string, string> = {
-  none: '不重复',
-  daily: '每天',
-  weekly: '每周',
-  monthly: '每月',
+const REPEAT_LABELS: Record<number, string> = {
+  0: '不重复',
+  1: '每天',
+  2: '每周',
+  3: '每月',
+  4: '每年',
 }
 
 interface EventDetailProps {
@@ -39,8 +40,8 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
 }) {
   if (!event) return null
 
-  const startTime = dayjs(event.start_time)
-  const endTime = dayjs(event.end_time)
+  const startTime = dayjs(event.startTime)
+  const endTime = dayjs(event.endTime)
   const isSameDay = startTime.isSame(endTime, 'day')
 
   const handleDelete = () => {
@@ -93,7 +94,7 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
             <ClockCircleOutlined /> 时间
           </span>
           <span className={styles.detailValue}>
-            {event.is_all_day
+            {event.allDay
               ? isSameDay
                 ? `${startTime.format('YYYY-MM-DD')} 全天`
                 : `${startTime.format('YYYY-MM-DD')} - ${endTime.format('YYYY-MM-DD')} 全天`
@@ -104,25 +105,25 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
         </div>
 
         {/* 提醒 */}
-        {event.reminder_minutes > 0 && (
+        {event.reminderMinutes > 0 && (
           <div className={styles.detailRow}>
             <span className={styles.detailLabel}>
               <BellOutlined /> 提醒
             </span>
             <span className={styles.detailValue}>
-              <ReminderBadge minutes={event.reminder_minutes} />
+              <ReminderBadge minutes={event.reminderMinutes} />
             </span>
           </div>
         )}
 
         {/* 重复 */}
-        {event.repeat && event.repeat !== 'none' && (
+        {event.repeatType > 0 && (
           <div className={styles.detailRow}>
             <span className={styles.detailLabel}>
               <ReloadOutlined /> 重复
             </span>
             <span className={styles.detailValue}>
-              <Tag>{REPEAT_LABELS[event.repeat] ?? event.repeat}</Tag>
+              <Tag>{REPEAT_LABELS[event.repeatType] ?? '未知'}</Tag>
             </span>
           </div>
         )}
@@ -152,7 +153,7 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
             className={styles.detailValue}
             style={{ fontSize: 12, color: 'var(--color-text-secondary, #999)' }}
           >
-            {dayjs(event.created_at).format('YYYY-MM-DD HH:mm')}
+            {dayjs(event.createdAt).format('YYYY-MM-DD HH:mm')}
           </span>
         </div>
       </div>

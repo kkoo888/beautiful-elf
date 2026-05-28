@@ -20,7 +20,7 @@ export function createNavigationCommand(
     keywords,
     module: getModuleGroup(id),
     action: () => navigate(id === 'chat' ? '/' : `/${id}`),
-    use_count: 0,
+    useCount: 0,
   }
 }
 

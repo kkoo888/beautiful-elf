@@ -177,7 +177,7 @@ export class WebSocketClient {
     if (message.type === 'ping') return
 
     // event_id 去重
-    if (message.event_id && this.isDuplicate(message.event_id)) {
+    if (message.eventId && this.isDuplicate(message.eventId)) {
       return
     }
 

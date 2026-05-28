@@ -35,23 +35,23 @@ export function useNotification() {
         title,
         message: body,
         type,
-        action_url,
+        actionUrl,
       } = msg.payload as {
         title?: string
         message?: string
         type?: NotificationType
-        action_url?: string
+        actionUrl?: string
       }
 
       const notif: Notification = {
-        id: (msg.event_id as string) || generateId(),
-        event_id: msg.event_id as string | undefined,
+        id: (msg.eventId as string) || generateId(),
+        eventId: msg.eventId as string | undefined,
         type: type || 'system_alert',
         title: title || '新通知',
         message: body || '',
         read: false,
-        created_at: new Date(msg.timestamp).toISOString(),
-        action_url,
+        createdAt: new Date(msg.timestamp).toISOString(),
+        actionUrl,
       }
 
       store.addNotification(notif)
@@ -59,7 +59,7 @@ export function useNotification() {
       // 弹出通知弹窗（内部处理 event_id 去重 + 桌面通知）
       showNotification({
         id: notif.id,
-        eventId: notif.event_id,
+        eventId: notif.eventId,
         type: notif.type,
         title: notif.title,
         body: notif.message,

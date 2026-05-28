@@ -123,8 +123,8 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
       const dateKey = day.format('YYYY-MM-DD')
       const events = schedulesByDate.get(dateKey) ?? []
       return events.filter((e) => {
-        if (e.is_all_day) return hour === 0
-        const h = dayjs(e.start_time).hour()
+        if (e.allDay) return hour === 0
+        const h = dayjs(e.startTime).hour()
         return h === hour
       })
     },
@@ -132,8 +132,8 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
   )
 
   const getEventTopAndHeight = useCallback((event: Schedule): { top: number; height: number } => {
-    const start = dayjs(event.start_time)
-    const end = dayjs(event.end_time)
+    const start = dayjs(event.startTime)
+    const end = dayjs(event.endTime)
     const top = (start.hour() + start.minute() / 60) * 60
     const durationHours = end.diff(start, 'minute') / 60
     const height = Math.max(durationHours * 60, 20)
@@ -220,10 +220,10 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
                       }}
                     >
                       <div className={styles.timeEventTitle}>{evt.title}</div>
-                      {!evt.is_all_day && (
+                      {!evt.allDay && (
                         <div className={styles.timeEventTime}>
-                          {dayjs(evt.start_time).format('HH:mm')} -{' '}
-                          {dayjs(evt.end_time).format('HH:mm')}
+                          {dayjs(evt.startTime).format('HH:mm')} -{' '}
+                          {dayjs(evt.endTime).format('HH:mm')}
                         </div>
                       )}
                     </div>

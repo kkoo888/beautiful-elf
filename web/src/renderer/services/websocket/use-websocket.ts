@@ -69,7 +69,7 @@ export function useWSMessage(
     const dedup = dedupRef.current!
     const wrappedHandler: MessageHandler = (message: WSMessage) => {
       // event_id 去重
-      if (message.event_id && dedup.checkAndAdd(message.event_id)) {
+      if (message.eventId && dedup.checkAndAdd(message.eventId)) {
         return
       }
       handlerRef.current(message)
@@ -112,7 +112,7 @@ export function useSendMessage() {
         type,
         payload,
         timestamp: Date.now(),
-        event_id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        eventId: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       }
       send(message)
     },

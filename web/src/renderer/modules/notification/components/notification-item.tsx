@@ -16,7 +16,7 @@ export function NotificationItem({ notification, onRead }: NotificationItemProps
   const icon = NOTIFICATION_TYPE_ICON[notification.type] || '🔔'
   const label = NOTIFICATION_TYPE_LABEL[notification.type] || '通知'
 
-  const timeStr = formatTime(notification.created_at)
+  const timeStr = formatTime(notification.createdAt)
 
   return (
     <div

@@ -36,8 +36,8 @@ export interface Notification {
   title: string
   message: string
   read: boolean
-  created_at: string
-  action_url?: string
+  createdAt: string
+  actionUrl?: string
 }
 
 /** 通知弹窗消息格式（用于 showNotification） */

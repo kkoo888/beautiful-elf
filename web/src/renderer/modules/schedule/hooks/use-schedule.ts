@@ -127,7 +127,7 @@ export function useSchedule(rangeStart?: string, rangeEnd?: string): UseSchedule
   const schedulesByDate = useMemo(() => {
     const map: ScheduleByDate = new Map()
     for (const s of schedules) {
-      const key = dayjs(s.start_time).format('YYYY-MM-DD')
+      const key = dayjs(s.startTime).format('YYYY-MM-DD')
       const list = map.get(key) ?? []
       list.push(s)
       map.set(key, list)
@@ -146,8 +146,8 @@ export function useSchedule(rangeStart?: string, rangeEnd?: string): UseSchedule
     const now = dayjs()
     const threshold = now.add(30, 'minute')
     return schedules.filter((s) => {
-      if (s.reminder_minutes <= 0) return false
-      const reminderTime = dayjs(s.start_time).subtract(s.reminder_minutes, 'minute')
+      if (s.reminderMinutes <= 0) return false
+      const reminderTime = dayjs(s.startTime).subtract(s.reminderMinutes, 'minute')
       return reminderTime.isBetween(now, threshold, null, '[]')
     })
   }, [schedules])

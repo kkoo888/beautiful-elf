@@ -80,11 +80,11 @@ export const EventForm = memo<EventFormProps>(function EventForm({
       reset({
         title: editingEvent.title,
         description: editingEvent.description || '',
-        timeRange: [dayjs(editingEvent.start_time), dayjs(editingEvent.end_time)],
-        isAllDay: editingEvent.is_all_day,
-        reminderMinutes: editingEvent.reminder_minutes,
+        timeRange: [dayjs(editingEvent.startTime), dayjs(editingEvent.endTime)],
+        isAllDay: editingEvent.allDay === 1,
+        reminderMinutes: editingEvent.reminderMinutes,
         color: editingEvent.color || SCHEDULE_COLORS[0].value,
-        repeat: editingEvent.repeat as 'none' | 'daily' | 'weekly' | 'monthly',
+        repeat: editingEvent.repeatType === 1 ? 'daily' : editingEvent.repeatType === 2 ? 'weekly' : editingEvent.repeatType === 3 ? 'monthly' : 'none',
       })
     } else {
       const start = initialDate ?? dayjs()
