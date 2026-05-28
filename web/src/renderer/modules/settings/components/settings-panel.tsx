@@ -12,7 +12,8 @@ import {
   KeyOutlined,
   SafetyOutlined,
   InfoCircleOutlined,
-  HeartOutlined
+  HeartOutlined,
+  FileTextOutlined
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSettings } from '../hooks/use-settings'
@@ -23,6 +24,7 @@ import { ShortcutSettings } from './shortcut-settings'
 import { PrivacySettings } from './privacy-settings'
 import { AboutSettings } from './about-settings'
 import { SoulSettings } from './soul-settings'
+import { PromptManager } from './prompt-manager'
 import styles from './settings-panel.module.css'
 
 const TAB_ITEMS = [
@@ -60,6 +62,11 @@ const TAB_ITEMS = [
     key: 'soul',
     label: '灵魂',
     icon: <HeartOutlined />
+  },
+  {
+    key: 'prompt',
+    label: 'Prompt 管理',
+    icon: <FileTextOutlined />
   }
 ]
 
@@ -118,6 +125,8 @@ export default function SettingsPanel() {
           return <AboutSettings />
         case 'soul':
           return <SoulSettings soul={soul} onChange={updateSoul} />
+        case 'prompt':
+          return <PromptManager />
         default:
           return null
       }
