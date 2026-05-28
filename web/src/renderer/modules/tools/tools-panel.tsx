@@ -1,10 +1,2 @@
-import { PageHeader } from '@/components/page-header'
-
-/** 工具管理面板 */
-export default function ToolsPanel() {
-  return (
-    <div>
-      <PageHeader title="🔌 工具管理" description="工具注册与调用统计" />
-    </div>
-  )
-}
+/** 工具管理面板 - 重导出（兼容旧路径） */
+export { default } from './components/tools-panel'
