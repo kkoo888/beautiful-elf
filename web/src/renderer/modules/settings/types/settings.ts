@@ -122,6 +122,46 @@ export const SPEAKING_STYLES = [
 
 export type SpeakingStyle = (typeof SPEAKING_STYLES)[number]
 
+/** Prompt 版本 */
+export interface PromptVersion {
+  /** 版本 ID */
+  id: string
+  /** 版本号 */
+  version: number
+  /** Prompt 内容 */
+  content: string
+  /** 创建时间 (timestamp ms) */
+  createdAt: number
+  /** 创建者 */
+  createdBy: string
+  /** 是否为激活版本 */
+  isActive: boolean
+}
+
+/** A/B 测试配置 */
+export interface ABTestConfig {
+  /** 是否启用 */
+  enabled: boolean
+  /** 测试变体 */
+  variants: { versionId: string; weight: number }[]
+}
+
+/** Prompt 配置 */
+export interface PromptConfig {
+  /** Prompt ID */
+  id: string
+  /** 名称 */
+  name: string
+  /** 描述 */
+  description: string
+  /** 版本列表 */
+  versions: PromptVersion[]
+  /** 激活版本 ID */
+  activeVersionId: string
+  /** A/B 测试配置 */
+  abTest?: ABTestConfig
+}
+
 /** 性格标签预设列表 */
 export const PERSONALITY_PRESETS: PersonalityPreset[] = [
   { label: '温柔', color: '#ff85c0' },

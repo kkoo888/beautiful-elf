@@ -1,7 +1,7 @@
 /** 工作流状态管理 hook（TanStack Query） */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import type { Workflow, WorkflowRun, WorkflowTemplate, WorkflowFormInput } from '../types/workflow'
 import {
   fetchWorkflows,
@@ -13,6 +13,8 @@ import {
   createFromTemplate,
   reorderSteps,
 } from '../services/workflow-api'
+import { pollingRegistry } from '@/services/polling-registry'
+import { useAppStore } from '@/stores/use-app-store'
 
 const WORKFLOW_KEY = ['workflows']
 const RUN_KEY = ['workflow-runs']
@@ -114,6 +116,29 @@ export function useWorkflow(): UseWorkflowReturn {
   const isMutating = createMut.isPending || updateMut.isPending || deleteMut.isPending || templateMut.isPending || reorderMut.isPending
 
   const selectedWorkflow = workflows.find((w) => w.id === selectedId)
+
+  // 轮询：定期刷新工作流和运行记录
+  const pollingEnabled = useAppStore((s) => s.pollingEnabled)
+  useEffect(() => {
+    const POLLING_ID = 'workflow:status'
+    if (pollingEnabled) {
+      pollingRegistry.register({
+        id: POLLING_ID,
+        module: 'workflow',
+        interval: 15_000,
+        callback: async () => {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: WORKFLOW_KEY }),
+            queryClient.invalidateQueries({ queryKey: RUN_KEY }),
+          ])
+        },
+        enabled: true,
+      })
+    }
+    return () => {
+      pollingRegistry.unregister(POLLING_ID)
+    }
+  }, [pollingEnabled, queryClient])
 
   return {
     workflows,

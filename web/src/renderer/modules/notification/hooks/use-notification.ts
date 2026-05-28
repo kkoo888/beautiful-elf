@@ -5,12 +5,12 @@
  */
 
 import { useEffect, useCallback } from 'react'
-import { notification } from 'antd'
 import { useWebSocket } from '@/services/websocket/use-websocket'
 import { useNotificationStore } from '@/stores/use-notification-store'
-import type { Notification, NotificationType } from '../types/notification'
-import { NOTIFICATION_TYPE_ICON } from '../types/notification'
+import type { NotificationType } from '../types/notification'
+import { showNotification } from '../services/notification-toast'
 import type { WSMessage } from '@/services/websocket/types'
+import type { Notification } from '@/types'
 
 function generateId(): string {
   return `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -20,7 +20,8 @@ function generateId(): string {
  * 通知状态管理 Hook
  *
  * - 自动订阅 WebSocket notification 消息
- * - 收到推送时弹出 Ant Design Notification
+ * - 收到推送时弹出 Ant Design Notification（带 event_id 去重）
+ * - 窗口失焦时额外触发桌面通知
  * - 提供筛选、已读、清除操作
  */
 export function useNotification() {
@@ -30,37 +31,35 @@ export function useNotification() {
   // 订阅 WebSocket 通知消息
   useEffect(() => {
     const unsub = subscribe('notification', (msg: WSMessage) => {
-      const { title, message: body, type, actionUrl } = msg.payload as {
+      const { title, message: body, type, action_url } = msg.payload as {
         title?: string
         message?: string
         type?: NotificationType
-        actionUrl?: string
+        action_url?: string
       }
 
       const notif: Notification = {
         id: (msg.event_id as string) || generateId(),
+        event_id: msg.event_id as string | undefined,
         type: type || 'system_alert',
         title: title || '新通知',
         message: body || '',
         read: false,
-        createdAt: new Date(msg.timestamp).toISOString(),
-        actionUrl,
+        created_at: new Date(msg.timestamp).toISOString(),
+        action_url,
       }
 
       store.addNotification(notif)
 
-      // 弹出 Ant Design 通知弹窗
-      const icon = NOTIFICATION_TYPE_ICON[notif.type] || '🔔'
-      notification.open({
-        message: `${icon} ${notif.title}`,
-        description: notif.message,
-        duration: 5,
-        onClick: notif.actionUrl
-          ? () => {
-              // 可扩展：导航到对应页面
-              console.log('Navigate to:', notif.actionUrl)
-            }
-          : undefined,
+      // 弹出通知弹窗（内部处理 event_id 去重 + 桌面通知）
+      showNotification({
+        id: notif.id,
+        eventId: notif.event_id,
+        type: notif.type,
+        title: notif.title,
+        body: notif.message,
+        read: false,
+        createdAt: msg.timestamp,
       })
     })
 
@@ -87,6 +86,14 @@ export function useNotification() {
     [store.notifications],
   )
 
+  /** 按类型筛选通知 */
+  const filterByType = useCallback(
+    (type: NotificationType | 'all') => {
+      return getFiltered(type)
+    },
+    [getFiltered],
+  )
+
   return {
     notifications: store.notifications,
     unreadCount: store.unreadCount,
@@ -94,5 +101,6 @@ export function useNotification() {
     markAllAsRead: store.markAllAsRead,
     clearRead: store.clearRead,
     getFiltered,
+    filterByType,
   }
 }

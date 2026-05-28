@@ -3,7 +3,7 @@
  */
 
 import { Tag } from 'antd'
-import type { Notification } from '../types/notification'
+import type { Notification } from '@/types'
 import { NOTIFICATION_TYPE_ICON, NOTIFICATION_TYPE_LABEL } from '../types/notification'
 import styles from './notification-panel.module.css'
 
@@ -16,7 +16,7 @@ export function NotificationItem({ notification, onRead }: NotificationItemProps
   const icon = NOTIFICATION_TYPE_ICON[notification.type] || '🔔'
   const label = NOTIFICATION_TYPE_LABEL[notification.type] || '通知'
 
-  const timeStr = formatTime(notification.createdAt)
+  const timeStr = formatTime(notification.created_at)
 
   return (
     <div

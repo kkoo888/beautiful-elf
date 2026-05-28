@@ -28,15 +28,27 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   system_alert: '系统告警',
 }
 
-/** 通知数据 */
+/** 通知数据（与 @/types Notification 对齐，额外支持 eventId 去重） */
 export interface Notification {
   id: string
+  eventId?: string
   type: NotificationType
   title: string
   message: string
   read: boolean
-  createdAt: string
-  actionUrl?: string
+  created_at: string
+  action_url?: string
+}
+
+/** 通知弹窗消息格式（用于 showNotification） */
+export interface NotificationMessage {
+  id: string
+  eventId?: string
+  type: NotificationType
+  title: string
+  body: string
+  read: boolean
+  createdAt: number
 }
 
 /** 通知筛选条件 */

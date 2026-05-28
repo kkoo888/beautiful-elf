@@ -1,7 +1,7 @@
 /** 日程 CRUD 状态 hook（TanStack Query） */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo, useEffect } from 'react'
 import dayjs from 'dayjs'
 import isBetween from 'dayjs/plugin/isBetween'
 import type { Schedule } from '@/types'
@@ -12,6 +12,9 @@ import {
   updateSchedule,
   deleteSchedule,
 } from '../services/schedule-api'
+import { pollingRegistry } from '@/services/polling-registry'
+import { showUndoToast } from '@/utils/undo-toast'
+import { useAppStore } from '@/stores/use-app-store'
 
 dayjs.extend(isBetween)
 
@@ -107,8 +110,17 @@ export function useSchedule(rangeStart?: string, rangeEnd?: string): UseSchedule
   )
 
   const deleteScheduleMut = useCallback(
-    (id: string) => deleteMut.mutateAsync(id),
-    [deleteMut]
+    (id: string) => {
+      const schedule = schedules.find((s) => s.id === id)
+      const title = schedule?.title ?? '日程'
+      return deleteMut.mutateAsync(id).then(() => {
+        showUndoToast(`已删除「${title}」`, () => {
+          // 撤销：重新创建（简化处理，触发 refetch）
+          void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+        })
+      })
+    },
+    [deleteMut, schedules, queryClient]
   )
 
   // 按日期分组
@@ -141,6 +153,24 @@ export function useSchedule(rangeStart?: string, rangeEnd?: string): UseSchedule
   }, [schedules])
 
   const isMutating = createMut.isPending || updateMut.isPending || deleteMut.isPending
+
+  // 轮询：定期刷新日程列表
+  const pollingEnabled = useAppStore((s) => s.pollingEnabled)
+  useEffect(() => {
+    const POLLING_ID = 'schedule:list'
+    if (pollingEnabled) {
+      pollingRegistry.register({
+        id: POLLING_ID,
+        module: 'schedule',
+        interval: 30_000,
+        callback: () => queryClient.invalidateQueries({ queryKey: QUERY_KEY }),
+        enabled: true,
+      })
+    }
+    return () => {
+      pollingRegistry.unregister(POLLING_ID)
+    }
+  }, [pollingEnabled, queryClient])
 
   return {
     schedules,

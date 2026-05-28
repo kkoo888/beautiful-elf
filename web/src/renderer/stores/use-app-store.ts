@@ -20,6 +20,10 @@ interface AppState {
   // 当前模块
   currentModule: string
   setCurrentModule: (module: string) => void
+
+  // 轮询控制
+  pollingEnabled: boolean
+  setPollingEnabled: (enabled: boolean) => void
 }
 
 /**
@@ -52,7 +56,11 @@ export const useAppStore = create<AppState>()(
 
       // 当前模块
       currentModule: 'chat',
-      setCurrentModule: (currentModule) => set({ currentModule })
+      setCurrentModule: (currentModule) => set({ currentModule }),
+
+      // 轮询控制
+      pollingEnabled: true,
+      setPollingEnabled: (pollingEnabled) => set({ pollingEnabled })
     }),
     {
       name: 'beautiful-elf:app',

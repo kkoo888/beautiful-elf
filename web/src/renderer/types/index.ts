@@ -186,6 +186,7 @@ export type NotificationType =
 
 export interface Notification {
   id: string
+  event_id?: string
   type: NotificationType
   title: string
   message: string
