@@ -1,0 +1,99 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.body {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.left {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.right {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.footer {
+  flex-shrink: 0;
+}
+
+.capture-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.capture-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.capture-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.capture-preview-image {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.analysis-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analysis-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analysis-panel-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.analysis-panel-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.analysis-panel-result {
+  margin-bottom: 12px;
+}
+
+.analysis-panel-confidence {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.frame-settings {
+  padding: 4px 0;
+}
