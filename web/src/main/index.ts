@@ -1,42 +1,8 @@
-import { app, BrowserWindow, shell } from 'electron'
-import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { app, shell } from 'electron'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { createMainWindow, getMainWindow } from './window-manager'
 import { createTray } from './tray'
 import { registerIpcHandlers } from './ipc-handlers'
-
-let mainWindow: BrowserWindow | null = null
-
-function createWindow(): void {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    show: false,
-    title: 'Beautiful-Elf',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
-  })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-}
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.beautiful-elf')
@@ -45,12 +11,18 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  createWindow()
+  const mainWindow = createMainWindow()
   createTray(mainWindow)
   registerIpcHandlers()
 
+  // 外部链接用系统浏览器打开
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (getMainWindow() === null) createMainWindow()
   })
 })
 

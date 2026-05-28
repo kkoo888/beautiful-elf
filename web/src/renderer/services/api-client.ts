@@ -1,8 +1,13 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 import { camelToSnake, snakeToCamel } from '@/utils'
+import { handleApiError } from './api-error'
 import type { ApiResponse } from '@/types'
 
+/**
+ * Axios 实例
+ * 含请求/响应拦截器、camelCase↔snake_case 转换、trace_id 注入
+ */
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}${API_PREFIX}`,
   timeout: 30000,
@@ -11,14 +16,15 @@ const apiClient: AxiosInstance = axios.create({
   }
 })
 
-// 请求拦截器：camelCase → snake_case
+// 请求拦截器：camelCase → snake_case + trace_id 注入
 apiClient.interceptors.request.use(
   (config) => {
+    // 字段名转换
     if (config.data && typeof config.data === 'object') {
       config.data = camelToSnake(config.data)
     }
 
-    // 生成 trace_id
+    // 生成 trace_id 并注入请求头
     const traceId = crypto.randomUUID()
     config.headers['X-Trace-Id'] = traceId
 
@@ -27,9 +33,10 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// 响应拦截器：snake_case → camelCase
+// 响应拦截器：snake_case → camelCase + 错误处理
 apiClient.interceptors.response.use(
   (response: AxiosResponse<ApiResponse<unknown>>) => {
+    // 字段名转换
     if (response.data && typeof response.data === 'object') {
       const data = response.data as Record<string, unknown>
       if (data.data && typeof data.data === 'object') {
@@ -39,9 +46,9 @@ apiClient.interceptors.response.use(
     return response
   },
   (error) => {
-    const message = error.response?.data?.message || error.message || '网络错误'
-    console.error('[API Error]', message)
-    return Promise.reject(error)
+    // 统一错误处理
+    const message = handleApiError(error)
+    return Promise.reject(new Error(message))
   }
 )
 

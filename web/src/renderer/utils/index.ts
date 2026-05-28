@@ -1,24 +1,47 @@
 /**
- * camelCase 转 snake_case
+ * 工具函数统一导出
+ */
+
+export { cn } from './cn'
+export {
+  formatDate,
+  formatRelativeTime,
+  formatNumber,
+  formatFileSize,
+  formatPercent,
+  formatDuration
+} from './format'
+export { encrypt, decrypt } from './crypto'
+
+/**
+ * camelCase 转 snake_case（深层递归）
  */
 export function camelToSnake(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => [
-      k.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
-      v
-    ])
+    Object.entries(obj).map(([k, v]) => {
+      const snakeKey = k.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+      // 递归处理嵌套对象
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        return [snakeKey, camelToSnake(v as Record<string, unknown>)]
+      }
+      return [snakeKey, v]
+    })
   )
 }
 
 /**
- * snake_case 转 camelCase
+ * snake_case 转 camelCase（深层递归）
  */
 export function snakeToCamel(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(obj).map(([k, v]) => [
-      k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
-      v
-    ])
+    Object.entries(obj).map(([k, v]) => {
+      const camelKey = k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+      // 递归处理嵌套对象
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        return [camelKey, snakeToCamel(v as Record<string, unknown>)]
+      }
+      return [camelKey, v]
+    })
   )
 }
 
@@ -42,37 +65,6 @@ export function sleep(ms: number): Promise<void> {
 export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str
   return str.slice(0, maxLength) + '...'
-}
-
-/**
- * 格式化文件大小
- */
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-/**
- * 格式化时间
- */
-export function formatTime(timestamp: number): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-
-  if (diff < 60000) return '刚刚'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`
-
-  return date.toLocaleDateString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
 }
 
 /**
