@@ -389,7 +389,7 @@ CREATE TABLE schedules (
 CREATE TABLE clipboard_items (
     id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     content         TEXT            NOT NULL COMMENT '剪贴板内容 (应用层软上限 100KB)',
-    content_type    TINYINT         NOT NULL DEFAULT 0 COMMENT '内容类型 (0=文本, 1=图片, 2=文件路径)',
+    content_type    TINYINT         NOT NULL DEFAULT 0 COMMENT '内容类型 (0=文本, 1=代码, 2=图片, 3=链接, 4=文件路径)',
     pinned          TINYINT         NOT NULL DEFAULT 0 COMMENT '是否固定',
     source_app      VARCHAR(256)    DEFAULT '' COMMENT '来源应用',
     deleted         TINYINT         NOT NULL DEFAULT 0,
@@ -420,6 +420,23 @@ CREATE TABLE snippets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='代码片段';
 ```
 
+### 18.1 snippet_tags — 代码片段标签
+
+> 从 snippets.tags JSON 字段拆出，支持按标签高效搜索。
+
+```sql
+CREATE TABLE snippet_tags (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    snippet_id      BIGINT UNSIGNED NOT NULL COMMENT '片段 ID (应用层校验存在性)',
+    tag             VARCHAR(64)     NOT NULL COMMENT '标签名称',
+    deleted         TINYINT         NOT NULL DEFAULT 0,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_snippet_tag (snippet_id, tag),
+    INDEX idx_snippet_tags_tag (tag)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='代码片段标签';
+```
+
 ### 19. pet_attributes — 宠物六维属性
 
 ```sql
@@ -443,9 +460,10 @@ CREATE TABLE pet_attributes (
 
 ```sql
 CREATE TABLE pet_interactions (
-    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    interaction_type TINYINT        NOT NULL COMMENT '互动类型 (0=喂食, 1=清洁, 2=聊天, 3=玩耍)',
-    effect_json     JSON            DEFAULT NULL COMMENT '属性变化效果',
+    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    pet_attribute_id    BIGINT UNSIGNED NOT NULL COMMENT '关联宠物属性 ID (应用层校验存在性)',
+    interaction_type    TINYINT         NOT NULL COMMENT '互动类型 (0=喂食, 1=清洁, 2=聊天, 3=玩耍)',
+    effect_json         JSON            DEFAULT NULL COMMENT '属性变化效果',
     deleted         TINYINT         NOT NULL DEFAULT 0,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -625,6 +643,28 @@ CREATE TABLE ai_feedback (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI 回答反馈';
 ```
 
+### 29. notifications — 通知历史
+
+> WebSocket 推送的通知持久化存储，支持刷新页面后恢复通知历史。
+
+```sql
+CREATE TABLE notifications (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    event_id        VARCHAR(128)    DEFAULT '' COMMENT '事件去重 ID (前端 LRU 缓存也用此字段)',
+    type            VARCHAR(32)     NOT NULL COMMENT '通知类型 (schedule/workflow/subagent/skill_suggest/system_alert)',
+    title           VARCHAR(256)    NOT NULL COMMENT '通知标题',
+    message         TEXT            NOT NULL COMMENT '通知内容',
+    read            TINYINT         NOT NULL DEFAULT 0 COMMENT '是否已读 (0=未读, 1=已读)',
+    action_url      VARCHAR(512)    DEFAULT '' COMMENT '点击跳转地址',
+    deleted         TINYINT         NOT NULL DEFAULT 0,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_notifications_type (type),
+    INDEX idx_notifications_read (read),
+    INDEX idx_notifications_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知历史';
+```
+
 ---
 
 ## 🔗 表关系图
@@ -755,6 +795,11 @@ CREATE TABLE ai_feedback (
 | prompts | (name, is_active) | 联合 | 查当前激活版本 |
 | performance_metrics | (created_at) | 单列 | 按时间查性能趋势 + 清理旧数据 |
 | skill_stats | (call_count) | 单列 | 技能排行 |
+| snippet_tags | (snippet_id, tag) | 唯一 | 按标签搜索代码片段 |
+| notifications | (type) | 单列 | 按类型筛选通知 |
+| notifications | (read) | 单列 | 筛选未读通知 |
+| notifications | (created_at) | 单列 | 按时间查通知历史 |
+| pet_interactions | (pet_attribute_id) | 单列 | 查宠物互动记录 |
 
 ---
 

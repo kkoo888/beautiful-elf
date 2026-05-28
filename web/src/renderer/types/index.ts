@@ -102,6 +102,15 @@ export interface Snippet {
   updatedAt: string
 }
 
+export interface SnippetTag {
+  id: string
+  snippetId: string
+  tag: string
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
 // ─── 知识库 ───
 export interface KnowledgeDocument {
   id: string
@@ -293,13 +302,15 @@ export type NotificationType =
 
 export interface Notification {
   id: string
-  eventId?: string
+  eventId: string
   type: NotificationType
   title: string
   message: string
-  read: boolean
+  read: number
+  actionUrl: string
+  deleted: number
   createdAt: string
-  actionUrl?: string
+  updatedAt: string
 }
 
 // ─── 设置 ───
