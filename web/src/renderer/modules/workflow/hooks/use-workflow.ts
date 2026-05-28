@@ -1,8 +1,15 @@
-/** 工作流状态管理 hook（TanStack Query） */
+/** 工作流状态管理 hook（TanStack Query + React Flow） */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useState, useEffect } from 'react'
-import type { Workflow, WorkflowRun, WorkflowTemplate, WorkflowFormInput } from '../types/workflow'
+import { useCallback, useState, useEffect, useMemo } from 'react'
+import type {
+  Workflow,
+  WorkflowRun,
+  WorkflowTemplate,
+  WorkflowFormInput,
+  WorkflowNode,
+  WorkflowEdge,
+} from '../types/workflow'
 import {
   fetchWorkflows,
   fetchWorkflowRuns,
@@ -11,7 +18,10 @@ import {
   updateWorkflow,
   deleteWorkflow,
   createFromTemplate,
-  reorderSteps,
+  saveWorkflowDag,
+  runWorkflow,
+  stopWorkflow,
+  duplicateWorkflow,
 } from '../services/workflow-api'
 import { pollingRegistry } from '@/services/polling-registry'
 import { useAppStore } from '@/stores/use-app-store'
@@ -49,18 +59,34 @@ export interface UseWorkflowReturn {
   deleteWorkflowMut: (id: string) => Promise<void>
   /** 从模板创建 */
   createFromTemplateMut: (templateId: string) => Promise<Workflow>
-  /** 重排步骤 */
-  reorderStepsMut: (workflowId: string, stepIds: string[]) => Promise<Workflow>
+  /** 保存 DAG */
+  saveDagMut: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => Promise<void>
+  /** 运行工作流 */
+  runWorkflowMut: (id: string) => Promise<void>
+  /** 停止工作流 */
+  stopWorkflowMut: (id: string) => Promise<void>
+  /** 复制工作流 */
+  duplicateWorkflowMut: (id: string) => Promise<void>
   /** 是否有正在提交的操作 */
   isMutating: boolean
   /** 选中的工作流 */
   selectedWorkflow: Workflow | undefined
+  /** 当前编辑器节点 */
+  nodes: WorkflowNode[]
+  setNodes: (nodes: WorkflowNode[]) => void
+  /** 当前编辑器边 */
+  edges: WorkflowEdge[]
+  setEdges: (edges: WorkflowEdge[]) => void
 }
 
 export function useWorkflow(): UseWorkflowReturn {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'list' | 'editor' | 'templates' | 'monitor'>('list')
+
+  // React Flow 编辑器状态
+  const [nodes, setNodes] = useState<WorkflowNode[]>([])
+  const [edges, setEdges] = useState<WorkflowEdge[]>([])
 
   const {
     data: workflows = [],
@@ -80,6 +106,22 @@ export function useWorkflow(): UseWorkflowReturn {
     queryKey: TEMPLATE_KEY,
     queryFn: fetchWorkflowTemplates,
   })
+
+  const selectedWorkflow = useMemo(
+    () => workflows.find((w) => w.id === selectedId),
+    [workflows, selectedId]
+  )
+
+  // 选中工作流变更时，同步编辑器节点/边
+  useEffect(() => {
+    if (selectedWorkflow) {
+      setNodes(selectedWorkflow.nodes)
+      setEdges(selectedWorkflow.edges)
+    } else {
+      setNodes([])
+      setEdges([])
+    }
+  }, [selectedId, selectedWorkflow])
 
   const invalidateAll = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: WORKFLOW_KEY })
@@ -107,9 +149,31 @@ export function useWorkflow(): UseWorkflowReturn {
     onSuccess: invalidateAll,
   })
 
-  const reorderMut = useMutation({
-    mutationFn: ({ workflowId, stepIds }: { workflowId: string; stepIds: string[] }) =>
-      reorderSteps(workflowId, stepIds),
+  const saveDagMutInner = useMutation({
+    mutationFn: ({
+      workflowId,
+      nodes: n,
+      edges: e,
+    }: {
+      workflowId: string
+      nodes: WorkflowNode[]
+      edges: WorkflowEdge[]
+    }) => saveWorkflowDag(workflowId, n, e),
+    onSuccess: invalidateAll,
+  })
+
+  const runMut = useMutation({
+    mutationFn: (id: string) => runWorkflow(id),
+    onSuccess: invalidateAll,
+  })
+
+  const stopMut = useMutation({
+    mutationFn: (id: string) => stopWorkflow(id),
+    onSuccess: invalidateAll,
+  })
+
+  const duplicateMut = useMutation({
+    mutationFn: (id: string) => duplicateWorkflow(id),
     onSuccess: invalidateAll,
   })
 
@@ -126,9 +190,20 @@ export function useWorkflow(): UseWorkflowReturn {
     (templateId: string) => templateMut.mutateAsync(templateId),
     [templateMut]
   )
-  const reorderStepsMut = useCallback(
-    (workflowId: string, stepIds: string[]) => reorderMut.mutateAsync({ workflowId, stepIds }),
-    [reorderMut]
+
+  const saveDagMut = useCallback(
+    (n: WorkflowNode[], e: WorkflowEdge[]) => {
+      if (!selectedId) return Promise.resolve()
+      return saveDagMutInner.mutateAsync({ workflowId: selectedId, nodes: n, edges: e })
+    },
+    [selectedId, saveDagMutInner]
+  )
+
+  const runWorkflowMut = useCallback((id: string) => runMut.mutateAsync(id), [runMut])
+  const stopWorkflowMut = useCallback((id: string) => stopMut.mutateAsync(id), [stopMut])
+  const duplicateWorkflowMut = useCallback(
+    (id: string) => duplicateMut.mutateAsync(id),
+    [duplicateMut]
   )
 
   const isMutating =
@@ -136,9 +211,10 @@ export function useWorkflow(): UseWorkflowReturn {
     updateMut.isPending ||
     deleteMut.isPending ||
     templateMut.isPending ||
-    reorderMut.isPending
-
-  const selectedWorkflow = workflows.find((w) => w.id === selectedId)
+    saveDagMutInner.isPending ||
+    runMut.isPending ||
+    stopMut.isPending ||
+    duplicateMut.isPending
 
   // 轮询：定期刷新工作流和运行记录
   const pollingEnabled = useAppStore((s) => s.pollingEnabled)
@@ -179,8 +255,15 @@ export function useWorkflow(): UseWorkflowReturn {
     updateWorkflowMut,
     deleteWorkflowMut,
     createFromTemplateMut,
-    reorderStepsMut,
+    saveDagMut,
+    runWorkflowMut,
+    stopWorkflowMut,
+    duplicateWorkflowMut,
     isMutating,
     selectedWorkflow,
+    nodes,
+    setNodes,
+    edges,
+    setEdges,
   }
 }

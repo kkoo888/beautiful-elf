@@ -44,13 +44,14 @@ echo ""
 # 2. ESLint 检查
 log_info "2/6 ESLint 代码规范检查..."
 ESLINT_OUTPUT=$(npx eslint src --ext .ts,.tsx 2>&1 || true)
-ESLINT_ERRORS=$(echo "$ESLINT_OUTPUT" | grep -c "error" || true)
-ESLINT_WARNINGS=$(echo "$ESLINT_OUTPUT" | grep -c "warning" || true)
-if [ "$ESLINT_ERRORS" -gt 0 ]; then
-  log_error "ESLint 有 $ESLINT_ERRORS 个错误"
-  echo "$ESLINT_OUTPUT" | grep "error" | head -10
-elif [ "$ESLINT_WARNINGS" -gt 0 ]; then
-  log_warn "ESLint 有 $ESLINT_WARNINGS 个警告"
+# 提取摘要行中的 errors 和 warnings 数量
+ESLINT_ERR_COUNT=$(echo "$ESLINT_OUTPUT" | grep -oP '\d+ errors' | grep -oP '\d+' || echo "0")
+ESLINT_WARN_COUNT=$(echo "$ESLINT_OUTPUT" | grep -oP '\d+ warnings' | grep -oP '\d+' || echo "0")
+if [ "$ESLINT_ERR_COUNT" -gt 0 ] 2>/dev/null; then
+  log_error "ESLint 有 $ESLINT_ERR_COUNT 个错误, $ESLINT_WARN_COUNT 个警告"
+  echo "$ESLINT_OUTPUT" | grep " error " | head -10
+elif [ "$ESLINT_WARN_COUNT" -gt 0 ] 2>/dev/null; then
+  log_warn "ESLint 有 $ESLINT_WARN_COUNT 个警告（0 错误）"
 else
   log_ok "ESLint 检查通过"
 fi

@@ -1,4 +1,4 @@
-/** 运行监控组件（Timeline） */
+/** 运行监控组件 */
 
 import { Timeline, Tag, Typography, Spin, Empty } from 'antd'
 import {
@@ -18,7 +18,7 @@ const NODE_STATUS_ICON: Record<NodeStatus, React.ReactNode> = {
   success: <CheckCircleFilled style={{ color: 'var(--ant-color-success)' }} />,
   failed: <CloseCircleFilled style={{ color: 'var(--ant-color-error)' }} />,
   running: <LoadingOutlined style={{ color: 'var(--ant-color-primary)' }} />,
-  pending: <ClockCircleOutlined style={{ color: 'var(--ant-color-text-quaternary)' }} />,
+  idle: <ClockCircleOutlined style={{ color: 'var(--ant-color-text-quaternary)' }} />,
   skipped: <MinusCircleFilled style={{ color: 'var(--ant-color-text-quaternary)' }} />,
 }
 
@@ -26,7 +26,7 @@ const NODE_STATUS_COLOR: Record<NodeStatus, string> = {
   success: 'green',
   failed: 'red',
   running: 'blue',
-  pending: 'gray',
+  idle: 'gray',
   skipped: 'gray',
 }
 
@@ -35,6 +35,17 @@ function formatDuration(ms?: number): string {
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`
+}
+
+function formatTime(ts?: number): string {
+  if (!ts) return ''
+  return new Date(ts).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
 }
 
 interface WorkflowMonitorProps {
@@ -50,7 +61,7 @@ export function WorkflowMonitor({ runs, loading }: WorkflowMonitorProps) {
   }
 
   if (runs.length === 0) {
-    return <Empty description="暂无运行记录" />
+    return <Empty description="暂无运行记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
   }
 
   const selectedRun = runs.find((r) => r.id === selectedRunId) ?? runs[0]
@@ -87,6 +98,9 @@ export function WorkflowMonitor({ runs, loading }: WorkflowMonitorProps) {
               </Tag>
               {run.duration && <span>{formatDuration(run.duration)}</span>}
             </div>
+            <div style={{ fontSize: 11, color: 'var(--ant-color-text-quaternary)', marginTop: 4 }}>
+              {formatTime(run.startedAt)}
+            </div>
           </div>
         ))}
       </div>
@@ -110,7 +124,7 @@ export function WorkflowMonitor({ runs, loading }: WorkflowMonitorProps) {
                         ? '运行中'
                         : node.status === 'skipped'
                           ? '已跳过'
-                          : '等待中'}
+                          : '空闲'}
                 </Tag>
                 {node.duration !== undefined && (
                   <span className={styles.nodeDuration}>{formatDuration(node.duration)}</span>

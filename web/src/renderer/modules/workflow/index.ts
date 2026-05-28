@@ -5,15 +5,19 @@ export { WorkflowList } from './components/workflow-list'
 export { WorkflowEditor } from './components/workflow-editor'
 export { WorkflowTemplates } from './components/workflow-templates'
 export { WorkflowMonitor } from './components/workflow-monitor'
+export { NodePalette } from './components/node-palette'
+export { NodeConfigDrawer } from './components/node-config-drawer'
 export { useWorkflow } from './hooks/use-workflow'
 export type {
   Workflow,
   WorkflowRun,
-  WorkflowStep,
+  WorkflowNode,
+  WorkflowEdge,
   WorkflowTemplate,
   WorkflowFormInput,
   WorkflowStatus,
   TriggerType,
+  DagNodeType,
   NodeStatus,
   NodeRun,
 } from './types/workflow'

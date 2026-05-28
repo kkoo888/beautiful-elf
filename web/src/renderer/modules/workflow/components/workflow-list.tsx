@@ -1,38 +1,18 @@
 /** 工作流列表组件 */
 
 import { Table, Tag, Space, Button, Popconfirm, Typography } from 'antd'
-import {
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  EditOutlined,
-  DeleteOutlined,
-} from '@ant-design/icons'
+import { PlayCircleOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import type { Workflow, WorkflowStatus, TriggerType } from '../types/workflow'
+import type { Workflow, WorkflowStatus } from '../types/workflow'
 import { EmptyState } from '@/components/empty-state'
 
 const { Text } = Typography
 
 const STATUS_MAP: Record<WorkflowStatus, { label: string; color: string }> = {
   draft: { label: '草稿', color: 'default' },
-  active: { label: '运行中', color: 'processing' },
-  paused: { label: '已暂停', color: 'warning' },
-  archived: { label: '已归档', color: 'default' },
-}
-
-const TRIGGER_MAP: Record<TriggerType, { label: string; icon: string }> = {
-  manual: { label: '手动触发', icon: '🖱️' },
-  schedule: { label: '定时触发', icon: '⏰' },
-  event: { label: '事件触发', icon: '⚡' },
-  webhook: { label: 'Webhook', icon: '🔗' },
-}
-
-const NODE_STATUS_COLOR: Record<string, string> = {
-  success: 'success',
-  failed: 'error',
-  running: 'processing',
-  pending: 'default',
-  skipped: 'default',
+  running: { label: '运行中', color: 'processing' },
+  completed: { label: '已完成', color: 'success' },
+  failed: { label: '失败', color: 'error' },
 }
 
 interface WorkflowListProps {
@@ -71,18 +51,11 @@ export function WorkflowList({ workflows, loading, onEdit, onDelete, onRun }: Wo
       },
     },
     {
-      title: '触发方式',
-      dataIndex: 'triggerType',
-      key: 'triggerType',
-      width: 120,
-      render: (type: TriggerType) => {
-        const { label, icon } = TRIGGER_MAP[type]
-        return (
-          <span>
-            {icon} {label}
-          </span>
-        )
-      },
+      title: '节点数',
+      key: 'nodeCount',
+      width: 80,
+      align: 'center',
+      render: (_: unknown, record: Workflow) => record.nodes.length,
     },
     {
       title: '最近运行',
@@ -92,13 +65,6 @@ export function WorkflowList({ workflows, loading, onEdit, onDelete, onRun }: Wo
         if (!record.lastRunAt) return <Text type="secondary">从未运行</Text>
         return (
           <Space size={4}>
-            <Tag color={NODE_STATUS_COLOR[record.lastRunStatus ?? 'default']}>
-              {record.lastRunStatus === 'success'
-                ? '成功'
-                : record.lastRunStatus === 'failed'
-                  ? '失败'
-                  : '运行中'}
-            </Tag>
             <Text type="secondary" style={{ fontSize: 12 }}>
               {new Date(record.lastRunAt).toLocaleString('zh-CN', {
                 month: '2-digit',
@@ -121,7 +87,7 @@ export function WorkflowList({ workflows, loading, onEdit, onDelete, onRun }: Wo
     {
       title: '操作',
       key: 'actions',
-      width: 160,
+      width: 140,
       render: (_: unknown, record: Workflow) => (
         <Space size={4}>
           <Button

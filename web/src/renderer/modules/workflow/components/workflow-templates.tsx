@@ -1,12 +1,11 @@
 /** 模板库组件 */
 
-import { Card, Typography, Button, Spin, Tag } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { Card, Typography, Spin, Tag } from 'antd'
 import type { WorkflowTemplate } from '../types/workflow'
 import { EmptyState } from '@/components/empty-state'
 import styles from './workflow-panel.module.css'
 
-const { Text, Paragraph } = Typography
+const { Paragraph } = Typography
 
 interface WorkflowTemplatesProps {
   templates: WorkflowTemplate[]
@@ -30,16 +29,7 @@ export function WorkflowTemplates({ templates, loading, onUseTemplate }: Workflo
           key={tpl.id}
           className={styles.templateCard}
           hoverable
-          actions={[
-            <Button
-              key="use"
-              type="link"
-              icon={<PlusOutlined />}
-              onClick={() => onUseTemplate(tpl.id)}
-            >
-              使用模板
-            </Button>,
-          ]}
+          onClick={() => onUseTemplate(tpl.id)}
         >
           <div className={styles.templateIcon}>{tpl.icon}</div>
           <Card.Meta
@@ -50,9 +40,7 @@ export function WorkflowTemplates({ templates, loading, onUseTemplate }: Workflo
                 <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 0 }}>
                   {tpl.description}
                 </Paragraph>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {tpl.steps.length} 个步骤
-                </Text>
+                <Tag style={{ marginTop: 8 }}>{tpl.nodes.length} 个节点</Tag>
               </>
             }
           />

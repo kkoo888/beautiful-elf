@@ -1,7 +1,14 @@
 /** 工作流主面板 - 三栏布局 + 底部监控 */
 
 import { Tabs, Button, Space, Typography, Divider, Input, Empty, Spin, Popconfirm } from 'antd'
-import { PlusOutlined, SaveOutlined, PlayCircleOutlined, StopOutlined, CopyOutlined, DeleteOutlined } from '@ant-design/icons'
+import {
+  PlusOutlined,
+  SaveOutlined,
+  PlayCircleOutlined,
+  StopOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons'
 import { useState, useCallback } from 'react'
 import { PageHeader } from '@/components/page-header'
 import { useWorkflow } from '../hooks/use-workflow'
@@ -54,8 +61,22 @@ export default function WorkflowPanel() {
       description: '',
       triggerType: 'manual',
       nodes: [
-        { id: 'node-start', type: 'start', label: '开始', position: { x: 250, y: 50 }, config: {}, status: 'idle' },
-        { id: 'node-end', type: 'end', label: '结束', position: { x: 250, y: 300 }, config: {}, status: 'idle' },
+        {
+          id: 'node-start',
+          type: 'start',
+          label: '开始',
+          position: { x: 250, y: 50 },
+          config: {},
+          status: 'idle',
+        },
+        {
+          id: 'node-end',
+          type: 'end',
+          label: '结束',
+          position: { x: 250, y: 300 },
+          config: {},
+          status: 'idle',
+        },
       ],
       edges: [],
     })
@@ -73,7 +94,11 @@ export default function WorkflowPanel() {
           name: `${tpl.name}（副本）`,
           description: tpl.description,
           triggerType: 'manual',
-          nodes: tpl.nodes.map((n) => ({ ...n, id: `node-${Date.now()}-${n.id}`, status: 'idle' as const })),
+          nodes: tpl.nodes.map((n) => ({
+            ...n,
+            id: `node-${Date.now()}-${n.id}`,
+            status: 'idle' as const,
+          })),
           edges: tpl.edges.map((e) => ({ ...e, id: `e-${Date.now()}-${e.id}` })),
         }).then((wf) => {
           setSelectedId(wf.id)
@@ -81,22 +106,19 @@ export default function WorkflowPanel() {
         })
       }
     },
-    [templates, createWorkflowMut, setSelectedId, setActiveTab],
+    [templates, createWorkflowMut, setSelectedId, setActiveTab]
   )
 
   // 节点选中 → 打开配置面板
-  const handleNodeSelect = useCallback(
-    (node: WorkflowNode | null) => {
-      if (node) {
-        setSelectedNode(node)
-        setDrawerOpen(true)
-      } else {
-        setSelectedNode(null)
-        setDrawerOpen(false)
-      }
-    },
-    [],
-  )
+  const handleNodeSelect = useCallback((node: WorkflowNode | null) => {
+    if (node) {
+      setSelectedNode(node)
+      setDrawerOpen(true)
+    } else {
+      setSelectedNode(null)
+      setDrawerOpen(false)
+    }
+  }, [])
 
   // 更新节点
   const handleNodeUpdate = useCallback(
@@ -105,7 +127,7 @@ export default function WorkflowPanel() {
       setNodes(newNodes)
       void saveDagMut(newNodes, edges)
     },
-    [nodes, edges, setNodes, saveDagMut],
+    [nodes, edges, setNodes, saveDagMut]
   )
 
   // 删除节点
@@ -117,7 +139,7 @@ export default function WorkflowPanel() {
       setEdges(newEdges)
       void saveDagMut(newNodes, newEdges)
     },
-    [nodes, edges, setNodes, setEdges, saveDagMut],
+    [nodes, edges, setNodes, setEdges, saveDagMut]
   )
 
   // 保存 DAG
@@ -129,8 +151,15 @@ export default function WorkflowPanel() {
   const leftPanel = (
     <div className={styles.leftPanel}>
       <div className={styles.leftPanelHeader}>
-        <Text strong style={{ fontSize: 14 }}>工作流</Text>
-        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => void handleCreate()}>
+        <Text strong style={{ fontSize: 14 }}>
+          工作流
+        </Text>
+        <Button
+          type="primary"
+          size="small"
+          icon={<PlusOutlined />}
+          onClick={() => void handleCreate()}
+        >
           新建
         </Button>
       </div>
@@ -170,7 +199,12 @@ export default function WorkflowPanel() {
               <Text strong>{selectedWorkflow.name}</Text>
             </Space>
             <Space size={4}>
-              <Button size="small" icon={<SaveOutlined />} onClick={handleSave} loading={isMutating}>
+              <Button
+                size="small"
+                icon={<SaveOutlined />}
+                onClick={handleSave}
+                loading={isMutating}
+              >
                 保存
               </Button>
               <Button
@@ -182,13 +216,27 @@ export default function WorkflowPanel() {
               >
                 运行
               </Button>
-              <Button size="small" icon={<StopOutlined />} onClick={() => void stopWorkflowMut(selectedId!)} loading={isMutating}>
+              <Button
+                size="small"
+                icon={<StopOutlined />}
+                onClick={() => void stopWorkflowMut(selectedId!)}
+                loading={isMutating}
+              >
                 停止
               </Button>
-              <Button size="small" icon={<CopyOutlined />} onClick={() => void duplicateWorkflowMut(selectedId!)}>
+              <Button
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() => void duplicateWorkflowMut(selectedId!)}
+              >
                 复制
               </Button>
-              <Popconfirm title="确定删除此工作流？" onConfirm={() => void deleteWorkflowMut(selectedId!).then(() => setSelectedId(null))}>
+              <Popconfirm
+                title="确定删除此工作流？"
+                onConfirm={() =>
+                  void deleteWorkflowMut(selectedId!).then(() => setSelectedId(null))
+                }
+              >
                 <Button size="small" danger icon={<DeleteOutlined />} />
               </Popconfirm>
             </Space>
@@ -212,9 +260,7 @@ export default function WorkflowPanel() {
   )
 
   // 底部栏：运行监控
-  const bottomPanel = (
-    <WorkflowMonitor runs={runs} loading={isRunsLoading} />
-  )
+  const bottomPanel = <WorkflowMonitor runs={runs} loading={isRunsLoading} />
 
   return (
     <div className={styles.panel}>
@@ -226,9 +272,7 @@ export default function WorkflowPanel() {
           <div className={styles.bottomPanel}>
             <Tabs
               size="small"
-              items={[
-                { key: 'monitor', label: '运行监控', children: bottomPanel },
-              ]}
+              items={[{ key: 'monitor', label: '运行监控', children: bottomPanel }]}
             />
           </div>
         </div>

@@ -16,7 +16,13 @@ interface NodeConfigDrawerProps {
   onDelete: (nodeId: string) => void
 }
 
-export function NodeConfigDrawer({ node, open, onClose, onUpdate, onDelete }: NodeConfigDrawerProps) {
+export function NodeConfigDrawer({
+  node,
+  open,
+  onClose,
+  onUpdate,
+  onDelete,
+}: NodeConfigDrawerProps) {
   const [form] = Form.useForm()
 
   useEffect(() => {
@@ -82,7 +88,11 @@ export function NodeConfigDrawer({ node, open, onClose, onUpdate, onDelete }: No
       }
     >
       <Form form={form} layout="vertical" size="small">
-        <Form.Item label="节点名称" name="label" rules={[{ required: true, message: '请输入节点名称' }]}>
+        <Form.Item
+          label="节点名称"
+          name="label"
+          rules={[{ required: true, message: '请输入节点名称' }]}
+        >
           <Input placeholder="输入节点名称" />
         </Form.Item>
         <Form.Item label="节点类型" name="type">
