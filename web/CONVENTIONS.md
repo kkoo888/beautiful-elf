@@ -74,6 +74,93 @@ web/src/
 ## API 字段命名转换
 - 后端统一 snake_case，前端统一 camelCase
 - 在 Axios 拦截器层自动转换
+- **类型定义必须与数据库表结构一一对应**（camelCase 版本）
+- 全局类型定义在 `types/index.ts`，模块类型定义在 `modules/*/types/*.ts`
+- 所有类型字段必须使用 camelCase，禁止在前端代码中出现 snake_case 字段引用
+
+## 数据库字段对照规则
+| 数据库 (snake_case) | 前端 (camelCase) | 说明 |
+|---------------------|------------------|------|
+| `created_at` | `createdAt` | 所有表通用 |
+| `updated_at` | `updatedAt` | 所有表通用 |
+| `is_all_day` | `allDay` | schedules 表，类型为 number (0/1) |
+| `repeat_type` | `repeatType` | schedules 表，类型为 number (0-4) |
+| `reminder_minutes` | `reminderMinutes` | schedules 表 |
+| `content_type` | `contentType` | clipboard_items 表 |
+| `source_app` | `sourceApp` | clipboard_items 表 |
+| `use_count` | `useCount` | snippets/commands 表 |
+| `file_type` | `fileType` | knowledge_documents 表 |
+| `chunk_count` | `chunkCount` | knowledge_documents 表 |
+| `conversation_id` | `conversationId` | messages/memory_entries 表 |
+| `tool_calls` | `toolCalls` | messages 表 |
+| `tool_call_id` | `toolCallId` | messages 表 |
+| `token_count` | `tokenCount` | messages 表 |
+| `dag_json` | `dagJson` | workflows 表 |
+| `json_schema` | `jsonSchema` | tools 表 |
+| `trigger_words` | `triggerWords` | skills 表 |
+| `display_name` | `displayName` | 多表通用 |
+| `shortcut_key` | `shortcutKey` | commands 表 |
+| `command_type` | `commandType` | commands 表 |
+| `qdrant_point_id` | `qdrantPointId` | 向量关联字段 |
+| `hit_count` | `hitCount` | intent_usage 表 |
+| `avg_confidence` | `avgConfidence` | intent_usage 表 |
+| `last_hit_at` | `lastHitAt` | intent_usage 表 |
+| `call_count` | `callCount` | stats 表 |
+| `success_count` | `successCount` | stats 表 |
+| `fail_count` | `failCount` | stats 表 |
+| `avg_duration_ms` | `avgDurationMs` | stats 表 |
+| `last_called_at` | `lastCalledAt` | stats 表 |
+| `last_used_at` | `lastUsedAt` | command_usage 表 |
+| `last_active_at` | `lastActiveAt` | pet_attributes 表 |
+| `interaction_type` | `interactionType` | pet_interactions 表 |
+| `effect_json` | `effectJson` | pet_interactions 表 |
+| `cpu_percent` | `cpuPercent` | performance_metrics 表 |
+| `memory_percent` | `memoryPercent` | performance_metrics 表 |
+| `memory_used_mb` | `memoryUsedMb` | performance_metrics 表 |
+| `disk_percent` | `diskPercent` | performance_metrics 表 |
+| `disk_used_gb` | `diskUsedGb` | performance_metrics 表 |
+| `gpu_percent` | `gpuPercent` | performance_metrics 表 |
+| `backup_type` | `backupType` | backup_records 表 |
+| `file_path` | `filePath` | backup_records 表 |
+| `file_size` | `fileSize` | 多表通用 |
+| `error_message` | `errorMessage` | 多表通用 |
+| `params_summary` | `paramsSummary` | action_logs 表 |
+| `session_id` | `sessionId` | action_logs 表 |
+| `system_prompt` | `systemPrompt` | soul_configs 表 |
+| `speaking_style` | `speakingStyle` | soul_configs 表 |
+| `avatar_url` | `avatarUrl` | soul_configs 表 |
+| `is_active` | `isActive` | 多表通用 |
+| `restart_required` | `restartRequired` | settings 表 |
+| `event_id` | `eventId` | 通知去重 |
+| `action_url` | `actionUrl` | 通知跳转 |
+| `model_name` | `modelName` | conversations 表 |
+| `message_count` | `messageCount` | conversations 表 |
+| `last_message_at` | `lastMessageAt` | conversations 表 |
+| `started_at` | `startedAt` | 多表通用 |
+| `finished_at` | `finishedAt` | workflow_runs 表 |
+| `duration_ms` | `durationMs` | 多表通用 |
+| `step_name` | `stepName` | workflow_step_runs 表 |
+| `step_type` | `stepType` | workflow_step_runs 表 |
+| `input_json` | `inputJson` | 多表通用 |
+| `output_json` | `outputJson` | 多表通用 |
+| `trigger_type` | `triggerType` | workflows 表 |
+| `cron_expr` | `cronExpr` | workflows 表 |
+| `event_trigger` | `eventTrigger` | workflows 表 |
+| `workflow_id` | `workflowId` | workflow_runs 表 |
+| `run_id` | `runId` | workflow_step_runs 表 |
+| `skill_id` | `skillId` | skill_stats 表 |
+| `tool_id` | `toolId` | tool_stats 表 |
+| `intent_id` | `intentId` | intent_usage 表 |
+| `command_id` | `commandId` | command_usage 表 |
+| `document_id` | `documentId` | knowledge_chunks 表 |
+| `chunk_index` | `chunkIndex` | knowledge_chunks 表 |
+| `content_preview` | `contentPreview` | knowledge_chunks 表 |
+| `target_module` | `targetModule` | intents 表 |
+| `trigger_texts` | `triggerTexts` | intents 表 |
+| `reason_tags` | `reasonTags` | ai_feedback 表 |
+| `reason_text` | `reasonText` | ai_feedback 表 |
+| `trace_id` | `traceId` | 多表通用 |
+| `feedback_type` | `feedbackType` | ai_feedback 表 |
 
 ## 设计方向
 - **风格**：现代简约，温暖亲切（桌面宠物助手调性）

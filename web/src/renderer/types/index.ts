@@ -1,5 +1,8 @@
 /**
  * 类型定义统一导出
+ *
+ * 命名规约：前端统一 camelCase，API 拦截器自动转换 snake_case ↔ camelCase
+ * 字段对齐：所有类型与数据库表结构一一对应（camelCase 版本）
  */
 
 // API 通用类型
@@ -29,17 +32,25 @@ export type {
 export interface Conversation {
   id: string
   title: string
-  created_at: string
-  updated_at: string
+  modelName: string
+  messageCount: number
+  lastMessageAt: string | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 export interface ChatMessage {
   id: string
-  conversation_id: string
-  role: 'user' | 'assistant' | 'system'
+  conversationId: string
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
-  created_at: number
-  tool_calls?: ToolCall[]
+  toolCalls: ToolCall[] | null
+  toolCallId: string | null
+  tokenCount: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 export interface ToolCall {
@@ -53,66 +64,99 @@ export interface ToolCall {
 export interface Schedule {
   id: string
   title: string
-  description?: string
-  start_time: string
-  end_time: string
-  is_all_day: boolean
-  reminder_minutes: number
-  color?: string
-  repeat: 'none' | 'daily' | 'weekly' | 'monthly'
+  description: string
+  startTime: string
+  endTime: string | null
+  allDay: number
+  reminderMinutes: number
+  reminded: number
+  repeatType: number
+  color: string
   deleted: number
-  created_at: string
-  updated_at: string
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 剪贴板 ───
 export interface ClipboardItem {
   id: string
   content: string
-  type: 'text' | 'image' | 'file'
-  pinned: boolean
-  created_at: number
+  contentType: number
+  pinned: number
+  sourceApp: string
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 代码片段 ───
 export interface Snippet {
   id: string
   title: string
-  code: string
+  content: string
   language: string
-  tags: string[]
-  use_count: number
-  created_at: string
-  updated_at: string
+  tags: string[] | null
+  useCount: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 知识库 ───
 export interface KnowledgeDocument {
   id: string
   filename: string
-  file_type: string
-  chunk_count: number
+  fileType: string
+  fileSize: number
+  chunkCount: number
+  status: number
+  errorMessage: string
   deleted: number
-  created_at: string
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 记忆 ───
 export interface MemoryEntry {
   id: string
-  content: string
-  conversation_id: string
-  created_at: string
+  conversationId: string | null
+  summary: string
+  tags: string[] | null
+  importance: number
+  qdrantPointId: string | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 技能 ───
 export interface Skill {
   id: string
   name: string
+  displayName: string
   description: string
   version: string
-  enabled: boolean
-  trigger_words: string[]
-  created_at: string
+  source: string
+  triggerWords: string[] | null
+  dependencies: string[] | null
+  enabled: number
+  config: Record<string, unknown> | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SkillStats {
+  id: string
+  skillId: string
+  callCount: number
+  successCount: number
+  failCount: number
+  avgDurationMs: number
+  lastCalledAt: string | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 工作流 ───
@@ -120,60 +164,123 @@ export interface Workflow {
   id: string
   name: string
   description: string
-  dag_json: string
-  created_at: string
+  dagJson: string
+  triggerType: number
+  cronExpr: string
+  eventTrigger: string
+  enabled: number
+  version: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 export interface WorkflowRun {
   id: string
-  workflow_id: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  started_at: string
-  completed_at?: string
+  workflowId: string
+  status: number
+  triggerType: number
+  inputJson: string | null
+  outputJson: string | null
+  errorMessage: string
+  startedAt: string | null
+  finishedAt: string | null
+  durationMs: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkflowStepRun {
+  id: string
+  runId: string
+  stepName: string
+  stepType: string
+  status: number
+  inputJson: string | null
+  outputJson: string | null
+  errorMessage: string
+  startedAt: string | null
+  finishedAt: string | null
+  durationMs: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 子代理 ───
 export interface SubAgent {
   id: string
-  task_name: string
+  taskName: string
   status: 'running' | 'paused' | 'completed' | 'failed'
-  started_at: string
-  current_step?: string
+  startedAt: string
+  currentStep?: string
 }
 
 // ─── 工具 ───
 export interface Tool {
   id: string
   name: string
+  displayName: string
   description: string
-  json_schema: string
   module: string
-  created_at: string
+  jsonSchema: string
+  enabled: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 export interface ToolStats {
-  tool_id: string
-  call_count: number
-  success_rate: number
-  avg_duration_ms: number
+  id: string
+  toolId: string
+  callCount: number
+  successCount: number
+  failCount: number
+  avgDurationMs: number
+  lastCalledAt: string | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 宠物 ───
 export interface PetAttributes {
+  id: string
   hunger: number
   clean: number
   mood: number
   health: number
   intimacy: number
   level: number
+  exp: number
+  lastActiveAt: string
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PetInteraction {
+  id: string
+  interactionType: number
+  effectJson: Record<string, unknown> | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 性能监控 ───
-export interface PerformanceMetrics {
-  cpu: number
-  memory: number
-  disk: number
-  timestamp: number
+export interface PerformanceMetric {
+  id: string
+  cpuPercent: number
+  memoryPercent: number
+  memoryUsedMb: number
+  diskPercent: number
+  diskUsedGb: number
+  gpuPercent: number | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 通知 ───
@@ -186,42 +293,42 @@ export type NotificationType =
 
 export interface Notification {
   id: string
-  event_id?: string
+  eventId?: string
   type: NotificationType
   title: string
   message: string
   read: boolean
-  created_at: string
-  action_url?: string
+  createdAt: string
+  actionUrl?: string
 }
 
 // ─── 设置 ───
 export interface Settings {
   ollama: {
     host: string
-    chat_model: string
-    embedding_model: string
-    vision_model: string
+    chatModel: string
+    embeddingModel: string
+    visionModel: string
   }
   ai: {
     temperature: number
-    max_tokens: number
-    top_p: number
-    frequency_penalty: number
-    ai_avatar: string
-    system_prompt: string
+    maxTokens: number
+    topP: number
+    frequencyPenalty: number
+    aiAvatar: string
+    systemPrompt: string
   }
   app: {
     language: string
-    auto_start: boolean
-    start_minimized: boolean
-    close_action: 'exit' | 'minimize'
+    autoStart: boolean
+    startMinimized: boolean
+    closeAction: 'exit' | 'minimize'
   }
   hotkeys: Record<string, string>
   privacy: {
-    encrypt_data: boolean
-    log_level: 'debug' | 'info' | 'warn' | 'error'
-    anonymous_stats: boolean
+    encryptData: boolean
+    logLevel: 'debug' | 'info' | 'warn' | 'error'
+    anonymousStats: boolean
   }
 }
 
@@ -229,24 +336,119 @@ export interface Settings {
 export interface SoulConfig {
   id: string
   name: string
-  avatar: string
+  avatarUrl: string
   personality: string[]
-  speaking_style: string
-  emotion: string
+  speakingStyle: string
   background: string
-  rules: string[]
+  systemPrompt: string
+  isActive: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── Prompt 版本管理 ───
+export interface Prompt {
+  id: string
+  name: string
+  content: string
+  version: number
+  isActive: number
+  description: string
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── AI 反馈 ───
+export interface AiFeedback {
+  id: string
+  conversationId: string | null
+  question: string
+  answer: string
+  feedbackType: number
+  reasonTags: string[] | null
+  reasonText: string
+  traceId: string
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── 意图 ───
+export interface Intent {
+  id: string
+  name: string
+  description: string
+  triggerTexts: string[]
+  targetModule: string
+  metadata: Record<string, unknown> | null
+  enabled: number
+  qdrantPointId: string | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface IntentUsage {
+  id: string
+  intentId: string
+  hitCount: number
+  avgConfidence: number
+  lastHitAt: string | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── 命令 ───
 export interface Command {
   id: string
   name: string
-  keywords: string[]
-  icon?: string
+  displayName: string
+  description: string
+  shortcutKey: string
   module: string
-  action: () => void
-  use_count: number
-  last_used_at?: number
+  commandType: number
+  enabled: number
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CommandUsage {
+  id: string
+  commandId: string
+  useCount: number
+  lastUsedAt: string | null
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── 备份 ───
+export interface BackupRecord {
+  id: string
+  backupType: number
+  filePath: string
+  fileSize: number
+  status: number
+  errorMessage: string
+  deleted: number
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── 行为日志 ───
+export interface ActionLog {
+  id: string
+  module: string
+  action: string
+  paramsSummary: string
+  sessionId: string
+  deleted: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ─── Electron API 类型 ───
