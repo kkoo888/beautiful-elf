@@ -95,7 +95,6 @@ export interface Snippet {
   title: string
   content: string
   language: string
-  tags: string[] | null
   useCount: number
   deleted: number
   createdAt: string

@@ -8,6 +8,14 @@
 | Redis 8.6 | 缓存 + 消息代理 | 热数据缓存、Celery Broker、WebSocket 队列 |
 | Qdrant | AI 向量专用 | intent_vectors、knowledge_chunks、memory_vectors |
 
+**Qdrant Collections**:
+
+| Collection | 向量来源 | payload 字段 | 关联 MySQL 表 |
+|-----------|---------|-------------|--------------|
+| `intent_vectors` | intents.trigger_texts → Qwen3-Embedding | `{ intent_id, deleted }` | intents |
+| `knowledge_chunks` | 文档分块 → Qwen3-Embedding | `{ doc_id, chunk_index, deleted }` | knowledge_documents + knowledge_chunks |
+| `memory_vectors` | memory_entries.summary → Qwen3-Embedding | `{ memory_id, deleted }` | memory_entries |
+
 **关联方式**: MySQL 与 Qdrant 通过 ID 关联，查询时先检索 Qdrant 获取向量匹配结果（含 payload 中的业务 ID），再用 ID 去 MySQL 查询完整业务数据。
 
 **外键策略**: 数据库层不建外键约束（`FOREIGN KEY`），由应用层 Repository 保证引用完整性。原因：① InnoDB 外键有性能开销 ② 批量导入/迁移时外键会阻塞 ③ 软删除场景下外键约束不适用。应用层必须确保：写入前校验关联 ID 存在，删除时级联处理关联数据。
@@ -41,7 +49,7 @@
   - `workflows.dag_json` → 允许（DAG 定义整体读写，不拆分查询）
   - `tools.json_schema` → 允许（Schema 整体使用，不需索引内部字段）
   - `soul_configs.personality` → 允许（配置数据，低频读取）
-  - `snippets.tags` → 注意（如需按标签搜索，考虑拆 tags 关联表）
+  - `memory_entries.tags` → 允许（标签列表，低频更新，不需单独查询）
 
 **TEXT 字段长度预警**:
 - [推荐] TEXT 字段在应用层设置软上限（如 content 最大 100KB）
@@ -409,7 +417,6 @@ CREATE TABLE snippets (
     title           VARCHAR(256)    NOT NULL COMMENT '片段标题',
     content         TEXT            NOT NULL COMMENT '代码内容 (应用层软上限 50KB)',
     language        VARCHAR(64)     DEFAULT '' COMMENT '编程语言',
-    tags            JSON            DEFAULT NULL COMMENT '标签列表 (如需按标签搜索，考虑拆 tags 关联表)',
     use_count       INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT '使用次数',
     deleted         TINYINT         NOT NULL DEFAULT 0,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -422,7 +429,7 @@ CREATE TABLE snippets (
 
 ### 18.1 snippet_tags — 代码片段标签
 
-> 从 snippets.tags JSON 字段拆出，支持按标签高效搜索。
+> 标签独立存储，支持按标签高效搜索和聚合统计。
 
 ```sql
 CREATE TABLE snippet_tags (
@@ -437,7 +444,9 @@ CREATE TABLE snippet_tags (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='代码片段标签';
 ```
 
-### 19. pet_attributes — 宠物六维属性
+### 19. pet_attributes — 宠物属性（单例表）
+
+> 全局只有一只宠物，此表始终只有一行数据。应用层启动时自动初始化。
 
 ```sql
 CREATE TABLE pet_attributes (
@@ -771,8 +780,9 @@ CREATE TABLE notifications (
 │  └──────────────┘                                                       │
 │                                                                         │
 │  ⚠️ 隐含关联 (表中无外键字段，应用层维护):                                │
-│    pet_interactions → 记录互动时同步更新 pet_attributes 对应属性           │
+│    pet_interactions.pet_attribute_id → 同步更新 pet_attributes 对应属性    │
 │    workflows.dag_json 中的节点 → 引用 tools.name 或 skills.name          │
+│    snippet_tags → snippets 软删除时级联清理                               │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -800,6 +810,10 @@ CREATE TABLE notifications (
 | notifications | (read) | 单列 | 筛选未读通知 |
 | notifications | (created_at) | 单列 | 按时间查通知历史 |
 | pet_interactions | (pet_attribute_id) | 单列 | 查宠物互动记录 |
+| workflow_step_runs | (run_id, step_name) | 联合 | 按运行记录查节点详情 |
+| workflow_runs | (created_at) | 单列 | 按时间查运行历史 |
+| knowledge_chunks | (document_id, chunk_index) | 联合 | 按文档查分块 |
+| knowledge_chunks | (qdrant_point_id) | 单列 | 向量 ID 反查 |
 
 ---
 
@@ -815,3 +829,4 @@ CREATE TABLE notifications (
 | | Redis: AOF + RDB，丢失后从 MySQL 重建 |
 | | Qdrant: 不单独备份，丢失后从 MySQL 重新 embedding |
 | 性能采样清理 | Celery Beat 每 5 分钟清理，保留最新 360 条 |
+| 通知清理 | Celery Beat 每天凌晨清理 30 天前的已读通知 |
