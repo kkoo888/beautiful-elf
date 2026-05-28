@@ -1,22 +1,31 @@
+/**
+ * 类型定义统一导出
+ */
+
+// API 通用类型
+export type {
+  ApiResponse,
+  PaginatedResponse,
+  ApiErrorResponse,
+  PaginationParams,
+  SortParams
+} from './api'
+
 // 通用类型
-export interface ApiResponse<T> {
-  code: string
-  message: string
-  data: T
-  request_id: string
-}
+export type {
+  Option,
+  TreeNode,
+  KeyValuePair,
+  OperationResult,
+  TimeRange,
+  FileInfo,
+  Point,
+  Rect,
+  ThemeMode,
+  NetworkStatus
+} from './common'
 
-export interface PaginatedResponse<T> {
-  items: T[]
-  total: number
-  page: number
-  page_size: number
-}
-
-// 主题
-export type ThemeMode = 'light' | 'dark' | 'high-contrast'
-
-// 对话
+// ─── 对话 ───
 export interface Conversation {
   id: string
   title: string
@@ -40,7 +49,7 @@ export interface ToolCall {
   result?: string
 }
 
-// 日程
+// ─── 日程 ───
 export interface Schedule {
   id: string
   title: string
@@ -56,7 +65,7 @@ export interface Schedule {
   updated_at: string
 }
 
-// 剪贴板
+// ─── 剪贴板 ───
 export interface ClipboardItem {
   id: string
   content: string
@@ -65,7 +74,7 @@ export interface ClipboardItem {
   created_at: number
 }
 
-// 代码片段
+// ─── 代码片段 ───
 export interface Snippet {
   id: string
   title: string
@@ -77,7 +86,7 @@ export interface Snippet {
   updated_at: string
 }
 
-// 知识库
+// ─── 知识库 ───
 export interface KnowledgeDocument {
   id: string
   filename: string
@@ -87,7 +96,7 @@ export interface KnowledgeDocument {
   created_at: string
 }
 
-// 记忆
+// ─── 记忆 ───
 export interface MemoryEntry {
   id: string
   content: string
@@ -95,7 +104,7 @@ export interface MemoryEntry {
   created_at: string
 }
 
-// 技能
+// ─── 技能 ───
 export interface Skill {
   id: string
   name: string
@@ -106,7 +115,7 @@ export interface Skill {
   created_at: string
 }
 
-// 工作流
+// ─── 工作流 ───
 export interface Workflow {
   id: string
   name: string
@@ -123,7 +132,7 @@ export interface WorkflowRun {
   completed_at?: string
 }
 
-// 子代理
+// ─── 子代理 ───
 export interface SubAgent {
   id: string
   task_name: string
@@ -132,7 +141,7 @@ export interface SubAgent {
   current_step?: string
 }
 
-// 工具
+// ─── 工具 ───
 export interface Tool {
   id: string
   name: string
@@ -149,7 +158,7 @@ export interface ToolStats {
   avg_duration_ms: number
 }
 
-// 宠物
+// ─── 宠物 ───
 export interface PetAttributes {
   hunger: number
   clean: number
@@ -159,7 +168,7 @@ export interface PetAttributes {
   level: number
 }
 
-// 性能监控
+// ─── 性能监控 ───
 export interface PerformanceMetrics {
   cpu: number
   memory: number
@@ -167,17 +176,25 @@ export interface PerformanceMetrics {
   timestamp: number
 }
 
-// 通知
+// ─── 通知 ───
+export type NotificationType =
+  | 'schedule'
+  | 'workflow'
+  | 'subagent'
+  | 'skill_suggest'
+  | 'system_alert'
+
 export interface Notification {
   id: string
-  type: string
+  type: NotificationType
   title: string
-  content: string
+  message: string
   read: boolean
   created_at: string
+  action_url?: string
 }
 
-// 设置
+// ─── 设置 ───
 export interface Settings {
   ollama: {
     host: string
@@ -207,7 +224,7 @@ export interface Settings {
   }
 }
 
-// 灵魂配置
+// ─── 灵魂配置 ───
 export interface SoulConfig {
   id: string
   name: string
@@ -219,7 +236,7 @@ export interface SoulConfig {
   rules: string[]
 }
 
-// 命令
+// ─── 命令 ───
 export interface Command {
   id: string
   name: string
@@ -231,7 +248,7 @@ export interface Command {
   last_used_at?: number
 }
 
-// Electron API 类型
+// ─── Electron API 类型 ───
 declare global {
   interface Window {
     electronAPI: {
