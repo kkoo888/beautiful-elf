@@ -1,0 +1,354 @@
+/* ================================================================
+   剪贴板模块样式
+   ================================================================ */
+
+/* 主面板容器 */
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+  padding: 16px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.panelTitleIcon {
+  font-size: 22px;
+}
+
+.panelCount {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.45);
+  font-weight: 400;
+}
+
+/* 搜索栏 */
+.searchBar {
+  flex-shrink: 0;
+}
+
+.searchInput {
+  border-radius: 8px;
+}
+
+/* 列表容器 */
+.listContainer {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.virtualList {
+  scrollbar-width: thin;
+}
+
+.virtualList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.virtualList::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+/* 单条剪贴板项 */
+.clipboardItem {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 16px;
+  margin: 2px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  height: 76px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.clipboardItem:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.clipboardItem:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: -2px;
+}
+
+.clipboardItem.pinned {
+  background: rgba(255, 165, 0, 0.06);
+  border-left: 3px solid #fa8c16;
+  padding-left: 13px;
+}
+
+.clipboardItem.pinned:hover {
+  background: rgba(255, 165, 0, 0.12);
+}
+
+/* 列表项头部 */
+.itemHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.itemIcon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.itemLanguage {
+  font-size: 11px;
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.08);
+  padding: 0 4px;
+  border-radius: 4px;
+  line-height: 18px;
+}
+
+.pinBadge {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.itemTime {
+  margin-left: auto;
+  color: rgba(0, 0, 0, 0.35);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* 内容预览 */
+.itemContent {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.65);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 40px);
+}
+
+.itemContent :global(mark) {
+  background: #ffe58f;
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* 操作按钮 */
+.itemActions {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.clipboardItem:hover .itemActions {
+  opacity: 1;
+}
+
+.actionBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.actionBtn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* 空状态 */
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+}
+
+/* 加载态 */
+.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+}
+
+.loadMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+/* 详情抽屉 */
+.detailDrawer {
+  border-radius: 12px 0 0 12px;
+}
+
+.detailMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.detailPinTag {
+  font-size: 12px;
+}
+
+.detailContent {
+  margin-top: 8px;
+}
+
+.codeBlock {
+  background: #f6f8fa;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.textContent {
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 右键菜单 */
+.contextMenu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.12),
+    0 3px 6px rgba(0, 0, 0, 0.08);
+  padding: 4px 0;
+  animation: contextMenuIn 0.12s ease-out;
+}
+
+@keyframes contextMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.contextMenuItem {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  color: rgba(0, 0, 0, 0.85);
+  transition: background-color 0.1s;
+  line-height: 1.5;
+}
+
+.contextMenuItem:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.contextMenuItem.danger {
+  color: #ff4d4f;
+}
+
+.contextMenuItem.danger:hover {
+  background: rgba(255, 77, 79, 0.06);
+}
+
+.contextMenuDivider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 4px 0;
+}
+
+/* 暗色模式适配 */
+:global(.dark) .listContainer {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+:global(.dark) .clipboardItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:global(.dark) .clipboardItem.pinned {
+  background: rgba(255, 165, 0, 0.08);
+}
+
+:global(.dark) .clipboardItem.pinned:hover {
+  background: rgba(255, 165, 0, 0.14);
+}
+
+:global(.dark) .itemContent {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+:global(.dark) .itemContent :global(mark) {
+  background: #d48806;
+  color: #fff;
+}
+
+:global(.dark) .itemTime {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+:global(.dark) .codeBlock {
+  background: #141414;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global(.dark) .contextMenu {
+  background: #1f1f1f;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.32),
+    0 3px 6px rgba(0, 0, 0, 0.24);
+}
+
+:global(.dark) .contextMenuItem {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+:global(.dark) .contextMenuItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
