@@ -1,8 +1,22 @@
-import { Card, Descriptions, Button, Space, Badge, Row, Col } from 'antd'
-import { ReloadOutlined, CloseOutlined, SyncOutlined } from '@ant-design/icons'
+import { Card, Button, Space, Badge, Row, Col } from 'antd'
+import {
+  CloseOutlined,
+  ReloadOutlined,
+  SyncOutlined,
+  PlayCircleOutlined,
+} from '@ant-design/icons'
+import { useElectronApi } from '@/hooks'
 import PetScreenshotPreview from './pet-screenshot-preview'
 
 export default function PetControlTab() {
+  const { pet: petApi, isElectron } = useElectronApi()
+
+  const handleTogglePet = async () => {
+    if (isElectron) {
+      await petApi.toggle()
+    }
+  }
+
   return (
     <Row gutter={16} style={{ width: '100%' }}>
       {/* 左侧：预览窗口 */}
@@ -18,8 +32,12 @@ export default function PetControlTab() {
           {/* 操作 */}
           <Card size="small" title="操作">
             <Space wrap>
-              <Button icon={<CloseOutlined />} danger>
-                关闭窗口
+              <Button
+                icon={<PlayCircleOutlined />}
+                type="primary"
+                onClick={handleTogglePet}
+              >
+                显示宠物
               </Button>
               <Button icon={<SyncOutlined />}>刷新</Button>
               <Button icon={<ReloadOutlined />} type="primary">
@@ -30,28 +48,17 @@ export default function PetControlTab() {
 
           {/* 模型信息 */}
           <Card size="small" title="模型信息">
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label="模型名称">Beautiful-Elf Pet v3.2</Descriptions.Item>
-              <Descriptions.Item label="模型版本">3.2.1</Descriptions.Item>
-              <Descriptions.Item label="渲染引擎">Canvas 2D</Descriptions.Item>
-              <Descriptions.Item label="动画帧率">60 FPS</Descriptions.Item>
-            </Descriptions>
+            <div style={{ fontSize: 13, color: 'var(--ant-color-text-secondary)' }}>
+              切换模型后请重载
+            </div>
           </Card>
 
           {/* 实时状态 */}
           <Card size="small" title="实时状态">
             <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Badge status="success" />
-                <span>宠物运行中</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Badge status="success" />
-                <span>桌面窗口: 已显示</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Badge status="processing" />
-                <span>动画: 空闲状态</span>
+                <Badge status="default" />
+                <span>宠物未启动</span>
               </div>
             </Space>
           </Card>
