@@ -73,16 +73,12 @@ export default function PetSettingsTab() {
   }, [petVisible, petApi, isElectron])
 
   const handleSelectModelDir = useCallback(async () => {
-    if (!isElectron) {
-      message.warning('目录选择需要在 Electron 环境下使用')
-      return
-    }
     const dir = await dialogApi.selectDirectory()
     if (dir) {
       setModelDir(dir)
       message.info(`已选择目录: ${dir}`)
     }
-  }, [dialogApi, isElectron])
+  }, [dialogApi])
 
   const handleSaveSettings = useCallback(() => {
     // TODO: persist settings to store/backend
