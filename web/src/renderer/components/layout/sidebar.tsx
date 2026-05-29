@@ -5,7 +5,7 @@ import {
   CopyOutlined,
   CodeOutlined,
   BookOutlined,
-  BrainOutlined,
+  BulbOutlined,
   TranslationOutlined,
   ToolOutlined,
   BranchesOutlined,
@@ -13,7 +13,7 @@ import {
   DashboardOutlined,
   SettingOutlined,
   BellOutlined,
-  PawPrintOutlined,
+  HeartOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppStore } from '@/stores/use-app-store'
@@ -44,7 +44,7 @@ const menuItems: ItemType[] = [
     type: 'group' as const,
     children: [
       { key: '/knowledge', icon: <BookOutlined />, label: '知识库' },
-      { key: '/memory', icon: <BrainOutlined />, label: '记忆' },
+      { key: '/memory', icon: <BulbOutlined />, label: '记忆' },
       { key: '/translate', icon: <TranslationOutlined />, label: '翻译' },
       { key: '/skills', icon: <ToolOutlined />, label: '技能' },
     ],
@@ -64,7 +64,7 @@ const menuItems: ItemType[] = [
     label: '系统',
     type: 'group' as const,
     children: [
-      { key: '/pet', icon: <PawPrintOutlined />, label: '宠物' },
+      { key: '/pet', icon: <HeartOutlined />, label: '宠物' },
       { key: '/performance', icon: <DashboardOutlined />, label: '性能监控' },
       { key: '/notification', icon: <BellOutlined />, label: '通知' },
       { key: '/settings', icon: <SettingOutlined />, label: '设置' },

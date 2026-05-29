@@ -5,7 +5,7 @@
 
 import React from 'react'
 import { Alert, Row, Col, Spin } from 'antd'
-import { CpuOutlined, DatabaseOutlined, HddOutlined } from '@ant-design/icons'
+import { DesktopOutlined, DatabaseOutlined, HddOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { usePerformance } from '../hooks/use-performance'
 import { MetricCard } from './metric-card'
@@ -61,7 +61,7 @@ export const PerformancePanel: React.FC = () => {
             title="CPU 使用率"
             value={latest?.cpu ?? 0}
             threshold={DEFAULT_THRESHOLDS.cpu}
-            icon={<CpuOutlined />}
+            icon={<DesktopOutlined />}
           />
         </Col>
         <Col span={8}>
