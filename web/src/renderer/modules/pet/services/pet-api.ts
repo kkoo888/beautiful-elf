@@ -158,13 +158,13 @@ export async function savePetSettings(settings: Record<string, unknown>): Promis
   const jsonStr = JSON.stringify(settings)
   try {
     await apiClient.put('/configs/pet_settings', {
-      value: jsonStr,
+      keyValue: jsonStr,
       description: '宠物设置（JSON）',
     })
   } catch {
     await apiClient.post('/configs', {
-      key: 'pet_settings',
-      value: jsonStr,
+      settingsKey: 'pet_settings',
+      keyValue: jsonStr,
       description: '宠物设置（JSON）',
     })
   }

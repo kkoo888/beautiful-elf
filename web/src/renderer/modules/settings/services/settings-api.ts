@@ -112,14 +112,14 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
   try {
     // 尝试更新
     await apiClient.put('/configs/app_settings', {
-      value: jsonStr,
+      keyValue: jsonStr,
       description: '应用设置（JSON）',
     })
   } catch {
     // 不存在则创建
     await apiClient.post('/configs', {
-      key: 'app_settings',
-      value: jsonStr,
+      settingsKey: 'app_settings',
+      keyValue: jsonStr,
       description: '应用设置（JSON）',
     })
   }
