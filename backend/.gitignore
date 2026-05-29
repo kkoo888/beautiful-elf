@@ -18,8 +18,9 @@ env/
 *.swp
 *.swo
 
-# Environment
-.env
+# Environment（仅忽略本地覆盖）
+.env.local
+.env.*.local
 
 # Logs
 *.log
