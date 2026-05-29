@@ -66,5 +66,15 @@ export function useElectronApi() {
     [isElectron]
   )
 
-  return { isElectron, window: windowApi, app: appApi, pet: petApi }
+  const dialogApi = useMemo(
+    () => ({
+      selectDirectory: async (): Promise<string | null> => {
+        if (isElectron) return window.electronAPI.dialog.selectDirectory()
+        return null
+      },
+    }),
+    [isElectron]
+  )
+
+  return { isElectron, window: windowApi, app: appApi, pet: petApi, dialog: dialogApi }
 }

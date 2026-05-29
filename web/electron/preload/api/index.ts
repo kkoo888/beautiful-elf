@@ -1,6 +1,7 @@
 import { windowApi } from './windowApi'
 import { appApi } from './appApi'
 import { petApi } from './petApi'
+import { dialogApi } from './dialogApi'
 
 /**
  * 聚合所有 API，暴露给渲染进程
@@ -10,6 +11,7 @@ export const electronAPI = {
   window: windowApi,
   app: appApi,
   pet: petApi,
+  dialog: dialogApi,
 }
 
 export type ElectronAPI = typeof electronAPI

@@ -1,6 +1,7 @@
 """宠物属性 Service"""
 from typing import List, Tuple
 from datetime import datetime
+from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.pet_repo import PetRepository
@@ -120,6 +121,41 @@ class PetService:
             })
 
         return result, total
+
+    # 支持的 3D 模型格式
+    MODEL_EXTENSIONS = {".pmx", ".vmd", ".glb", ".gltf", ".fbx", ".obj"}
+
+    def scan_models(self, dir_path: str) -> dict:
+        """扫描目录下的 3D 模型文件"""
+        target = Path(dir_path)
+        if not target.exists():
+            from app.core.exceptions import AppError
+            raise AppError(
+                code="PET_DIR_NOT_FOUND",
+                message=f"目录不存在: {dir_path}",
+                status_code=404,
+            )
+        if not target.is_dir():
+            from app.core.exceptions import AppError
+            raise AppError(
+                code="PET_NOT_A_DIR",
+                message=f"不是有效目录: {dir_path}",
+                status_code=400,
+            )
+
+        models = []
+        for f in sorted(target.iterdir()):
+            if f.is_file() and f.suffix.lower() in self.MODEL_EXTENSIONS:
+                models.append({
+                    "name": f.name,
+                    "path": str(f),
+                    "size": f.stat().st_size,
+                })
+
+        return {
+            "dir_path": str(target),
+            "models": models,
+        }
 
     @staticmethod
     def _to_dict(pet) -> dict:

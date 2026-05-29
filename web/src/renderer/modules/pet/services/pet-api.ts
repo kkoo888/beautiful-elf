@@ -108,11 +108,25 @@ export async function fetchInteractions(
   }))
 }
 
-// ─── 模型管理（后端暂未实现） ───
+// ─── 模型管理 ───
 
-export async function getAvailableModels(): Promise<string[]> {
-  // TODO: 后端暂未实现模型列表接口
-  return ['default.pmx']
+interface BackendModelInfo {
+  name: string
+  path: string
+  size: number
+}
+
+interface BackendModelScanResponse {
+  dir_path: string
+  models: BackendModelInfo[]
+}
+
+/** 扫描指定目录下的 3D 模型文件 */
+export async function scanModels(dirPath: string): Promise<string[]> {
+  const resp = await apiClient.post('/pets/models/scan', { dir_path: dirPath })
+  const body = resp.data as any
+  const data: BackendModelScanResponse = body.data
+  return data.models.map((m) => m.name)
 }
 
 export async function switchPetModel(_modelPath: string): Promise<void> {

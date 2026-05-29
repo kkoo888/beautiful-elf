@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.services.pet_service import PetService
-from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate
+from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate, ModelScanRequest
 from app.schemas.response import ok, ok_page
 
 router = APIRouter()
@@ -27,6 +27,12 @@ async def update_pet(data: PetAttributeUpdate, db: AsyncSession = Depends(get_db
 async def create_interaction(data: PetInteractionCreate, db: AsyncSession = Depends(get_db)):
     """宠物互动（喂食/清洁/聊天/玩耍）"""
     return ok(await _service.interact(db, data))
+
+
+@router.post("/models/scan")
+async def scan_models(data: ModelScanRequest):
+    """扫描目录下的 3D 模型文件"""
+    return ok(_service.scan_models(data.dir_path))
 
 
 @router.get("/interactions")

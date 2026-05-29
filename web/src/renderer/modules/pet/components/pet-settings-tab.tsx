@@ -21,17 +21,19 @@ import {
 } from '@ant-design/icons'
 import { useElectronApi } from '@/hooks'
 import { DEFAULT_PET_SETTINGS, DECAY_SPEED_OPTIONS, type PetSettings } from '../types/pet'
-import { getAvailableModels, switchPetModel } from '../services/pet-api'
+import { scanModels, switchPetModel } from '../services/pet-api'
 
 export default function PetSettingsTab() {
   const [settings, setSettings] = useState<PetSettings>(DEFAULT_PET_SETTINGS)
   const [petVisible, setPetVisible] = useState(false)
   const queryClient = useQueryClient()
-  const { pet: petApi, isElectron } = useElectronApi()
+  const { pet: petApi, dialog: dialogApi, isElectron } = useElectronApi()
+  const [modelDir, setModelDir] = useState<string>('')
 
   const { data: models = [], isLoading: modelsLoading } = useQuery({
-    queryKey: ['pet-models'],
-    queryFn: getAvailableModels,
+    queryKey: ['pet-models', modelDir],
+    queryFn: () => scanModels(modelDir),
+    enabled: !!modelDir,
   })
 
   const switchMutation = useMutation({
@@ -70,10 +72,13 @@ export default function PetSettingsTab() {
     message.info(petVisible ? '宠物窗口已隐藏' : '宠物窗口已显示')
   }, [petVisible, petApi, isElectron])
 
-  const handleOpenModelDir = useCallback(() => {
-    // TODO: 需要在 preload 中添加 shell.openPath API
-    message.warning('打开目录功能需要额外配置')
-  }, [])
+  const handleSelectModelDir = useCallback(async () => {
+    const dir = await dialogApi.selectDirectory()
+    if (dir) {
+      setModelDir(dir)
+      message.info(`已选择目录: ${dir}`)
+    }
+  }, [dialogApi])
 
   const handleSaveSettings = useCallback(() => {
     // TODO: persist settings to store/backend
@@ -81,33 +86,46 @@ export default function PetSettingsTab() {
   }, [])
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       <Card size="small" title="模型配置">
-        <Space direction="vertical" style={{ width: '100%' }} size="small">
+        <Space orientation="vertical" style={{ width: '100%' }} size="small">
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              模型目录
+            </Typography.Text>
+            <Space style={{ width: '100%', marginTop: 4 }}>
+              <Input
+                placeholder="点击右侧按钮选择模型目录"
+                value={modelDir}
+                readOnly
+                style={{ flex: 1 }}
+              />
+              <Button icon={<FolderOpenOutlined />} onClick={handleSelectModelDir}>
+                选择目录
+              </Button>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['pet-models', modelDir] })}
+                disabled={!modelDir}
+              >
+                刷新
+              </Button>
+            </Space>
+          </div>
+
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               选择模型
             </Typography.Text>
             <Select
               style={{ width: '100%', marginTop: 4 }}
-              placeholder="选择 .pmx 模型文件"
+              placeholder={modelDir ? '选择模型文件' : '请先选择模型目录'}
               value={settings.modelPath || undefined}
               onChange={handleModelChange}
               loading={modelsLoading}
               options={models.map((m) => ({ label: m, value: m }))}
-              notFoundContent={modelsLoading ? '加载中...' : '暂无可用模型'}
-            />
-          </div>
-
-          <div>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              模型路径（手动输入）
-            </Typography.Text>
-            <Input
-              placeholder="输入 3D 模型文件路径 (如 .glb / .gltf)"
-              value={settings.modelPath}
-              onChange={(e) => updateSetting('modelPath', e.target.value)}
-              suffix={<FolderOpenOutlined style={{ color: '#999' }} />}
+              notFoundContent={modelsLoading ? '扫描中...' : modelDir ? '目录下无模型文件' : '请先选择目录'}
+              disabled={!modelDir}
             />
           </div>
 
@@ -119,27 +137,11 @@ export default function PetSettingsTab() {
               <Descriptions.Item label="路径">{settings.modelPath}</Descriptions.Item>
             </Descriptions>
           )}
-
-          <Space>
-            <Button
-              icon={<FolderOpenOutlined />}
-              onClick={handleOpenModelDir}
-              disabled={!settings.modelPath}
-            >
-              打开模型目录
-            </Button>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={() => queryClient.invalidateQueries({ queryKey: ['pet-models'] })}
-            >
-              刷新模型列表
-            </Button>
-          </Space>
         </Space>
       </Card>
 
       <Card size="small" title="窗口设置">
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <Typography.Text>窗口透明度</Typography.Text>
@@ -159,7 +161,7 @@ export default function PetSettingsTab() {
       </Card>
 
       <Card size="small" title="宠物行为">
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <Typography.Text>属性衰减速度</Typography.Text>
             <Select

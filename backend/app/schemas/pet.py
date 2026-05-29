@@ -48,3 +48,21 @@ class PetInteractionOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ModelScanRequest(BaseModel):
+    """扫描模型目录请求"""
+    dir_path: str = Field(..., description="模型目录路径")
+
+
+class ModelInfo(BaseModel):
+    """模型文件信息"""
+    name: str = Field(..., description="模型文件名")
+    path: str = Field(..., description="模型完整路径")
+    size: int = Field(..., description="文件大小（字节）")
+
+
+class ModelScanResponse(BaseModel):
+    """扫描模型目录响应"""
+    dir_path: str
+    models: List[ModelInfo]

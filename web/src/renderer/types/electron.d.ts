@@ -26,10 +26,15 @@ interface PetApi {
   sendScreenshot: (data: string) => void
 }
 
+interface DialogApi {
+  selectDirectory: () => Promise<string | null>
+}
+
 interface ElectronAPI {
   window: WindowApi
   app: AppApi
   pet: PetApi
+  dialog: DialogApi
 }
 
 declare global {
