@@ -14,10 +14,8 @@ import {
 } from 'antd'
 import {
   FolderOpenOutlined,
-  EyeOutlined,
-  EyeInvisibleOutlined,
-  SettingOutlined,
   ReloadOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import { useElectronApi } from '@/hooks'
 import { DEFAULT_PET_SETTINGS, DECAY_SPEED_OPTIONS, type PetSettings } from '../types/pet'
@@ -25,9 +23,8 @@ import { scanModels, switchPetModel } from '../services/pet-api'
 
 export default function PetSettingsTab() {
   const [settings, setSettings] = useState<PetSettings>(DEFAULT_PET_SETTINGS)
-  const [petVisible, setPetVisible] = useState(false)
   const queryClient = useQueryClient()
-  const { pet: petApi, dialog: dialogApi, isElectron } = useElectronApi()
+  const { dialog: dialogApi } = useElectronApi()
   const [modelDir, setModelDir] = useState<string>('')
 
   const { data: models = [], isLoading: modelsLoading } = useQuery({
@@ -62,16 +59,6 @@ export default function PetSettingsTab() {
     [updateSetting, switchMutation]
   )
 
-  const handleTogglePet = useCallback(async () => {
-    if (!isElectron) {
-      message.warning('当前环境不支持宠物窗口')
-      return
-    }
-    await petApi.toggle()
-    setPetVisible((v) => !v)
-    message.info(petVisible ? '宠物窗口已隐藏' : '宠物窗口已显示')
-  }, [petVisible, petApi, isElectron])
-
   const handleSelectModelDir = useCallback(async () => {
     const dir = await dialogApi.selectDirectory()
     if (dir) {
@@ -86,9 +73,9 @@ export default function PetSettingsTab() {
   }, [])
 
   return (
-    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+    <Space direction="vertical" style={{ width: '100%' }} size="middle">
       <Card size="small" title="模型配置">
-        <Space orientation="vertical" style={{ width: '100%' }} size="small">
+        <Space direction="vertical" style={{ width: '100%' }} size="small">
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               模型目录
@@ -141,7 +128,7 @@ export default function PetSettingsTab() {
       </Card>
 
       <Card size="small" title="窗口设置">
-        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <Typography.Text>窗口透明度</Typography.Text>
@@ -161,7 +148,7 @@ export default function PetSettingsTab() {
       </Card>
 
       <Card size="small" title="宠物行为">
-        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <Typography.Text>属性衰减速度</Typography.Text>
             <Select
@@ -184,19 +171,10 @@ export default function PetSettingsTab() {
         </Space>
       </Card>
 
-      <Card size="small" title="窗口控制">
-        <Space wrap>
-          <Button
-            type={petVisible ? 'default' : 'primary'}
-            icon={petVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-            onClick={handleTogglePet}
-          >
-            {petVisible ? '关闭宠物窗口' : '打开宠物窗口'}
-          </Button>
-          <Button type="primary" icon={<SettingOutlined />} onClick={handleSaveSettings}>
-            保存设置
-          </Button>
-        </Space>
+      <Card size="small" title="设置操作">
+        <Button type="primary" icon={<SettingOutlined />} onClick={handleSaveSettings} block>
+          保存设置
+        </Button>
       </Card>
     </Space>
   )

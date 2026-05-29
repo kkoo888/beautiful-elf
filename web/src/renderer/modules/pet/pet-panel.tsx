@@ -38,7 +38,7 @@ const items = [
 export default function PetPanel() {
   return (
     <div className={styles.panel}>
-      <Tabs items={items} defaultActiveKey="status" />
+      <Tabs items={items} defaultActiveKey="control" />
     </div>
   )
 }

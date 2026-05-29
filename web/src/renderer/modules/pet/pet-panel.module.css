@@ -1,3 +1,21 @@
 .panel {
   padding: 16px;
 }
+
+.panel :global(.ant-card) {
+  border-radius: 8px;
+}
+
+.panel :global(.ant-card-head) {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.panel :global(.ant-card-head-title) {
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.panel :global(.ant-card-body) {
+  padding: 12px;
+}
