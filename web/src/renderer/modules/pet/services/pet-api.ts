@@ -129,7 +129,6 @@ export async function scanModels(dirPath: string): Promise<string[]> {
   return data.models.map((m) => m.name)
 }
 
-export async function switchPetModel(_modelPath: string): Promise<void> {
-  // TODO: 后端暂未实现模型切换接口
-  console.log('switchPetModel: 后端暂未实现')
+export async function switchPetModel(modelPath: string): Promise<void> {
+  await apiClient.post('/pets/models/switch', { model_path: modelPath })
 }

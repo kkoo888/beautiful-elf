@@ -180,6 +180,33 @@ class PetService:
             "models": models,
         }
 
+    async def switch_model(self, db: AsyncSession, model_path: str) -> dict:
+        """切换宠物模型，保存到 settings 表"""
+        from pathlib import Path
+        p = Path(model_path)
+        if not p.exists():
+            from app.core.exceptions import AppError
+            raise AppError(
+                code="PET_MODEL_NOT_FOUND",
+                message=f"模型文件不存在: {model_path}",
+                status_code=404,
+            )
+
+        # 保存到 settings 表
+        from app.repository.config_repo import ConfigRepository
+        config_repo = ConfigRepository()
+        existing = await config_repo.find_by_key(db, "pet_model_path")
+        if existing:
+            await config_repo.update_by_key(db, "pet_model_path", {"key_value": model_path})
+        else:
+            await config_repo.create(db, {
+                "settings_key": "pet_model_path",
+                "key_value": model_path,
+                "description": "宠物模型路径",
+            })
+
+        return {"model_path": model_path}
+
     @staticmethod
     def _to_dict(pet) -> dict:
         return {

@@ -66,3 +66,8 @@ class ModelScanResponse(BaseModel):
     """扫描模型目录响应"""
     dir_path: str
     models: List[ModelInfo]
+
+
+class ModelSwitchRequest(BaseModel):
+    """切换模型请求"""
+    model_path: str = Field(..., description="模型文件完整路径")
