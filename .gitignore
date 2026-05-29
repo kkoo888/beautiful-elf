@@ -1,2 +1,12 @@
 node_modules
 web/node_modules
+
+# OpenClaw workspace
+.openclaw/
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
