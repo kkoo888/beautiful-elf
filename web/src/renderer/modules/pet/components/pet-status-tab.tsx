@@ -30,7 +30,7 @@ export default function PetStatusTab() {
   }
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       <Card size="small" title="宠物属性">
         <Row gutter={[16, 8]}>
           {ATTR_CONFIG.map(({ key, label, icon, color }) => (
@@ -59,10 +59,19 @@ export default function PetStatusTab() {
         </Space>
       </Card>
 
-      <Card size="small" title="互动记录">
+      <Card
+        size="small"
+        title="互动记录"
+        styles={{
+          body: {
+            maxHeight: 320,
+            overflowY: 'auto',
+          },
+        }}
+      >
         <Timeline
           items={interactions.map((item) => ({
-            children: (
+            content: (
               <span>
                 <Typography.Text strong>
                   {PET_INTERACTION_META[item.type].icon} {PET_INTERACTION_META[item.type].label}
