@@ -3,21 +3,26 @@
 /** 技能使用统计 */
 export interface SkillStats {
   callCount: number
-  successRate: number
-  avgDuration: number
+  successCount: number
+  failCount: number
+  avgDurationMs: number
+  lastCalledAt: string | null
 }
 
 /** 技能数据 */
 export interface Skill {
   id: string
   name: string
+  displayName: string
   description: string
   version: string
+  source: string
   enabled: boolean
   triggerWords: string[]
   dependencies: string[]
-  stats: SkillStats
+  config: Record<string, unknown>
   createdAt: string
+  updatedAt: string
 }
 
 /** 安装来源类型 */
@@ -61,6 +66,38 @@ export interface SkillChain {
 
 /** 技能列表查询参数 */
 export interface SkillQueryParams {
-  keyword?: string
-  enabledOnly?: boolean
+  page?: number
+  pageSize?: number
+  enabled?: number
+}
+
+/** 技能创建参数 */
+export interface CreateSkillInput {
+  name: string
+  displayName: string
+  description: string
+  version: string
+  source: string
+  triggerWords: string[]
+  dependencies: string[]
+  config: Record<string, unknown>
+}
+
+/** 技能更新参数 */
+export interface UpdateSkillInput {
+  displayName?: string
+  description?: string
+  version?: string
+  source?: string
+  triggerWords?: string[]
+  dependencies?: string[]
+  config?: Record<string, unknown>
+}
+
+/** 分页结果 */
+export interface PaginatedResult<T> {
+  data: T[]
+  total: number
+  page: number
+  pageSize: number
 }
