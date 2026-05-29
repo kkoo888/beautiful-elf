@@ -85,7 +85,7 @@ function toFrontendSoul(data: BackendSoulConfig): SoulConfig {
  */
 export async function getSettings(): Promise<AppSettings> {
   try {
-    const resp = await apiClient.get('/config/app_settings')
+    const resp = await apiClient.get('/configs/app_settings')
     const item = (resp.data as any).data as BackendConfigItem
     if (item?.value) {
       return { ...DEFAULT_SETTINGS, ...JSON.parse(item.value) }
@@ -111,13 +111,13 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
 
   try {
     // 尝试更新
-    await apiClient.put('/config/app_settings', {
+    await apiClient.put('/configs/app_settings', {
       value: jsonStr,
       description: '应用设置（JSON）',
     })
   } catch {
     // 不存在则创建
-    await apiClient.post('/config', {
+    await apiClient.post('/configs', {
       key: 'app_settings',
       value: jsonStr,
       description: '应用设置（JSON）',

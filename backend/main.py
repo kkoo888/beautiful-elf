@@ -104,9 +104,8 @@ async def trace_middleware(request: Request, call_next):
     return response
 
 
-# 注册路由
+# 注册路由（注意：带通配符的路由放后面，避免拦截具体路径）
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
-app.include_router(config.router, prefix="/api/v1", tags=["config"])
 app.include_router(schedule.router, prefix="/api/v1/schedules", tags=["schedule"])
 app.include_router(clipboard.router, prefix="/api/v1/clipboard-items", tags=["clipboard"])
 app.include_router(snippet.router, prefix="/api/v1/snippets", tags=["snippet"])
@@ -124,6 +123,8 @@ app.include_router(command_usage.router, prefix="/api/v1/command-usage", tags=["
 app.include_router(backup.router, prefix="/api/v1/backups", tags=["backup"])
 app.include_router(prompt.router, prefix="/api/v1/prompts", tags=["prompt"])
 app.include_router(ai_feedback.router, prefix="/api/v1/ai-feedback", tags=["ai_feedback"])
+# config 路由含 /{key} 通配符，放最后避免拦截其他路由
+app.include_router(config.router, prefix="/api/v1/configs", tags=["config"])
 
 
 if __name__ == "__main__":
