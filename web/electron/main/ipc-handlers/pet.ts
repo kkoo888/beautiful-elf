@@ -30,13 +30,20 @@ export function registerPetHandlers(): void {
       return { error: 'PET_WINDOW_ERROR', message: '宠物窗口未打开' }
     }
     try {
-      return await Promise.race([
-        new Promise((resolve) => {
-          win.webContents.send('pet:request-attributes')
-          ipcMain.once('pet:attributes-response', (_, data) => resolve(data))
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-      ])
+      return await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          // 超时后清理 once 监听器
+          ipcMain.removeAllListeners('pet:attributes-response')
+          reject(new Error('timeout'))
+        }, 5000)
+
+        ipcMain.once('pet:attributes-response', (_, data) => {
+          clearTimeout(timeout)
+          resolve(data)
+        })
+
+        win.webContents.send('pet:request-attributes')
+      })
     } catch {
       return { error: 'PET_WINDOW_ERROR', message: '宠物窗口通信异常' }
     }

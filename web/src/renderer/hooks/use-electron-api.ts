@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 
 /**
  * 封装 window.electronAPI 调用
@@ -51,24 +51,17 @@ export function useElectronApi() {
         if (isElectron) return window.electronAPI.pet.getAttributes()
         return null
       },
-      onScreenshotUpdate: useCallback(
-        (callback: (data: string) => void) => {
-          if (isElectron) window.electronAPI.pet.onScreenshotUpdate(callback)
-        },
-        [isElectron]
-      ),
-      onVisibilityChange: useCallback(
-        (callback: (visible: boolean) => void) => {
-          if (isElectron) window.electronAPI.pet.onVisibilityChange(callback)
-        },
-        [isElectron]
-      ),
-      sendScreenshot: useCallback(
-        (data: string) => {
-          if (isElectron) window.electronAPI.pet.sendScreenshot(data)
-        },
-        [isElectron]
-      ),
+      onScreenshotUpdate: (callback: (data: string) => void): (() => void) => {
+        if (isElectron) return window.electronAPI.pet.onScreenshotUpdate(callback)
+        return () => {}
+      },
+      onVisibilityChange: (callback: (visible: boolean) => void): (() => void) => {
+        if (isElectron) return window.electronAPI.pet.onVisibilityChange(callback)
+        return () => {}
+      },
+      sendScreenshot: (data: string) => {
+        if (isElectron) window.electronAPI.pet.sendScreenshot(data)
+      },
     }),
     [isElectron]
   )

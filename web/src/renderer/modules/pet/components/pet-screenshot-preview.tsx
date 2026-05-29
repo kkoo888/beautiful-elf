@@ -11,13 +11,18 @@ export default function PetScreenshotPreview() {
   useEffect(() => {
     if (!isElectron) return
 
-    petApi.onScreenshotUpdate((data: string) => {
+    const cleanupScreenshot = petApi.onScreenshotUpdate((data: string) => {
       setScreenshot(data)
     })
 
-    petApi.onVisibilityChange((visible: boolean) => {
+    const cleanupVisibility = petApi.onVisibilityChange((visible: boolean) => {
       setPetVisible(visible)
     })
+
+    return () => {
+      cleanupScreenshot()
+      cleanupVisibility()
+    }
   }, [isElectron, petApi])
 
   const handleTogglePet = useCallback(async () => {

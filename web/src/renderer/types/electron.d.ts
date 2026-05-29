@@ -19,8 +19,10 @@ interface PetApi {
   hide: () => Promise<void>
   toggle: () => Promise<void>
   getAttributes: () => Promise<Record<string, unknown>>
-  onScreenshotUpdate: (callback: (data: string) => void) => void
-  onVisibilityChange: (callback: (visible: boolean) => void) => void
+  /** 监听截图更新，返回清理函数 */
+  onScreenshotUpdate: (callback: (data: string) => void) => (() => void)
+  /** 监听可见性变化，返回清理函数 */
+  onVisibilityChange: (callback: (visible: boolean) => void) => (() => void)
   sendScreenshot: (data: string) => void
 }
 

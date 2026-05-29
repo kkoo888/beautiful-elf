@@ -6,11 +6,17 @@ export const petApi = {
   hide: () => ipcRenderer.invoke('pet:hide'),
   toggle: () => ipcRenderer.invoke('pet:toggle'),
   getAttributes: () => ipcRenderer.invoke('pet:getAttributes'),
-  onScreenshotUpdate: (callback: (data: string) => void) => {
-    ipcRenderer.on('pet:screenshot-update', (_, data) => callback(data))
+  /** 监听截图更新，返回清理函数 */
+  onScreenshotUpdate: (callback: (data: string) => void): (() => void) => {
+    const handler = (_: Electron.IpcRendererEvent, data: string) => callback(data)
+    ipcRenderer.on('pet:screenshot-update', handler)
+    return () => ipcRenderer.removeListener('pet:screenshot-update', handler)
   },
-  onVisibilityChange: (callback: (visible: boolean) => void) => {
-    ipcRenderer.on('pet:visibility-change', (_, visible) => callback(visible))
+  /** 监听可见性变化，返回清理函数 */
+  onVisibilityChange: (callback: (visible: boolean) => void): (() => void) => {
+    const handler = (_: Electron.IpcRendererEvent, visible: boolean) => callback(visible)
+    ipcRenderer.on('pet:visibility-change', handler)
+    return () => ipcRenderer.removeListener('pet:visibility-change', handler)
   },
   sendScreenshot: (data: string) => {
     ipcRenderer.send('pet:screenshot', data)
