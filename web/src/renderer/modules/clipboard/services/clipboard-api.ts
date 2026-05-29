@@ -51,7 +51,7 @@ export async function fetchClipboardList(
   params: ClipboardListParams = {}
 ): Promise<ClipboardListResponse> {
   const { page = 1, pageSize = 20, keyword } = params
-  const resp = await apiClient.get('/clipboard-items', {
+  const resp = await apiClient.get('/clipboard_items', {
     params: { page, page_size: pageSize },
   })
   const body = resp.data as any
@@ -82,7 +82,7 @@ export async function fetchClipboardList(
 export async function createClipboardItem(
   data: Pick<ClipboardItem, 'content' | 'contentType' | 'language'>
 ): Promise<ClipboardItem> {
-  const resp = await apiClient.post('/clipboard-items', {
+  const resp = await apiClient.post('/clipboard_items', {
     content: data.content,
     content_type: unmapContentType(data.contentType),
   })
@@ -91,11 +91,11 @@ export async function createClipboardItem(
 
 /** 删除剪贴板条目 */
 export async function deleteClipboardItem(id: string): Promise<void> {
-  await apiClient.delete(`/clipboard-items/${id}`)
+  await apiClient.delete(`/clipboard_items/${id}`)
 }
 
 /** 固定/取消固定 */
 export async function togglePinClipboardItem(id: string): Promise<ClipboardItem> {
-  const resp = await apiClient.put(`/clipboard-items/${id}/pin`)
+  const resp = await apiClient.put(`/clipboard_items/${id}/pin`)
   return toFrontend((resp.data as any).data)
 }

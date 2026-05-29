@@ -6,7 +6,7 @@ export function usePet() {
   const queryClient = useQueryClient()
 
   const { data: attributes, isLoading } = useQuery({
-    queryKey: ['pet-attributes'],
+    queryKey: ['pets'],
     queryFn: fetchPetAttributes,
     refetchInterval: 30000,
   })
@@ -19,7 +19,7 @@ export function usePet() {
   const mutation = useMutation({
     mutationFn: (type: PetInteractionType) => interact(type),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pet-attributes'] })
+      queryClient.invalidateQueries({ queryKey: ['pets'] })
       queryClient.invalidateQueries({ queryKey: ['pet-interactions'] })
     },
   })

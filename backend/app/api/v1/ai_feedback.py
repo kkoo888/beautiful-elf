@@ -1,4 +1,4 @@
-"""AI 回答反馈 API"""
+"""AI 回答反馈 API — RESTful 规范"""
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.services.ai_feedback_service import AIFeedbackService
 from app.schemas.ai_feedback import AIFeedbackCreate
-from app.schemas.response import success, page_success
+from app.schemas.response import ok, ok_page
 
 router = APIRouter()
 _service = AIFeedbackService()
@@ -14,17 +14,17 @@ _service = AIFeedbackService()
 
 @router.post("")
 async def create_feedback(data: AIFeedbackCreate, db: AsyncSession = Depends(get_db)):
-    return success(await _service.create(db, data))
+    return ok(await _service.create(db, data))
 
 
 @router.get("/stats")
 async def get_feedback_stats(db: AsyncSession = Depends(get_db)):
-    return success(await _service.get_stats(db))
+    return ok(await _service.get_stats(db))
 
 
 @router.get("/{feedback_id}")
 async def get_feedback(feedback_id: int, db: AsyncSession = Depends(get_db)):
-    return success(await _service.get_by_id(db, feedback_id))
+    return ok(await _service.get_by_id(db, feedback_id))
 
 
 @router.get("")
@@ -35,4 +35,4 @@ async def list_feedbacks(
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await _service.list(db, page, page_size, feedback_type)
-    return page_success(items, total, page, page_size)
+    return ok_page(items, total, page, page_size)

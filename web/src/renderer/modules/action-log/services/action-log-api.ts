@@ -29,17 +29,17 @@ export interface CreateActionLogParams {
 
 /** 创建操作日志 */
 export async function createActionLog(data: CreateActionLogParams): Promise<ActionLog> {
-  const resp = await apiClient.post('/action-logs', data)
+  const resp = await apiClient.post('/action_logs', data)
   return (resp.data as any).data
 }
 
 /** 获取操作日志列表 */
 export async function fetchActionLogs(params?: ActionLogListParams): Promise<ActionLogListResponse> {
-  const resp = await apiClient.get('/action-logs', { params })
+  const resp = await apiClient.get('/action_logs', { params })
   return (resp.data as any).data
 }
 
 /** 清理旧日志 */
 export async function cleanupActionLogs(days: number): Promise<void> {
-  await apiClient.delete('/action-logs/cleanup', { params: { days } })
+  await apiClient.delete('/action_logs/cleanup', { params: { days } })
 }

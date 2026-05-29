@@ -67,7 +67,7 @@ function toFrontendPet(data: BackendPetAttributes): PetAttributes {
 
 /** 获取宠物属性 */
 export async function fetchPetAttributes(): Promise<PetAttributes> {
-  const resp = await apiClient.get('/pet-attributes')
+  const resp = await apiClient.get('/pets')
   return toFrontendPet((resp.data as any).data)
 }
 
@@ -75,7 +75,7 @@ export async function fetchPetAttributes(): Promise<PetAttributes> {
 export async function interact(
   type: PetInteractionType
 ): Promise<{ attributes: PetAttributes; interaction: PetInteraction }> {
-  const resp = await apiClient.post('/pet-attributes/interact', {
+  const resp = await apiClient.post('/pets/interactions', {
     interaction_type: INTERACTION_TYPE_MAP[type],
   })
   const result = (resp.data as any).data
@@ -95,7 +95,7 @@ export async function interact(
 export async function fetchInteractions(
   params: { page?: number; pageSize?: number } = {}
 ): Promise<PetInteraction[]> {
-  const resp = await apiClient.get('/pet-attributes/interactions', {
+  const resp = await apiClient.get('/pets/interactions', {
     params: { page: params.page ?? 1, page_size: params.pageSize ?? 20 },
   })
   const body = resp.data as any

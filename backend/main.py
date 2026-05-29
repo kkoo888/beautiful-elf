@@ -75,6 +75,8 @@ async def app_error_handler(request: Request, exc: AppError):
         content={
             "code": exc.code,
             "message": exc.message,
+            "user_tip": exc.user_tip,
+            "data": None,
             "request_id": getattr(request.state, "trace_id", ""),
         },
     )
@@ -88,6 +90,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "code": "SYSTEM_INTERNAL_ERROR",
             "message": "服务器内部错误",
+            "user_tip": "系统繁忙，请稍后重试",
+            "data": None,
             "request_id": getattr(request.state, "trace_id", ""),
         },
     )
@@ -104,26 +108,26 @@ async def trace_middleware(request: Request, call_next):
     return response
 
 
-# 注册路由（注意：带通配符的路由放后面，避免拦截具体路径）
+# 注册路由（按阿里规范：下划线分隔、复数名词、通配路由放最后）
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(schedule.router, prefix="/api/v1/schedules", tags=["schedule"])
-app.include_router(clipboard.router, prefix="/api/v1/clipboard-items", tags=["clipboard"])
+app.include_router(clipboard.router, prefix="/api/v1/clipboard_items", tags=["clipboard"])
 app.include_router(snippet.router, prefix="/api/v1/snippets", tags=["snippet"])
 app.include_router(conversation.router, prefix="/api/v1/conversations", tags=["conversation"])
-app.include_router(message.router, prefix="/api/v1/messages", tags=["message"])
-app.include_router(pet.router, prefix="/api/v1/pet-attributes", tags=["pet"])
+app.include_router(message.router, prefix="/api/v1/conversations/{conversation_id}/messages", tags=["message"])
+app.include_router(pet.router, prefix="/api/v1/pets", tags=["pet"])
 app.include_router(notification.router, prefix="/api/v1/notifications", tags=["notification"])
 app.include_router(performance.router, prefix="/api/v1/performance", tags=["performance"])
 app.include_router(command.router, prefix="/api/v1/commands", tags=["command"])
-app.include_router(soul_config.router, prefix="/api/v1/soul-configs", tags=["soul_config"])
+app.include_router(soul_config.router, prefix="/api/v1/soul_configs", tags=["soul_config"])
 app.include_router(skill.router, prefix="/api/v1/skills", tags=["skill"])
 app.include_router(tool.router, prefix="/api/v1/tools", tags=["tool"])
-app.include_router(action_log.router, prefix="/api/v1/action-logs", tags=["action_log"])
-app.include_router(command_usage.router, prefix="/api/v1/command-usage", tags=["command_usage"])
+app.include_router(action_log.router, prefix="/api/v1/action_logs", tags=["action_log"])
+app.include_router(command_usage.router, prefix="/api/v1/command_usage", tags=["command_usage"])
 app.include_router(backup.router, prefix="/api/v1/backups", tags=["backup"])
 app.include_router(prompt.router, prefix="/api/v1/prompts", tags=["prompt"])
-app.include_router(ai_feedback.router, prefix="/api/v1/ai-feedback", tags=["ai_feedback"])
-# config 路由含 /{key} 通配符，放最后避免拦截其他路由
+app.include_router(ai_feedback.router, prefix="/api/v1/ai_feedback", tags=["ai_feedback"])
+# config 含 /{key} 通配符，放最后
 app.include_router(config.router, prefix="/api/v1/configs", tags=["config"])
 
 

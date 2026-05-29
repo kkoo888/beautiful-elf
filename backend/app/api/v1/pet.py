@@ -1,29 +1,32 @@
-"""宠物属性 API"""
+"""宠物属性 API — RESTful 规范"""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.services.pet_service import PetService
 from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate
-from app.schemas.response import success, page_success
+from app.schemas.response import ok, ok_page
 
 router = APIRouter()
 _service = PetService()
 
 
 @router.get("")
-async def get_pet_attributes(db: AsyncSession = Depends(get_db)):
-    return success(await _service.get_attributes(db))
+async def list_pets(db: AsyncSession = Depends(get_db)):
+    """获取宠物属性"""
+    return ok(await _service.get_attributes(db))
 
 
 @router.put("")
-async def update_pet_attributes(data: PetAttributeUpdate, db: AsyncSession = Depends(get_db)):
-    return success(await _service.update_attributes(db, data))
+async def update_pet(data: PetAttributeUpdate, db: AsyncSession = Depends(get_db)):
+    """更新宠物属性"""
+    return ok(await _service.update_attributes(db, data))
 
 
-@router.post("/interact")
-async def pet_interact(data: PetInteractionCreate, db: AsyncSession = Depends(get_db)):
-    return success(await _service.interact(db, data))
+@router.post("/interactions")
+async def create_interaction(data: PetInteractionCreate, db: AsyncSession = Depends(get_db)):
+    """宠物互动（喂食/清洁/聊天/玩耍）"""
+    return ok(await _service.interact(db, data))
 
 
 @router.get("/interactions")
@@ -34,4 +37,4 @@ async def list_interactions(
 ):
     """查询互动记录（分页）"""
     items, total = await _service.get_interactions(db, page, page_size)
-    return page_success(items, total, page, page_size)
+    return ok_page(items, total, page, page_size)

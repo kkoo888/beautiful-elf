@@ -1,4 +1,4 @@
-"""通知系统 API"""
+"""通知系统 API — RESTful 规范"""
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.services.notification_service import NotificationService
 from app.schemas.notification import NotificationCreate
-from app.schemas.response import success, page_success
+from app.schemas.response import ok, ok_page
 
 router = APIRouter()
 _service = NotificationService()
@@ -21,31 +21,31 @@ async def list_notifications(
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await _service.list(db, page, page_size, type, read)
-    return page_success(items, total, page, page_size)
+    return ok_page(items, total, page, page_size)
 
 
 @router.get("/{notification_id}")
 async def get_notification(notification_id: int, db: AsyncSession = Depends(get_db)):
-    return success(await _service.get_by_id(db, notification_id))
+    return ok(await _service.get_by_id(db, notification_id))
 
 
 @router.post("")
 async def create_notification(data: NotificationCreate, db: AsyncSession = Depends(get_db)):
-    return success(await _service.create(db, data))
+    return ok(await _service.create(db, data))
 
 
 @router.delete("/{notification_id}")
 async def delete_notification(notification_id: int, db: AsyncSession = Depends(get_db)):
     await _service.delete(db, notification_id)
-    return success(message="删除成功")
+    return ok(message="删除成功")
 
 
 @router.put("/{notification_id}/read")
 async def mark_read(notification_id: int, db: AsyncSession = Depends(get_db)):
-    return success(await _service.mark_read(db, notification_id))
+    return ok(await _service.mark_read(db, notification_id))
 
 
 @router.put("/read-all")
 async def mark_all_read(db: AsyncSession = Depends(get_db)):
     count = await _service.mark_all_read(db)
-    return success({"marked": count})
+    return ok({"marked": count})

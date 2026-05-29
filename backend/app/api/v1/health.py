@@ -1,9 +1,9 @@
-"""健康检查端点"""
+"""健康检查端点 — RESTful 规范"""
 from fastapi import APIRouter
 from sqlalchemy import text
 from app.core.database import AsyncSessionLocal, get_redis, get_qdrant
 from app.core.logging import get_logger
-from app.schemas.response import success
+from app.schemas.response import ok
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 @router.get("/health")
 async def health_check():
     """存活检查"""
-    return success({"status": "alive"})
+    return ok({"status": "alive"})
 
 
 @router.get("/ready")
@@ -45,7 +45,7 @@ async def ready_check():
         checks["qdrant"] = {"status": "error", "detail": str(e)}
 
     all_ok = all(c["status"] == "ok" for c in checks.values())
-    return success({"status": "ready" if all_ok else "not_ready", "checks": checks})
+    return ok({"status": "ready" if all_ok else "not_ready", "checks": checks})
 
 
 @router.get("/deps")
@@ -81,4 +81,4 @@ async def deps_check():
     except Exception as e:
         deps["qdrant"] = {"status": "error", "detail": str(e)}
 
-    return success(deps)
+    return ok(deps)

@@ -1,11 +1,11 @@
-"""消息记录 API"""
+"""消息记录 API — RESTful 规范"""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.services.message_service import MessageService
 from app.schemas.message import MessageCreate
-from app.schemas.response import success, page_success
+from app.schemas.response import ok, ok_page
 
 router = APIRouter()
 _service = MessageService()
@@ -19,20 +19,20 @@ async def list_messages(
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await _service.list_by_conversation(db, conversation_id, page, page_size)
-    return page_success(items, total, page, page_size)
+    return ok_page(items, total, page, page_size)
 
 
 @router.get("/{message_id}")
 async def get_message(message_id: int, db: AsyncSession = Depends(get_db)):
-    return success(await _service.get_by_id(db, message_id))
+    return ok(await _service.get_by_id(db, message_id))
 
 
 @router.post("")
 async def create_message(data: MessageCreate, db: AsyncSession = Depends(get_db)):
-    return success(await _service.create(db, data))
+    return ok(await _service.create(db, data))
 
 
 @router.delete("/{message_id}")
 async def delete_message(message_id: int, db: AsyncSession = Depends(get_db)):
     await _service.delete(db, message_id)
-    return success(message="删除成功")
+    return ok(message="删除成功")

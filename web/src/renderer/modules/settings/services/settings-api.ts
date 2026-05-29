@@ -132,7 +132,7 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
  */
 export async function getSoulConfig(): Promise<SoulConfig> {
   try {
-    const resp = await apiClient.get('/soul-configs/active')
+    const resp = await apiClient.get('/soul_configs/active')
     return toFrontendSoul((resp.data as any).data)
   } catch {
     return { ...DEFAULT_SOUL }
@@ -146,9 +146,9 @@ export async function getSoulConfig(): Promise<SoulConfig> {
 export async function saveSoulConfig(config: SoulConfig): Promise<SoulConfig> {
   try {
     // 尝试获取当前活跃配置
-    const resp = await apiClient.get('/soul-configs/active')
+    const resp = await apiClient.get('/soul_configs/active')
     const existing = (resp.data as any).data as BackendSoulConfig
-    await apiClient.put(`/soul-configs/${existing.id}`, {
+    await apiClient.put(`/soul_configs/${existing.id}`, {
       name: config.name,
       avatar: config.avatar,
       personality: config.personality,
@@ -158,7 +158,7 @@ export async function saveSoulConfig(config: SoulConfig): Promise<SoulConfig> {
     })
   } catch {
     // 没有活跃配置，创建新的
-    await apiClient.post('/soul-configs', {
+    await apiClient.post('/soul_configs', {
       name: config.name,
       avatar: config.avatar,
       personality: config.personality,
