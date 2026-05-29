@@ -126,7 +126,15 @@ class PetService:
     MODEL_EXTENSIONS = {".pmx", ".vmd", ".glb", ".gltf", ".fbx", ".obj"}
 
     def scan_models(self, dir_path: str) -> dict:
-        """扫描目录下的 3D 模型文件"""
+        """扫描目录下的 3D 模型文件（递归两层）
+        
+        结构示例：
+          模型目录/
+            初音未来/
+              miku.pmx
+            雷电将军/
+              raiden.pmx
+        """
         target = Path(dir_path)
         if not target.exists():
             from app.core.exceptions import AppError
@@ -144,6 +152,8 @@ class PetService:
             )
 
         models = []
+
+        # 扫描当前目录的文件
         for f in sorted(target.iterdir()):
             if f.is_file() and f.suffix.lower() in self.MODEL_EXTENSIONS:
                 models.append({
@@ -151,6 +161,17 @@ class PetService:
                     "path": str(f),
                     "size": f.stat().st_size,
                 })
+
+        # 扫描子目录下的文件（第二层）
+        for sub in sorted(target.iterdir()):
+            if sub.is_dir():
+                for f in sorted(sub.iterdir()):
+                    if f.is_file() and f.suffix.lower() in self.MODEL_EXTENSIONS:
+                        models.append({
+                            "name": f"{sub.name} / {f.name}",
+                            "path": str(f),
+                            "size": f.stat().st_size,
+                        })
 
         return {
             "dir_path": str(target),
