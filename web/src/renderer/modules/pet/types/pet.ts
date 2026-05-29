@@ -51,33 +51,3 @@ export interface PetModelInfo {
   size: number
   lastModified: number
 }
-
-// ─── Live2D 模型信息 ───
-export interface Live2DModelInfo {
-  name: string
-  version: string
-  engine: string
-  expressionCount: number
-  motionCount: number
-  ready: boolean
-}
-
-// ─── 宠物运行状态 ───
-export interface PetRuntimeStatus {
-  libraryLoaded: boolean
-  mouseFollow: boolean
-  clickInteraction: boolean
-  lipSync: boolean
-  currentExpression: string
-  currentMotion: string
-  bubbleText: string
-  motionQueueCount: number
-  fps: number
-}
-
-export const FPS_OPTIONS = [
-  { label: '30 FPS', value: 30 },
-  { label: '60 FPS', value: 60 },
-  { label: '120 FPS', value: 120 },
-  { label: '无限制', value: 0 },
-] as const
