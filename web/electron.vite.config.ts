@@ -30,7 +30,6 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/renderer/index.html')
         },
-        external: ['reactflow'],
       }
     },
     resolve: {
