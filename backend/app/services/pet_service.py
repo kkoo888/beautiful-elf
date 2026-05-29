@@ -167,8 +167,10 @@ class PetService:
             if sub.is_dir():
                 for f in sorted(sub.iterdir()):
                     if f.is_file() and f.suffix.lower() in self.MODEL_EXTENSIONS:
+                        # 文件名和文件夹名相同时只显示文件名，避免冗余
+                        display_name = f.name if f.stem == sub.name else f"{sub.name} / {f.name}"
                         models.append({
-                            "name": f"{sub.name} / {f.name}",
+                            "name": display_name,
                             "path": str(f),
                             "size": f.stat().st_size,
                         })
