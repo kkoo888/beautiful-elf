@@ -41,7 +41,9 @@
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/theme-one-dark": "^6.1.2",
-    "reactflow": "^11.11.4"
+    "reactflow": "^11.11.4",
+    "three": "^0.181.0",
+    "three-mmd-loader": "^0.0.11"
   },
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -53,6 +55,7 @@
     "@types/react-dom": "^19.1.5",
     "@types/prismjs": "^1.26.5",
     "@types/react-window": "^1.8.8",
+    "@types/three": "^0.181.0",
     "@vitejs/plugin-react": "^4.5.2",
     "typescript": "^6.0.0",
     "eslint": "^9.27.0",

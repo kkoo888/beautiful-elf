@@ -28,10 +28,11 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     build: {
-      emptyOutDir: true,
+      emptyOutDir: false,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          'pet-window': resolve(__dirname, 'src/renderer/pet-window.html'),
         },
       }
     },
