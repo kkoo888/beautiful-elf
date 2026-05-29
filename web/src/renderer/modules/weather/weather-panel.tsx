@@ -6,7 +6,7 @@
 import React from 'react'
 import { Spin } from 'antd'
 import { PageHeader } from '@/components/page-header'
-import { useWeather } from '../hooks/use-weather'
+import { useWeather } from './hooks/use-weather'
 import { WeatherCard } from './weather-card'
 import { WeatherForecast } from './weather-forecast'
 import { GreetingBubble } from './greeting-bubble'
