@@ -1,6 +1,38 @@
 node_modules
 web/node_modules
 
+# 构建产物
+web/out/
+web/dist/
+web/build/
+web/release/
+
+# Vite 缓存
+web/.vite/
+
+# Electron 打包
+web/*.exe
+web/*.dmg
+web/*.AppImage
+web/*.deb
+web/*.rpm
+web/*.snap
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
 # OpenClaw workspace
 .openclaw/
 AGENTS.md

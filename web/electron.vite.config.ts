@@ -38,6 +38,7 @@ export default defineConfig({
         '@shared': resolve(__dirname, 'src/shared')
       }
     },
-    plugins: [react()]
+    plugins: [react()],
+    cacheDir: resolve(__dirname, 'node_modules/.vite')
   }
 })
