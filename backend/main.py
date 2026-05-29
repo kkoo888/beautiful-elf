@@ -7,26 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
-from app.core.database import engine, Base
+from app.core.database import Base, engine, close_db
+from app.core.redis_client import close_redis
 from app.core.exceptions import AppError
 from app.core.logging import setup_logging, get_logger, trace_id_var
-from app.api.v1 import health, config, schedule, clipboard, snippet
-from app.api.v1 import (
-    conversation,
-    message,
-    pet,
-    notification,
-    performance,
-    command,
-    soul_config,
-    action_log,
-    command_usage,
-    skill,
-    tool,
-    backup,
-    prompt,
-    ai_feedback,
-)
+from app.api.v1.api import api_router
+from app.api.v1.websocket import router as ws_router
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -41,12 +27,13 @@ async def lifespan(app: FastAPI):
     # 创建数据库表（开发阶段，生产用 Alembic）
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
     logger.info("数据库表初始化完成")
+
     yield
 
     # 清理资源
-    await engine.dispose()
+    await close_db()
+    await close_redis()
     logger.info("Beautiful-Elf 后端已停止")
 
 
@@ -108,27 +95,9 @@ async def trace_middleware(request: Request, call_next):
     return response
 
 
-# 注册路由（按阿里规范：下划线分隔、复数名词、通配路由放最后）
-app.include_router(health.router, prefix="/api/v1", tags=["health"])
-app.include_router(schedule.router, prefix="/api/v1/schedules", tags=["schedule"])
-app.include_router(clipboard.router, prefix="/api/v1/clipboard_items", tags=["clipboard"])
-app.include_router(snippet.router, prefix="/api/v1/snippets", tags=["snippet"])
-app.include_router(conversation.router, prefix="/api/v1/conversations", tags=["conversation"])
-app.include_router(message.router, prefix="/api/v1/conversations/{conversation_id}/messages", tags=["message"])
-app.include_router(pet.router, prefix="/api/v1/pets", tags=["pet"])
-app.include_router(notification.router, prefix="/api/v1/notifications", tags=["notification"])
-app.include_router(performance.router, prefix="/api/v1/performance", tags=["performance"])
-app.include_router(command.router, prefix="/api/v1/commands", tags=["command"])
-app.include_router(soul_config.router, prefix="/api/v1/soul_configs", tags=["soul_config"])
-app.include_router(skill.router, prefix="/api/v1/skills", tags=["skill"])
-app.include_router(tool.router, prefix="/api/v1/tools", tags=["tool"])
-app.include_router(action_log.router, prefix="/api/v1/action_logs", tags=["action_log"])
-app.include_router(command_usage.router, prefix="/api/v1/command_usage", tags=["command_usage"])
-app.include_router(backup.router, prefix="/api/v1/backups", tags=["backup"])
-app.include_router(prompt.router, prefix="/api/v1/prompts", tags=["prompt"])
-app.include_router(ai_feedback.router, prefix="/api/v1/ai_feedback", tags=["ai_feedback"])
-# config 含 /{key} 通配符，放最后
-app.include_router(config.router, prefix="/api/v1/configs", tags=["config"])
+# 注册路由
+app.include_router(api_router, prefix="/api/v1")
+app.include_router(ws_router, prefix="/api/v1")
 
 
 if __name__ == "__main__":
