@@ -4,7 +4,7 @@
  */
 
 import { useCallback } from 'react'
-import { Slider, InputNumber, Typography } from 'antd'
+import { Slider, InputNumber, Typography, Input } from 'antd'
 import type { AppSettings } from '../types/settings'
 import styles from './settings-panel.module.css'
 
