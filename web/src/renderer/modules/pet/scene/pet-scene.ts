@@ -1,9 +1,12 @@
 import * as THREE from 'three'
-import { MMDLoader } from 'three-mmd-loader'
+import { MMDLoader } from 'three/examples/jsm/loaders/MMDLoader.js'
+import { MMDAnimationHelper } from 'three/examples/jsm/animation/MMDAnimationHelper.js'
 
 /**
  * 宠物 3D 场景管理
- * 负责：Three.js 场景初始化、PMX 模型加载、渲染循环、截图
+ * 负责：Three.js 场景初始化、PMX 模型加载、VMD 动画、渲染循环、截图
+ *
+ * 使用 Three.js r171 官方 MMDLoader（本地模块）
  */
 export class PetScene {
   private container: HTMLElement
@@ -14,6 +17,8 @@ export class PetScene {
   private animationId: number | null = null
   private visible = true
   private mesh: THREE.SkinnedMesh | null = null
+  private helper: MMDAnimationHelper | null = null
+  private loader: MMDLoader | null = null
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -59,6 +64,13 @@ export class PetScene {
     // 时钟
     this.clock = new THREE.Clock()
 
+    // MMD 官方 Loader + Helper
+    this.loader = new MMDLoader()
+    this.helper = new MMDAnimationHelper({
+      afterglow: 2.0,
+      resetPhysicsOnLoop: true,
+    })
+
     // 响应窗口大小变化
     window.addEventListener('resize', this.handleResize)
 
@@ -66,26 +78,16 @@ export class PetScene {
     this.startRenderLoop()
   }
 
-  /** 加载 PMX 模型 */
+  /** 加载 PMX 模型（纯模型，无动画） */
   async loadModel(modelPath: string): Promise<void> {
     if (!this.scene) throw new Error('Scene not initialized')
-
-    const loader = new MMDLoader()
+    if (!this.loader) throw new Error('Loader not initialized')
 
     return new Promise((resolve, reject) => {
-      loader.load(
+      this.loader!.load(
         modelPath,
         (mesh) => {
-          // 移除旧模型
-          if (this.mesh) {
-            this.scene!.remove(this.mesh)
-            this.mesh.geometry.dispose()
-            if (this.mesh.material instanceof THREE.Material) {
-              this.mesh.material.dispose()
-            }
-          }
-
-          this.mesh = mesh
+          this.replaceMesh(mesh)
           this.scene!.add(mesh)
           this.fitCameraToModel(mesh)
           resolve()
@@ -96,6 +98,54 @@ export class PetScene {
         }
       )
     })
+  }
+
+  /** 加载 PMX 模型 + VMD 动画（官方 loadWithAnimation） */
+  async loadModelWithAnimation(
+    modelPath: string,
+    vmdPath: string
+  ): Promise<void> {
+    if (!this.scene) throw new Error('Scene not initialized')
+    if (!this.loader) throw new Error('Loader not initialized')
+    if (!this.helper) throw new Error('Helper not initialized')
+
+    return new Promise((resolve, reject) => {
+      this.loader!.loadWithAnimation(
+        modelPath,
+        vmdPath,
+        (result) => {
+          const { mesh, animation } = result
+
+          this.replaceMesh(mesh)
+
+          // 通过 MMDAnimationHelper 管理动画 + IK + 物理
+          this.helper!.add(mesh, {
+            animation,
+            physics: true,
+          })
+
+          this.scene!.add(mesh)
+          this.fitCameraToModel(mesh)
+          resolve()
+        },
+        undefined,
+        (error) => {
+          reject(error)
+        }
+      )
+    })
+  }
+
+  /** 替换旧模型 */
+  private replaceMesh(mesh: THREE.SkinnedMesh): void {
+    if (this.mesh) {
+      this.scene!.remove(this.mesh)
+      this.mesh.geometry.dispose()
+      if (this.mesh.material instanceof THREE.Material) {
+        this.mesh.material.dispose()
+      }
+    }
+    this.mesh = mesh
   }
 
   /** 自动调整相机以适配模型 */
@@ -122,9 +172,9 @@ export class PetScene {
 
       const delta = this.clock!.getDelta()
 
-      // 更新模型动画（如果有时钟/动画混合器）
-      if (this.mesh && (this.mesh as any).geometry) {
-        // MMD 动画更新由 MMDLoader 内部处理
+      // 更新 MMD 动画（IK、物理、morph 都由 helper 统一处理）
+      if (this.helper) {
+        this.helper.update(delta)
       }
 
       this.renderer!.render(this.scene!, this.camera!)
@@ -172,6 +222,8 @@ export class PetScene {
       }
     }
 
+    this.helper?.dispose()
+
     this.renderer?.dispose()
     this.renderer?.domElement.remove()
 
@@ -180,5 +232,7 @@ export class PetScene {
     this.camera = null
     this.clock = null
     this.mesh = null
+    this.helper = null
+    this.loader = null
   }
 }
