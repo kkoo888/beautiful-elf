@@ -9,7 +9,7 @@ export default defineConfig({
       emptyOutDir: true,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+          index: resolve(__dirname, 'electron/main/index.ts')
         }
       }
     }
@@ -20,7 +20,7 @@ export default defineConfig({
       emptyOutDir: true,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/preload/index.ts')
+          index: resolve(__dirname, 'electron/preload/index.ts')
         }
       }
     }
@@ -38,7 +38,8 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src/renderer'),
-        '@shared': resolve(__dirname, 'src/shared')
+        '@shared': resolve(__dirname, 'src/shared'),
+        '@electron': resolve(__dirname, 'electron')
       }
     },
     plugins: [react()],

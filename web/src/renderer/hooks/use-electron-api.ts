@@ -1,0 +1,77 @@
+import { useCallback, useMemo } from 'react'
+
+/**
+ * 封装 window.electronAPI 调用
+ * 提供类型安全 + 环境检测 + 优雅降级
+ */
+export function useElectronApi() {
+  const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+
+  const windowApi = useMemo(
+    () => ({
+      minimize: async () => {
+        if (isElectron) await window.electronAPI.window.minimize()
+      },
+      maximize: async () => {
+        if (isElectron) await window.electronAPI.window.maximize()
+      },
+      close: async () => {
+        if (isElectron) await window.electronAPI.window.close()
+      },
+      isMaximized: async (): Promise<boolean> => {
+        if (isElectron) return window.electronAPI.window.isMaximized()
+        return false
+      },
+    }),
+    [isElectron]
+  )
+
+  const appApi = useMemo(
+    () => ({
+      getVersion: async (): Promise<string> => {
+        if (isElectron) return window.electronAPI.app.getVersion()
+        return 'unknown'
+      },
+    }),
+    [isElectron]
+  )
+
+  const petApi = useMemo(
+    () => ({
+      show: async () => {
+        if (isElectron) await window.electronAPI.pet.show()
+      },
+      hide: async () => {
+        if (isElectron) await window.electronAPI.pet.hide()
+      },
+      toggle: async () => {
+        if (isElectron) await window.electronAPI.pet.toggle()
+      },
+      getAttributes: async () => {
+        if (isElectron) return window.electronAPI.pet.getAttributes()
+        return null
+      },
+      onScreenshotUpdate: useCallback(
+        (callback: (data: string) => void) => {
+          if (isElectron) window.electronAPI.pet.onScreenshotUpdate(callback)
+        },
+        [isElectron]
+      ),
+      onVisibilityChange: useCallback(
+        (callback: (visible: boolean) => void) => {
+          if (isElectron) window.electronAPI.pet.onVisibilityChange(callback)
+        },
+        [isElectron]
+      ),
+      sendScreenshot: useCallback(
+        (data: string) => {
+          if (isElectron) window.electronAPI.pet.sendScreenshot(data)
+        },
+        [isElectron]
+      ),
+    }),
+    [isElectron]
+  )
+
+  return { isElectron, window: windowApi, app: appApi, pet: petApi }
+}

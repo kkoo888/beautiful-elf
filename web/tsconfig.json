@@ -17,9 +17,9 @@
     "paths": {
       "@/*": ["src/renderer/*"],
       "@shared/*": ["src/shared/*"],
-      "@main/*": ["src/main/*"]
+      "@electron/*": ["electron/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "electron/**/*"],
   "exclude": ["node_modules", "out", "dist"]
 }
