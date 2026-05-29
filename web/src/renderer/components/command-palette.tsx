@@ -124,7 +124,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       closable={false}
       width={600}
       styles={{ body: { padding: 0 } }}
-      destroyOnHidden
+      destroyOnClose
     >
       <Input
         ref={inputRef as React.RefObject<HTMLInputElement>}

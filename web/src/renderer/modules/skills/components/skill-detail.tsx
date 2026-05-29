@@ -64,7 +64,7 @@ export function SkillDetail({ open, skill, onClose, onRefine }: SkillDetailProps
   const skillMd = getMockSkillMd(skill)
 
   return (
-    <Drawer title={`🔧 ${skill.name}`} open={open} onClose={onClose} width={500} destroyOnHidden>
+    <Drawer title={`🔧 ${skill.name}`} open={open} onClose={onClose} width={500} destroyOnClose>
       <div className={styles.detailContent}>
         {/* 基本信息 */}
         <div className={styles.detailSection}>

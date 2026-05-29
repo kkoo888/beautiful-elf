@@ -82,9 +82,9 @@ export default function PetSettingsTab() {
   }, [])
 
   return (
-    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+    <Space direction="vertical" style={{ width: '100%' }} size="middle">
       <Card size="small" title="模型配置">
-        <Space orientation="vertical" style={{ width: '100%' }} size="small">
+        <Space direction="vertical" style={{ width: '100%' }} size="small">
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               选择模型
@@ -140,7 +140,7 @@ export default function PetSettingsTab() {
       </Card>
 
       <Card size="small" title="窗口设置">
-        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <Typography.Text>窗口透明度</Typography.Text>
@@ -160,7 +160,7 @@ export default function PetSettingsTab() {
       </Card>
 
       <Card size="small" title="宠物行为">
-        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
             <Typography.Text>属性衰减速度</Typography.Text>
             <Select

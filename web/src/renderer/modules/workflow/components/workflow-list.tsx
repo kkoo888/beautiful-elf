@@ -30,7 +30,7 @@ export function WorkflowList({ workflows, loading, onEdit, onDelete, onRun }: Wo
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record: Workflow) => (
-        <Space orientation="vertical" size={0}>
+        <Space direction="vertical" size={0}>
           <Text strong>{name}</Text>
           {record.description && (
             <Text type="secondary" style={{ fontSize: 12 }}>

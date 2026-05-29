@@ -14,7 +14,7 @@ export default function PetControlTab() {
 
       {/* 右侧：操作 - 模型信息 - 实时状态 */}
       <Col span={10}>
-        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           {/* 操作 */}
           <Card size="small" title="操作">
             <Space wrap>
@@ -40,7 +40,7 @@ export default function PetControlTab() {
 
           {/* 实时状态 */}
           <Card size="small" title="实时状态">
-            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Badge status="success" />
                 <span>宠物运行中</span>

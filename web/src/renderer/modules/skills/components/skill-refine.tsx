@@ -57,7 +57,7 @@ export function SkillRefine({ open, skill, onClose, onRefine, isRefining }: Skil
       open={open}
       onClose={handleClose}
       width={520}
-      destroyOnHidden
+      destroyOnClose
     >
       <div className={styles.refineContent}>
         {/* 优化提示输入 */}

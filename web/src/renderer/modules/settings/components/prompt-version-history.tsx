@@ -50,7 +50,7 @@ export function PromptVersionHistory({
         onCancel={onClose}
         footer={null}
         width={640}
-        destroyOnHidden
+        destroyOnClose
       >
         <Timeline
           items={sortedVersions.map((version) => ({

@@ -36,7 +36,7 @@ export function FilePreviewModal({ open, onClose, file }: FilePreviewModalProps)
       onCancel={onClose}
       footer={null}
       width="80%"
-      destroyOnHidden
+      destroyOnClose
     >
       {renderContent()}
     </Modal>

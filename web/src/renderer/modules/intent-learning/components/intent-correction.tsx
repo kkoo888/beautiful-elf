@@ -44,7 +44,7 @@ export default function IntentCorrection({
       onCancel={onClose}
       okButtonProps={{ disabled: !selectedModule }}
     >
-      <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+      <Space direction="vertical" style={{ width: '100%' }} size="middle">
         {originalIntent && (
           <div>
             <Typography.Text type="secondary">原始意图：</Typography.Text>

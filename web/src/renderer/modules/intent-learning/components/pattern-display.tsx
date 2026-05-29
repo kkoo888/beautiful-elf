@@ -8,7 +8,7 @@ export default function PatternDisplay() {
   if (patterns.length === 0) return <Empty description="暂无行为模式" />
 
   return (
-    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+    <Space direction="vertical" style={{ width: '100%' }} size="middle">
       {patterns.map((pattern) => (
         <Card key={pattern.id} size="small">
           <Typography.Paragraph style={{ marginBottom: 8 }}>

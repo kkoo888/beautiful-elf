@@ -315,7 +315,7 @@ export function PromptManager() {
         onCancel={() => setIsModalOpen(false)}
         okText="保存"
         cancelText="取消"
-        destroyOnHidden
+        destroyOnClose
       >
         <Form form={form} layout="vertical" preserve={false}>
           <Form.Item
@@ -349,7 +349,7 @@ export function PromptManager() {
         onCancel={() => setAbTestPrompt(null)}
         okText="保存"
         cancelText="取消"
-        destroyOnHidden
+        destroyOnClose
         width={520}
       >
         {abTestPrompt && (

@@ -24,7 +24,7 @@ export function PdfPreview({ name, size }: PdfPreviewProps) {
         minHeight: '300px',
       }}
     >
-      <Space orientation="vertical" align="center" size="large">
+      <Space direction="vertical" align="center" size="large">
         <FilePdfOutlined style={{ fontSize: '64px', color: '#e74c3c' }} />
         <Text strong style={{ fontSize: '16px' }}>
           {name}

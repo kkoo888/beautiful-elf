@@ -126,7 +126,7 @@ export const EventForm = memo<EventFormProps>(function EventForm({
       open={open}
       onClose={onClose}
       width={420}
-      destroyOnHidden
+      destroyOnClose
       footer={
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Button onClick={onClose}>取消</Button>

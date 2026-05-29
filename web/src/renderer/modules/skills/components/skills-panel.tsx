@@ -178,7 +178,7 @@ export default function SkillsPanel() {
         open={chainOpen}
         onClose={() => setChainOpen(false)}
         width={480}
-        destroyOnHidden
+        destroyOnClose
       >
         <SkillChain skills={skills} chainNodes={chainNodes} onChange={handleChainChange} />
       </Drawer>

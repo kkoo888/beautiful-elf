@@ -56,7 +56,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
   }, [githubUrl, onInstall, onClose])
 
   return (
-    <Drawer title="📦 安装技能" open={open} onClose={onClose} width={400} destroyOnHidden>
+    <Drawer title="📦 安装技能" open={open} onClose={onClose} width={400} destroyOnClose>
       <div className={styles.installContent}>
         {/* 文件上传 */}
         <div className={styles.installSection}>

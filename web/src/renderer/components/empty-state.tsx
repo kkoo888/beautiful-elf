@@ -44,7 +44,7 @@ export function EmptyState({
       <Empty
         image={image || Empty.PRESENTED_IMAGE_SIMPLE}
         description={
-          <Space orientation="vertical" size={4}>
+          <Space direction="vertical" size={4}>
             {icon && <span style={{ fontSize: 32 }}>{icon}</span>}
             <Text type="secondary">{description}</Text>
           </Space>

@@ -66,7 +66,7 @@ export function AppSettingsPanel({ settings, onChange }: AppSettingsProps) {
           value={settings.closeBehavior}
           onChange={(e) => onChange({ closeBehavior: e.target.value })}
         >
-          <Space orientation="vertical">
+          <Space direction="vertical">
             <Radio value="minimize">最小化到托盘</Radio>
             <Radio value="exit">直接退出</Radio>
           </Space>
