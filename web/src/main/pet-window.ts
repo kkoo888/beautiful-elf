@@ -18,6 +18,7 @@ export function createPetWindow(): BrowserWindow {
     resizable: false,
     skipTaskbar: true,
     hasShadow: false,
+    show: false, // 默认隐藏，用户手动打开
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
