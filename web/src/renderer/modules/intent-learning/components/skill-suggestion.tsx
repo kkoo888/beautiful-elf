@@ -14,7 +14,7 @@ export default function SkillSuggestion() {
   if (suggestions.length === 0) return <Empty description="暂无技能建议" />
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       {suggestions.map((suggestion) => (
         <Alert
           key={suggestion.id}

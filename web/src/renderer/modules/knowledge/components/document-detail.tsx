@@ -29,7 +29,7 @@ export function DocumentDetail({
   onClose,
 }: DocumentDetailProps) {
   return (
-    <Drawer title="📄 文档分块预览" open={open} onClose={onClose} width={520} destroyOnClose>
+    <Drawer title="📄 文档分块预览" open={open} onClose={onClose} width={520} destroyOnHidden>
       {loading ? (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
           <Spin tip="加载分块中..." />

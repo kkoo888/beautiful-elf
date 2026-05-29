@@ -117,7 +117,7 @@ export function PromptDiff({ versions, leftId, rightId, open, onClose }: PromptD
   const handleRightChange = useCallback((val: string) => setCurrentRightId(val), [])
 
   return (
-    <Modal title="版本对比" open={open} onCancel={onClose} footer={null} width={900} destroyOnClose>
+    <Modal title="版本对比" open={open} onCancel={onClose} footer={null} width={900} destroyOnHidden>
       <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
         <div style={{ flex: 1 }}>
           <Text type="secondary" style={{ fontSize: 12, marginBottom: 4, display: 'block' }}>

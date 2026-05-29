@@ -34,7 +34,7 @@ export function MemoryDetail({ memory, open, onClose, onDelete }: MemoryDetailPr
       open={open}
       onClose={onClose}
       width={480}
-      destroyOnClose
+      destroyOnHidden
       extra={
         <Popconfirm
           title="确定删除这条记忆？"

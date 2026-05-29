@@ -26,7 +26,7 @@ export function ToolList({ tools, loading }: ToolListProps) {
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Text code strong>
             {name}
           </Text>

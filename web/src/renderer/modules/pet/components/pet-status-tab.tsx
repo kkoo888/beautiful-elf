@@ -30,7 +30,7 @@ export default function PetStatusTab() {
   }
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size="middle">
+    <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       <Card size="small" title="宠物属性">
         <Row gutter={[16, 8]}>
           {ATTR_CONFIG.map(({ key, label, icon, color }) => (
