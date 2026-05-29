@@ -29,7 +29,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html')
-        }
+        },
+        external: ['reactflow'],
       }
     },
     resolve: {
