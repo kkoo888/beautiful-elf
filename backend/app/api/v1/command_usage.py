@@ -1,0 +1,36 @@
+"""命令使用统计 API"""
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.services.command_usage_service import CommandUsageService
+from app.schemas.response import success, page_success
+
+router = APIRouter()
+_service = CommandUsageService()
+
+
+@router.post("/record")
+async def record_use(
+    command_id: int = Query(..., description="命令 ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    return success(await _service.record_use(db, command_id))
+
+
+@router.get("/top")
+async def top_commands(
+    limit: int = Query(default=10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    return success(await _service.top_commands(db, limit))
+
+
+@router.get("")
+async def list_command_usage(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    items, total = await _service.list(db, page, page_size)
+    return page_success(items, total, page, page_size)

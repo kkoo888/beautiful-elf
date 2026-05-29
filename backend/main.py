@@ -19,6 +19,13 @@ from app.api.v1 import (
     performance,
     command,
     soul_config,
+    action_log,
+    command_usage,
+    skill,
+    tool,
+    backup,
+    prompt,
+    ai_feedback,
 )
 
 settings = get_settings()
@@ -110,6 +117,13 @@ app.include_router(notification.router, prefix="/api/v1/notifications", tags=["n
 app.include_router(performance.router, prefix="/api/v1/performance", tags=["performance"])
 app.include_router(command.router, prefix="/api/v1/commands", tags=["command"])
 app.include_router(soul_config.router, prefix="/api/v1/soul-configs", tags=["soul_config"])
+app.include_router(skill.router, prefix="/api/v1/skills", tags=["skill"])
+app.include_router(tool.router, prefix="/api/v1/tools", tags=["tool"])
+app.include_router(action_log.router, prefix="/api/v1/action-logs", tags=["action_log"])
+app.include_router(command_usage.router, prefix="/api/v1/command-usage", tags=["command_usage"])
+app.include_router(backup.router, prefix="/api/v1/backups", tags=["backup"])
+app.include_router(prompt.router, prefix="/api/v1/prompts", tags=["prompt"])
+app.include_router(ai_feedback.router, prefix="/api/v1/ai-feedback", tags=["ai_feedback"])
 
 
 if __name__ == "__main__":
