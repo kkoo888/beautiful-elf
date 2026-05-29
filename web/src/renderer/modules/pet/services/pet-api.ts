@@ -122,11 +122,11 @@ interface BackendModelScanResponse {
 }
 
 /** 扫描指定目录下的 3D 模型文件 */
-export async function scanModels(dirPath: string): Promise<string[]> {
+export async function scanModels(dirPath: string): Promise<BackendModelInfo[]> {
   const resp = await apiClient.post('/pets/models/scan', { dir_path: dirPath })
   const body = resp.data as any
   const data: BackendModelScanResponse = body.data
-  return data.models.map((m) => m.name)
+  return data.models
 }
 
 export async function switchPetModel(modelPath: string): Promise<void> {
