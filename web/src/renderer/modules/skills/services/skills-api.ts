@@ -7,6 +7,8 @@ import type {
   SkillQueryParams,
   CreateSkillInput,
   UpdateSkillInput,
+  InstallSkillInput,
+  RefineResult,
   PaginatedResult,
 } from '../types/skills'
 
@@ -62,4 +64,22 @@ export async function recordSkillCall(id: string, success: boolean, durationMs: 
   await apiClient.post(`/skills/${id}/stats/record`, null, {
     params: { success, durationMs },
   })
+}
+
+/** 安装技能 */
+export async function installSkill(input: InstallSkillInput): Promise<Skill> {
+  const resp = await apiClient.post('/skills/install', input)
+  return (resp.data as any).data
+}
+
+/** 切换技能启用/禁用状态 */
+export async function toggleSkill(id: string, enabled: boolean): Promise<Skill> {
+  const resp = await apiClient.patch(`/skills/${id}/toggle`, { enabled })
+  return (resp.data as any).data
+}
+
+/** 炼化技能（LLM 优化建议） */
+export async function refineSkill(id: string, prompt?: string): Promise<RefineResult> {
+  const resp = await apiClient.post(`/skills/${id}/refine`, { prompt })
+  return (resp.data as any).data
 }

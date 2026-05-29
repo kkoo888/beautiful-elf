@@ -4,6 +4,7 @@ import { apiClient } from '@/services/api-client'
 import type {
   ToolInfo,
   ToolStats,
+  ToolStatsSummary,
   ToolQueryParams,
   CreateToolInput,
   UpdateToolInput,
@@ -62,4 +63,10 @@ export async function recordToolCall(id: string, success: boolean, durationMs: n
   await apiClient.post(`/tools/${id}/stats/record`, null, {
     params: { success, durationMs },
   })
+}
+
+/** 获取工具统计汇总 */
+export async function fetchToolStatsSummary(): Promise<ToolStatsSummary> {
+  const resp = await apiClient.get('/tools/stats/summary')
+  return (resp.data as any).data
 }

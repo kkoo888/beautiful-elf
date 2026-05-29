@@ -36,6 +36,21 @@ export interface ToolStats {
   lastCalledAt: string | null
 }
 
+/** 工具统计汇总 */
+export interface ToolStatsSummary {
+  /** 工具总数 */
+  totalTools: number
+  /** 活跃工具数 */
+  activeTools: number
+  /** 总调用次数 */
+  totalCalls: number
+  /** 平均成功率（百分比） */
+  avgSuccessRate: number
+}
+
+/** 工具状态 */
+export type ToolStatus = 'active' | 'inactive' | 'error'
+
 /** 工具列表查询参数 */
 export interface ToolQueryParams {
   page?: number
