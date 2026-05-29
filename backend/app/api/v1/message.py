@@ -1,5 +1,5 @@
 """消息记录 API — RESTful 规范"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,7 +13,7 @@ _service = MessageService()
 
 @router.get("")
 async def list_messages(
-    conversation_id: int = Query(..., description="会话 ID"),
+    conversation_id: int = Path(..., description="会话 ID"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
