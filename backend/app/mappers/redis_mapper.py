@@ -3,7 +3,7 @@ from typing import Optional
 import json
 import redis.asyncio as aioredis
 
-from app.core.database import get_redis
+from app.core.redis_client import get_redis
 from app.core.exceptions import StorageError
 from app.core.logging import get_logger
 

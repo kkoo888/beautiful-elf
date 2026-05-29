@@ -12,7 +12,7 @@ from qdrant_client.models import (
     SearchRequest,
 )
 
-from app.core.database import get_qdrant
+from app.core.qdrant_client import get_qdrant
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)

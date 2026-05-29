@@ -1,7 +1,9 @@
 """健康检查端点 — RESTful 规范"""
 from fastapi import APIRouter
 from sqlalchemy import text
-from app.core.database import AsyncSessionLocal, get_redis, get_qdrant
+from app.core.database import AsyncSessionLocal
+from app.core.redis_client import get_redis
+from app.core.qdrant_client import get_qdrant
 from app.core.logging import get_logger
 from app.schemas.response import ok
 
