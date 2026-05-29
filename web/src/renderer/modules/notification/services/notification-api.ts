@@ -45,10 +45,10 @@ export async function deleteNotification(id: string): Promise<void> {
 
 /** 标记单条通知已读 */
 export async function markRead(id: string): Promise<void> {
-  await apiClient.patch(`/notifications/${id}/read`)
+  await apiClient.put(`/notifications/${id}/read`)
 }
 
 /** 标记全部通知已读 */
 export async function markAllRead(): Promise<void> {
-  await apiClient.post('/notifications/read-all')
+  await apiClient.put('/notifications/read-all')
 }

@@ -7,6 +7,21 @@ from app.repository.pet_repo import PetRepository
 from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate
 from app.core.exceptions import RecordNotFoundError
 
+# 互动类型映射
+INTERACTION_TYPE_NAMES = {
+    0: "feed",
+    1: "clean",
+    2: "chat",
+    3: "play",
+}
+
+INTERACTION_EFFECT_DESC = {
+    0: "饥饿度 +20",
+    1: "清洁度 +20",
+    2: "心情 +15, 亲密 +5",
+    3: "心情 +25, 经验 +10",
+}
+
 
 class PetService:
     def __init__(self):
@@ -83,6 +98,28 @@ class PetService:
         })
 
         return {"pet": self._to_dict(pet), "effect": effect}
+
+    async def get_interactions(
+        self, db: AsyncSession, page: int = 1, page_size: int = 20
+    ) -> Tuple[List[dict], int]:
+        """查询互动记录（分页）"""
+        offset = (page - 1) * page_size
+        items = await self.repo.get_interactions(db, offset=offset, limit=page_size)
+        total = await self.repo.count_interactions(db)
+
+        result = []
+        for item in items:
+            result.append({
+                "id": item.id,
+                "pet_attribute_id": item.pet_attribute_id,
+                "interaction_type": item.interaction_type,
+                "interaction_type_name": INTERACTION_TYPE_NAMES.get(item.interaction_type, "unknown"),
+                "effect_desc": INTERACTION_EFFECT_DESC.get(item.interaction_type, ""),
+                "effect_json": item.effect_json,
+                "created_at": str(item.created_at) if item.created_at else None,
+            })
+
+        return result, total
 
     @staticmethod
     def _to_dict(pet) -> dict:

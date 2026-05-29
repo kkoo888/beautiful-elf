@@ -38,3 +38,7 @@ class PetRepository:
         return await self.interaction_mapper.find_all(
             db, offset=offset, limit=limit, order_by=PetInteraction.created_at.desc()
         )
+
+    async def count_interactions(self, db: AsyncSession) -> int:
+        """统计互动记录总数"""
+        return await self.interaction_mapper.count(db)

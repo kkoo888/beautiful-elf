@@ -1,76 +1,50 @@
-import {} from '@/services/api-client'
+import { apiClient } from '@/services/api-client'
 import type { PaginatedResponse } from '@/types'
 import type { Snippet, SnippetFormData, SnippetQueryParams } from '../types/snippets'
 
-/** Mock 数据 */
-const MOCK_SNIPPETS: Snippet[] = [
-  {
-    id: '1',
-    title: 'React useState Hook',
-    content: `import { useState } from 'react';\n\nfunction Counter() {\n  const [count, setCount] = useState(0);\n  return (\n    <button onClick={() => setCount(c => c + 1)}>\n      Count: {count}\n    </button>\n  );\n}`,
-    language: 'typescript',
-    tags: ['react', 'hooks'],
-    useCount: 42,
-    createdAt: '2026-05-01T10:00:00Z',
-    updatedAt: '2026-05-20T14:30:00Z',
-  },
-  {
-    id: '2',
-    title: 'Python 快速排序',
-    content: `def quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)`,
-    language: 'python',
-    tags: ['algorithm', 'sort'],
-    useCount: 28,
-    createdAt: '2026-04-15T08:00:00Z',
-    updatedAt: '2026-05-10T09:00:00Z',
-  },
-  {
-    id: '3',
-    title: 'CSS Flexbox 居中',
-    content: `.container {\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  min-height: 100vh;\n}`,
-    language: 'css',
-    tags: ['css', 'layout'],
-    useCount: 35,
-    createdAt: '2026-03-20T12:00:00Z',
-    updatedAt: '2026-05-18T16:00:00Z',
-  },
-  {
-    id: '4',
-    title: 'Fetch API 封装',
-    content: `async function request<T>(url: string, options?: RequestInit): Promise<T> {\n  const res = await fetch(url, {\n    headers: { 'Content-Type': 'application/json' },\n    ...options,\n  });\n  if (!res.ok) throw new Error(res.statusText);\n  return res.json();\n}`,
-    language: 'typescript',
-    tags: ['http', 'fetch', 'utils'],
-    useCount: 19,
-    createdAt: '2026-04-01T15:00:00Z',
-    updatedAt: '2026-05-15T11:00:00Z',
-  },
-  {
-    id: '5',
-    title: 'Shell 文件批量重命名',
-    content: '#!/bin/bash\nfor f in *.txt; do\n  mv "$f" "${f%.txt}.md"\ndone',
-    language: 'shell',
-    tags: ['shell', 'batch'],
-    useCount: 12,
-    createdAt: '2026-05-05T10:00:00Z',
-    updatedAt: '2026-05-22T08:00:00Z',
-  },
-]
+// ── 类型映射：后端 snake_case ↔ 前端 camelCase ──────────────────
 
-/** 模拟延迟 */
-const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms))
+interface BackendSnippet {
+  id: number
+  title: string
+  content: string
+  language: string
+  use_count: number
+  tags: string[]
+  created_at: string
+  updated_at: string
+}
 
-/** 获取片段列表（支持搜索、标签筛选、分页） */
+function toFrontend(item: BackendSnippet): Snippet {
+  return {
+    id: String(item.id),
+    title: item.title,
+    content: item.content,
+    language: item.language,
+    tags: item.tags ?? [],
+    useCount: item.use_count ?? 0,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  }
+}
+
+// ── API 函数 ──────────────────────────────────────────────────
+
+/** 获取片段列表 */
 export async function fetchSnippets(
   params?: SnippetQueryParams
 ): Promise<PaginatedResponse<Snippet>> {
-  // 实际请求：
-  // const { data } = await .get<<PaginatedResponse<Snippet>>>('/snippets', { params })
-  // return data.data
+  const resp = await apiClient.get('/snippets', {
+    params: {
+      page: params?.page ?? 1,
+      page_size: params?.pageSize ?? 20,
+      tag: params?.tags?.[0], // 后端只支持单 tag 过滤
+    },
+  })
+  const body = resp.data as any
+  let items: Snippet[] = (body.data ?? []).map(toFrontend)
 
-  await delay()
-  let items = [...MOCK_SNIPPETS]
-
-  // 搜索过滤
+  // 前端关键词过滤（后端暂不支持 keyword）
   if (params?.keyword) {
     const kw = params.keyword.toLowerCase()
     items = items.filter(
@@ -81,79 +55,61 @@ export async function fetchSnippets(
     )
   }
 
-  // 标签过滤
-  if (params?.tags && params.tags.length > 0) {
+  // 前端多标签过滤
+  if (params?.tags && params.tags.length > 1) {
     items = items.filter((s) => params.tags!.some((tag) => s.tags.includes(tag)))
   }
 
-  // 按使用次数排序（高频靠前）
+  // 按使用次数排序
   items.sort((a, b) => b.useCount - a.useCount)
 
-  const page = params?.page ?? 1
-  const pageSize = params?.pageSize ?? 20
-  const total = items.length
-  const start = (page - 1) * pageSize
-  items = items.slice(start, start + pageSize)
-
-  return { items, total, page, pageSize }
+  return {
+    items,
+    total: body.total ?? items.length,
+    page: body.page ?? params?.page ?? 1,
+    pageSize: body.page_size ?? params?.pageSize ?? 20,
+  }
 }
 
 /** 创建片段 */
 export async function createSnippet(data: SnippetFormData): Promise<Snippet> {
-  // const { data: res } = await .post<<Snippet>>('/snippets', data)
-  // return res.data
-
-  await delay()
-  const now = new Date().toISOString()
-  const snippet: Snippet = {
-    id: crypto.randomUUID(),
-    ...data,
-    useCount: 0,
-    createdAt: now,
-    updatedAt: now,
-  }
-  MOCK_SNIPPETS.unshift(snippet)
-  return snippet
+  const resp = await apiClient.post('/snippets', {
+    title: data.title,
+    content: data.content,
+    language: data.language,
+    tags: data.tags,
+  })
+  return toFrontend((resp.data as any).data)
 }
 
 /** 更新片段 */
 export async function updateSnippet(id: string, data: SnippetFormData): Promise<Snippet> {
-  // const { data: res } = await .put<<Snippet>>(`/snippets/${id}`, data)
-  // return res.data
-
-  await delay()
-  const idx = MOCK_SNIPPETS.findIndex((s) => s.id === id)
-  if (idx === -1) throw new Error('Snippet not found')
-  MOCK_SNIPPETS[idx] = {
-    ...MOCK_SNIPPETS[idx],
-    ...data,
-    updatedAt: new Date().toISOString(),
-  }
-  return MOCK_SNIPPETS[idx]
+  const resp = await apiClient.put(`/snippets/${id}`, {
+    title: data.title,
+    content: data.content,
+    language: data.language,
+    tags: data.tags,
+  })
+  return toFrontend((resp.data as any).data)
 }
 
 /** 删除片段 */
 export async function deleteSnippet(id: string): Promise<void> {
-  // await .delete(`/snippets/${id}`)
-
-  await delay()
-  const idx = MOCK_SNIPPETS.findIndex((s) => s.id === id)
-  if (idx !== -1) MOCK_SNIPPETS.splice(idx, 1)
+  await apiClient.delete(`/snippets/${id}`)
 }
 
 /** 记录使用 */
 export async function recordSnippetUse(id: string): Promise<void> {
-  // await .post(`/snippets/${id}/use`)
-
-  await delay(100)
-  const snippet = MOCK_SNIPPETS.find((s) => s.id === id)
-  if (snippet) snippet.useCount += 1
+  await apiClient.post(`/snippets/${id}/use`)
 }
 
-/** 获取所有已用标签 */
+/** 获取所有已用标签（前端聚合，后端无此接口） */
 export async function fetchAllTags(): Promise<string[]> {
-  await delay(100)
+  // 从全量列表中聚合标签
+  const resp = await apiClient.get('/snippets', { params: { page: 1, page_size: 500 } })
+  const body = resp.data as any
+  const items: BackendSnippet[] = body.data ?? []
   const tags = new Set<string>()
-  MOCK_SNIPPETS.forEach((s) => s.tags.forEach((t) => tags.add(t)))
+  items.forEach((s) => (s.tags ?? []).forEach((t: string) => tags.add(t)))
   return Array.from(tags).sort()
 }

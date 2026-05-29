@@ -1,128 +1,121 @@
-import dayjs from 'dayjs'
+import { apiClient } from '@/services/api-client'
 import type { PetAttributes } from '@/types'
 import type { PetInteraction, PetInteractionType } from '../types/pet'
 
-const MOCK_ATTRIBUTES: PetAttributes = {
-  hunger: 65,
-  clean: 80,
-  mood: 70,
-  health: 90,
-  intimacy: 35,
-  level: 3,
+// ── 类型映射 ──────────────────────────────────────────────────
+
+/** 前端互动类型 → 后端 interaction_type 数字 */
+const INTERACTION_TYPE_MAP: Record<PetInteractionType, number> = {
+  feed: 0,
+  clean: 1,
+  chat: 2,
+  play: 3,
 }
 
-const MOCK_INTERACTIONS: PetInteraction[] = [
-  {
-    id: '1',
-    type: 'feed',
-    effect: '饥饿度 +15',
-    createdAt: dayjs().subtract(10, 'minute').toISOString(),
-  },
-  {
-    id: '2',
-    type: 'chat',
-    effect: '心情 +10',
-    createdAt: dayjs().subtract(30, 'minute').toISOString(),
-  },
-  {
-    id: '3',
-    type: 'clean',
-    effect: '清洁度 +20',
-    createdAt: dayjs().subtract(1, 'hour').toISOString(),
-  },
-  {
-    id: '4',
-    type: 'play',
-    effect: '亲密 +5, 心情 +8',
-    createdAt: dayjs().subtract(2, 'hour').toISOString(),
-  },
-  {
-    id: '5',
-    type: 'feed',
-    effect: '饥饿度 +12',
-    createdAt: dayjs().subtract(3, 'hour').toISOString(),
-  },
-  {
-    id: '6',
-    type: 'chat',
-    effect: '心情 +6',
-    createdAt: dayjs().subtract(5, 'hour').toISOString(),
-  },
-]
-
-const INTERACT_EFFECTS: Record<
-  PetInteractionType,
-  { effect: string; delta: Partial<PetAttributes> }
-> = {
-  feed: { effect: '饥饿度 +15', delta: { hunger: 15 } },
-  clean: { effect: '清洁度 +20', delta: { clean: 20 } },
-  chat: { effect: '心情 +10, 亲密 +3', delta: { mood: 10, intimacy: 3 } },
-  play: { effect: '心情 +8, 亲密 +5', delta: { mood: 8, intimacy: 5 } },
+/** 后端 interaction_type 数字 → 前端互动类型 */
+const INTERACTION_TYPE_NAME_MAP: Record<number, PetInteractionType> = {
+  0: 'feed',
+  1: 'clean',
+  2: 'chat',
+  3: 'play',
 }
 
-export async function fetchPetAttributes(): Promise<PetAttributes> {
-  try {
-    // const res = await apiClient.get<PetAttributes>('/pet/attributes')
-    // return res.data
-    throw new Error('use mock')
-  } catch {
-    return { ...MOCK_ATTRIBUTES }
+/** 互动效果描述 */
+const INTERACT_EFFECTS: Record<PetInteractionType, string> = {
+  feed: '饥饿度 +20',
+  clean: '清洁度 +20',
+  chat: '心情 +15, 亲密 +5',
+  play: '心情 +25, 经验 +10',
+}
+
+interface BackendPetAttributes {
+  id: number
+  hunger: number
+  clean: number
+  mood: number
+  health: number
+  intimacy: number
+  level: number
+  exp: number
+  last_active_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+interface BackendInteraction {
+  id: number
+  pet_attribute_id: number
+  interaction_type: number
+  interaction_type_name: string
+  effect_desc: string
+  effect_json: Record<string, number> | null
+  created_at: string | null
+}
+
+function toFrontendPet(data: BackendPetAttributes): PetAttributes {
+  return {
+    hunger: data.hunger,
+    clean: data.clean,
+    mood: data.mood,
+    health: data.health,
+    intimacy: data.intimacy,
+    level: data.level,
   }
 }
 
+// ── API 函数 ──────────────────────────────────────────────────
+
+/** 获取宠物属性 */
+export async function fetchPetAttributes(): Promise<PetAttributes> {
+  const resp = await apiClient.get('/pet-attributes')
+  return toFrontendPet((resp.data as any).data)
+}
+
+/** 宠物互动 */
 export async function interact(
   type: PetInteractionType
 ): Promise<{ attributes: PetAttributes; interaction: PetInteraction }> {
-  try {
-    // const res = await apiClient.post('/pet/interact', { type })
-    // return res.data
-    throw new Error('use mock')
-  } catch {
-    const meta = INTERACT_EFFECTS[type]
-    const updated: PetAttributes = { ...MOCK_ATTRIBUTES }
-    for (const [key, value] of Object.entries(meta.delta)) {
-      const k = key as keyof PetAttributes
-      const current = updated[k] as number
-      ;(updated as Record<string, number>)[k] = Math.min(100, current + (value as number))
-    }
-    const interaction: PetInteraction = {
-      id: Date.now().toString(),
-      type,
-      effect: meta.effect,
-      createdAt: new Date().toISOString(),
-    }
-    return { attributes: updated, interaction }
+  const resp = await apiClient.post('/pet-attributes/interact', {
+    interaction_type: INTERACTION_TYPE_MAP[type],
+  })
+  const result = (resp.data as any).data
+  const interaction: PetInteraction = {
+    id: String(Date.now()),
+    type,
+    effect: INTERACT_EFFECTS[type],
+    createdAt: new Date().toISOString(),
+  }
+  return {
+    attributes: toFrontendPet(result.pet),
+    interaction,
   }
 }
 
-export async function fetchInteractions(): Promise<PetInteraction[]> {
-  try {
-    // const res = await apiClient.get<PetInteraction[]>('/pet/interactions')
-    // return res.data
-    throw new Error('use mock')
-  } catch {
-    return [...MOCK_INTERACTIONS]
-  }
+/** 获取互动记录 */
+export async function fetchInteractions(
+  params: { page?: number; pageSize?: number } = {}
+): Promise<PetInteraction[]> {
+  const resp = await apiClient.get('/pet-attributes/interactions', {
+    params: { page: params.page ?? 1, page_size: params.pageSize ?? 20 },
+  })
+  const body = resp.data as any
+  const items: BackendInteraction[] = body.data ?? []
+  return items.map((item) => ({
+    id: String(item.id),
+    type: INTERACTION_TYPE_NAME_MAP[item.interaction_type] ?? 'feed',
+    effect: item.effect_desc ?? '',
+    createdAt: item.created_at ?? new Date().toISOString(),
+  }))
 }
 
-// ─── 模型管理 ───
+// ─── 模型管理（后端暂未实现） ───
+
 export async function getAvailableModels(): Promise<string[]> {
-  try {
-    // TODO: 调用后端 API 读取本地目录下的 .pmx 文件
-    // const res = await apiClient.get<string[]>('/pet/models')
-    // return res.data
-    throw new Error('use mock')
-  } catch {
-    return ['default.pmx', 'haru.pmx', 'shizuku.pmx']
-  }
+  // TODO: 后端暂未实现模型列表接口
+  return ['default.pmx']
 }
 
-export async function switchPetModel(modelPath: string): Promise<void> {
-  try {
-    // TODO: 调用后端 API 切换模型
-    // await apiClient.post('/pet/switch-model', { modelPath })
-    throw new Error('use mock')
-  } catch {
-    console.log('Switching model to:', modelPath)
-  }
+export async function switchPetModel(_modelPath: string): Promise<void> {
+  // TODO: 后端暂未实现模型切换接口
+  console.log('switchPetModel: 后端暂未实现')
 }

@@ -1,39 +1,53 @@
-/** 性能监控 API 服务（mock 实现） */
-
+import { apiClient } from '@/services/api-client'
 import type { PerformanceMetric } from '../types/performance'
 
-/** 生成指定范围内的随机数 */
-function randomInRange(min: number, max: number): number {
-  return Number((Math.random() * (max - min) + min).toFixed(1))
+// ── 类型映射：后端 → 前端 ─────────────────────────────────────
+
+interface BackendMetric {
+  id: number
+  cpu_percent: number
+  memory_percent: number
+  memory_used_mb: number
+  disk_percent: number
+  disk_used_gb: number
+  gpu_percent: number | null
+  created_at: string
 }
 
-/** 生成 mock 性能数据（最近 30 个数据点，间隔 5 秒） */
-export async function fetchPerformanceMetrics(): Promise<PerformanceMetric[]> {
-  // 模拟网络延迟
-  await new Promise((r) => setTimeout(r, 200))
+interface BackendCurrentStatus {
+  cpu_percent: number
+  memory_percent: number
+  memory_used_mb: number
+  memory_total_mb: number
+  disk_percent: number
+  disk_used_gb: number
+  disk_total_gb: number
+  gpu_percent: number | null
+  uptime_seconds: number
+}
 
-  const now = Date.now()
-  const points: PerformanceMetric[] = []
-
-  // 基准值，模拟小幅波动
-  let cpuBase = 45
-  let memoryBase = 60
-  let diskBase = 58
-
-  for (let i = 29; i >= 0; i--) {
-    // 在基准值附近波动
-    cpuBase = Math.max(25, Math.min(75, cpuBase + (Math.random() - 0.48) * 8))
-    memoryBase = Math.max(35, Math.min(82, memoryBase + (Math.random() - 0.47) * 5))
-    diskBase = Math.max(48, Math.min(72, diskBase + (Math.random() - 0.5) * 3))
-
-    points.push({
-      cpu: randomInRange(cpuBase - 5, cpuBase + 5),
-      memory: randomInRange(memoryBase - 4, memoryBase + 4),
-      disk: randomInRange(diskBase - 2, diskBase + 2),
-      gpu: randomInRange(20, 60),
-      timestamp: new Date(now - i * 5000).toISOString(),
-    })
+function toFrontendMetric(item: BackendMetric): PerformanceMetric {
+  return {
+    cpu: item.cpu_percent,
+    memory: item.memory_percent,
+    disk: item.disk_percent,
+    gpu: item.gpu_percent ?? undefined,
+    timestamp: item.created_at,
   }
+}
 
-  return points
+// ── API 函数 ──────────────────────────────────────────────────
+
+/** 获取历史性能指标 */
+export async function fetchPerformanceMetrics(): Promise<PerformanceMetric[]> {
+  const resp = await apiClient.get('/performance/metrics', { params: { limit: 30 } })
+  const body = resp.data as any
+  const items: BackendMetric[] = body.data ?? []
+  return items.map(toFrontendMetric)
+}
+
+/** 获取当前系统状态 */
+export async function fetchCurrentStatus(): Promise<BackendCurrentStatus> {
+  const resp = await apiClient.get('/performance/current')
+  return (resp.data as any).data
 }

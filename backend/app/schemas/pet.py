@@ -36,3 +36,15 @@ class PetInteractionCreate(BaseModel):
     """创建互动记录"""
     interaction_type: int = Field(..., ge=0, description="互动类型")
     effect_json: Optional[Any] = Field(None, description="属性变化效果")
+
+
+class PetInteractionOut(BaseModel):
+    """互动记录输出"""
+    id: int
+    pet_attribute_id: int
+    interaction_type: int
+    effect_json: Optional[Any] = None
+    created_at: str
+
+    class Config:
+        from_attributes = True

@@ -1,171 +1,80 @@
+import { apiClient } from '@/services/api-client'
 import type { ClipboardItem, ClipboardListParams, ClipboardListResponse } from '../types/clipboard'
 
-// ============================================================
-// Mock 数据
-// ============================================================
+// ── 类型映射：后端 snake_case ↔ 前端 camelCase ──────────────────
 
-const MOCK_ITEMS: ClipboardItem[] = [
-  {
-    id: '1',
-    content: 'npm install react-window @types/react-window',
-    contentType: 'code',
-    language: 'bash',
-    isPinned: true,
-    copiedAt: '2026-05-28T10:30:00Z',
-    createdAt: '2026-05-28T10:30:00Z',
-  },
-  {
-    id: '2',
-    content: '这是一段普通的剪贴板文本内容，用于测试显示效果。',
-    contentType: 'text',
-    isPinned: false,
-    copiedAt: '2026-05-28T10:25:00Z',
-    createdAt: '2026-05-28T10:25:00Z',
-  },
-  {
-    id: '3',
-    content: 'https://github.com/nicolestandifer3/react-window',
-    contentType: 'link',
-    isPinned: false,
-    copiedAt: '2026-05-28T10:20:00Z',
-    createdAt: '2026-05-28T10:20:00Z',
-  },
-  {
-    id: '4',
-    content: `function fibonacci(n: number): number {
-  if (n <= 1) return n
-  return fibonacci(n - 1) + fibonacci(n - 2)
+interface BackendClipboardItem {
+  id: number
+  content: string
+  content_type: number
+  pinned: number
+  source_app: string
+  created_at: string | null
+  updated_at: string | null
 }
 
-console.log(fibonacci(10)) // 55`,
-    contentType: 'code',
-    language: 'typescript',
-    isPinned: true,
-    copiedAt: '2026-05-28T10:15:00Z',
-    createdAt: '2026-05-28T10:15:00Z',
-  },
-  {
-    id: '5',
-    content: 'Beautiful-Elf 是一个温暖亲切的桌面宠物助手，帮你管理日常任务。',
-    contentType: 'text',
-    isPinned: false,
-    copiedAt: '2026-05-28T10:10:00Z',
-    createdAt: '2026-05-28T10:10:00Z',
-  },
-  {
-    id: '6',
-    content: 'https://ant.design/index-cn',
-    contentType: 'link',
-    isPinned: false,
-    copiedAt: '2026-05-28T10:05:00Z',
-    createdAt: '2026-05-28T10:05:00Z',
-  },
-  {
-    id: '7',
-    content: `import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-
-const useStore = create()(
-  persist(
-    (set) => ({
-      count: 0,
-      increment: () => set((s) => ({ count: s.count + 1 }))
-    }),
-    { name: 'my-store' }
-  )
-)`,
-    contentType: 'code',
-    language: 'typescript',
-    isPinned: false,
-    copiedAt: '2026-05-28T10:00:00Z',
-    createdAt: '2026-05-28T10:00:00Z',
-  },
-  {
-    id: '8',
-    content: '剪贴板历史最多保留 1000 条记录，超过后自动清理最早的内容。',
-    contentType: 'text',
-    isPinned: false,
-    copiedAt: '2026-05-28T09:55:00Z',
-    createdAt: '2026-05-28T09:55:00Z',
-  },
-  {
-    id: '9',
-    content: `SELECT u.name, COUNT(o.id) AS order_count
-FROM users u
-LEFT JOIN orders o ON u.id = o.user_id
-WHERE o.created_at > '2026-01-01'
-GROUP BY u.name
-HAVING order_count > 5
-ORDER BY order_count DESC;`,
-    contentType: 'code',
-    language: 'sql',
-    isPinned: false,
-    copiedAt: '2026-05-28T09:50:00Z',
-    createdAt: '2026-05-28T09:50:00Z',
-  },
-  {
-    id: '10',
-    content:
-      'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-    contentType: 'text',
-    isPinned: false,
-    copiedAt: '2026-05-28T09:45:00Z',
-    createdAt: '2026-05-28T09:45:00Z',
-  },
-]
-
-// 生成更多 mock 数据
-for (let i = 11; i <= 50; i++) {
-  const types: ClipboardItem['contentType'][] = ['text', 'code', 'link']
-  const type = types[i % 3]
-  MOCK_ITEMS.push({
-    id: String(i),
-    content:
-      type === 'link'
-        ? `https://example.com/page/${i}`
-        : type === 'code'
-          ? `// 代码片段 #${i}\nconst value = ${i};`
-          : `这是第 ${i} 条剪贴板内容，用于测试虚拟滚动性能。`,
-    contentType: type,
-    language: type === 'code' ? 'javascript' : undefined,
-    isPinned: false,
-    copiedAt: new Date(Date.now() - i * 300_000).toISOString(),
-    createdAt: new Date(Date.now() - i * 300_000).toISOString(),
-  })
+/** 后端 content_type 数字 → 前端 contentType 字符串 */
+function mapContentType(ct: number): ClipboardItem['contentType'] {
+  switch (ct) {
+    case 1: return 'code'
+    case 2: return 'image'
+    case 3: return 'link'
+    default: return 'text'
+  }
 }
 
-// 模拟网络延迟
-const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms))
+/** 前端 contentType 字符串 → 后端 content_type 数字 */
+function unmapContentType(ct: ClipboardItem['contentType']): number {
+  switch (ct) {
+    case 'code': return 1
+    case 'image': return 2
+    case 'link': return 3
+    default: return 0
+  }
+}
 
-// ============================================================
-// API 函数（mock 实现，后续替换为真实 API）
-// ============================================================
+function toFrontend(item: BackendClipboardItem): ClipboardItem {
+  return {
+    id: String(item.id),
+    content: item.content,
+    contentType: mapContentType(item.content_type),
+    isPinned: item.pinned === 1,
+    copiedAt: item.updated_at ?? item.created_at ?? new Date().toISOString(),
+    createdAt: item.created_at ?? new Date().toISOString(),
+  }
+}
+
+// ── API 函数 ──────────────────────────────────────────────────
 
 /** 获取剪贴板列表 */
 export async function fetchClipboardList(
   params: ClipboardListParams = {}
 ): Promise<ClipboardListResponse> {
   const { page = 1, pageSize = 20, keyword } = params
-  await delay()
+  const resp = await apiClient.get('/clipboard-items', {
+    params: { page, page_size: pageSize },
+  })
+  const body = resp.data as any
+  const items: ClipboardItem[] = (body.data ?? []).map(toFrontend)
 
-  let filtered = [...MOCK_ITEMS]
+  // 前端关键词过滤（后端暂不支持 keyword 搜索）
+  let filtered = items
   if (keyword) {
     const lower = keyword.toLowerCase()
-    filtered = filtered.filter((item) => item.content.toLowerCase().includes(lower))
+    filtered = items.filter((item) => item.content.toLowerCase().includes(lower))
   }
 
   // 固定项排在最前
   filtered.sort((a, b) => {
     if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
-    return new Date(b.copiedAt).getTime() - new Date(a.copiedAt).getTime()
+    return 0
   })
 
-  const start = (page - 1) * pageSize
   return {
-    items: filtered.slice(start, start + pageSize),
-    total: filtered.length,
-    page,
-    pageSize,
+    items: filtered,
+    total: body.total ?? filtered.length,
+    page: body.page ?? page,
+    pageSize: body.page_size ?? pageSize,
   }
 }
 
@@ -173,33 +82,20 @@ export async function fetchClipboardList(
 export async function createClipboardItem(
   data: Pick<ClipboardItem, 'content' | 'contentType' | 'language'>
 ): Promise<ClipboardItem> {
-  await delay()
-  const now = new Date().toISOString()
-  const item: ClipboardItem = {
-    id: String(Date.now()),
+  const resp = await apiClient.post('/clipboard-items', {
     content: data.content,
-    contentType: data.contentType,
-    language: data.language,
-    isPinned: false,
-    copiedAt: now,
-    createdAt: now,
-  }
-  MOCK_ITEMS.unshift(item)
-  return item
+    content_type: unmapContentType(data.contentType),
+  })
+  return toFrontend((resp.data as any).data)
 }
 
 /** 删除剪贴板条目 */
 export async function deleteClipboardItem(id: string): Promise<void> {
-  await delay()
-  const idx = MOCK_ITEMS.findIndex((item) => item.id === id)
-  if (idx !== -1) MOCK_ITEMS.splice(idx, 1)
+  await apiClient.delete(`/clipboard-items/${id}`)
 }
 
 /** 固定/取消固定 */
 export async function togglePinClipboardItem(id: string): Promise<ClipboardItem> {
-  await delay()
-  const item = MOCK_ITEMS.find((i) => i.id === id)
-  if (!item) throw new Error(`ClipboardItem ${id} not found`)
-  item.isPinned = !item.isPinned
-  return { ...item }
+  const resp = await apiClient.put(`/clipboard-items/${id}/pin`)
+  return toFrontend((resp.data as any).data)
 }
