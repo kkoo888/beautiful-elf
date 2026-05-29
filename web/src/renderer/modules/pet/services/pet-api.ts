@@ -132,3 +132,51 @@ export async function scanModels(dirPath: string): Promise<BackendModelInfo[]> {
 export async function switchPetModel(modelPath: string): Promise<void> {
   await apiClient.post('/pets/models/switch', { model_path: modelPath })
 }
+
+// ─── 宠物设置持久化 ───
+
+interface BackendConfigItem {
+  key_value: string
+}
+
+/** 加载宠物设置（从 configs 表读取 pet_settings） */
+export async function loadPetSettings(): Promise<Record<string, unknown> | null> {
+  try {
+    const resp = await apiClient.get('/configs/pet_settings')
+    const item = (resp.data as any).data as BackendConfigItem
+    if (item?.key_value) {
+      return JSON.parse(item.key_value)
+    }
+  } catch {
+    // key 不存在返回 null
+  }
+  return null
+}
+
+/** 保存宠物设置（写入 configs 表 pet_settings） */
+export async function savePetSettings(settings: Record<string, unknown>): Promise<void> {
+  const jsonStr = JSON.stringify(settings)
+  try {
+    await apiClient.put('/configs/pet_settings', {
+      value: jsonStr,
+      description: '宠物设置（JSON）',
+    })
+  } catch {
+    await apiClient.post('/configs', {
+      key: 'pet_settings',
+      value: jsonStr,
+      description: '宠物设置（JSON）',
+    })
+  }
+}
+
+/** 获取已保存的模型路径（从 configs 表读取 pet_model_path） */
+export async function loadPetModelPath(): Promise<string | null> {
+  try {
+    const resp = await apiClient.get('/configs/pet_model_path')
+    const item = (resp.data as any).data as BackendConfigItem
+    return item?.key_value ?? null
+  } catch {
+    return null
+  }
+}

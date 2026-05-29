@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Card,
@@ -11,6 +11,7 @@ import {
   Typography,
   Descriptions,
   message,
+  Spin,
 } from 'antd'
 import {
   FolderOpenOutlined,
@@ -21,21 +22,61 @@ import {
 } from '@ant-design/icons'
 import { useElectronApi } from '@/hooks'
 import { DEFAULT_PET_SETTINGS, DECAY_SPEED_OPTIONS, type PetSettings } from '../types/pet'
-import { scanModels, switchPetModel } from '../services/pet-api'
+import {
+  scanModels,
+  switchPetModel,
+  loadPetSettings,
+  savePetSettings,
+  loadPetModelPath,
+} from '../services/pet-api'
 
 export default function PetSettingsTab() {
   const [settings, setSettings] = useState<PetSettings>(DEFAULT_PET_SETTINGS)
   const [petVisible, setPetVisible] = useState(false)
+  const [loading, setLoading] = useState(true)
   const queryClient = useQueryClient()
   const { pet: petApi, dialog: dialogApi, isElectron } = useElectronApi()
   const [modelDir, setModelDir] = useState<string>('')
 
+  // ── 启动时加载已保存的设置 ──
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [saved, savedModelPath] = await Promise.all([
+          loadPetSettings(),
+          loadPetModelPath(),
+        ])
+        if (saved) {
+          setSettings({
+            modelPath: (saved.modelPath as string) ?? savedModelPath ?? DEFAULT_PET_SETTINGS.modelPath,
+            opacity: (saved.opacity as number) ?? DEFAULT_PET_SETTINGS.opacity,
+            decaySpeed: (saved.decaySpeed as PetSettings['decaySpeed']) ?? DEFAULT_PET_SETTINGS.decaySpeed,
+            bubbleFrequency: (saved.bubbleFrequency as number) ?? DEFAULT_PET_SETTINGS.bubbleFrequency,
+          })
+          if (saved.modelDir) {
+            setModelDir(saved.modelDir as string)
+          }
+        } else if (savedModelPath) {
+          // 没有完整设置，但有模型路径（从 switch_model 保存的）
+          setSettings((prev) => ({ ...prev, modelPath: savedModelPath }))
+          // 从模型路径推导目录
+          const dir = savedModelPath.substring(0, savedModelPath.lastIndexOf('/'))
+          if (dir) setModelDir(dir)
+        }
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  // ── 扫描模型（有目录时自动触发）──
   const { data: models = [], isLoading: modelsLoading } = useQuery({
     queryKey: ['pet-models', modelDir],
     queryFn: () => scanModels(modelDir),
     enabled: !!modelDir,
   })
 
+  // ── 切换模型 ──
   const switchMutation = useMutation({
     mutationFn: switchPetModel,
     onSuccess: () => {
@@ -47,19 +88,40 @@ export default function PetSettingsTab() {
     },
   })
 
+  // ── 持久化保存设置（防抖）──
+  const persistTimer = useState<{ current: ReturnType<typeof setTimeout> | null }>({ current: null })[0]
+
+  const persistSettings = useCallback(
+    (next: PetSettings, dir: string) => {
+      if (persistTimer.current) clearTimeout(persistTimer.current)
+      persistTimer.current = setTimeout(() => {
+        void savePetSettings({ ...next, modelDir: dir })
+      }, 500)
+    },
+    [persistTimer]
+  )
+
   const updateSetting = useCallback(
     <K extends keyof PetSettings>(key: K, value: PetSettings[K]) => {
-      setSettings((prev) => ({ ...prev, [key]: value }))
+      setSettings((prev) => {
+        const next = { ...prev, [key]: value }
+        persistSettings(next, modelDir)
+        return next
+      })
     },
-    []
+    [modelDir, persistSettings]
   )
 
   const handleModelChange = useCallback(
     (modelPath: string) => {
-      updateSetting('modelPath', modelPath)
+      setSettings((prev) => {
+        const next = { ...prev, modelPath }
+        persistSettings(next, modelDir)
+        return next
+      })
       switchMutation.mutate(modelPath)
     },
-    [updateSetting, switchMutation]
+    [modelDir, persistSettings, switchMutation]
   )
 
   const handleTogglePet = useCallback(async () => {
@@ -76,14 +138,28 @@ export default function PetSettingsTab() {
     const dir = await dialogApi.selectDirectory()
     if (dir) {
       setModelDir(dir)
+      // 目录变更也持久化
+      setSettings((prev) => {
+        persistSettings(prev, dir)
+        return prev
+      })
       message.info(`已选择目录: ${dir}`)
     }
-  }, [dialogApi])
+  }, [dialogApi, persistSettings])
 
   const handleSaveSettings = useCallback(() => {
-    // TODO: persist settings to store/backend
-    message.success('设置已保存')
-  }, [])
+    void savePetSettings({ ...settings, modelDir }).then(() => {
+      message.success('设置已保存')
+    })
+  }, [settings, modelDir])
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 40 }}>
+        <Spin tip="加载设置中..." />
+      </div>
+    )
+  }
 
   return (
     <Space orientation="vertical" style={{ width: '100%' }} size="middle">
