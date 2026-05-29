@@ -13,8 +13,10 @@ export interface UsePerformanceReturn {
   latest: PerformanceMetric | undefined
   /** 全部历史数据 */
   metrics: PerformanceMetric[]
-  /** 是否加载中 */
+  /** 是否首次加载中（无数据时） */
   isLoading: boolean
+  /** 是否正在刷新（后台轮询） */
+  isFetching: boolean
   /** 错误信息 */
   error: Error | null
   /** 当前告警列表 */
@@ -74,11 +76,13 @@ export function usePerformance(
   const {
     data: metrics = [],
     isLoading,
+    isFetching,
     error,
   } = useQuery({
     queryKey: METRICS_KEY,
     queryFn: fetchPerformanceMetrics,
     refetchInterval: pollInterval,
+    staleTime: 0, // 始终认为是过期的，保证每次轮询都获取新数据
   })
 
   const latest = useMemo(() => {
@@ -91,6 +95,7 @@ export function usePerformance(
     latest,
     metrics,
     isLoading,
+    isFetching,
     error: error as Error | null,
     alerts,
     hasAlerts: alerts.length > 0,

@@ -18,66 +18,20 @@
 
 /* 指标卡片 */
 .metricCard {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px 16px;
   border-radius: 12px;
-  background: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-border-secondary);
   transition: all 0.3s ease;
 }
 
 .metricCard:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-}
-
-.metricCardWarning {
-  border-color: var(--ant-color-error);
-  box-shadow: 0 0 0 1px var(--ant-color-error-border);
-  animation: pulseWarning 2s infinite;
-}
-
-.metricHeader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.metricIcon {
-  font-size: 20px;
-}
-
-.metricTitle {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ant-color-text);
-}
-
-.metricBody {
-  margin-bottom: 8px;
-}
-
-.metricValue {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.metricUnit {
-  font-size: 12px;
-  font-weight: 400;
-  opacity: 0.7;
-  margin-left: 2px;
-}
-
-.metricFooter {
-  font-size: 12px;
-  color: var(--ant-color-text-secondary);
-  cursor: help;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 /* 图表区域 */
+.chartCard {
+  border-radius: 12px;
+}
+
 .chartSection {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -89,7 +43,6 @@
   padding: 16px;
   border-radius: 12px;
   background: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-border-secondary);
   min-height: 200px;
 }
 
