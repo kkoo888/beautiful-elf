@@ -4,7 +4,7 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { StatusBar } from './status-bar'
-import { useTheme } from '@/hooks'
+import { useTheme, useElectronApi } from '@/hooks'
 
 const { Content } = Layout
 
@@ -16,6 +16,7 @@ const { Content } = Layout
  */
 export function AppLayout() {
   const [isMaximized, setIsMaximized] = useState(true)
+  const { window: windowApi, isElectron } = useElectronApi()
 
   // 初始化主题
   useTheme()
@@ -23,13 +24,13 @@ export function AppLayout() {
   // 监听窗口最大化状态
   useEffect(() => {
     const checkMaximized = async () => {
-      if (window.electronAPI) {
-        const maximized = await window.electronAPI.window.isMaximized()
+      if (isElectron) {
+        const maximized = await windowApi.isMaximized()
         setIsMaximized(maximized)
       }
     }
     checkMaximized()
-  }, [])
+  }, [isElectron, windowApi])
 
   return (
     <Layout style={{ height: '100vh' }}>

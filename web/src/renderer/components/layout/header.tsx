@@ -10,7 +10,7 @@ import {
   BellOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { useIPC, useTheme } from '@/hooks'
+import { useElectronApi, useTheme } from '@/hooks'
 import { useNotificationStore } from '@/stores/use-notification-store'
 import { useCommandStore } from '@/stores/use-command-store'
 
@@ -25,7 +25,7 @@ interface HeaderProps {
  * 包含：命令面板入口、主题切换、通知、窗口控制
  */
 export function Header({ isMaximized }: HeaderProps) {
-  const { minimizeWindow, maximizeWindow, closeWindow } = useIPC()
+  const { window: windowApi } = useElectronApi()
   const { isDark, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const unreadCount = useNotificationStore((state) => state.unreadCount)
@@ -70,17 +70,17 @@ export function Header({ isMaximized }: HeaderProps) {
         <div style={{ width: 1, height: 20, backgroundColor: 'var(--ant-color-border)' }} />
 
         <Tooltip title="最小化">
-          <Button type="text" icon={<MinusOutlined />} onClick={minimizeWindow} />
+          <Button type="text" icon={<MinusOutlined />} onClick={() => windowApi.minimize()} />
         </Tooltip>
         <Tooltip title={isMaximized ? '还原' : '最大化'}>
           <Button
             type="text"
             icon={isMaximized ? <CompressOutlined /> : <ExpandOutlined />}
-            onClick={maximizeWindow}
+            onClick={() => windowApi.maximize()}
           />
         </Tooltip>
         <Tooltip title="关闭">
-          <Button type="text" icon={<CloseOutlined />} onClick={closeWindow} danger />
+          <Button type="text" icon={<CloseOutlined />} onClick={() => windowApi.close()} danger />
         </Tooltip>
       </Space>
     </AntHeader>

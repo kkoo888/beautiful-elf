@@ -19,6 +19,7 @@ import {
   SettingOutlined,
   ReloadOutlined,
 } from '@ant-design/icons'
+import { useElectronApi } from '@/hooks'
 import { DEFAULT_PET_SETTINGS, DECAY_SPEED_OPTIONS, type PetSettings } from '../types/pet'
 import { getAvailableModels, switchPetModel } from '../services/pet-api'
 
@@ -26,6 +27,7 @@ export default function PetSettingsTab() {
   const [settings, setSettings] = useState<PetSettings>(DEFAULT_PET_SETTINGS)
   const [petVisible, setPetVisible] = useState(false)
   const queryClient = useQueryClient()
+  const { pet: petApi, isElectron } = useElectronApi()
 
   const { data: models = [], isLoading: modelsLoading } = useQuery({
     queryKey: ['pet-models'],
@@ -59,22 +61,19 @@ export default function PetSettingsTab() {
   )
 
   const handleTogglePet = useCallback(async () => {
-    const api = window.electronAPI?.pet
-    if (!api) return
-    await api.toggle()
-    setPetVisible((v) => !v)
-    message.info(petVisible ? '宠物窗口已隐藏' : '宠物窗口已显示')
-  }, [petVisible])
-
-  const handleOpenModelDir = useCallback(async () => {
-    const api = window.electronAPI?.shell
-    if (!api?.openPath) {
-      message.warning('当前环境不支持打开目录')
+    if (!isElectron) {
+      message.warning('当前环境不支持宠物窗口')
       return
     }
-    // 打开模型所在目录，实际路径由后端决定
-    await api.openPath(settings.modelPath || '.')
-  }, [settings.modelPath])
+    await petApi.toggle()
+    setPetVisible((v) => !v)
+    message.info(petVisible ? '宠物窗口已隐藏' : '宠物窗口已显示')
+  }, [petVisible, petApi, isElectron])
+
+  const handleOpenModelDir = useCallback(() => {
+    // TODO: 需要在 preload 中添加 shell.openPath API
+    message.warning('打开目录功能需要额外配置')
+  }, [])
 
   const handleSaveSettings = useCallback(() => {
     // TODO: persist settings to store/backend

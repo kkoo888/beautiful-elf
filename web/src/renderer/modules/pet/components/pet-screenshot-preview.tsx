@@ -1,31 +1,30 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Card, Typography, Button } from 'antd'
 import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons'
+import { useElectronApi } from '@/hooks'
 
 export default function PetScreenshotPreview() {
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [petVisible, setPetVisible] = useState(false)
+  const { pet: petApi, isElectron } = useElectronApi()
 
   useEffect(() => {
-    const api = window.electronAPI?.pet
-    if (!api) return
+    if (!isElectron) return
 
-    api.onScreenshotUpdate((data: string) => {
+    petApi.onScreenshotUpdate((data: string) => {
       setScreenshot(data)
     })
 
-    api.onVisibilityChange((visible: boolean) => {
+    petApi.onVisibilityChange((visible: boolean) => {
       setPetVisible(visible)
     })
-
-    return () => {
-      // Electron IPC listeners are cleaned up when window closes
-    }
-  }, [])
+  }, [isElectron, petApi])
 
   const handleTogglePet = useCallback(async () => {
-    await window.electronAPI?.pet?.toggle()
-  }, [])
+    if (isElectron) {
+      await petApi.toggle()
+    }
+  }, [isElectron, petApi])
 
   return (
     <Card
