@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PetScene } from './modules/pet/scene/pet-scene'
 
 /**
@@ -10,8 +10,9 @@ export default function PetApp() {
   const sceneRef = useRef<PetScene | null>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<string>('初始化中...')
 
-  // 初始化 3D 场景
+  // 初始化 3D 场景 + 加载模型
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -19,19 +20,35 @@ export default function PetApp() {
     const scene = new PetScene(container)
     sceneRef.current = scene
 
-    scene
-      .init()
-      .then(() => {
+    const initPet = async () => {
+      try {
+        setStatus('初始化 3D 场景...')
+        await scene.init()
         setReady(true)
+
+        // 从后端读取已保存的模型路径
+        setStatus('读取模型配置...')
+        const modelPath = await fetchModelPath()
+
+        if (modelPath) {
+          setStatus(`加载模型: ${modelPath.split('/').pop() || modelPath}`)
+          await scene.loadModel(modelPath)
+          setStatus('模型加载完成')
+        } else {
+          setStatus('未配置模型，请在设置中选择模型目录')
+        }
+
         // 通知主窗口：宠物已就绪
         if (window.electronAPI?.pet) {
           window.electronAPI.pet.sendScreenshot('')
         }
-      })
-      .catch((err) => {
+      } catch (err: any) {
         console.error('[PetApp] init failed:', err)
         setError(err.message || '初始化失败')
-      })
+      }
+    }
+
+    initPet()
 
     // 可见性变化 → 控制渲染帧率
     const cleanup = window.electronAPI?.pet?.onVisibilityChange((visible: boolean) => {
@@ -65,18 +82,25 @@ export default function PetApp() {
     return () => clearInterval(timer)
   }, [ready])
 
-  // 监听主窗口请求属性
+  // 监听主窗口请求模型切换
   useEffect(() => {
     if (!window.electronAPI?.pet) return
 
-    const handler = () => {
-      // 返回当前宠物状态给主窗口
-      const ipcRenderer = (window as any).electronAPI?.pet
-      // 通过 IPC 回传属性（如果需要）
-    }
+    const cleanup = window.electronAPI.pet.onVisibilityChange(async (visible: boolean) => {
+      if (visible && sceneRef.current) {
+        // 每次窗口显示时检查模型是否有更新
+        try {
+          const modelPath = await fetchModelPath()
+          if (modelPath) {
+            await sceneRef.current.loadModel(modelPath)
+          }
+        } catch (e) {
+          console.warn('[PetApp] refresh model failed:', e)
+        }
+      }
+    })
 
-    // electron 暴露的 API 不直接支持 on，需要通过 preload 桥接
-    // 这里预留接口
+    return () => cleanup?.()
   }, [])
 
   return (
@@ -87,8 +111,27 @@ export default function PetApp() {
         height: '100vh',
         overflow: 'hidden',
         background: 'transparent',
+        position: 'relative',
       }}
     >
+      {/* 状态提示（开发阶段可见，生产可隐藏） */}
+      {status && !error && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            left: 8,
+            right: 8,
+            color: 'rgba(255,255,255,0.6)',
+            fontSize: 11,
+            textAlign: 'center',
+            pointerEvents: 'none',
+            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+          }}
+        >
+          {status}
+        </div>
+      )}
       {error && (
         <div
           style={{
@@ -109,4 +152,40 @@ export default function PetApp() {
       )}
     </div>
   )
+}
+
+/**
+ * 从后端读取已保存的模型路径
+ * 优先读 pet_settings（含 modelPath），回退到 pet_model_path
+ */
+async function fetchModelPath(): Promise<string | null> {
+  const base = 'http://localhost:8000/api/v1'
+
+  try {
+    // 先尝试读 pet_settings 里的 modelPath
+    const settingsResp = await fetch(`${base}/configs/pet_settings`)
+    if (settingsResp.ok) {
+      const body = await settingsResp.json()
+      const value = body?.data?.key_value
+      if (value) {
+        const parsed = JSON.parse(value)
+        if (parsed.modelPath) return parsed.modelPath
+      }
+    }
+  } catch {
+    // pet_settings 不存在，继续
+  }
+
+  try {
+    // 回退：读 pet_model_path（switch_model 保存的）
+    const resp = await fetch(`${base}/configs/pet_model_path`)
+    if (resp.ok) {
+      const body = await resp.json()
+      return body?.data?.key_value ?? null
+    }
+  } catch {
+    // 都没有
+  }
+
+  return null
 }
