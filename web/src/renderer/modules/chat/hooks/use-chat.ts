@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useRef } from 'react'
-import { useChatStore } from '@/stores/useChatStore'
+import { useChatStore } from '@/stores/use-chat-store'
 import { chat, chatStream, submitFeedback } from '../services/chat-api'
 import type {
   ChatMessage,
