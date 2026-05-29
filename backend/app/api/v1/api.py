@@ -28,8 +28,8 @@ from app.api.v1 import (
 
 api_router = APIRouter()
 
-# 健康检查
-api_router.include_router(health.router, prefix="/health", tags=["health"])
+# 健康检查（路由已包含完整路径，不加 prefix）
+api_router.include_router(health.router, tags=["health"])
 
 # 核心业务
 api_router.include_router(conversation.router, prefix="/conversations", tags=["conversation"])
