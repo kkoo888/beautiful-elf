@@ -1,12 +1,12 @@
 /** 专家团执行抽屉组件 */
 
-import { Drawer, Form, Input, InputNumber, Button, Space, Typography, Tag, Avatar } from 'antd'
+import { Drawer, Form, Input, InputNumber, Button, Space, Typography, Tag } from 'antd'
 import { PlayCircleOutlined } from '@ant-design/icons'
 import { useEffect } from 'react'
 import type { ExpertTeam, ExpertTeamExecuteInput } from '../types'
 
 const { TextArea } = Input
-const { Text, Title } = Typography
+const { Text } = Typography
 
 interface ExpertTeamExecuteDrawerProps {
   open: boolean
@@ -35,8 +35,8 @@ export function ExpertTeamExecuteDrawer({
     try {
       const values = await form.validateFields()
       await onSubmit({
-        input_text: values.input_text,
-        max_rounds: values.max_rounds,
+        inputText: values.inputText,
+        maxRounds: values.maxRounds,
       })
     } catch {
       // validation failed
@@ -95,7 +95,7 @@ export function ExpertTeamExecuteDrawer({
         <div style={{ marginTop: 8 }}>
           <Space>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              最大讨论轮次: <Tag color="blue">{team.max_rounds} 轮</Tag>
+              最大讨论轮次: <Tag color="blue">{team.maxRounds} 轮</Tag>
             </Text>
           </Space>
         </div>
@@ -104,7 +104,7 @@ export function ExpertTeamExecuteDrawer({
       {/* 执行表单 */}
       <Form form={form} layout="vertical">
         <Form.Item
-          name="input_text"
+          name="inputText"
           label="输入问题/任务"
           rules={[{ required: true, message: '请输入要分析的问题或任务' }]}
         >
@@ -114,11 +114,11 @@ export function ExpertTeamExecuteDrawer({
           />
         </Form.Item>
 
-        <Form.Item name="max_rounds" label="覆盖最大轮次（可选）">
+        <Form.Item name="maxRounds" label="覆盖最大轮次（可选）">
           <InputNumber
             min={1}
             max={10}
-            placeholder={`默认: ${team.max_rounds}`}
+            placeholder={`默认: ${team.maxRounds}`}
             style={{ width: 160 }}
           />
         </Form.Item>
@@ -135,7 +135,7 @@ export function ExpertTeamExecuteDrawer({
       >
         <Text style={{ fontSize: 13 }}>
           💡 执行流程：编排器分析任务 → 各专家并行讨论（最多{' '}
-          <Tag color="blue">{team.max_rounds}</Tag> 轮）→ 汇总器生成最终报告
+          <Tag color="blue">{team.maxRounds}</Tag> 轮）→ 汇总器生成最终报告
         </Text>
       </div>
     </Drawer>

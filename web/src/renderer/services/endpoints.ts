@@ -89,8 +89,12 @@ export const EXPERT_TEAM_ENDPOINTS = {
   LIST: `${API_PREFIX}/expert_teams`,
   CREATE: `${API_PREFIX}/expert_teams`,
   DETAIL: (id: string) => `${API_PREFIX}/expert_teams/${id}`,
+  MEMBERS: (teamId: string) => `${API_PREFIX}/expert_teams/${teamId}/members`,
+  MEMBER_DETAIL: (memberId: string) => `${API_PREFIX}/expert_teams/members/${memberId}`,
   EXECUTE: (id: string) => `${API_PREFIX}/expert_teams/${id}/execute`,
   RUNS: (id: string) => `${API_PREFIX}/expert_teams/${id}/runs`,
+  RUNS_ALL: `${API_PREFIX}/expert_teams/runs/all`,
+  RUN_DETAIL: (runId: string) => `${API_PREFIX}/expert_teams/runs/${runId}`,
 } as const
 
 // ─── 子代理 ───

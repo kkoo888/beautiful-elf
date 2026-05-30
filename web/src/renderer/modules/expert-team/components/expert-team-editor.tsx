@@ -6,7 +6,6 @@ import {
   Input,
   Select,
   InputNumber,
-  Switch,
   Button,
   Space,
   Card,
@@ -25,7 +24,7 @@ import {
 import type { ExpertTeam, ExpertTeamFormInput, ExpertMemberFormInput } from '../types'
 
 const { TextArea } = Input
-const { Title, Text } = Typography
+const { Text } = Typography
 
 /** 预设专家角色 */
 const PRESET_EXPERTS: ExpertMemberFormInput[] = [
@@ -33,31 +32,31 @@ const PRESET_EXPERTS: ExpertMemberFormInput[] = [
     name: '架构师',
     role: '架构师',
     avatar: '🏗️',
-    system_prompt: '你是一位资深软件架构师，擅长系统设计、技术选型、性能优化。请从架构角度分析问题，关注可扩展性、可维护性和性能。',
+    systemPrompt: '你是一位资深软件架构师，擅长系统设计、技术选型、性能优化。请从架构角度分析问题，关注可扩展性、可维护性和性能。',
   },
   {
     name: '测试专家',
     role: '测试专家',
     avatar: '🧪',
-    system_prompt: '你是一位经验丰富的测试专家，擅长发现潜在问题、设计测试策略。请从质量保障角度分析问题，关注边界情况、异常场景和回归风险。',
+    systemPrompt: '你是一位经验丰富的测试专家，擅长发现潜在问题、设计测试策略。请从质量保障角度分析问题，关注边界情况、异常场景和回归风险。',
   },
   {
     name: '产品经理',
     role: '产品经理',
     avatar: '📋',
-    system_prompt: '你是一位敏锐的产品经理，擅长用户需求分析、产品规划。请从用户体验和商业价值角度分析问题，关注用户痛点和市场竞争力。',
+    systemPrompt: '你是一位敏锐的产品经理，擅长用户需求分析、产品规划。请从用户体验和商业价值角度分析问题，关注用户痛点和市场竞争力。',
   },
   {
     name: '安全专家',
     role: '安全专家',
     avatar: '🛡️',
-    system_prompt: '你是一位安全专家，擅长安全审计、风险评估。请从安全角度分析问题，关注数据安全、权限控制和潜在攻击面。',
+    systemPrompt: '你是一位安全专家，擅长安全审计、风险评估。请从安全角度分析问题，关注数据安全、权限控制和潜在攻击面。',
   },
   {
     name: '数据专家',
     role: '数据专家',
     avatar: '📊',
-    system_prompt: '你是一位数据专家，擅长数据分析、数据建模。请从数据角度分析问题，关注数据质量、数据流和指标体系。',
+    systemPrompt: '你是一位数据专家，擅长数据分析、数据建模。请从数据角度分析问题，关注数据质量、数据流和指标体系。',
   },
 ]
 
@@ -75,10 +74,10 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
       name: m.name,
       role: m.role,
       avatar: m.avatar,
-      system_prompt: m.system_prompt,
-      model_name: m.model_name,
+      systemPrompt: m.systemPrompt,
+      modelName: m.modelName,
       temperature: m.temperature,
-      max_tokens: m.max_tokens,
+      maxTokens: m.maxTokens,
     })) ?? []
   )
 
@@ -89,16 +88,15 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
         name: '',
         role: '',
         avatar: '🤖',
-        system_prompt: '',
+        systemPrompt: '',
         temperature: 70,
-        max_tokens: 2048,
+        maxTokens: 2048,
       },
     ])
   }, [])
 
   const handleAddPreset = useCallback((preset: ExpertMemberFormInput) => {
     setMembers((prev) => {
-      // 避免重复添加
       if (prev.some((m) => m.role === preset.role)) {
         message.warning(`已存在「${preset.role}」角色`)
         return prev
@@ -129,9 +127,8 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
         return
       }
 
-      // 校验成员
       for (let i = 0; i < members.length; i++) {
-        if (!members[i].name || !members[i].role || !members[i].system_prompt) {
+        if (!members[i].name || !members[i].role || !members[i].systemPrompt) {
           message.warning(`专家 #${i + 1} 的名称、角色和提示词不能为空`)
           return
         }
@@ -142,9 +139,9 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
         description: values.description ?? '',
         icon: values.icon ?? '👥',
         category: values.category ?? '通用',
-        orchestrator_prompt: values.orchestrator_prompt ?? '',
-        synthesizer_prompt: values.synthesizer_prompt ?? '',
-        max_rounds: values.max_rounds ?? 3,
+        orchestratorPrompt: values.orchestratorPrompt ?? '',
+        synthesizerPrompt: values.synthesizerPrompt ?? '',
+        maxRounds: values.maxRounds ?? 3,
         members,
       }
 
@@ -164,9 +161,9 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
           description: team?.description ?? '',
           icon: team?.icon ?? '👥',
           category: team?.category ?? '通用',
-          orchestrator_prompt: team?.orchestrator_prompt ?? '',
-          synthesizer_prompt: team?.synthesizer_prompt ?? '',
-          max_rounds: team?.max_rounds ?? 3,
+          orchestratorPrompt: team?.orchestratorPrompt ?? '',
+          synthesizerPrompt: team?.synthesizerPrompt ?? '',
+          maxRounds: team?.maxRounds ?? 3,
         }}
       >
         {/* 基本信息 */}
@@ -203,19 +200,19 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
 
         {/* 提示词配置 */}
         <Card title="🧠 提示词配置" style={{ marginTop: 16 }}>
-          <Form.Item name="orchestrator_prompt" label="编排器提示词（可选）">
+          <Form.Item name="orchestratorPrompt" label="编排器提示词（可选）">
             <TextArea
               rows={3}
               placeholder="留空使用默认编排器。自定义编排器可以控制任务分配策略..."
             />
           </Form.Item>
-          <Form.Item name="synthesizer_prompt" label="汇总器提示词（可选）">
+          <Form.Item name="synthesizerPrompt" label="汇总器提示词（可选）">
             <TextArea
               rows={3}
               placeholder="留空使用默认汇总器。自定义汇总器可以控制输出格式和风格..."
             />
           </Form.Item>
-          <Form.Item name="max_rounds" label="最大讨论轮次">
+          <Form.Item name="maxRounds" label="最大讨论轮次">
             <InputNumber min={1} max={10} style={{ width: 120 }} />
           </Form.Item>
         </Card>
@@ -303,8 +300,8 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                 </Space>
                 <Form.Item label="系统提示词" required style={{ marginBottom: 8 }}>
                   <TextArea
-                    value={member.system_prompt}
-                    onChange={(e) => handleMemberChange(index, 'system_prompt', e.target.value)}
+                    value={member.systemPrompt}
+                    onChange={(e) => handleMemberChange(index, 'systemPrompt', e.target.value)}
                     rows={3}
                     placeholder="定义这个专家的专业领域和行为方式..."
                   />
@@ -312,8 +309,8 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                 <Space>
                   <Form.Item label="模型" style={{ marginBottom: 0 }}>
                     <Input
-                      value={member.model_name}
-                      onChange={(e) => handleMemberChange(index, 'model_name', e.target.value)}
+                      value={member.modelName}
+                      onChange={(e) => handleMemberChange(index, 'modelName', e.target.value)}
                       placeholder="默认模型"
                       style={{ width: 150 }}
                     />
@@ -329,8 +326,8 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                   </Form.Item>
                   <Form.Item label="Max Tokens" style={{ marginBottom: 0 }}>
                     <InputNumber
-                      value={member.max_tokens}
-                      onChange={(v) => handleMemberChange(index, 'max_tokens', v)}
+                      value={member.maxTokens}
+                      onChange={(v) => handleMemberChange(index, 'maxTokens', v)}
                       min={1}
                       max={8192}
                       style={{ width: 120 }}

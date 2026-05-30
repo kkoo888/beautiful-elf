@@ -106,53 +106,78 @@ class ExpertState(TypedDict):
 
 # ─── LangGraph 节点函数 ──────────────────────────────────
 
+CONSENSUS_KEYWORDS = ["同意", "赞同", "一致", "共识", "没有异议", "完全同意"]
+
+
+def _check_consensus(round_discussion: list) -> bool:
+    """检查是否达成共识"""
+    positive_count = sum(
+        1 for d in round_discussion
+        if any(kw in d["content"] for kw in CONSENSUS_KEYWORDS)
+    )
+    return positive_count >= len(round_discussion) * 0.7
+
+
 async def orchestrator_node(state: OrchestratorState) -> dict:
-    """Orchestrator 节点: 分析任务，生成执行计划"""
+    """Orchestrator 节点: 分析任务，生成执行计划（第一轮才执行）"""
     client = OllamaClient()
     expert_list = state["expert_list"]
     input_text = state["input_text"]
     orchestrator_prompt = state["orchestrator_prompt"]
+    current_round = state.get("current_round", 0)
 
-    prompt = (orchestrator_prompt or DEFAULT_ORCHESTRATOR_PROMPT).format(
-        expert_list=expert_list,
-        input_text=input_text,
-    )
+    # 第一轮：分析任务
+    if current_round == 0:
+        prompt = (orchestrator_prompt or DEFAULT_ORCHESTRATOR_PROMPT).format(
+            expert_list=expert_list,
+            input_text=input_text,
+        )
+        response = await client.chat(
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0.3,
+        )
+        tokens = response.get("eval_count", 0)
+        msg = {
+            "round": 0,
+            "expert_name": "编排器",
+            "expert_role": "Orchestrator",
+            "content": response["content"],
+            "timestamp": datetime.now().isoformat(),
+        }
+        logger.info(f"编排器分析完成: {response['content'][:100]}...")
+        return {
+            "discussion": [msg],
+            "total_tokens": tokens,
+            "current_round": 1,
+        }
 
-    response = await client.chat(
-        messages=[{"role": "system", "content": prompt}],
-        temperature=0.3,
-    )
-
-    tokens = response.get("eval_count", 0)
-    msg = {
-        "round": 0,
-        "expert_name": "编排器",
-        "expert_role": "Orchestrator",
-        "content": response["content"],
-        "timestamp": datetime.now().isoformat(),
-    }
-
-    logger.info(f"编排器分析完成: {response['content'][:100]}...")
-
-    return {
-        "discussion": [msg],
-        "total_tokens": tokens,
-        "current_round": 0,
-    }
+    # 后续轮次：跳过编排器，直接进入专家讨论
+    return {"current_round": current_round + 1}
 
 
-def assign_experts(state: OrchestratorState) -> list[Send]:
-    """Fan-out: 为每个启用的专家分配任务（LangGraph Send 并行）"""
-    members = state["members_data"]
-    current_round = state["current_round"] + 1
+def route_after_orchestrator(state: OrchestratorState) -> list[Send]:
+    """编排器之后: 判断是继续讨论还是汇总
+
+    LangGraph Send 并行分发: 为每位专家创建独立分支
+    """
+    current_round = state["current_round"]
     max_rounds = state["max_rounds"]
+    discussion = state.get("discussion", [])
 
+    # 检查是否应该结束讨论
     if current_round > max_rounds:
         return [Send("synthesizer", state)]
 
+    # 检查上一轮是否达成共识（跳过 round 0 编排器）
+    prev_round_msgs = [d for d in discussion if d.get("round", 0) == current_round - 1 and d.get("round", 0) > 0]
+    if prev_round_msgs and _check_consensus(prev_round_msgs):
+        logger.info(f"第 {current_round - 1} 轮达成共识，提前进入汇总")
+        return [Send("synthesizer", state)]
+
+    # Fan-out: 为每位专家分发任务
     sends = []
-    for member in members:
-        expert_state = {
+    for member in state["members_data"]:
+        expert_state: ExpertState = {
             "member": member,
             "input_text": state["input_text"],
             "discussion": state["discussion"],
@@ -256,19 +281,74 @@ async def synthesizer_node(state: OrchestratorState) -> dict:
     }
 
 
+async def round_router_node(state: OrchestratorState) -> dict:
+    """路由节点: 专家讨论结束后，决定是继续下一轮还是汇总"""
+    # 此节点只做状态更新，实际路由由 route_after_round 决定
+    return {}
+
+
+def route_after_round(state: OrchestratorState) -> list[Send]:
+    """专家讨论结束后: 判断是继续下一轮还是汇总"""
+    current_round = state["current_round"]
+    max_rounds = state["max_rounds"]
+    discussion = state.get("discussion", [])
+
+    # 检查是否应该结束讨论
+    if current_round >= max_rounds:
+        return [Send("synthesizer", state)]
+
+    # 检查当前轮是否达成共识
+    current_round_msgs = [d for d in discussion if d.get("round", 0) == current_round]
+    if current_round_msgs and _check_consensus(current_round_msgs):
+        logger.info(f"第 {current_round} 轮达成共识，提前进入汇总")
+        return [Send("synthesizer", state)]
+
+    # Fan-out: 下一轮专家讨论
+    next_round = current_round + 1
+    sends = []
+    for member in state["members_data"]:
+        expert_state: ExpertState = {
+            "member": member,
+            "input_text": state["input_text"],
+            "discussion": state["discussion"],
+            "round_num": next_round,
+        }
+        sends.append(Send("expert_call", expert_state))
+
+    return sends
+
+
 # ─── 构建 LangGraph 工作流 ──────────────────────────────
 
 def _build_expert_workflow():
-    """构建 LangGraph StateGraph 工作流"""
+    """构建 LangGraph StateGraph 工作流
+
+    流程:
+      START → orchestrator → [Send(expert_1), Send(expert_2), ...] → round_router
+        → (检查共识/轮次) → [Send(expert_1), ...] 或 → synthesizer → END
+
+    使用 LangGraph Send API 实现动态并行分发
+    """
     workflow = StateGraph(OrchestratorState)
 
     workflow.add_node("orchestrator", orchestrator_node)
     workflow.add_node("expert_call", expert_call_node)
+    workflow.add_node("round_router", round_router_node)
     workflow.add_node("synthesizer", synthesizer_node)
 
+    # START → orchestrator
     workflow.add_edge(START, "orchestrator")
-    workflow.add_conditional_edges("orchestrator", assign_experts, ["expert_call", "synthesizer"])
-    workflow.add_edge("expert_call", synthesizer_node)  # 单个专家完成后直接到 synthesizer
+
+    # orchestrator → Send(experts) 或 Send(synthesizer)
+    workflow.add_conditional_edges("orchestrator", route_after_orchestrator, ["expert_call", "synthesizer"])
+
+    # experts 完成后 → round_router（等待所有专家完成，合并 discussion）
+    workflow.add_edge("expert_call", "round_router")
+
+    # round_router → 继续下一轮或汇总
+    workflow.add_conditional_edges("round_router", route_after_round, ["expert_call", "synthesizer"])
+
+    # synthesizer → END
     workflow.add_edge("synthesizer", END)
 
     return workflow.compile()
@@ -283,20 +363,6 @@ def get_expert_graph():
     if _expert_graph is None:
         _expert_graph = _build_expert_workflow()
     return _expert_graph
-
-
-# ─── 共识检测 ───────────────────────────────────────────
-
-CONSENSUS_KEYWORDS = ["同意", "赞同", "一致", "共识", "没有异议", "完全同意"]
-
-
-def _check_consensus(round_discussion: list) -> bool:
-    """检查是否达成共识"""
-    positive_count = sum(
-        1 for d in round_discussion
-        if any(kw in d["content"] for kw in CONSENSUS_KEYWORDS)
-    )
-    return positive_count >= len(round_discussion) * 0.7
 
 
 # ─── Service 主类 ────────────────────────────────────────

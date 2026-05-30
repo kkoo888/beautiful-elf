@@ -81,8 +81,8 @@ export function ExpertTeamList({
     },
     {
       title: '最大轮次',
-      dataIndex: 'max_rounds',
-      key: 'max_rounds',
+      dataIndex: 'maxRounds',
+      key: 'maxRounds',
       width: 100,
       align: 'center',
       render: (rounds: number) => <Tag color="blue">{rounds} 轮</Tag>,

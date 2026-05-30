@@ -9,6 +9,7 @@ import type {
   ExpertMemberFormInput,
   ExpertTeamRun,
   ExpertTeamExecuteInput,
+  ExpertTeamExecuteResult,
 } from '../types'
 import {
   fetchExpertTeams,
@@ -59,21 +60,7 @@ export interface UseExpertTeamReturn {
   deleteMemberMut: (memberId: number) => Promise<void>
 
   // 执行
-  executeTeamMut: (teamId: number, input: ExpertTeamExecuteInput) => Promise<{
-    run_id: number
-    status: number
-    output: string
-    discussion: Array<{
-      round: number
-      expert_name: string
-      expert_role: string
-      content: string
-      timestamp: string
-    }>
-    rounds: number
-    token_usage: number
-    duration_ms: number
-  }>
+  executeTeamMut: (teamId: number, input: ExpertTeamExecuteInput) => Promise<ExpertTeamExecuteResult>
   isExecuting: boolean
 
   // 状态
@@ -124,7 +111,7 @@ export function useExpertTeam(): UseExpertTeamReturn {
     void queryClient.invalidateQueries({ queryKey: RUN_KEY })
   }, [queryClient])
 
-  // CRUD mutations
+  // CRUD mutations — onSuccess 自动刷新，无需手动调用
   const createMut = useMutation({
     mutationFn: (input: ExpertTeamFormInput) => createExpertTeam(input),
     onSuccess: refreshTeams,
@@ -166,12 +153,10 @@ export function useExpertTeam(): UseExpertTeamReturn {
   const executeMut = useMutation({
     mutationFn: ({ teamId, input }: { teamId: number; input: ExpertTeamExecuteInput }) =>
       executeExpertTeam(teamId, input),
-    onSuccess: () => {
-      refreshRuns()
-    },
+    onSuccess: refreshRuns,
   })
 
-  // 包装函数
+  // 包装函数 — 参数展平
   const createTeamMut = useCallback(
     (input: ExpertTeamFormInput) => createMut.mutateAsync(input),
     [createMut]

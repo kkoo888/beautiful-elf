@@ -1,6 +1,6 @@
 /** 专家团工作流主面板 */
 
-import { Tabs, Button, Space, Typography, Empty, Spin, message } from 'antd'
+import { Tabs, Button, Space, Typography, Spin, message } from 'antd'
 import {
   PlusOutlined,
   TeamOutlined,
@@ -39,7 +39,6 @@ export default function ExpertTeamPanel() {
     executeTeamMut,
     isExecuting,
     isMutating,
-    refreshTeams,
     refreshRuns,
   } = useExpertTeam()
 
@@ -80,7 +79,7 @@ export default function ExpertTeamPanel() {
     [deleteTeamMut]
   )
 
-  // 保存（新建/编辑）
+  // 保存（新建/编辑）— mutation onSuccess 自动刷新列表
   const handleSave = useCallback(
     async (input: ExpertTeamFormInput) => {
       if (selectedId) {
@@ -92,9 +91,8 @@ export default function ExpertTeamPanel() {
         message.success('已创建')
       }
       setActiveTab('list')
-      refreshTeams()
     },
-    [selectedId, createTeamMut, updateTeamMut, setSelectedId, setActiveTab, refreshTeams]
+    [selectedId, createTeamMut, updateTeamMut, setSelectedId, setActiveTab]
   )
 
   // 执行
@@ -110,7 +108,7 @@ export default function ExpertTeamPanel() {
     async (input: ExpertTeamExecuteInput) => {
       if (!executeTeam) return
       const result = await executeTeamMut(executeTeam.id, input)
-      message.success(`执行完成！共 ${result.rounds} 轮讨论，耗时 ${(result.duration_ms / 1000).toFixed(1)}s`)
+      message.success(`执行完成！共 ${result.rounds} 轮讨论，耗时 ${(result.durationMs / 1000).toFixed(1)}s`)
       setExecuteDrawerOpen(false)
       setActiveTab('monitor')
       refreshRuns()
@@ -170,9 +168,7 @@ export default function ExpertTeamPanel() {
           onEdit={() => handleEdit(selectedTeam.id)}
           onExecute={() => handleExecute(selectedTeam)}
         />
-      ) : (
-        <Empty description="请选择一个专家团" />
-      ),
+      ) : null,
     },
     {
       key: 'monitor',

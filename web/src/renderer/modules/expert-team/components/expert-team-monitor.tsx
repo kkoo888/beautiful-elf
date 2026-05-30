@@ -66,8 +66,8 @@ export function ExpertTeamMonitor({ runs, loading, onRefresh }: ExpertTeamMonito
     },
     {
       title: '输入',
-      dataIndex: 'input_text',
-      key: 'input_text',
+      dataIndex: 'inputText',
+      key: 'inputText',
       ellipsis: true,
       render: (text: string) => (
         <Paragraph ellipsis={{ rows: 1, tooltip: true }} style={{ margin: 0 }}>
@@ -91,43 +91,43 @@ export function ExpertTeamMonitor({ runs, loading, onRefresh }: ExpertTeamMonito
     },
     {
       title: '轮次',
-      dataIndex: 'round_count',
-      key: 'round_count',
+      dataIndex: 'roundCount',
+      key: 'roundCount',
       width: 80,
       align: 'center',
       render: (count: number) => <Tag>{count}</Tag>,
     },
     {
       title: '耗时',
-      dataIndex: 'duration_ms',
-      key: 'duration_ms',
+      dataIndex: 'durationMs',
+      key: 'durationMs',
       width: 100,
       render: (ms: number) => (ms ? formatDuration(ms) : '-'),
     },
     {
       title: 'Token',
-      dataIndex: 'token_usage',
-      key: 'token_usage',
+      dataIndex: 'tokenUsage',
+      key: 'tokenUsage',
       width: 100,
       render: (tokens: number) => (tokens ? tokens.toLocaleString() : '-'),
     },
     {
       title: '时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
       width: 180,
       render: (time: string) => (time ? new Date(time).toLocaleString() : '-'),
     },
   ]
 
   const renderDiscussion = (run: ExpertTeamRun) => {
-    if (!run.discussion_json || run.discussion_json.length === 0) {
+    if (!run.discussionJson || run.discussionJson.length === 0) {
       return <Empty description="暂无讨论记录" />
     }
 
     // 按轮次分组
     const rounds = new Map<number, DiscussionMessage[]>()
-    for (const msg of run.discussion_json) {
+    for (const msg of run.discussionJson) {
       const roundNum = msg.round
       if (!rounds.has(roundNum)) rounds.set(roundNum, [])
       rounds.get(roundNum)!.push(msg)
@@ -142,12 +142,12 @@ export function ExpertTeamMonitor({ runs, loading, onRefresh }: ExpertTeamMonito
           children: (
             <Timeline
               items={messages.map((msg) => ({
-                color: msg.expert_role === 'Orchestrator' ? 'blue' : 'green',
+                color: msg.expertRole === 'Orchestrator' ? 'blue' : 'green',
                 children: (
                   <div>
                     <Space>
-                      <Text strong>{msg.expert_name}</Text>
-                      <Tag color="geekblue">{msg.expert_role}</Tag>
+                      <Text strong>{msg.expertName}</Text>
+                      <Tag color="geekblue">{msg.expertRole}</Tag>
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         {new Date(msg.timestamp).toLocaleTimeString()}
                       </Text>
@@ -192,26 +192,26 @@ export function ExpertTeamMonitor({ runs, loading, onRefresh }: ExpertTeamMonito
           expandedRowRender: (record) => (
             <div style={{ padding: '16px 0' }}>
               {/* 输出结果 */}
-              {record.output_text && (
+              {record.outputText && (
                 <Card
                   title="📋 最终输出"
                   size="small"
                   style={{ marginBottom: 16 }}
                 >
                   <Paragraph style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                    {record.output_text}
+                    {record.outputText}
                   </Paragraph>
                 </Card>
               )}
 
               {/* 错误信息 */}
-              {record.error_message && (
+              {record.errorMessage && (
                 <Card
                   title="❌ 错误信息"
                   size="small"
                   style={{ marginBottom: 16 }}
                 >
-                  <Text type="danger">{record.error_message}</Text>
+                  <Text type="danger">{record.errorMessage}</Text>
                 </Card>
               )}
 

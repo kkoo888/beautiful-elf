@@ -1,7 +1,7 @@
 /** 专家团工作流 API 服务 */
 
 import { apiClient } from '@/services/api-client'
-import { API_PREFIX } from '@shared/constants'
+import { EXPERT_TEAM_ENDPOINTS } from '@/services/endpoints'
 import type {
   ExpertTeam,
   ExpertTeamFormInput,
@@ -9,9 +9,8 @@ import type {
   ExpertMemberFormInput,
   ExpertTeamRun,
   ExpertTeamExecuteInput,
+  ExpertTeamExecuteResult,
 } from '../types'
-
-const BASE = `${API_PREFIX}/expert_teams`
 
 // ─── 专家团 CRUD ─────────────────────────────────────────
 
@@ -20,21 +19,21 @@ export async function fetchExpertTeams(params?: {
   category?: string
   enabled?: number
   page?: number
-  page_size?: number
+  pageSize?: number
 }): Promise<{ items: ExpertTeam[]; total: number }> {
-  const { data } = await apiClient.get(BASE, { params })
+  const { data } = await apiClient.get(EXPERT_TEAM_ENDPOINTS.LIST, { params })
   return data.data
 }
 
 /** 获取专家团详情 */
 export async function fetchExpertTeamById(id: number): Promise<ExpertTeam> {
-  const { data } = await apiClient.get(`${BASE}/${id}`)
+  const { data } = await apiClient.get(EXPERT_TEAM_ENDPOINTS.DETAIL(String(id)))
   return data.data
 }
 
 /** 创建专家团 */
 export async function createExpertTeam(input: ExpertTeamFormInput): Promise<ExpertTeam> {
-  const { data } = await apiClient.post(BASE, input)
+  const { data } = await apiClient.post(EXPERT_TEAM_ENDPOINTS.CREATE, input)
   return data.data
 }
 
@@ -43,13 +42,13 @@ export async function updateExpertTeam(
   id: number,
   input: ExpertTeamUpdateInput
 ): Promise<ExpertTeam> {
-  const { data } = await apiClient.put(`${BASE}/${id}`, input)
+  const { data } = await apiClient.put(EXPERT_TEAM_ENDPOINTS.DETAIL(String(id)), input)
   return data.data
 }
 
 /** 删除专家团 */
 export async function deleteExpertTeam(id: number): Promise<void> {
-  await apiClient.delete(`${BASE}/${id}`)
+  await apiClient.delete(EXPERT_TEAM_ENDPOINTS.DETAIL(String(id)))
 }
 
 // ─── 专家成员 ────────────────────────────────────────────
@@ -59,7 +58,10 @@ export async function addExpertMember(
   teamId: number,
   input: ExpertMemberFormInput
 ): Promise<ExpertMemberFormInput> {
-  const { data } = await apiClient.post(`${BASE}/${teamId}/members`, input)
+  const { data } = await apiClient.post(
+    EXPERT_TEAM_ENDPOINTS.MEMBERS(String(teamId)),
+    input
+  )
   return data.data
 }
 
@@ -68,13 +70,16 @@ export async function updateExpertMember(
   memberId: number,
   input: Partial<ExpertMemberFormInput>
 ): Promise<ExpertMemberFormInput> {
-  const { data } = await apiClient.put(`${BASE}/members/${memberId}`, input)
+  const { data } = await apiClient.put(
+    EXPERT_TEAM_ENDPOINTS.MEMBER_DETAIL(String(memberId)),
+    input
+  )
   return data.data
 }
 
 /** 删除专家成员 */
 export async function deleteExpertMember(memberId: number): Promise<void> {
-  await apiClient.delete(`${BASE}/members/${memberId}`)
+  await apiClient.delete(EXPERT_TEAM_ENDPOINTS.MEMBER_DETAIL(String(memberId)))
 }
 
 // ─── 执行 ────────────────────────────────────────────────
@@ -83,22 +88,11 @@ export async function deleteExpertMember(memberId: number): Promise<void> {
 export async function executeExpertTeam(
   teamId: number,
   input: ExpertTeamExecuteInput
-): Promise<{
-  run_id: number
-  status: number
-  output: string
-  discussion: Array<{
-    round: number
-    expert_name: string
-    expert_role: string
-    content: string
-    timestamp: string
-  }>
-  rounds: number
-  token_usage: number
-  duration_ms: number
-}> {
-  const { data } = await apiClient.post(`${BASE}/${teamId}/execute`, input)
+): Promise<ExpertTeamExecuteResult> {
+  const { data } = await apiClient.post(
+    EXPERT_TEAM_ENDPOINTS.EXECUTE(String(teamId)),
+    input
+  )
   return data.data
 }
 
@@ -107,9 +101,12 @@ export async function executeExpertTeam(
 /** 获取专家团运行记录 */
 export async function fetchExpertTeamRuns(
   teamId: number,
-  params?: { page?: number; page_size?: number }
+  params?: { page?: number; pageSize?: number }
 ): Promise<{ items: ExpertTeamRun[]; total: number }> {
-  const { data } = await apiClient.get(`${BASE}/${teamId}/runs`, { params })
+  const { data } = await apiClient.get(
+    EXPERT_TEAM_ENDPOINTS.RUNS(String(teamId)),
+    { params }
+  )
   return data.data
 }
 
@@ -117,14 +114,16 @@ export async function fetchExpertTeamRuns(
 export async function fetchAllExpertRuns(params?: {
   status?: number
   page?: number
-  page_size?: number
+  pageSize?: number
 }): Promise<{ items: ExpertTeamRun[]; total: number }> {
-  const { data } = await apiClient.get(`${BASE}/runs/all`, { params })
+  const { data } = await apiClient.get(EXPERT_TEAM_ENDPOINTS.RUNS_ALL, { params })
   return data.data
 }
 
 /** 获取运行记录详情 */
 export async function fetchExpertRunById(runId: number): Promise<ExpertTeamRun> {
-  const { data } = await apiClient.get(`${BASE}/runs/${runId}`)
+  const { data } = await apiClient.get(
+    EXPERT_TEAM_ENDPOINTS.RUN_DETAIL(String(runId))
+  )
   return data.data
 }

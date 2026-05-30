@@ -9,7 +9,6 @@ import {
   Typography,
   Avatar,
   List,
-  Divider,
   Row,
   Col,
   Statistic,
@@ -93,7 +92,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
           <Card>
             <Statistic
               title="最大讨论轮次"
-              value={team.max_rounds}
+              value={team.maxRounds}
               prefix={<ThunderboltOutlined />}
               suffix="轮"
             />
@@ -142,17 +141,17 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
                       ellipsis={{ rows: 2, tooltip: true }}
                       style={{ margin: 0 }}
                     >
-                      {member.system_prompt}
+                      {member.systemPrompt}
                     </Paragraph>
                     <Space style={{ marginTop: 4 }}>
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        模型: {member.model_name || '默认'}
+                        模型: {member.modelName || '默认'}
                       </Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         温度: {(member.temperature / 100).toFixed(1)}
                       </Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        Max Tokens: {member.max_tokens}
+                        Max Tokens: {member.maxTokens}
                       </Text>
                     </Space>
                   </div>
@@ -171,7 +170,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
               ellipsis={{ rows: 3, expandable: true, symbol: '展开' }}
               style={{ margin: 0 }}
             >
-              {team.orchestrator_prompt || '（使用默认编排器提示词）'}
+              {team.orchestratorPrompt || '（使用默认编排器提示词）'}
             </Paragraph>
           </Descriptions.Item>
           <Descriptions.Item label="汇总器提示词">
@@ -179,7 +178,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
               ellipsis={{ rows: 3, expandable: true, symbol: '展开' }}
               style={{ margin: 0 }}
             >
-              {team.synthesizer_prompt || '（使用默认汇总器提示词）'}
+              {team.synthesizerPrompt || '（使用默认汇总器提示词）'}
             </Paragraph>
           </Descriptions.Item>
         </Descriptions>

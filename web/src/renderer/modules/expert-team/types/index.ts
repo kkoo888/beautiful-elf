@@ -1,23 +1,23 @@
-/** 专家团工作流类型定义 */
+/** 专家团工作流类型定义 — camelCase 匹配后端 API */
 
 // ─── 专家成员 ────────────────────────────────────────────
 
 /** 专家成员 */
 export interface ExpertMember {
   id: number
-  team_id: number
+  teamId: number
   name: string
   role: string
   avatar: string
-  system_prompt: string
-  model_name: string
+  systemPrompt: string
+  modelName: string
   temperature: number
-  max_tokens: number
-  tools_json: Record<string, unknown>[] | null
-  sort_order: number
+  maxTokens: number
+  toolsJson: Record<string, unknown>[] | null
+  sortOrder: number
   enabled: number
-  created_at: string | null
-  updated_at: string | null
+  createdAt: string | null
+  updatedAt: string | null
 }
 
 /** 创建专家成员表单 */
@@ -25,11 +25,11 @@ export interface ExpertMemberFormInput {
   name: string
   role: string
   avatar?: string
-  system_prompt: string
-  model_name?: string
+  systemPrompt: string
+  modelName?: string
   temperature?: number
-  max_tokens?: number
-  tools_json?: Record<string, unknown>[]
+  maxTokens?: number
+  toolsJson?: Record<string, unknown>[]
   enabled?: number
 }
 
@@ -42,15 +42,15 @@ export interface ExpertTeam {
   description: string
   icon: string
   category: string
-  orchestrator_prompt: string
-  synthesizer_prompt: string
-  max_rounds: number
+  orchestratorPrompt: string
+  synthesizerPrompt: string
+  maxRounds: number
   enabled: number
   version: number
-  config_json: Record<string, unknown> | null
+  configJson: Record<string, unknown> | null
   members: ExpertMember[]
-  created_at: string | null
-  updated_at: string | null
+  createdAt: string | null
+  updatedAt: string | null
 }
 
 /** 创建专家团表单 */
@@ -59,10 +59,10 @@ export interface ExpertTeamFormInput {
   description?: string
   icon?: string
   category?: string
-  orchestrator_prompt?: string
-  synthesizer_prompt?: string
-  max_rounds?: number
-  config_json?: Record<string, unknown>
+  orchestratorPrompt?: string
+  synthesizerPrompt?: string
+  maxRounds?: number
+  configJson?: Record<string, unknown>
   members: ExpertMemberFormInput[]
 }
 
@@ -72,11 +72,11 @@ export interface ExpertTeamUpdateInput {
   description?: string
   icon?: string
   category?: string
-  orchestrator_prompt?: string
-  synthesizer_prompt?: string
-  max_rounds?: number
+  orchestratorPrompt?: string
+  synthesizerPrompt?: string
+  maxRounds?: number
   enabled?: number
-  config_json?: Record<string, unknown>
+  configJson?: Record<string, unknown>
 }
 
 // ─── 讨论消息 ────────────────────────────────────────────
@@ -84,8 +84,8 @@ export interface ExpertTeamUpdateInput {
 /** 讨论消息 */
 export interface DiscussionMessage {
   round: number
-  expert_name: string
-  expert_role: string
+  expertName: string
+  expertRole: string
   content: string
   timestamp: string
 }
@@ -98,26 +98,37 @@ export type ExpertRunStatus = 0 | 1 | 2 | 3 | 4 // 待执行 | 运行中 | 已�
 /** 运行记录 */
 export interface ExpertTeamRun {
   id: number
-  team_id: number
-  team_name?: string
+  teamId: number
+  teamName?: string
   status: ExpertRunStatus
-  trigger_type: number
-  input_text: string
-  output_text: string
-  discussion_json: DiscussionMessage[] | null
-  error_message: string
-  round_count: number
-  token_usage: number
-  started_at: string | null
-  finished_at: string | null
-  duration_ms: number
-  created_at: string | null
+  triggerType: number
+  inputText: string
+  outputText: string
+  discussionJson: DiscussionMessage[] | null
+  errorMessage: string
+  roundCount: number
+  tokenUsage: number
+  startedAt: string | null
+  finishedAt: string | null
+  durationMs: number
+  createdAt: string | null
 }
 
 /** 执行请求 */
 export interface ExpertTeamExecuteInput {
-  input_text: string
-  max_rounds?: number
+  inputText: string
+  maxRounds?: number
+}
+
+/** 执行结果 */
+export interface ExpertTeamExecuteResult {
+  runId: number
+  status: number
+  output: string
+  discussion: DiscussionMessage[]
+  rounds: number
+  tokenUsage: number
+  durationMs: number
 }
 
 // ─── 预设模板 ────────────────────────────────────────────
@@ -130,9 +141,9 @@ export interface ExpertTeamTemplate {
   icon: string
   category: string
   members: ExpertMemberFormInput[]
-  orchestrator_prompt: string
-  synthesizer_prompt: string
-  max_rounds: number
+  orchestratorPrompt: string
+  synthesizerPrompt: string
+  maxRounds: number
 }
 
 // ─── 状态映射 ────────────────────────────────────────────
