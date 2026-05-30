@@ -7,11 +7,13 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
+@router.websocket("/ws")
 @router.websocket("/ws/{channel}")
 async def websocket_endpoint(websocket: WebSocket, channel: str = "default"):
     """
     WebSocket 连接端点
-    channel 可选: chat, pet, notification, system 等
+    /ws          → 默认 channel (default)
+    /ws/{channel} → 指定 channel: chat, pet, notification, system 等
     """
     await ws_manager.connect(websocket, channel)
     try:
