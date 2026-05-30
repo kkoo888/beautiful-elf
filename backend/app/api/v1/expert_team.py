@@ -275,5 +275,8 @@ async def list_role_runs(
     db: AsyncSession = Depends(get_db),
 ):
     """查询某次运行的所有角色执行记录"""
-    runs = await service.list_role_runs(db, run_id)
-    return ok(data=runs)
+    try:
+        runs = await service.list_role_runs(db, run_id)
+        return ok(data=runs)
+    except RecordNotFoundError as e:
+        return fail("EXPERT_TEAM_NOT_FOUND", str(e), "请检查运行记录 ID", _req_id(request))

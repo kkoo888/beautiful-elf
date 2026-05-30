@@ -573,6 +573,10 @@ class ExpertTeamService:
 
     async def list_role_runs(self, db: AsyncSession, run_id: int) -> list:
         """查询某次运行的所有角色执行记录"""
+        # 先校验 run 存在
+        run = await self.repo.find_run_by_id(db, run_id)
+        if not run:
+            raise RecordNotFoundError("运行记录不存在")
         runs = await self.repo.find_role_runs_by_run(db, run_id)
         return [self._serialize_role_run(r) for r in runs]
 

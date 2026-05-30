@@ -36,13 +36,15 @@ export function useSkills(): UseSkillsReturn {
   const [keyword, setKeyword] = useState('')
 
   const {
-    data: skills = [],
+    data: skillsResult,
     isLoading,
     error,
   } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: fetchSkills,
   })
+
+  const skills: Skill[] = skillsResult?.data ?? []
 
   const installMut = useMutation({
     mutationFn: (input: InstallSkillInput) => installSkill(input),

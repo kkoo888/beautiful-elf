@@ -108,3 +108,11 @@ class ScheduleError(AppError):
     status_code = 500
     message = "日程系统错误"
     user_tip = "日程系统异常，请稍后重试"
+
+
+class ExpertTeamError(AppError):
+    """专家团系统异常"""
+    code = "EXPERT_TEAM_ERROR"
+    status_code = 500
+    message = "专家团系统错误"
+    user_tip = "专家团操作失败，请稍后重试"
