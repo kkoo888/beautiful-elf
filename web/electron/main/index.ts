@@ -3,6 +3,7 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createMainWindow, getMainWindow } from './window-manager'
 import { createTray } from './tray'
 import { registerIpcHandlers } from './ipc-handlers'
+import { createChineseMenu } from './menu'
 import './pet-window'
 
 app.whenReady().then(() => {
@@ -13,6 +14,7 @@ app.whenReady().then(() => {
   })
 
   const mainWindow = createMainWindow()
+  createChineseMenu(mainWindow)
   createTray(mainWindow)
   registerIpcHandlers()
 
