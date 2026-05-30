@@ -67,3 +67,45 @@ class ExpertTeamRun(BaseModel):
         Index("idx_expert_runs_status", "status"),
         Index("idx_expert_runs_created", "created_at"),
     )
+
+
+class ExpertRoleSkill(BaseModel):
+    """角色技能绑定 — 专家成员可绑定已有技能，执行时按优先级调用"""
+    __tablename__ = "expert_role_skills"
+
+    role_id = Column(BigInteger, nullable=False, comment="成员 ID (关联 expert_team_members.id)")
+    skill_id = Column(BigInteger, nullable=False, comment="技能 ID (关联 skills.id)")
+    priority = Column(Integer, default=0, comment="调用优先级 (数值越大越优先)")
+    config_override = Column(JSON, default=None, comment="角色级别的技能配置覆盖")
+    enabled = Column(Integer, nullable=False, default=1, comment="是否启用")
+
+    __table_args__ = (
+        Index("uk_role_skill", "role_id", "skill_id", unique=True),
+        Index("idx_role_skills_role", "role_id"),
+        Index("idx_role_skills_skill", "skill_id"),
+    )
+
+
+class ExpertRoleRun(BaseModel):
+    """角色执行记录 — 每次运行中各专家成员的独立执行记录"""
+    __tablename__ = "expert_role_runs"
+
+    run_id = Column(BigInteger, nullable=False, comment="运行记录 ID (关联 expert_team_runs.id)")
+    role_id = Column(BigInteger, nullable=False, comment="成员 ID (关联 expert_team_members.id)")
+    role_name = Column(String(128), nullable=False, comment="成员名称 (冗余)")
+    status = Column(Integer, nullable=False, default=0, comment="状态: 0=待运行 1=运行中 2=成功 3=失败 4=跳过")
+    round_num = Column(Integer, default=0, comment="所在讨论轮次")
+    input_json = Column(JSON, default=None, comment="角色输入 (子任务 + 上下文)")
+    output_json = Column(JSON, default=None, comment="角色输出 (分析结果)")
+    skills_used = Column(JSON, default=None, comment="实际调用的技能列表")
+    error_message = Column(String(2048), default="", comment="错误信息")
+    started_at = Column(DateTime, default=None, comment="开始时间")
+    finished_at = Column(DateTime, default=None, comment="完成时间")
+    duration_ms = Column(Integer, default=0, comment="执行耗时 (毫秒)")
+    token_usage = Column(Integer, default=0, comment="token 消耗")
+
+    __table_args__ = (
+        Index("idx_role_runs_run", "run_id"),
+        Index("idx_role_runs_role", "role_id"),
+        Index("idx_role_runs_status", "status"),
+    )

@@ -152,3 +152,64 @@ class DiscussionMessage(BaseModel):
     expert_role: str = Field(..., description="专家角色", alias="expertRole")
     content: str = Field(..., description="发言内容")
     timestamp: str = Field(..., description="时间戳")
+
+
+# ─── 角色技能绑定 ────────────────────────────────────────
+
+class RoleSkillCreate(BaseModel):
+    """绑定技能到角色"""
+    model_config = ConfigDict(populate_by_name=True)
+
+    skill_id: int = Field(..., description="技能 ID", alias="skillId")
+    priority: int = Field(default=0, ge=0, description="调用优先级", alias="priority")
+    config_override: Optional[dict] = Field(default=None, description="配置覆盖", alias="configOverride")
+    enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
+
+
+class RoleSkillUpdate(BaseModel):
+    """更新角色技能绑定"""
+    model_config = ConfigDict(populate_by_name=True)
+
+    priority: Optional[int] = Field(default=None, ge=0)
+    config_override: Optional[dict] = Field(default=None, alias="configOverride")
+    enabled: Optional[int] = Field(default=None, ge=0, le=1)
+
+
+class RoleSkillOut(BaseModel):
+    """角色技能绑定输出"""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int
+    role_id: int = Field(alias="roleId")
+    skill_id: int = Field(alias="skillId")
+    skill_name: str = Field(default="", alias="skillName")
+    skill_display_name: str = Field(default="", alias="skillDisplayName")
+    skill_description: str = Field(default="", alias="skillDescription")
+    priority: int
+    config_override: Optional[dict] = Field(default=None, alias="configOverride")
+    enabled: int
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
+
+
+# ─── 角色执行记录 ────────────────────────────────────────
+
+class ExpertRoleRunOut(BaseModel):
+    """角色执行记录输出"""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int
+    run_id: int = Field(alias="runId")
+    role_id: int = Field(alias="roleId")
+    role_name: str = Field(alias="roleName")
+    status: int
+    round_num: int = Field(alias="roundNum")
+    input_json: Optional[dict] = Field(default=None, alias="inputJson")
+    output_json: Optional[dict] = Field(default=None, alias="outputJson")
+    skills_used: Optional[List[dict]] = Field(default=None, alias="skillsUsed")
+    error_message: str = Field(default="", alias="errorMessage")
+    started_at: Optional[datetime] = Field(default=None, alias="startedAt")
+    finished_at: Optional[datetime] = Field(default=None, alias="finishedAt")
+    duration_ms: int = Field(alias="durationMs")
+    token_usage: int = Field(alias="tokenUsage")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")

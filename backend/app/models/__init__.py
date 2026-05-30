@@ -59,7 +59,10 @@ from app.models.prompt import Prompt
 from app.models.action_log import ActionLog
 
 # 专家团工作流
-from app.models.expert_team import ExpertTeam, ExpertTeamMember, ExpertTeamRun
+from app.models.expert_team import (
+    ExpertTeam, ExpertTeamMember, ExpertTeamRun,
+    ExpertRoleSkill, ExpertRoleRun,
+)
 
 __all__ = [
     "BaseModel",
@@ -83,4 +86,5 @@ __all__ = [
     "Prompt",
     "ActionLog",
     "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
+    "ExpertRoleSkill", "ExpertRoleRun",
 ]

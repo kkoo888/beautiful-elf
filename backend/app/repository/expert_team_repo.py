@@ -4,7 +4,10 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mappers.base import MySQLMapper
-from app.models.expert_team import ExpertTeam, ExpertTeamMember, ExpertTeamRun
+from app.models.expert_team import (
+    ExpertTeam, ExpertTeamMember, ExpertTeamRun,
+    ExpertRoleSkill, ExpertRoleRun,
+)
 
 
 class ExpertTeamRepository:
@@ -14,6 +17,8 @@ class ExpertTeamRepository:
         self.team_mapper = MySQLMapper(ExpertTeam)
         self.member_mapper = MySQLMapper(ExpertTeamMember)
         self.run_mapper = MySQLMapper(ExpertTeamRun)
+        self.skill_bind_mapper = MySQLMapper(ExpertRoleSkill)
+        self.role_run_mapper = MySQLMapper(ExpertRoleRun)
 
     # ─── 专家团 ─────────────────────────────────────────
 
@@ -125,3 +130,78 @@ class ExpertTeamRepository:
 
     async def update_run(self, db: AsyncSession, run_id: int, data: dict) -> Optional[ExpertTeamRun]:
         return await self.run_mapper.update(db, run_id, data)
+
+    # ─── 角色技能绑定 ─────────────────────────────────
+
+    async def find_skills_by_role(self, db: AsyncSession, role_id: int) -> List[ExpertRoleSkill]:
+        """查询角色绑定的所有技能"""
+        stmt = (
+            select(ExpertRoleSkill)
+            .where(ExpertRoleSkill.role_id == role_id, ExpertRoleSkill.deleted == 0)
+            .order_by(ExpertRoleSkill.priority.desc())
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_skills_by_roles(self, db: AsyncSession, role_ids: List[int]) -> List[ExpertRoleSkill]:
+        """批量查询多个角色的技能绑定（消除 N+1）"""
+        if not role_ids:
+            return []
+        stmt = (
+            select(ExpertRoleSkill)
+            .where(ExpertRoleSkill.role_id.in_(role_ids), ExpertRoleSkill.deleted == 0)
+            .order_by(ExpertRoleSkill.priority.desc())
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_skill_bind_by_id(self, db: AsyncSession, bind_id: int) -> Optional[ExpertRoleSkill]:
+        return await self.skill_bind_mapper.find_by_id(db, bind_id)
+
+    async def find_skill_bind(self, db: AsyncSession, role_id: int, skill_id: int) -> Optional[ExpertRoleSkill]:
+        """查询特定角色-技能绑定"""
+        stmt = select(ExpertRoleSkill).where(
+            ExpertRoleSkill.role_id == role_id,
+            ExpertRoleSkill.skill_id == skill_id,
+            ExpertRoleSkill.deleted == 0,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def create_skill_bind(self, db: AsyncSession, data: dict) -> ExpertRoleSkill:
+        return await self.skill_bind_mapper.create(db, data)
+
+    async def update_skill_bind(self, db: AsyncSession, bind_id: int, data: dict) -> Optional[ExpertRoleSkill]:
+        return await self.skill_bind_mapper.update(db, bind_id, data)
+
+    async def soft_delete_skill_bind(self, db: AsyncSession, bind_id: int) -> bool:
+        return await self.skill_bind_mapper.soft_delete(db, bind_id)
+
+    # ─── 角色执行记录 ─────────────────────────────────
+
+    async def create_role_run(self, db: AsyncSession, data: dict) -> ExpertRoleRun:
+        return await self.role_run_mapper.create(db, data)
+
+    async def update_role_run(self, db: AsyncSession, role_run_id: int, data: dict) -> Optional[ExpertRoleRun]:
+        return await self.role_run_mapper.update(db, role_run_id, data)
+
+    async def find_role_runs_by_run(self, db: AsyncSession, run_id: int) -> List[ExpertRoleRun]:
+        """查询某次运行的所有角色执行记录"""
+        stmt = (
+            select(ExpertRoleRun)
+            .where(ExpertRoleRun.run_id == run_id, ExpertRoleRun.deleted == 0)
+            .order_by(ExpertRoleRun.created_at.asc())
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_role_runs_by_role(self, db: AsyncSession, role_id: int, offset: int = 0, limit: int = 20) -> List[ExpertRoleRun]:
+        """查询某角色的历史执行记录"""
+        stmt = (
+            select(ExpertRoleRun)
+            .where(ExpertRoleRun.role_id == role_id, ExpertRoleRun.deleted == 0)
+            .order_by(ExpertRoleRun.created_at.desc())
+            .offset(offset).limit(limit)
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())

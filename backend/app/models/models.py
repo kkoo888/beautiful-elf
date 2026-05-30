@@ -21,7 +21,10 @@ from app.models.backup import BackupRecord
 from app.models.ai_feedback import AIFeedback
 from app.models.prompt import Prompt
 from app.models.action_log import ActionLog
-from app.models.expert_team import ExpertTeam, ExpertTeamMember, ExpertTeamRun
+from app.models.expert_team import (
+    ExpertTeam, ExpertTeamMember, ExpertTeamRun,
+    ExpertRoleSkill, ExpertRoleRun,
+)
 
 __all__ = [
     "Conversation", "Message",

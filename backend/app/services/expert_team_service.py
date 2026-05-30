@@ -31,6 +31,7 @@ from app.schemas.expert_team import (
     ExpertMemberCreate, ExpertMemberOut,
     ExpertTeamRunOut, ExpertTeamExecuteRequest,
     DiscussionMessage,
+    RoleSkillCreate, RoleSkillUpdate,
 )
 from app.core.exceptions import RecordNotFoundError
 from app.services.ollama_service import OllamaClient, get_chat_model
@@ -85,15 +86,19 @@ class OrchestratorState(TypedDict):
     """编排器全局状态"""
     input_text: str
     expert_list: str
-    members_data: list  # 序列化的成员信息
+    members_data: list  # 序列化的成员信息 (含 skills)
     orchestrator_prompt: str
     synthesizer_prompt: str
     max_rounds: int
     current_round: int
     discussion: Annotated[list[dict], operator.add]  # 讨论记录（可累加）
     expert_results: Annotated[list[dict], operator.add]  # 专家结果（可累加）
+    role_run_ids: Annotated[list[dict], operator.add]  # 角色执行记录 ID（可累加）
     final_output: str
     total_tokens: int
+    run_id: int  # 专家团运行记录 ID
+    _service: Any  # service 实例引用
+    _db: Any  # db session 引用
 
 
 class ExpertState(TypedDict):
@@ -102,6 +107,9 @@ class ExpertState(TypedDict):
     input_text: str
     discussion: list[dict]
     round_num: int
+    run_id: int
+    _service: Any
+    _db: Any
 
 
 # ─── LangGraph 节点函数 ──────────────────────────────────
@@ -182,6 +190,9 @@ def route_after_orchestrator(state: OrchestratorState) -> list[Send]:
             "input_text": state["input_text"],
             "discussion": state["discussion"],
             "round_num": current_round,
+            "run_id": state["run_id"],
+            "_service": state["_service"],
+            "_db": state["_db"],
         }
         sends.append(Send("expert_call", expert_state))
 
@@ -189,12 +200,18 @@ def route_after_orchestrator(state: OrchestratorState) -> list[Send]:
 
 
 async def expert_call_node(state: ExpertState) -> dict:
-    """单个专家节点: 从专业角度分析问题"""
+    """单个专家节点: 从专业角度分析问题，追踪角色执行记录"""
     client = OllamaClient()
     member = state["member"]
     input_text = state["input_text"]
     discussion = state["discussion"]
     round_num = state["round_num"]
+    run_id = state["run_id"]
+    service = state["_service"]
+    db = state["_db"]
+
+    # 创建角色执行记录
+    role_run = await service._create_role_run(db, run_id, member["id"], member["name"], round_num)
 
     # 构建上下文
     prev_msgs = [d for d in discussion if d.get("round", 0) > 0]
@@ -208,10 +225,19 @@ async def expert_call_node(state: ExpertState) -> dict:
         context = f"原始问题: {input_text}\n\n请从你的专业角度分析这个问题。"
 
     base_prompt = member.get("system_prompt") or f"你是{member['name']}，角色是{member['role']}。请从专业角度分析问题。"
+
+    # 构建技能上下文
+    skills = member.get("skills", [])
+    skill_context = ""
+    skills_used = []
+    if skills:
+        skill_names = ", ".join([s.get("display_name", s.get("name", "")) for s in skills])
+        skill_context = f"\n\n你可以使用以下技能来辅助分析: {skill_names}"
+
     prompt = f"""{base_prompt}
 
 当前是第{round_num}轮讨论。
-{context}
+{context}{skill_context}
 
 请从你的专业角度，给出深入、具体的分析。要求:
 1. 观点明确，论据充分
@@ -221,6 +247,7 @@ async def expert_call_node(state: ExpertState) -> dict:
     model = member.get("model_name") or None
     temperature = (member.get("temperature") or 70) / 100
 
+    start_time = datetime.now()
     try:
         response = await client.chat(
             messages=[{"role": "user", "content": prompt}],
@@ -230,10 +257,23 @@ async def expert_call_node(state: ExpertState) -> dict:
         )
         content = response["content"]
         tokens = response.get("eval_count", 0)
+
+        # 完成角色执行记录
+        duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+        await service._finish_role_run(
+            db, role_run.id, status=2,
+            output=content, skills_used=skills_used, tokens=tokens,
+        )
+
     except Exception as e:
         logger.error(f"专家 {member['name']} 调用失败: {e}")
         content = f"[调用失败: {e}]"
         tokens = 0
+        duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
+        await service._finish_role_run(
+            db, role_run.id, status=3,
+            error=str(e),
+        )
 
     msg = {
         "round": round_num,
@@ -247,6 +287,7 @@ async def expert_call_node(state: ExpertState) -> dict:
         "discussion": [msg],
         "expert_results": [msg],
         "total_tokens": tokens,
+        "role_run_ids": [{"role_id": member["id"], "role_run_id": role_run.id}],
     }
 
 
@@ -311,6 +352,9 @@ def route_after_round(state: OrchestratorState) -> list[Send]:
             "input_text": state["input_text"],
             "discussion": state["discussion"],
             "round_num": next_round,
+            "run_id": state["run_id"],
+            "_service": state["_service"],
+            "_db": state["_db"],
         }
         sends.append(Send("expert_call", expert_state))
 
@@ -455,6 +499,138 @@ class ExpertTeamService:
             raise RecordNotFoundError("专家成员不存在")
         return await self.repo.soft_delete_member(db, member_id)
 
+    # ─── 角色技能绑定 ─────────────────────────────────
+
+    async def list_member_skills(self, db: AsyncSession, member_id: int) -> list:
+        """查询成员绑定的技能（含技能详情）"""
+        binds = await self.repo.find_skills_by_role(db, member_id)
+        result = []
+        for b in binds:
+            skill = await self._get_skill_info(db, b.skill_id)
+            result.append({
+                "id": b.id,
+                "roleId": b.role_id,
+                "skillId": b.skill_id,
+                "skillName": skill.get("name", "") if skill else "",
+                "skillDisplayName": skill.get("display_name", "") if skill else "",
+                "skillDescription": skill.get("description", "") if skill else "",
+                "priority": b.priority,
+                "configOverride": b.config_override,
+                "enabled": b.enabled,
+                "createdAt": str(b.created_at) if b.created_at else None,
+                "updatedAt": str(b.updated_at) if b.updated_at else None,
+            })
+        return result
+
+    async def bind_skill(self, db: AsyncSession, member_id: int, data: RoleSkillCreate) -> dict:
+        """绑定技能到成员"""
+        member = await self.repo.find_member_by_id(db, member_id)
+        if not member:
+            raise RecordNotFoundError("专家成员不存在")
+        bind_data = data.model_dump(by_alias=False)
+        bind_data["role_id"] = member_id
+        # 检查是否已绑定
+        existing = await self.repo.find_skill_bind(db, member_id, data.skill_id)
+        if existing:
+            # 更新已有绑定
+            bind = await self.repo.update_skill_bind(db, existing.id, bind_data)
+        else:
+            bind = await self.repo.create_skill_bind(db, bind_data)
+        return self._serialize_skill_bind(bind)
+
+    async def update_skill_bind(self, db: AsyncSession, bind_id: int, data: RoleSkillUpdate) -> dict:
+        """更新角色技能绑定"""
+        bind = await self.repo.find_skill_bind_by_id(db, bind_id)
+        if not bind:
+            raise RecordNotFoundError("技能绑定不存在")
+        update_data = data.model_dump(exclude_unset=True, by_alias=False)
+        if update_data:
+            bind = await self.repo.update_skill_bind(db, bind_id, update_data)
+        return self._serialize_skill_bind(bind)
+
+    async def unbind_skill(self, db: AsyncSession, bind_id: int) -> bool:
+        """解绑技能"""
+        bind = await self.repo.find_skill_bind_by_id(db, bind_id)
+        if not bind:
+            raise RecordNotFoundError("技能绑定不存在")
+        return await self.repo.soft_delete_skill_bind(db, bind_id)
+
+    async def _get_skill_info(self, db: AsyncSession, skill_id: int) -> Optional[dict]:
+        """获取技能基本信息"""
+        from app.repository.skill_repo import SkillRepository
+        skill_repo = SkillRepository()
+        skill = await skill_repo.find_by_id(db, skill_id)
+        if not skill:
+            return None
+        return {
+            "id": skill.id,
+            "name": skill.name,
+            "display_name": skill.display_name,
+            "description": skill.description,
+        }
+
+    # ─── 角色执行记录 ─────────────────────────────────
+
+    async def list_role_runs(self, db: AsyncSession, run_id: int) -> list:
+        """查询某次运行的所有角色执行记录"""
+        runs = await self.repo.find_role_runs_by_run(db, run_id)
+        return [self._serialize_role_run(r) for r in runs]
+
+    async def _create_role_run(self, db: AsyncSession, run_id: int, role_id: int, role_name: str, round_num: int) -> object:
+        """创建角色执行记录"""
+        return await self.repo.create_role_run(db, {
+            "run_id": run_id,
+            "role_id": role_id,
+            "role_name": role_name,
+            "status": 1,  # 运行中
+            "round_num": round_num,
+            "started_at": datetime.now(),
+        })
+
+    async def _finish_role_run(self, db: AsyncSession, role_run_id: int, status: int,
+                                output: str = "", skills_used: list = None,
+                                error: str = "", tokens: int = 0) -> None:
+        """完成角色执行记录"""
+        await self.repo.update_role_run(db, role_run_id, {
+            "status": status,
+            "output_json": {"output": output} if output else None,
+            "skills_used": skills_used or [],
+            "error_message": error[:2048] if error else "",
+            "finished_at": datetime.now(),
+            "token_usage": tokens,
+        })
+
+    def _serialize_skill_bind(self, bind) -> dict:
+        return {
+            "id": bind.id,
+            "roleId": bind.role_id,
+            "skillId": bind.skill_id,
+            "priority": bind.priority,
+            "configOverride": bind.config_override,
+            "enabled": bind.enabled,
+            "createdAt": str(bind.created_at) if bind.created_at else None,
+            "updatedAt": str(bind.updated_at) if bind.updated_at else None,
+        }
+
+    def _serialize_role_run(self, run) -> dict:
+        return {
+            "id": run.id,
+            "runId": run.run_id,
+            "roleId": run.role_id,
+            "roleName": run.role_name,
+            "status": run.status,
+            "roundNum": run.round_num,
+            "inputJson": run.input_json,
+            "outputJson": run.output_json,
+            "skillsUsed": run.skills_used,
+            "errorMessage": run.error_message,
+            "startedAt": str(run.started_at) if run.started_at else None,
+            "finishedAt": str(run.finished_at) if run.finished_at else None,
+            "durationMs": run.duration_ms,
+            "tokenUsage": run.token_usage,
+            "createdAt": str(run.created_at) if run.created_at else None,
+        }
+
     # ─── 执行专家团（LangGraph 核心）──────────────────
 
     async def execute_team(
@@ -485,6 +661,25 @@ class ExpertTeamService:
         try:
             # 序列化成员信息供 LangGraph 使用
             members_data = [self._serialize_member(m) for m in enabled_members]
+
+            # 批量加载技能绑定（消除 N+1）
+            member_ids = [m["id"] for m in members_data]
+            all_skills = await self.repo.find_skills_by_roles(db, member_ids)
+            skills_by_role: dict[int, list] = {}
+            for s in all_skills:
+                skills_by_role.setdefault(s.role_id, []).append(s)
+
+            # 加载技能详情并注入到成员数据
+            for m in members_data:
+                binds = skills_by_role.get(m["id"], [])
+                m["skills"] = []
+                for b in binds:
+                    skill_info = await self._get_skill_info(db, b.skill_id)
+                    if skill_info:
+                        skill_info["priority"] = b.priority
+                        skill_info["config_override"] = b.config_override
+                        m["skills"].append(skill_info)
+
             expert_list = ", ".join([f"{m['name']}({m['role']})" for m in members_data])
 
             # 构建 LangGraph 初始状态
@@ -498,8 +693,12 @@ class ExpertTeamService:
                 "current_round": 0,
                 "discussion": [],
                 "expert_results": [],
+                "role_run_ids": [],
                 "final_output": "",
                 "total_tokens": 0,
+                "run_id": run.id,
+                "_service": self,
+                "_db": db,
             }
 
             # 执行 LangGraph 工作流

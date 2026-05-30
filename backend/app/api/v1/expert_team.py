@@ -11,6 +11,7 @@ from app.schemas.expert_team import (
     ExpertTeamCreate, ExpertTeamUpdate, ExpertTeamOut,
     ExpertMemberCreate, ExpertMemberUpdate,
     ExpertTeamExecuteRequest,
+    RoleSkillCreate, RoleSkillUpdate,
 )
 from app.schemas.response import ok, ok_page, fail
 
@@ -203,3 +204,76 @@ async def list_expert_team_runs(
         db, team_id, page=pagination.page, page_size=pagination.page_size,
     )
     return ok_page(data=items, total=total, page=pagination.page, page_size=pagination.page_size)
+
+
+# ─── 角色技能绑定 ───────────────────────────────────────
+
+@router.get("/members/{member_id}/skills")
+async def list_member_skills(
+    request: Request,
+    member_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """查询成员绑定的技能列表"""
+    try:
+        skills = await service.list_member_skills(db, member_id)
+        return ok(data=skills)
+    except RecordNotFoundError as e:
+        return fail("EXPERT_TEAM_NOT_FOUND", str(e), "请检查成员 ID", _req_id(request))
+
+
+@router.post("/members/{member_id}/skills")
+async def bind_skill_to_member(
+    request: Request,
+    member_id: int,
+    data: RoleSkillCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """绑定技能到成员"""
+    try:
+        bind = await service.bind_skill(db, member_id, data)
+        return ok(data=bind)
+    except RecordNotFoundError as e:
+        return fail("EXPERT_TEAM_NOT_FOUND", str(e), "请检查成员或技能 ID", _req_id(request))
+
+
+@router.put("/skills/{bind_id}")
+async def update_skill_bind(
+    request: Request,
+    bind_id: int,
+    data: RoleSkillUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """更新角色技能绑定"""
+    try:
+        bind = await service.update_skill_bind(db, bind_id, data)
+        return ok(data=bind)
+    except RecordNotFoundError as e:
+        return fail("EXPERT_TEAM_NOT_FOUND", str(e), "请检查绑定 ID", _req_id(request))
+
+
+@router.delete("/skills/{bind_id}")
+async def unbind_skill(
+    request: Request,
+    bind_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """解绑技能"""
+    try:
+        await service.unbind_skill(db, bind_id)
+        return ok(data=None, message="解绑成功")
+    except RecordNotFoundError as e:
+        return fail("EXPERT_TEAM_NOT_FOUND", str(e), "请检查绑定 ID", _req_id(request))
+
+
+# ─── 角色执行记录 ───────────────────────────────────────
+
+@router.get("/runs/{run_id}/role-runs")
+async def list_role_runs(
+    request: Request,
+    run_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """查询某次运行的所有角色执行记录"""
+    runs = await service.list_role_runs(db, run_id)
+    return ok(data=runs)
