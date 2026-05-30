@@ -51,17 +51,21 @@
 │        │           │ (技能调用)   │                                    │
 │        │           └─────────────┘                                    │
 │        │                                                              │
-│  实时 WebSocket 推送: role_start / skill_call / role_complete         │
-└───────────────────────────────────────────────────────────────────────┘
+│  ┌─────▼──────────────────────────────────────────┐                  │
+│  │ phase_dispatcher (按依赖层级分批调度)             │                  │
+│  │ 批内并行 Send → fan-in → 下一批 → ... → 完成    │                  │
+│  └────────────────────────────────────────────────┘                  │
+│                                                                      │
+│  实时流式推送: get_stream_writer → Celery → Redis → WS               │
+└──────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
-┌───────────────────────────────────────────────────────────────────────┐
-│  MySQL: expert_teams / expert_roles / expert_role_skills              │
-│         expert_team_runs / expert_role_runs                           │
-│  Qdrant: knowledge_chunks (技能检索)                                   │
-│  Redis: WebSocket 消息队列                                             │
-└───────────────────────────────────────────────────────────────────────┘
-```
+┌──────────────────────────────────────────────────────────────────────┐
+│  MySQL: expert_teams / expert_roles / expert_role_skills             │
+│         expert_team_runs / expert_role_runs                          │
+│  Qdrant: knowledge_chunks (技能检索)                                  │
+│  Redis: Celery 消息队列 + 流式事件转发                                │
+└──────────────────────────────────────────────────────────────────────┘
 
 ---
 
@@ -212,13 +216,13 @@ expert_team_runs (1) ──── (N) expert_role_runs
 │ (任务拆解)    │     输出: [{role_id, sub_task, priority}, ...]
 └──────┬───────┘
        │
-       │  assign_roles (Send 并行)
+       │  phase_dispatcher (按依赖层级分批 Send)
        ▼
 ┌──────────────────────────────────────────────────┐
+│  第 N 批 (同一批内并行)                            │
 │                                                  │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
 │  │ role_1   │  │ role_2   │  │ role_3   │  ...  │
-│  │ (研究员)  │  │ (编码者)  │  │ (审查员)  │       │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘       │
 │       │              │              │             │
 │  ┌────▼─────┐  ┌────▼─────┐  ┌────▼─────┐       │
@@ -230,15 +234,24 @@ expert_team_runs (1) ──── (N) expert_role_runs
 └───────┼──────────────┼──────────────┼─────────────┘
         │              │              │
         └──────────────┼──────────────┘
+                       │  (fan-in: 等所有并行 Worker 完成)
+                       ▼
+                ┌──────────────┐
+                │phase_dispatch│  ← 检查是否还有待执行的角色批次
+                │ (阶段调度)    │     有 → Send 下一批角色
+                └──────┬───────┘     无 → Send synthesizer
                        │
-                ┌──────▼───────┐
-                │ synthesizer  │  ← 汇总所有角色输出
-                │ (结果合并)    │
-                └──────┬───────┘
-                       │
-                ┌──────▼───────┐
-                │     END      │
-                └──────────────┘
+         ┌─────────────┴─────────────┐
+         ▼                           ▼
+  ┌─────────────┐            ┌──────────────┐
+  │ role_worker │            │ synthesizer  │
+  │ (下一批角色) │            │ (结果合并)    │
+  └──────┬──────┘            └──────┬───────┘
+         │                          │
+         └──► phase_dispatch        ▼
+                            ┌──────────────┐
+                            │     END      │
+                            └──────────────┘
 ```
 
 ### State 定义
@@ -272,6 +285,7 @@ class RoleWorkerState(TypedDict):
     role: dict                               # 角色配置 {id, name, type, prompt, skills}
     sub_task: str                            # 该角色的子任务
     context: str                             # 前置角色的输出（依赖上下文）
+    run_id: int                              # 本次运行 ID（用于记录和 WebSocket 推送）
     role_results: Annotated[list[dict], operator.add]  # 结果累加
 ```
 
@@ -381,15 +395,19 @@ def orchestrator(state: ExpertTeamState) -> dict:
 
     llm = get_llm(state["team_config"].get("llm_model"))
     result = llm.invoke(prompt)
-    plan = json.loads(result.content)
+    content = result.content
+    json_str = content[content.find('{') : content.rfind('}')+1]
+    plan = json.loads(json_str)
 
     # 记录到 expert_team_runs
     save_team_run(state["run_id"], status=1, plan=plan)  # 1=运行中
 
-    # WebSocket 推送：编排完成
-    ws_broadcast("expert_progress", {
-        "run_id": state["run_id"],
+    # 流式推送：编排完成（通过 LangGraph get_stream_writer，前端 stream_mode=["custom"] 接收）
+    writer = get_stream_writer()
+    writer({
+        "event": "expert_progress",
         "phase": "orchestrator",
+        "run_id": state["run_id"],
         "status": "completed",
         "plan": plan["execution_plan"],
         "reasoning": plan.get("reasoning", ""),
@@ -402,15 +420,18 @@ def orchestrator(state: ExpertTeamState) -> dict:
 # 3. 角色执行器 — 单个角色执行子任务
 # ============================================================
 def role_worker(state: RoleWorkerState) -> dict:
-    """单个角色执行其子任务，可调用绑定的技能"""
+    """单个角色执行其子任务，可调用绑定的技能。失败时返回错误结果而非抛异常，保证图继续运行。"""
     role = state["role"]
     sub_task = state["sub_task"]
     context = state.get("context", "")
+    run_id = state.get("run_id")
+    writer = get_stream_writer()
 
-    # WebSocket 推送：角色开始执行
-    ws_broadcast("expert_progress", {
-        "run_id": state.get("run_id"),
+    # 流式推送：角色开始执行
+    writer({
+        "event": "expert_progress",
         "phase": "role_start",
+        "run_id": run_id,
         "role_id": role["id"],
         "role_name": role["name"],
         "sub_task": sub_task,
@@ -418,70 +439,73 @@ def role_worker(state: RoleWorkerState) -> dict:
 
     # 记录角色执行开始
     role_run_id = save_role_run(
-        run_id=state["run_id"],
+        run_id=run_id,
         role_id=role["id"],
         role_name=role["name"],
         status=1,  # 运行中
         input_json={"sub_task": sub_task, "context": context},
     )
 
-    skills_used = []
-    skill_results = []
+    try:
+        skills_used = []
+        skill_results = []
 
-    # ---- 第一步：角色决定是否需要调用技能 ----
-    if role["skills"]:
-        skill_decision = decide_skills(role, sub_task, context)
+        # ---- 第一步：角色决定是否需要调用技能 ----
+        if role["skills"]:
+            skill_decision = decide_skills(role, sub_task, context)
 
-        # ---- 第二步：按需调用技能 ----
-        for skill_call in skill_decision.get("skills_to_call", []):
-            skill_info = next(
-                (s for s in role["skills"] if s["name"] == skill_call["skill_name"]),
-                None
-            )
-            if not skill_info:
-                continue
-
-            # WebSocket 推送：技能调用
-            ws_broadcast("expert_progress", {
-                "run_id": state.get("run_id"),
-                "phase": "skill_call",
-                "role_id": role["id"],
-                "role_name": role["name"],
-                "skill_name": skill_info["display_name"],
-                "params": skill_call.get("params", {}),
-            })
-
-            try:
-                skill_result = execute_skill(
-                    skill_name=skill_info["name"],
-                    params=skill_call.get("params", {}),
-                    context=context,
+            # ---- 第二步：按需调用技能 ----
+            for skill_call in skill_decision.get("skills_to_call", []):
+                skill_info = next(
+                    (s for s in role["skills"] if s["name"] == skill_call["skill_name"]),
+                    None
                 )
-                skills_used.append({
-                    "skill_id": skill_info["id"],
-                    "name": skill_info["name"],
-                    "display_name": skill_info["display_name"],
-                    "status": "success",
-                    "result": skill_result[:500],  # 截断保存
-                })
-                skill_results.append(
-                    f"[技能 {skill_info['display_name']}]: {skill_result}"
-                )
-            except Exception as e:
-                skills_used.append({
-                    "skill_id": skill_info["id"],
-                    "name": skill_info["name"],
-                    "display_name": skill_info["display_name"],
-                    "status": "failed",
-                    "error": str(e)[:200],
+                if not skill_info:
+                    continue
+
+                # 流式推送：技能调用
+                writer({
+                    "event": "expert_progress",
+                    "phase": "skill_call",
+                    "run_id": run_id,
+                    "role_id": role["id"],
+                    "role_name": role["name"],
+                    "skill_name": skill_info["display_name"],
+                    "params": skill_call.get("params", {}),
                 })
 
-    # ---- 第三步：角色基于技能结果生成最终输出 ----
-    skill_context = "\n\n".join(skill_results) if skill_results else ""
-    full_context = f"{context}\n\n## 技能调用结果\n{skill_context}" if skill_context else context
+                try:
+                    skill_result = execute_skill(
+                        skill_name=skill_info["name"],
+                        params=skill_call.get("params", {}),
+                        context=context,
+                    )
+                    skills_used.append({
+                        "skill_id": skill_info["id"],
+                        "name": skill_info["name"],
+                        "display_name": skill_info["display_name"],
+                        "status": "success",
+                        "result": skill_result[:500],  # 截断保存
+                    })
+                    skill_results.append(
+                        f"[技能 {skill_info['display_name']}]: {skill_result}"
+                    )
+                except Exception as e:
+                    # 单个技能失败不阻塞角色，记录后继续
+                    skills_used.append({
+                        "skill_id": skill_info["id"],
+                        "name": skill_info["name"],
+                        "display_name": skill_info["display_name"],
+                        "status": "failed",
+                        "error": str(e)[:200],
+                    })
 
-    role_prompt = role.get("system_prompt", f"你是{role['name']}，请完成以下任务。")
-    prompt = f"""{role_prompt}
+        # ---- 第三步：角色基于技能结果生成最终输出 ----
+        skill_context = "\n\n".join(skill_results) if skill_results else ""
+        full_context = f"{context}\n\n## 技能调用结果\n{skill_context}" if skill_context else context
+
+        role_prompt = role.get("system_prompt", f"你是{role['name']}，请完成以下任务。")
+        prompt = f"""{role_prompt}
 
 ## 你的任务
 {sub_task}
@@ -494,37 +518,63 @@ def role_worker(state: RoleWorkerState) -> dict:
 2. 如果调用了技能，结合技能结果综合分析
 3. 输出要结构化、清晰"""
 
-    llm = get_llm(role.get("llm_model"), role.get("temperature", 0.7))
-    result = llm.invoke(prompt)
-    role_output = result.content
+        llm = get_llm(role.get("llm_model"), role.get("temperature", 0.7))
+        result = llm.invoke(prompt)
+        role_output = result.content
 
-    # 记录角色执行完成
-    save_role_run(
-        role_run_id=role_run_id,
-        status=2,  # 成功
-        output_json={"output": role_output, "skills_used": skills_used},
-        skills_used=skills_used,
-    )
+        # 记录角色执行完成
+        save_role_run(
+            role_run_id=role_run_id,
+            status=2,  # 成功
+            output_json={"output": role_output, "skills_used": skills_used},
+            skills_used=skills_used,
+        )
 
-    # WebSocket 推送：角色完成
-    ws_broadcast("expert_progress", {
-        "run_id": state.get("run_id"),
-        "phase": "role_complete",
-        "role_id": role["id"],
-        "role_name": role["name"],
-        "output": role_output[:300],  # 截断推送
-        "skills_used": [s["display_name"] for s in skills_used],
-        "duration_ms": get_role_duration(role_run_id),
-    })
+        # 流式推送：角色完成
+        writer({
+            "event": "expert_progress",
+            "phase": "role_complete",
+            "run_id": run_id,
+            "role_id": role["id"],
+            "role_name": role["name"],
+            "output": role_output[:300],  # 截断推送
+            "skills_used": [s["display_name"] for s in skills_used],
+            "duration_ms": get_role_duration(role_run_id),
+        })
 
-    return {"role_results": [{
-        "role_id": role["id"],
-        "role_name": role["name"],
-        "role_type": role["type"],
-        "sub_task": sub_task,
-        "output": role_output,
-        "skills_used": skills_used,
-    }]}
+        return {"role_results": [{
+            "role_id": role["id"],
+            "role_name": role["name"],
+            "role_type": role["type"],
+            "sub_task": sub_task,
+            "output": role_output,
+            "skills_used": skills_used,
+        }]}
+
+    except Exception as e:
+        # 角色整体失败：记录错误，返回失败结果，不阻塞其他角色和汇总
+        error_msg = str(e)[:500]
+        save_role_run(
+            role_run_id=role_run_id,
+            status=3,  # 失败
+            error_message=error_msg,
+        )
+        writer({
+            "event": "expert_progress",
+            "phase": "role_failed",
+            "run_id": run_id,
+            "role_id": role["id"],
+            "role_name": role["name"],
+            "error": error_msg,
+        })
+        return {"role_results": [{
+            "role_id": role["id"],
+            "role_name": role["name"],
+            "role_type": role["type"],
+            "sub_task": sub_task,
+            "output": f"[执行失败] {error_msg}",
+            "skills_used": [],
+        }]}
 
 
 # ============================================================
@@ -565,8 +615,14 @@ def decide_skills(role: dict, sub_task: str, context: str) -> dict:
 如果不需要调用技能，返回 {{"reasoning": "...", "skills_to_call": []}}"""
 
     llm = get_llm(role.get("llm_model"), temperature=0.3)  # 低温度，稳定决策
-    result = llm.invoke(prompt)
-    return json.loads(result.content)
+    try:
+        result = llm.invoke(prompt)
+        content = result.content
+        json_str = content[content.find('{') : content.rfind('}')+1]
+        return json.loads(json_str)
+    except Exception as e:
+        # 技能决策失败时不阻塞角色执行，降级为不调用技能
+        return {"reasoning": f"技能决策失败: {e}", "skills_to_call": []}
 
 
 # ============================================================
@@ -604,7 +660,9 @@ def synthesizer(state: ExpertTeamState) -> dict:
 
     llm = get_llm(state["team_config"].get("llm_model"))
     result = llm.invoke(prompt)
-    output = json.loads(result.content)
+    content = result.content
+    json_str = content[content.find('{') : content.rfind('}')+1]
+    output = json.loads(json_str)
 
     # 更新运行记录
     save_team_run(
@@ -613,10 +671,12 @@ def synthesizer(state: ExpertTeamState) -> dict:
         output_json={"final_output": output["final_output"], "summary": output["summary"]},
     )
 
-    # WebSocket 推送：任务完成
-    ws_broadcast("expert_progress", {
-        "run_id": state["run_id"],
+    # 流式推送：任务完成
+    writer = get_stream_writer()
+    writer({
+        "event": "expert_progress",
         "phase": "completed",
+        "run_id": state["run_id"],
         "final_output": output["final_output"],
         "summary": output["summary"],
     })
@@ -627,40 +687,68 @@ def synthesizer(state: ExpertTeamState) -> dict:
 ### 路由逻辑
 
 ```python
-def assign_roles(state: ExpertTeamState) -> list[Send]:
-    """根据执行计划分配角色，支持并行和串行"""
+def build_dep_context(state: ExpertTeamState, plan: dict) -> str:
+    """收集依赖角色的输出作为上下文"""
+    deps = plan.get("dependencies", [])
+    if not deps:
+        return ""
+    return "\n\n".join([
+        f"[{r['role_name']}的输出]: {r['output']}"
+        for r in state["role_results"]
+        if r["role_id"] in deps
+    ])
+
+
+def phase_dispatcher(state: ExpertTeamState) -> list[Send]:
+    """
+    阶段调度器：按依赖层级分批派发角色。
+    - 同一批内的角色并行执行（依赖全部满足）
+    - 批次间串行（fan-in 后再派发下一批）
+    - 受 max_concurrent_roles 限制，超出的放入下一批
+    - 所有角色完成后派发 synthesizer
+    """
+    completed = {r["role_id"] for r in state["role_results"]}
+    plan = state["execution_plan"]
+    max_concurrent = state["team_config"].get("max_concurrent_roles", 3)
+
+    # 找出所有依赖已满足的角色
+    ready = []
+    for p in plan:
+        if p["role_id"] in completed:
+            continue
+        deps = p.get("dependencies", [])
+        if all(d in completed for d in deps):
+            ready.append(p)
+
+    if not ready:
+        # 所有角色已完成（或出现死依赖）→ 进入汇总
+        return [Send("synthesizer", {"run_id": state["run_id"]})]
+
+    # 受并发数限制，超出部分会在下一轮 phase_dispatcher 自动派发
+    ready = ready[:max_concurrent]
+
+    # 派发这一批就绪的角色
     sends = []
-    completed_roles = {r["role_id"] for r in state["role_results"]}
-
-    for plan in state["execution_plan"]:
-        role_id = plan["role_id"]
-        if role_id in completed_roles:
-            continue  # 已完成，跳过
-
-        # 检查依赖是否已完成
-        deps = plan.get("dependencies", [])
-        if all(d in completed_roles for d in deps):
-            # 收集依赖角色的输出作为上下文
-            dep_context = "\n\n".join([
-                f"[{r['role_name']}的输出]: {r['output']}"
-                for r in state["role_results"]
-                if r["role_id"] in deps
-            ])
-
-            role = next(r for r in state["roles"] if r["id"] == role_id)
-            sends.append(Send("role_worker", {
-                "role": role,
-                "sub_task": plan["sub_task"],
-                "context": dep_context,
-            }))
-
-    return sends if sends else [Send("synthesizer", {})]
+    for p in ready:
+        role = next((r for r in state["roles"] if r["id"] == p["role_id"]), None)
+        if not role:
+            # 角色配置缺失，跳过并记录
+            continue
+        sends.append(Send("role_worker", {
+            "role": role,
+            "sub_task": p["sub_task"],
+            "context": build_dep_context(state, p),
+            "run_id": state["run_id"],
+        }))
+    return sends
 ```
 
 ### 图构建
 
 ```python
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.config import get_stream_writer
 
 workflow = StateGraph(ExpertTeamState)
 
@@ -671,11 +759,26 @@ workflow.add_node("synthesizer", synthesizer)
 
 workflow.add_edge(START, "load_team")
 workflow.add_edge("load_team", "orchestrator")
-workflow.add_conditional_edges("orchestrator", assign_roles, ["role_worker", "synthesizer"])
-workflow.add_edge("role_worker", "synthesizer")
+
+# orchestrator → phase_dispatcher (隐含在 conditional_edges 中)
+# phase_dispatcher 根据依赖状态 Send 到 role_worker 或 synthesizer
+workflow.add_conditional_edges(
+    "orchestrator", phase_dispatcher, ["role_worker", "synthesizer"]
+)
+
+# 每批 Worker 完成后 (fan-in)，回到 phase_dispatcher 检查下一批
+workflow.add_conditional_edges(
+    "role_worker", phase_dispatcher, ["role_worker", "synthesizer"]
+)
+
 workflow.add_edge("synthesizer", END)
 
-expert_team_graph = workflow.compile()
+# 生产环境建议用 MySQLSaver 持久化状态，支持断点恢复
+# from langgraph.checkpoint.mysql import MySQLSaver
+# checkpointer = MySQLSaver(conn_string)
+checkpointer = MemorySaver()
+
+expert_team_graph = workflow.compile(checkpointer=checkpointer)
 ```
 
 ---
@@ -705,42 +808,54 @@ expert_team_graph = workflow.compile()
                         │
 ┌─ orchestrator ───────────────────────────────────────────┐
 │  分析任务 → 制定计划:                                     │
-│  1. 研究员: "分析代码结构和技术栈" (并行)                  │
-│  2. 审查员: "发现 Bug 和安全问题" (依赖1)                 │
-│  3. 改写者: "根据审查结果修复代码" (依赖2)                │
-│  4. 文档员: "生成审查报告" (依赖1,2,3)                    │
+│  1. 研究员: "分析代码结构和技术栈" (依赖: 无)             │
+│  2. 审查员: "发现 Bug 和安全问题" (依赖: 研究员)          │
+│  3. 改写者: "根据审查结果修复代码" (依赖: 审查员)         │
+│  4. 文档员: "生成审查报告" (依赖: 研究员,审查员,改写者)   │
 │                                                          │
 │  WebSocket: expert_progress.phase=orchestrator            │
 └───────────────────────┬─────────────────────────────────┘
-                        │ Send()
-                        ▼
+                        │
+┌─ phase_dispatcher (第1批) ───────────────────────────────┐
+│  检查: 研究员依赖为空 → 就绪; 其他角色依赖未满足 → 跳过   │
+│  Send: [研究员]                                           │
+└───────────────────────┬─────────────────────────────────┘
+                        │
 ┌─ role_worker (研究员) ───────────────────────────────────┐
 │  📡 WS: expert_progress.phase=role_start (研究员)         │
-│                                                          │
 │  1. decide_skills → 调用 [code-analysis, file-reader]    │
 │  📡 WS: expert_progress.phase=skill_call (code-analysis) │
 │  📡 WS: expert_progress.phase=skill_call (file-reader)   │
-│                                                          │
 │  2. 基于技能结果生成分析报告                              │
 │  📡 WS: expert_progress.phase=role_complete (研究员)      │
 └───────────────────────┬─────────────────────────────────┘
-                        │ (上下文传递给下一个角色)
+                        │ (fan-in: 研究员完成)
                         ▼
+┌─ phase_dispatcher (第2批) ───────────────────────────────┐
+│  检查: 审查员依赖=[研究员]→研究员已完成→就绪              │
+│  Send: [审查员]                                           │
+└───────────────────────┬─────────────────────────────────┘
+                        │
 ┌─ role_worker (审查员) ───────────────────────────────────┐
 │  📡 WS: expert_progress.phase=role_start (审查员)         │
-│                                                          │
+│  context: [研究员的输出]: "识别为 React + TypeScript..."  │
 │  1. decide_skills → 调用 [security-scan, lint-check]     │
-│  📡 WS: expert_progress.phase=skill_call (security-scan) │
-│  📡 WS: expert_progress.phase=skill_call (lint-check)    │
-│                                                          │
 │  2. 综合分析，输出审查结果                                │
 │  📡 WS: expert_progress.phase=role_complete (审查员)      │
 └───────────────────────┬─────────────────────────────────┘
+                        │ (fan-in: 审查员完成)
+                        ▼
+┌─ phase_dispatcher (第3批) ───────────────────────────────┐
+│  Send: [改写者] → 同理...                                 │
+└───────────────────────┬─────────────────────────────────┘
+                        │
+                    ... (改写者 → 文档员, 每批串行, 批内并行)
                         │
                         ▼
-                    ... (改写者 → 文档员) ...
+┌─ phase_dispatcher (最终) ────────────────────────────────┐
+│  所有角色完成 → Send: [synthesizer]                       │
+└───────────────────────┬─────────────────────────────────┘
                         │
-                        ▼
 ┌─ synthesizer ────────────────────────────────────────────┐
 │  汇总所有角色输出:                                        │
 │  - 代码结构分析 (研究员)                                  │
@@ -795,21 +910,47 @@ POST   /api/v1/expert-team-runs/{id}/cancel     # 取消执行
 
 ### WebSocket
 
-```
-WS /api/v1/ws?token=<jwt>
+客户端通过 WebSocket 接收实时进度。事件流路径：
 
-事件类型: expert_progress
-payload: {
+```
+LangGraph get_stream_writer()        (节点内写入事件)
+        │
+        ▼
+graph.stream(state, stream_mode=["custom"])  (LangGraph 流式输出)
+        │
+        ▼
+Celery Task (迭代 stream，转发到 Redis)      (expert_team_task.py)
+        │
+        ▼
+Redis Pub/Sub channel: expert_run:{run_id}
+        │
+        ▼
+WebSocket Server (订阅 Redis，推送到客户端)   (ws_manager.py)
+        │
+        ▼
+客户端 (前端接收实时事件)
+```
+
+```
+WS /api/v1/ws?token=<jwt>&run_id=<run_id>
+
+事件 payload (由 get_stream_writer 写入):
+{
+    "event": "expert_progress",
     "run_id": 123,
-    "phase": "orchestrator|role_start|skill_call|role_complete|completed",
+    "phase": "orchestrator|role_start|skill_call|role_complete|role_failed|completed",
     "role_id": 1,          // 角色相关事件
     "role_name": "研究员",
     "skill_name": "...",   // 技能调用事件
     "output": "...",       // 完成事件
     "plan": [...],         // 编排事件
     "final_output": "...", // 最终结果
+    "error": "..."         // 失败事件
 }
 ```
+
+> 💡 Celery Task 实现要点：使用 `graph.stream()` 而非 `graph.invoke()`，
+> 逐个迭代 custom 事件并 publish 到 Redis，实现真正的实时推送。
 
 ---
 
