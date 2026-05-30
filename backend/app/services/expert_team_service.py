@@ -139,8 +139,8 @@ async def orchestrator_node(state: OrchestratorState) -> dict:
         tokens = response.get("eval_count", 0)
         msg = {
             "round": 0,
-            "expert_name": "编排器",
-            "expert_role": "Orchestrator",
+            "expertName": "编排器",
+            "expertRole": "Orchestrator",
             "content": response["content"],
             "timestamp": datetime.now().isoformat(),
         }
@@ -200,7 +200,7 @@ async def expert_call_node(state: ExpertState) -> dict:
     prev_msgs = [d for d in discussion if d.get("round", 0) > 0]
     if prev_msgs:
         prev_text = "\n".join([
-            f"[{d['expert_name']}({d['expert_role']}) 第{d['round']}轮]: {d['content']}"
+            f"[{d['expertName']}({d['expertRole']}) 第{d['round']}轮]: {d['content']}"
             for d in prev_msgs
         ])
         context = f"原始问题: {input_text}\n\n以下是其他专家的意见，请参考并补充:\n{prev_text}"
@@ -237,8 +237,8 @@ async def expert_call_node(state: ExpertState) -> dict:
 
     msg = {
         "round": round_num,
-        "expert_name": member["name"],
-        "expert_role": member["role"],
+        "expertName": member["name"],
+        "expertRole": member["role"],
         "content": content,
         "timestamp": datetime.now().isoformat(),
     }
@@ -260,7 +260,7 @@ async def synthesizer_node(state: OrchestratorState) -> dict:
     # 格式化讨论内容
     lines = []
     for d in discussion:
-        lines.append(f"[第{d['round']}轮] {d['expert_name']}({d['expert_role']}):\n{d['content']}\n")
+        lines.append(f"[第{d['round']}轮] {d['expertName']}({d['expertRole']}):\n{d['content']}\n")
     discussion_text = "\n".join(lines)
 
     prompt = (synthesizer_prompt or DEFAULT_SYNTHESIZER_PROMPT).format(
@@ -282,9 +282,8 @@ async def synthesizer_node(state: OrchestratorState) -> dict:
 
 
 async def round_router_node(state: OrchestratorState) -> dict:
-    """路由节点: 专家讨论结束后，决定是继续下一轮还是汇总"""
-    # 此节点只做状态更新，实际路由由 route_after_round 决定
-    return {}
+    """路由节点: 专家讨论结束后，递增轮次计数器"""
+    return {"current_round": state["current_round"] + 1}
 
 
 def route_after_round(state: OrchestratorState) -> list[Send]:
@@ -516,13 +515,13 @@ class ExpertTeamService:
             )))
 
             result = {
-                "run_id": run.id,
+                "runId": run.id,
                 "status": 2,
                 "output": final_state["final_output"],
                 "discussion": final_state.get("discussion", []),
                 "rounds": rounds,
-                "token_usage": final_state.get("total_tokens", 0),
-                "duration_ms": duration_ms,
+                "tokenUsage": final_state.get("total_tokens", 0),
+                "durationMs": duration_ms,
             }
 
             # 更新运行记录
@@ -531,7 +530,7 @@ class ExpertTeamService:
                 "output_text": result["output"],
                 "discussion_json": result["discussion"],
                 "round_count": rounds,
-                "token_usage": result["token_usage"],
+                "token_usage": result["tokenUsage"],
                 "started_at": run.created_at,
                 "finished_at": end_time,
                 "duration_ms": duration_ms,
@@ -576,12 +575,7 @@ class ExpertTeamService:
 
     @staticmethod
     def _serialize_team(team, members=None) -> dict:
-        """用 Pydantic schema 序列化专家团"""
-        team_dict = ExpertTeamOut.model_validate(team).model_dump(by_alias=False)
-        team_dict["members"] = [
-            ExpertTeamOut.__annotations__  # placeholder
-        ]
-        # 直接构建，因为 members 需要单独处理
+        """序列化专家团"""
         return {
             "id": team.id,
             "name": team.name,

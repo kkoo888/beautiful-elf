@@ -901,6 +901,94 @@ CREATE TABLE translate_history (
 
 ---
 
+### 24. expert_teams — 专家团
+
+> 多专家协作工作流，基于 LangGraph Orchestrator-Worker 模式。
+
+```sql
+CREATE TABLE expert_teams (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name            VARCHAR(256)    NOT NULL COMMENT '专家团名称',
+    description     VARCHAR(1024)   DEFAULT '' COMMENT '专家团描述',
+    icon            VARCHAR(64)     DEFAULT '👥' COMMENT '图标',
+    category        VARCHAR(64)     DEFAULT '通用' COMMENT '分类',
+    orchestrator_prompt TEXT        DEFAULT '' COMMENT '编排器系统提示词',
+    synthesizer_prompt  TEXT        DEFAULT '' COMMENT '汇总器系统提示词',
+    max_rounds      INT             NOT NULL DEFAULT 3 COMMENT '最大讨论轮次',
+    enabled         TINYINT         NOT NULL DEFAULT 1 COMMENT '是否启用',
+    version         INT             NOT NULL DEFAULT 1 COMMENT '版本号',
+    config_json     JSON            DEFAULT NULL COMMENT '扩展配置',
+    deleted         TINYINT         NOT NULL DEFAULT 0,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_expert_teams_enabled (deleted, enabled),
+    INDEX idx_expert_teams_category (category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团';
+```
+
+### 25. expert_team_members — 专家团成员
+
+```sql
+CREATE TABLE expert_team_members (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    team_id         BIGINT UNSIGNED NOT NULL COMMENT '所属专家团 ID',
+    name            VARCHAR(128)    NOT NULL COMMENT '专家名称',
+    role            VARCHAR(128)    NOT NULL COMMENT '专家角色 (如: 架构师、测试专家)',
+    avatar          VARCHAR(64)     DEFAULT '🤖' COMMENT '头像 emoji',
+    system_prompt   TEXT            NOT NULL COMMENT '专家系统提示词',
+    model_name      VARCHAR(128)    DEFAULT '' COMMENT '使用的模型名称 (为空用默认)',
+    temperature     INT             DEFAULT 70 COMMENT '温度参数 (x100 存储, 70=0.7)',
+    max_tokens      INT             DEFAULT 2048 COMMENT '最大生成 token 数',
+    tools_json      JSON            DEFAULT NULL COMMENT '可用工具列表',
+    sort_order      INT             DEFAULT 0 COMMENT '排序顺序',
+    enabled         TINYINT         NOT NULL DEFAULT 1 COMMENT '是否启用',
+    deleted         TINYINT         NOT NULL DEFAULT 0,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_expert_members_team (team_id, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团成员';
+```
+
+### 26. expert_team_runs — 专家团运行记录
+
+```sql
+CREATE TABLE expert_team_runs (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    team_id         BIGINT UNSIGNED NOT NULL COMMENT '专家团 ID',
+    status          TINYINT         NOT NULL DEFAULT 0 COMMENT '状态: 0=待执行 1=运行中 2=已完成 3=失败 4=已取消',
+    trigger_type    TINYINT         NOT NULL DEFAULT 0 COMMENT '触发方式: 0=手动 1=定时 2=事件',
+    input_text      TEXT            DEFAULT '' COMMENT '用户输入',
+    output_text     TEXT            DEFAULT '' COMMENT '最终输出',
+    discussion_json JSON            DEFAULT NULL COMMENT '讨论过程记录 [{round, expertName, expertRole, content, timestamp}]',
+    error_message   VARCHAR(2048)   DEFAULT '' COMMENT '错误信息',
+    round_count     INT             DEFAULT 0 COMMENT '实际讨论轮次',
+    token_usage     INT             DEFAULT 0 COMMENT '总 token 消耗',
+    started_at      DATETIME        DEFAULT NULL COMMENT '开始时间',
+    finished_at     DATETIME        DEFAULT NULL COMMENT '完成时间',
+    duration_ms     INT             DEFAULT 0 COMMENT '执行耗时 (毫秒)',
+    deleted         TINYINT         NOT NULL DEFAULT 0,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_expert_runs_team (team_id, status),
+    INDEX idx_expert_runs_status (status),
+    INDEX idx_expert_runs_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团运行记录';
+```
+
+**ER 关系**:
+```
+expert_teams (1) ──── (N) expert_team_members
+expert_teams (1) ──── (N) expert_team_runs
+```
+
+**设计说明**:
+- `temperature` 用整数 x100 存储 (70 = 0.7)，避免浮点精度问题
+- `discussion_json` 存储完整的讨论过程，含轮次、专家名、角色、内容、时间戳
+- `config_json` 预留扩展字段（如共识阈值、超时配置等）
+- 运行记录保留 `team_name` 冗余？→ 不保留，查询时 JOIN 即可
+
+---
+
 ## 🔍 索引策略总览
 
 | 表 | 索引 | 类型 | 用途 |
@@ -930,6 +1018,10 @@ CREATE TABLE translate_history (
 | subagent_runs | (priority) | 单列 | 按优先级排序 |
 | translate_history | (source_lang, target_lang, created_at) | 联合 | 按语言对查翻译历史 |
 | translate_history | (favorite) | 单列 | 筛选收藏翻译 |
+| expert_team_members | (team_id, deleted) | 联合 | 按专家团查成员 |
+| expert_team_runs | (team_id, status) | 联合 | 按专家团查运行状态 |
+| expert_team_runs | (status) | 单列 | 按状态查运行记录 |
+| expert_team_runs | (created_at) | 单列 | 按时间查运行历史 |
 
 ---
 
