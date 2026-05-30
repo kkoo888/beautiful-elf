@@ -941,6 +941,7 @@ CREATE TABLE expert_team_members (
     max_tokens      INT             DEFAULT 2048 COMMENT '最大生成 token 数',
     tools_json      JSON            DEFAULT NULL COMMENT '可用工具列表',
     sort_order      INT             DEFAULT 0 COMMENT '排序顺序',
+    depends_on      JSON            DEFAULT NULL COMMENT '依赖的成员 ID 列表',
     enabled         TINYINT         NOT NULL DEFAULT 1 COMMENT '是否启用',
     deleted         TINYINT         NOT NULL DEFAULT 0,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,

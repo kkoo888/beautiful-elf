@@ -958,98 +958,152 @@ WS /api/v1/ws?token=<jwt>&run_id=<run_id>
 
 ```python
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 # === 请求模型 ===
+
 class ExpertTeamCreate(BaseModel):
-    name: str = Field(..., max_length=256)
-    description: str = Field("", max_length=1024)
-    icon: str = Field("👥", max_length=64)
-    system_prompt: Optional[str] = None
-    max_concurrent_roles: int = Field(3, ge=1, le=10)
-    timeout_seconds: int = Field(300, ge=30, le=3600)
+    """创建专家团"""
+    name: str = Field(..., min_length=1, max_length=256, description="专家团名称")
+    description: str = Field(default="", max_length=1024, description="描述")
+    icon: str = Field(default="👥", max_length=64, description="图标")
+    category: str = Field(default="通用", max_length=64, description="分类")
+    orchestrator_prompt: str = Field(default="", description="编排器系统提示词")
+    synthesizer_prompt: str = Field(default="", description="汇总器系统提示词")
+    max_rounds: int = Field(default=3, ge=1, le=10, description="最大讨论轮次")
+    config_json: Optional[dict] = Field(default=None, description="扩展配置")
+    members: List["ExpertMemberCreate"] = Field(default=[], description="专家成员列表")
 
-class ExpertRoleCreate(BaseModel):
-    name: str = Field(..., max_length=128)
-    display_name: str = Field("", max_length=256)
-    description: str = Field("", max_length=1024)
-    role_type: str = Field("worker", pattern="^(orchestrator|worker|reviewer)$")
-    system_prompt: Optional[str] = None
-    llm_model: Optional[str] = None
-    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
-    execution_order: int = Field(0, ge=0)
-    depends_on: Optional[list[int]] = None
 
-class RoleSkillBind(BaseModel):
-    skill_id: int
-    priority: int = Field(0, ge=0)
-    config_override: Optional[dict] = None
+class ExpertMemberCreate(BaseModel):
+    """创建专家成员"""
+    name: str = Field(..., min_length=1, max_length=128, description="专家名称")
+    role: str = Field(..., min_length=1, max_length=128, description="专家角色")
+    avatar: str = Field(default="🤖", max_length=64, description="头像 emoji")
+    system_prompt: str = Field(..., min_length=1, description="专家系统提示词")
+    model_name: str = Field(default="", max_length=128, description="模型名称")
+    temperature: int = Field(default=70, ge=0, le=200, description="温度 (x100)")
+    max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数")
+    tools_json: Optional[List[dict]] = Field(default=None, description="可用工具列表")
+    sort_order: int = Field(default=0, description="排序顺序")
+    depends_on: Optional[List[int]] = Field(default=None, description="依赖的成员 ID 列表")
+    enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
 
-class ExpertTeamExecute(BaseModel):
-    task_input: str = Field(..., min_length=1, max_length=10000)
+
+class RoleSkillCreate(BaseModel):
+    """绑定技能到角色"""
+    skill_id: int = Field(..., description="技能 ID")
+    priority: int = Field(default=0, ge=0, description="调用优先级")
+    config_override: Optional[dict] = Field(default=None, description="配置覆盖")
+    enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
+
+
+class ExpertTeamExecuteRequest(BaseModel):
+    """执行专家团请求"""
+    input_text: str = Field(..., min_length=1, description="用户输入")
+    max_rounds: Optional[int] = Field(default=None, ge=1, le=10, description="覆盖最大轮次")
+
 
 # === 响应模型 ===
-class ExpertTeamResponse(BaseModel):
+
+class ExpertTeamOut(BaseModel):
+    """专家团输出"""
     id: int
     name: str
     description: str
     icon: str
-    roles_count: int
-    enabled: bool
-    created_at: datetime
+    category: str
+    orchestrator_prompt: str
+    synthesizer_prompt: str
+    max_rounds: int
+    enabled: int
+    version: int
+    config_json: Optional[dict]
+    members: List["ExpertMemberOut"] = []
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 
-class ExpertTeamDetailResponse(BaseModel):
+
+class ExpertMemberOut(BaseModel):
+    """专家成员输出"""
     id: int
+    team_id: int
     name: str
-    description: str
-    icon: str
-    system_prompt: Optional[str]
-    max_concurrent_roles: int
-    timeout_seconds: int
-    roles: list["ExpertRoleResponse"]
-    enabled: bool
+    role: str
+    avatar: str
+    system_prompt: str
+    model_name: str
+    temperature: int
+    max_tokens: int
+    tools_json: Optional[List[dict]]
+    sort_order: int
+    depends_on: Optional[List[int]]
+    enabled: int
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 
-class ExpertRoleResponse(BaseModel):
-    id: int
-    name: str
-    display_name: str
-    description: str
-    role_type: str
-    execution_order: int
-    depends_on: Optional[list[int]]
-    skills: list["RoleSkillResponse"]
-    enabled: bool
 
-class RoleSkillResponse(BaseModel):
-    skill_id: int
-    skill_name: str
-    skill_display_name: str
-    priority: int
-    config_override: Optional[dict]
-
-class ExpertTeamRunResponse(BaseModel):
+class ExpertTeamRunOut(BaseModel):
+    """运行记录输出"""
     id: int
     team_id: int
     team_name: str
     status: int
-    task_input: str
-    output_json: Optional[dict]
-    role_runs: list["ExpertRoleRunResponse"]
+    trigger_type: int
+    input_text: str
+    output_text: str
+    discussion_json: Optional[List[dict]]
+    error_message: str
+    round_count: int
+    token_usage: int
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     duration_ms: int
+    created_at: Optional[datetime]
 
-class ExpertRoleRunResponse(BaseModel):
+
+class ExpertRoleRunOut(BaseModel):
+    """角色执行记录输出"""
     id: int
+    run_id: int
     role_id: int
     role_name: str
     status: int
+    round_num: int
+    input_json: Optional[dict]
     output_json: Optional[dict]
-    skills_used: Optional[list[dict]]
+    skills_used: Optional[List[dict]]
+    error_message: str
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     duration_ms: int
+    token_usage: int
+    created_at: Optional[datetime]
+
+
+class RoleSkillOut(BaseModel):
+    """角色技能绑定输出"""
+    id: int
+    role_id: int
+    skill_id: int
+    skill_name: str
+    skill_display_name: str
+    skill_description: str
+    priority: int
+    config_override: Optional[dict]
+    enabled: int
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+
+class DiscussionMessage(BaseModel):
+    """讨论过程中的单条消息"""
+    round: int
+    expert_name: str
+    expert_role: str
+    content: str
+    timestamp: str
 ```
 
 ---
