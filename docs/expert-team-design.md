@@ -965,6 +965,7 @@ from datetime import datetime
 class ExpertTeamCreate(BaseModel):
     name: str = Field(..., max_length=256)
     description: str = Field("", max_length=1024)
+    icon: str = Field("👥", max_length=64)
     system_prompt: Optional[str] = None
     max_concurrent_roles: int = Field(3, ge=1, le=10)
     timeout_seconds: int = Field(300, ge=30, le=3600)
@@ -993,6 +994,7 @@ class ExpertTeamResponse(BaseModel):
     id: int
     name: str
     description: str
+    icon: str
     roles_count: int
     enabled: bool
     created_at: datetime
@@ -1001,6 +1003,7 @@ class ExpertTeamDetailResponse(BaseModel):
     id: int
     name: str
     description: str
+    icon: str
     system_prompt: Optional[str]
     max_concurrent_roles: int
     timeout_seconds: int
