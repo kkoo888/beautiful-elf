@@ -2,6 +2,8 @@ import { useEffect, useCallback } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from '@/styles/theme-provider'
+import { WebSocketProvider } from '@/services/websocket'
+import { WS_URL } from '@shared/constants'
 import { MainLayout } from '@/layouts'
 import { GlobalErrorBoundary } from '@/components/error-boundary/global-error-boundary'
 import { CommandPalette } from '@/components/command-palette'
@@ -85,33 +87,35 @@ export default function App() {
   return (
     <GlobalErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<MainLayout />}>
-                <Route index element={<ChatPage />} />
-                <Route path="schedule" element={<SchedulePage />} />
-                <Route path="clipboard" element={<ClipboardPage />} />
-                <Route path="snippets" element={<SnippetsPage />} />
-                <Route path="knowledge" element={<KnowledgePage />} />
-                <Route path="memory" element={<MemoryPage />} />
-                <Route path="translate" element={<TranslatePage />} />
-                <Route path="skills" element={<SkillsPage />} />
-                <Route path="workflow" element={<WorkflowPage />} />
-                <Route path="subagent" element={<SubagentPage />} />
-                <Route path="tools" element={<ToolsPage />} />
-                <Route path="pet" element={<PetPage />} />
-                <Route path="performance" element={<PerformancePage />} />
-                <Route path="notification" element={<NotificationPage />} />
-                <Route path="expert-team" element={<ExpertTeamPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-              </Route>
-            </Routes>
+        <WebSocketProvider config={{ url: WS_URL }}>
+          <ThemeProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<MainLayout />}>
+                  <Route index element={<ChatPage />} />
+                  <Route path="schedule" element={<SchedulePage />} />
+                  <Route path="clipboard" element={<ClipboardPage />} />
+                  <Route path="snippets" element={<SnippetsPage />} />
+                  <Route path="knowledge" element={<KnowledgePage />} />
+                  <Route path="memory" element={<MemoryPage />} />
+                  <Route path="translate" element={<TranslatePage />} />
+                  <Route path="skills" element={<SkillsPage />} />
+                  <Route path="workflow" element={<WorkflowPage />} />
+                  <Route path="subagent" element={<SubagentPage />} />
+                  <Route path="tools" element={<ToolsPage />} />
+                  <Route path="pet" element={<PetPage />} />
+                  <Route path="performance" element={<PerformancePage />} />
+                  <Route path="notification" element={<NotificationPage />} />
+                  <Route path="expert-team" element={<ExpertTeamPage />} />
+                  <Route path="settings" element={<SettingsPage />} />
+                </Route>
+              </Routes>
 
-            {/* 命令面板 — 全局覆盖层 */}
-            <CommandPalette open={commandPaletteOpen} onClose={closeCommandPalette} />
-          </BrowserRouter>
-        </ThemeProvider>
+              {/* 命令面板 — 全局覆盖层 */}
+              <CommandPalette open={commandPaletteOpen} onClose={closeCommandPalette} />
+            </BrowserRouter>
+          </ThemeProvider>
+        </WebSocketProvider>
       </QueryClientProvider>
     </GlobalErrorBoundary>
   )
