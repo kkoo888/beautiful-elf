@@ -61,6 +61,18 @@ class ExpertTeamRepository:
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_members_by_teams(self, db: AsyncSession, team_ids: List[int]) -> List[ExpertTeamMember]:
+        """批量查询多个团队的成员（消除 N+1）"""
+        if not team_ids:
+            return []
+        stmt = (
+            select(ExpertTeamMember)
+            .where(ExpertTeamMember.team_id.in_(team_ids), ExpertTeamMember.deleted == 0)
+            .order_by(ExpertTeamMember.sort_order.asc())
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_member_by_id(self, db: AsyncSession, member_id: int) -> Optional[ExpertTeamMember]:
         return await self.member_mapper.find_by_id(db, member_id)
 

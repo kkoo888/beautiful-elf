@@ -1,6 +1,7 @@
 """统一响应格式 — 符合阿里巴巴 API 规范"""
 from typing import Any, Optional, List
 from pydantic import BaseModel
+import uuid
 
 
 class ApiResponse(BaseModel):
@@ -47,6 +48,7 @@ def fail(
     code: str,
     message: str = "操作失败",
     user_tip: str = "",
+    request_id: str = "",
 ) -> dict:
     """错误响应"""
     return {
@@ -54,6 +56,7 @@ def fail(
         "message": message,
         "user_tip": user_tip,
         "data": None,
+        "request_id": request_id or str(uuid.uuid4()),
     }
 
 
