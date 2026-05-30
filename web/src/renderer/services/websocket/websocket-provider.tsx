@@ -117,13 +117,13 @@ export function WebSocketProvider({
   const clientRef = useRef<WebSocketClient | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
 
-  // 初始化客户端
-  if (!clientRef.current) {
-    clientRef.current = new WebSocketClient(config)
-  }
+  // 稳定化 config 引用，避免重复初始化
+  const stableConfig = useMemo(() => config, [config?.url])
 
   useEffect(() => {
-    const client = clientRef.current!
+    // 在 useEffect 内部初始化，避免竞态
+    const client = new WebSocketClient(stableConfig)
+    clientRef.current = client
     let mounted = true
 
     // 初始化消息队列
@@ -146,7 +146,7 @@ export function WebSocketProvider({
       client.destroy()
       clientRef.current = null
     }
-  }, [])
+  }, [stableConfig])
 
   const send = useCallback((message: WSMessage) => {
     clientRef.current?.send(message)
