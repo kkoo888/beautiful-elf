@@ -975,17 +975,76 @@ CREATE TABLE expert_team_runs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团运行记录';
 ```
 
-**ER 关系**:
+### 27. expert_role_skills — 角色技能绑定
+
+> 专家成员可绑定已有技能，执行时按优先级调用。
+
+```sql
+CREATE TABLE expert_role_skills (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    role_id         BIGINT UNSIGNED NOT NULL COMMENT '成员 ID (关联 expert_team_members.id)',
+    skill_id        BIGINT UNSIGNED NOT NULL COMMENT '技能 ID (关联 skills.id)',
+    priority        TINYINT         NOT NULL DEFAULT 0 COMMENT '调用优先级 (数值越大越优先)',
+    config_override JSON            DEFAULT NULL COMMENT '角色级别的技能配置覆盖',
+    enabled         TINYINT         NOT NULL DEFAULT 1 COMMENT '是否启用',
+    deleted         TINYINT         NOT NULL DEFAULT 0,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_role_skill (role_id, skill_id),
+    INDEX idx_role_skills_role (role_id),
+    INDEX idx_role_skills_skill (skill_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色技能绑定';
+```
+
+### 28. expert_role_runs — 角色执行记录
+
+> 每次运行中，各专家成员的独立执行记录（含技能调用详情）。
+
+```sql
+CREATE TABLE expert_role_runs (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    run_id          BIGINT UNSIGNED NOT NULL COMMENT '运行记录 ID (关联 expert_team_runs.id)',
+    role_id         BIGINT UNSIGNED NOT NULL COMMENT '成员 ID (关联 expert_team_members.id)',
+    role_name       VARCHAR(128)    NOT NULL COMMENT '成员名称 (冗余，避免 JOIN)',
+    status          TINYINT         NOT NULL DEFAULT 0 COMMENT '状态: 0=待运行 1=运行中 2=成功 3=失败 4=跳过',
+    round_num       INT             DEFAULT 0 COMMENT '所在讨论轮次',
+    input_json      JSON            DEFAULT NULL COMMENT '角色输入 (子任务 + 上下文)',
+    output_json     JSON            DEFAULT NULL COMMENT '角色输出 (分析结果)',
+    skills_used     JSON            DEFAULT NULL COMMENT '实际调用的技能列表 [{skill_id, name, status, result}]',
+    error_message   VARCHAR(2048)   DEFAULT '' COMMENT '错误信息',
+    started_at      DATETIME        DEFAULT NULL COMMENT '开始时间',
+    finished_at     DATETIME        DEFAULT NULL COMMENT '完成时间',
+    duration_ms     INT             DEFAULT 0 COMMENT '执行耗时 (毫秒)',
+    token_usage     INT             DEFAULT 0 COMMENT 'token 消耗',
+    deleted         TINYINT         NOT NULL DEFAULT 0,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_role_runs_run (run_id),
+    INDEX idx_role_runs_role (role_id),
+    INDEX idx_role_runs_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色执行记录';
+```
+
+**ER 关系图**:
 ```
 expert_teams (1) ──── (N) expert_team_members
-expert_teams (1) ──── (N) expert_team_runs
+                                  │
+                                  │ (N)
+                                  ▼
+                            expert_role_skills (N) ──── (1) skills
+
+expert_team_runs (1) ──── (N) expert_role_runs
+expert_team_members (1) ──── (N) expert_role_runs
 ```
 
 **设计说明**:
 - `temperature` 用整数 x100 存储 (70 = 0.7)，避免浮点精度问题
 - `discussion_json` 存储完整的讨论过程，含轮次、专家名、角色、内容、时间戳
 - `config_json` 预留扩展字段（如共识阈值、超时配置等）
-- 运行记录保留 `team_name` 冗余？→ 不保留，查询时 JOIN 即可
+- `expert_role_skills` 通过唯一索引 `uk_role_skill` 防止重复绑定
+- `expert_role_skills.config_override` 可覆盖技能全局配置（如特定角色用不同参数）
+- `expert_role_runs` 冗余存储 `role_name`，避免每次查运行记录都要 JOIN members 表
+- `expert_role_runs.skills_used` 记录每次执行实际调用了哪些技能及结果
 
 ---
 
@@ -1022,6 +1081,11 @@ expert_teams (1) ──── (N) expert_team_runs
 | expert_team_runs | (team_id, status) | 联合 | 按专家团查运行状态 |
 | expert_team_runs | (status) | 单列 | 按状态查运行记录 |
 | expert_team_runs | (created_at) | 单列 | 按时间查运行历史 |
+| expert_role_skills | (role_id, skill_id) | 唯一 | 防止重复绑定 + 按角色查技能 |
+| expert_role_skills | (skill_id) | 单列 | 按技能查绑定的角色 |
+| expert_role_runs | (run_id) | 联合 | 按运行记录查各角色执行 |
+| expert_role_runs | (role_id) | 单列 | 按角色查历史执行 |
+| expert_role_runs | (status) | 单列 | 按状态查角色执行 |
 
 ---
 
