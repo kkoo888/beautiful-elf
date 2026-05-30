@@ -14,6 +14,7 @@ import {
   SettingOutlined,
   BellOutlined,
   HeartOutlined,
+  TeamOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppStore } from '@/stores/use-app-store'
@@ -55,6 +56,7 @@ const menuItems: ItemType[] = [
     type: 'group' as const,
     children: [
       { key: '/workflow', icon: <BranchesOutlined />, label: '工作流' },
+      { key: '/expert-team', icon: <TeamOutlined />, label: '专家团' },
       { key: '/subagent', icon: <RobotOutlined />, label: '子代理' },
       { key: '/tools', icon: <DashboardOutlined />, label: '工具管理' },
     ],

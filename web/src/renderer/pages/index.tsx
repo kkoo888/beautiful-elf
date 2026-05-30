@@ -38,6 +38,7 @@ const PetPanel = React.lazy(() => import('@/modules/pet/pet-panel'))
 const PerformancePanel = React.lazy(() => import('@/modules/performance/performance-panel'))
 const NotificationPanel = React.lazy(() => import('@/modules/notification/notification-panel'))
 const SettingsPanel = React.lazy(() => import('@/modules/settings/settings-panel'))
+const ExpertTeamPanel = React.lazy(() => import('@/modules/expert-team/components/expert-team-panel'))
 
 export function ChatPage() {
   return (
@@ -155,6 +156,14 @@ export function SettingsPage() {
   return (
     <PageSuspense moduleName="设置">
       <SettingsPanel />
+    </PageSuspense>
+  )
+}
+
+export function ExpertTeamPage() {
+  return (
+    <PageSuspense moduleName="专家团">
+      <ExpertTeamPanel />
     </PageSuspense>
   )
 }

@@ -46,6 +46,15 @@ async def ready_check():
     except Exception as e:
         checks["qdrant"] = {"status": "error", "detail": str(e)}
 
+    # Ollama
+    try:
+        from app.services.ollama_service import OllamaClient
+        client = OllamaClient()
+        result = await client.health_check()
+        checks["ollama"] = {"status": result["status"], "models": result.get("models", [])}
+    except Exception as e:
+        checks["ollama"] = {"status": "error", "detail": str(e)}
+
     all_ok = all(c["status"] == "ok" for c in checks.values())
     return ok({"status": "ready" if all_ok else "not_ready", "checks": checks})
 
@@ -82,5 +91,20 @@ async def deps_check():
         }
     except Exception as e:
         deps["qdrant"] = {"status": "error", "detail": str(e)}
+
+    # Ollama
+    try:
+        from app.services.ollama_service import OllamaClient, get_host, get_chat_model, get_embed_model
+        client = OllamaClient()
+        result = await client.health_check()
+        deps["ollama"] = {
+            "host": get_host(),
+            "chat_model": get_chat_model(),
+            "embed_model": get_embed_model(),
+            "models": result.get("models", []),
+            "status": result["status"],
+        }
+    except Exception as e:
+        deps["ollama"] = {"status": "error", "detail": str(e)}
 
     return ok(deps)

@@ -29,6 +29,15 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     logger.info("数据库表初始化完成")
 
+    # 加载 Ollama 配置到内存缓存
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.services.ollama_service import load_ollama_config
+        async with AsyncSessionLocal() as db:
+            await load_ollama_config(db)
+    except Exception as e:
+        logger.warning(f"Ollama 配置加载失败（首次启动可能无数据）: {e}")
+
     yield
 
     # 清理资源

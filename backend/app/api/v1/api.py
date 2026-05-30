@@ -24,6 +24,8 @@ from app.api.v1 import (
     knowledge,
     memory,
     workflow,
+    expert_team,
+    ollama,
 )
 
 api_router = APIRouter()
@@ -51,6 +53,8 @@ api_router.include_router(ai_feedback.router, prefix="/ai_feedback", tags=["ai_f
 api_router.include_router(skill.router, prefix="/skills", tags=["skill"])
 api_router.include_router(tool.router, prefix="/tools", tags=["tool"])
 api_router.include_router(workflow.router, prefix="/workflows", tags=["workflow"])
+api_router.include_router(expert_team.router, prefix="/expert_teams", tags=["expert_team"])
+api_router.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
 
 # 系统
 api_router.include_router(notification.router, prefix="/notifications", tags=["notification"])

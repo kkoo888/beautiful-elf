@@ -13,3 +13,4 @@ python-multipart==0.0.18
 PyJWT==2.10.1
 passlib[bcrypt]==1.7.4
 websockets==14.2
+httpx==0.28.1

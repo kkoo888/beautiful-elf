@@ -58,6 +58,9 @@ from app.models.prompt import Prompt
 # 操作日志
 from app.models.action_log import ActionLog
 
+# 专家团工作流
+from app.models.expert_team import ExpertTeam, ExpertTeamMember, ExpertTeamRun
+
 __all__ = [
     "BaseModel",
     "Conversation", "Message",
@@ -79,4 +82,5 @@ __all__ = [
     "AIFeedback",
     "Prompt",
     "ActionLog",
+    "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
 ]

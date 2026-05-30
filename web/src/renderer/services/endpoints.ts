@@ -84,6 +84,15 @@ export const WORKFLOW_ENDPOINTS = {
   EXECUTE: (id: string) => `${API_PREFIX}/workflows/${id}/execute`,
 } as const
 
+// ─── 专家团 ───
+export const EXPERT_TEAM_ENDPOINTS = {
+  LIST: `${API_PREFIX}/expert_teams`,
+  CREATE: `${API_PREFIX}/expert_teams`,
+  DETAIL: (id: string) => `${API_PREFIX}/expert_teams/${id}`,
+  EXECUTE: (id: string) => `${API_PREFIX}/expert_teams/${id}/execute`,
+  RUNS: (id: string) => `${API_PREFIX}/expert_teams/${id}/runs`,
+} as const
+
 // ─── 子代理 ───
 export const SUBAGENT_ENDPOINTS = {
   LIST: `${API_PREFIX}/subagents`,
