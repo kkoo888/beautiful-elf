@@ -116,3 +116,11 @@ export const SYSTEM_ENDPOINTS = {
   STATUS: `${API_PREFIX}/system/status`,
   HEALTH: `${API_PREFIX}/system/health`,
 } as const
+
+// ─── 大模型供应商 ───
+export const LLM_PROVIDER_ENDPOINTS = {
+  LIST: `${API_PREFIX}/llm_providers`,
+  ENABLED: `${API_PREFIX}/llm_providers/enabled`,
+  DETAIL: (id: string) => `${API_PREFIX}/llm_providers/${id}`,
+  TOGGLE: (id: string) => `${API_PREFIX}/llm_providers/${id}/toggle`,
+} as const

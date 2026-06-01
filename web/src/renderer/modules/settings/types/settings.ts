@@ -122,6 +122,57 @@ export const SPEAKING_STYLES = [
 
 export type SpeakingStyle = (typeof SPEAKING_STYLES)[number]
 
+// ── 大模型供应商 ─────────────────────────────────────────────
+
+/** 供应商类型 */
+export type ProviderType = 'openai' | 'claude' | 'deepseek' | 'ollama' | 'qwen' | 'custom'
+
+/** 模型列表中的单个模型 */
+export interface LLMModelItem {
+  id: string
+  name: string
+  contextLength?: number
+  supportsVision?: boolean
+  supportsTools?: boolean
+}
+
+/** 大模型供应商配置 */
+export interface LLMProvider {
+  id: number
+  name: string
+  providerType: ProviderType
+  baseUrl: string
+  apiKey: string
+  models: LLMModelItem[]
+  enabled: number  // 1=启用 0=禁用
+  isDefault: number  // 1=默认 0=非默认
+  description: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/** 创建/更新供应商参数 */
+export interface LLMProviderPayload {
+  name: string
+  providerType: ProviderType
+  baseUrl: string
+  apiKey: string
+  models?: LLMModelItem[]
+  enabled?: number
+  isDefault?: number
+  description?: string
+}
+
+/** 供应商预设配置 */
+export const PROVIDER_PRESETS: Record<ProviderType, { name: string; baseUrl: string; placeholder: string }> = {
+  openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', placeholder: 'sk-...' },
+  claude: { name: 'Claude', baseUrl: 'https://api.anthropic.com/v1', placeholder: 'sk-ant-...' },
+  deepseek: { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', placeholder: 'sk-...' },
+  ollama: { name: 'Ollama', baseUrl: 'http://localhost:11434', placeholder: '无需 Key' },
+  qwen: { name: '通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', placeholder: 'sk-...' },
+  custom: { name: '自定义', baseUrl: '', placeholder: '输入 API Key' },
+}
+
 /** Prompt 版本 */
 export interface PromptVersion {
   /** 版本 ID */

@@ -25,6 +25,7 @@ from app.models.expert_team import (
     ExpertTeam, ExpertTeamMember, ExpertTeamRun,
     ExpertRoleSkill, ExpertRoleRun,
 )
+from app.models.llm_provider import LLMProvider
 
 __all__ = [
     "Conversation", "Message",
@@ -47,4 +48,5 @@ __all__ = [
     "Prompt",
     "ActionLog",
     "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
+    "LLMProvider",
 ]

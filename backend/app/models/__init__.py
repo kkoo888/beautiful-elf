@@ -64,6 +64,9 @@ from app.models.expert_team import (
     ExpertRoleSkill, ExpertRoleRun,
 )
 
+# 大模型供应商
+from app.models.llm_provider import LLMProvider
+
 __all__ = [
     "BaseModel",
     "Conversation", "Message",
@@ -87,4 +90,5 @@ __all__ = [
     "ActionLog",
     "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
     "ExpertRoleSkill", "ExpertRoleRun",
+    "LLMProvider",
 ]

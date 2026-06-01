@@ -26,6 +26,7 @@ from app.api.v1 import (
     workflow,
     expert_team,
     ollama,
+    llm_provider,
 )
 
 api_router = APIRouter()
@@ -55,6 +56,7 @@ api_router.include_router(tool.router, prefix="/tools", tags=["tool"])
 api_router.include_router(workflow.router, prefix="/workflows", tags=["workflow"])
 api_router.include_router(expert_team.router, prefix="/expert_teams", tags=["expert_team"])
 api_router.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
+api_router.include_router(llm_provider.router, prefix="/llm_providers", tags=["llm_provider"])
 
 # 系统
 api_router.include_router(notification.router, prefix="/notifications", tags=["notification"])

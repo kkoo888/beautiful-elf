@@ -15,11 +15,13 @@ import {
   HeartOutlined,
   FileTextOutlined,
   DatabaseOutlined,
+  ApiOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSettings } from '../hooks/use-settings'
 import { OllamaSettings } from './ollama-settings'
 import { AiSettings } from './ai-settings'
+import { LlmProviderSettings } from './llm-provider-settings'
 import { AppSettingsPanel } from './app-settings'
 import { ShortcutSettings } from './shortcut-settings'
 import { PrivacySettings } from './privacy-settings'
@@ -30,6 +32,11 @@ import { DataManagement } from './data-management'
 import styles from './settings-panel.module.css'
 
 const TAB_ITEMS = [
+  {
+    key: 'llm_provider',
+    label: '模型供应商',
+    icon: <ApiOutlined />,
+  },
   {
     key: 'ollama',
     label: 'Ollama',
@@ -95,6 +102,8 @@ export default function SettingsPanel() {
   const renderTabContent = useCallback(
     (key: string) => {
       switch (key) {
+        case 'llm_provider':
+          return <LlmProviderSettings />
         case 'ollama':
           return (
             <OllamaSettings
