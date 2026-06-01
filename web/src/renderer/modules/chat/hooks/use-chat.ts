@@ -79,10 +79,25 @@ export function useChat(): UseChatReturn {
   const ensureConversationId = useCallback(async (): Promise<string> => {
     if (currentConversationId) return currentConversationId
     // 调用后端创建会话，获取真实 ID
-    const conv = await createConversation('新会话')
-    useChatStore.getState().addConversation(conv)
-    useChatStore.getState().setCurrentConversation(conv.id)
-    return conv.id
+    try {
+      const conv = await createConversation('新会话')
+      useChatStore.getState().addConversation(conv)
+      useChatStore.getState().setCurrentConversation(conv.id)
+      return conv.id
+    } catch (err) {
+      console.error('[Chat] 创建会话失败，使用本地 ID:', err)
+      // 降级：本地创建会话（不依赖后端）
+      const id = generateId()
+      useChatStore.getState().addConversation({
+        id,
+        title: '新会话',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messageCount: 0,
+      })
+      useChatStore.getState().setCurrentConversation(id)
+      return id
+    }
   }, [currentConversationId])
 
   /** 发送消息（流式） */

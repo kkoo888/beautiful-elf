@@ -136,9 +136,11 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   const listRef = useRef<VirtualList>(null)
 
   const filtered = useMemo(() => {
-    if (!debouncedSearch.trim()) return conversations
+    // 防御：过滤掉无效条目
+    const valid = conversations.filter(Boolean) as Conversation[]
+    if (!debouncedSearch.trim()) return valid
     const q = debouncedSearch.toLowerCase()
-    return conversations.filter(
+    return valid.filter(
       (c) => c.title.toLowerCase().includes(q) || c.lastMessage?.toLowerCase().includes(q)
     )
   }, [conversations, debouncedSearch])

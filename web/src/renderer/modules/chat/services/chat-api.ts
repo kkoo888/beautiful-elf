@@ -87,7 +87,11 @@ export async function createConversation(title?: string): Promise<Conversation> 
     title: title ?? '新会话',
     model_name: '',
   })
-  return toFrontendConversation((resp.data as any).data)
+  const raw = (resp.data as any)?.data
+  if (!raw || typeof raw.id === 'undefined') {
+    throw new Error('创建会话失败：后端返回数据格式异常')
+  }
+  return toFrontendConversation(raw)
 }
 
 /** 更新会话 */
@@ -96,7 +100,9 @@ export async function updateConversation(
   data: { title?: string }
 ): Promise<Conversation> {
   const resp = await apiClient.put(`/conversations/${id}`, data)
-  return toFrontendConversation((resp.data as any).data)
+  const raw = (resp.data as any)?.data
+  if (!raw) throw new Error('更新会话失败：后端返回数据异常')
+  return toFrontendConversation(raw)
 }
 
 /** 删除会话 */
