@@ -1,10 +1,10 @@
-"""
-共享模型选择器组件
-从已启用的 LLM 供应商中选择模型
-支持两种用法：
-  - 紧凑模式：单行 Select（用于专家团成员等表单内）
-  - 完整模式：供应商 + 模型级联选择（用于聊天面板等）
-*/
+/**
+ * 共享模型选择器组件
+ * 从已启用的 LLM 供应商中选择模型
+ * 支持两种用法：
+ *   - 紧凑模式：单行 Select（用于专家团成员等表单内）
+ *   - 完整模式：供应商 + 模型级联选择（用于聊天面板等）
+ */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Select, Space, Tag, Typography } from 'antd'
