@@ -60,7 +60,7 @@
 | 强制 | `id` 为主键，类型 `unsigned bigint`，单表自增步长 1 |
 | 强制 | `gmt_create`, `gmt_modified` 类型为 `datetime` |
 
-> 💡 可用 `create_time`, `update_time` 替代 `gmt_create`, `gmt_modified`。
+> 💡 可用 `create_time`, `update_time` 或 `created_at`, `updated_at` 替代 `gmt_create`, `gmt_modified`。
 
 #### 1.3.5 其他字段规范
 
@@ -179,7 +179,7 @@
 - [ ] 小数用 `decimal`
 - [ ] 固定长度字符串用 `char`
 - [ ] varchar 不超过 5000，超过用 `text` 独立成表
-- [ ] 必备字段：`id`(主键), `gmt_create`, `gmt_modified`
+- [ ] 必备字段：`id`(主键), `gmt_create`/`created_at`, `gmt_modified`/`updated_at`
 - [ ] 禁用外键和级联
 
 ### 索引检查
