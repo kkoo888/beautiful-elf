@@ -106,7 +106,7 @@ export async function recordSnippetUse(id: string): Promise<void> {
 /** 获取所有已用标签（前端聚合，后端无此接口） */
 export async function fetchAllTags(): Promise<string[]> {
   // 从全量列表中聚合标签
-  const resp = await apiClient.get('/snippets', { params: { page: 1, page_size: 500 } })
+  const resp = await apiClient.get('/snippets', { params: { page: 1, page_size: 100 } })
   const body = resp.data as any
   const items: BackendSnippet[] = body.data ?? []
   const tags = new Set<string>()
