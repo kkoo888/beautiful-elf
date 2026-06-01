@@ -88,8 +88,8 @@ export async function createConversation(title?: string): Promise<Conversation> 
     modelName: '',
   })
   const raw = (resp.data as any)?.data
-  if (!raw || typeof raw.id === 'undefined') {
-    throw new Error('创建会话失败：后端返回数据格式异常')
+  if (!raw) {
+    throw new Error('创建会话失败：后端返回数据为空')
   }
   return toFrontendConversation(raw)
 }
