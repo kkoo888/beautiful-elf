@@ -68,7 +68,16 @@ export async function recordSkillCall(id: string, success: boolean, durationMs: 
 
 /** 安装技能 */
 export async function installSkill(input: InstallSkillInput): Promise<Skill> {
-  const resp = await apiClient.post('/skills/install', input)
+  const name = input.source === 'github'
+    ? input.content.split('/').pop()?.replace('.git', '') || 'imported-skill'
+    : `imported-${Date.now()}`
+  const resp = await apiClient.post('/skills', {
+    name,
+    displayName: name,
+    description: `从${input.source === 'github' ? 'GitHub' : '文件'}导入`,
+    source: input.source,
+    config: { content: input.content },
+  })
   return (resp.data as any).data
 }
 
