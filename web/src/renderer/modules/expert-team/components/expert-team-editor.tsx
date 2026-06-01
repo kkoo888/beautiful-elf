@@ -23,6 +23,7 @@ import {
   ArrowLeftOutlined,
   UserAddOutlined,
 } from '@ant-design/icons'
+import { CompactModelSelect } from '@/modules/shared/components/model-selector'
 import type { ExpertTeam, ExpertTeamFormInput, ExpertMemberFormInput } from '../types'
 
 const { TextArea } = Input
@@ -335,11 +336,11 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                 </Form.Item>
                 <Space>
                   <Form.Item label="模型" style={{ marginBottom: 0 }}>
-                    <Input
-                      value={member.modelName}
-                      onChange={(e) => handleMemberChange(index, 'modelName', e.target.value)}
+                    <CompactModelSelect
+                      value={member.modelName || ''}
+                      onChange={(_val, _pid, modelName) => handleMemberChange(index, 'modelName', modelName)}
                       placeholder="默认模型"
-                      style={{ width: 150 }}
+                      style={{ width: 220 }}
                     />
                   </Form.Item>
                   <Form.Item label="温度" style={{ marginBottom: 0 }}>

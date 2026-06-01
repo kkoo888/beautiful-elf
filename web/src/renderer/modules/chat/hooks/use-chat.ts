@@ -30,12 +30,18 @@ interface UseChatReturn {
   conversations: Conversation[]
   /** 当前会话 ID（用于会话管理） */
   currentConversationId: string | null
+  /** 选中的供应商 ID */
+  selectedProviderId: number | undefined
+  /** 选中的模型名称 */
+  selectedModelName: string | undefined
   /** 发送消息（流式） */
   sendMessage: (content: string) => void
   /** 发送消息（非流式） */
   sendMessageSync: (content: string) => Promise<void>
   /** 设置推理深度 */
   setReasoningDepth: (depth: ReasoningDepth) => void
+  /** 设置模型选择 */
+  setModelSelection: (providerId: number, modelName: string) => void
   /** 提交反馈 */
   submitFeedback: (data: FeedbackData) => Promise<void>
   /** 清空消息 */
@@ -57,9 +63,12 @@ export function useChat(): UseChatReturn {
     reasoningDepth,
     isLoading,
     conversations,
+    selectedProviderId,
+    selectedModelName,
     addMessage,
     setMessages,
     setReasoningDepth: storeSetReasoningDepth,
+    setModelSelection,
     setIsLoading,
     clearMessages: storeClearMessages,
   } = useChatStore()
@@ -315,9 +324,12 @@ export function useChat(): UseChatReturn {
     isLoading,
     conversations,
     currentConversationId,
+    selectedProviderId,
+    selectedModelName,
     sendMessage,
     sendMessageSync,
     setReasoningDepth,
+    setModelSelection,
     submitFeedback: handleFeedback,
     clearMessages,
     stopGeneration,

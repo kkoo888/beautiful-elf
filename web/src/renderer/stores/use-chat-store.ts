@@ -12,6 +12,10 @@ interface ChatState {
   // 推理深度
   reasoningDepth: 'fast' | 'deep' | 'full'
 
+  // 模型选择
+  selectedProviderId: number | undefined
+  selectedModelName: string | undefined
+
   // 加载状态
   isLoading: boolean
 
@@ -21,6 +25,7 @@ interface ChatState {
   setMessages: (messages: ChatMessage[]) => void
   addMessage: (message: ChatMessage) => void
   setReasoningDepth: (depth: 'fast' | 'deep' | 'full') => void
+  setModelSelection: (providerId: number, modelName: string) => void
   setIsLoading: (loading: boolean) => void
   clearMessages: () => void
 
@@ -38,6 +43,8 @@ export const useChatStore = create<ChatState>((set) => ({
   currentConversationId: null,
   messages: [],
   reasoningDepth: 'fast',
+  selectedProviderId: undefined,
+  selectedModelName: undefined,
   isLoading: false,
 
   setConversations: (conversations) => set({ conversations }),
@@ -48,6 +55,7 @@ export const useChatStore = create<ChatState>((set) => ({
       messages: [...state.messages, message],
     })),
   setReasoningDepth: (reasoningDepth) => set({ reasoningDepth }),
+  setModelSelection: (providerId, modelName) => set({ selectedProviderId: providerId, selectedModelName: modelName }),
   setIsLoading: (isLoading) => set({ isLoading }),
   clearMessages: () => set({ messages: [] }),
 

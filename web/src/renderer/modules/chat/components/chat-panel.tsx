@@ -1,6 +1,6 @@
 /**
  * 聊天主面板组件
- * 整合消息列表、输入框、推理深度切换等
+ * 整合消息列表、输入框、推理深度切换、模型选择等
  */
 
 import React, { useCallback } from 'react'
@@ -10,6 +10,7 @@ import styles from './chat-panel.module.css'
 import { SimpleMessageList } from './message-list'
 import { MessageInput } from './message-input'
 import { ReasoningDepthSwitch } from './reasoning-depth'
+import { FullModelSelect } from '@/modules/shared/components/model-selector'
 import { useChat } from '../hooks/use-chat'
 
 export const ChatPanel: React.FC = () => {
@@ -17,8 +18,11 @@ export const ChatPanel: React.FC = () => {
     messages,
     reasoningDepth,
     isLoading,
+    selectedProviderId,
+    selectedModelName,
     sendMessage,
     setReasoningDepth,
+    setModelSelection,
     submitFeedback,
     clearMessages,
     stopGeneration,
@@ -41,6 +45,11 @@ export const ChatPanel: React.FC = () => {
       <div className={styles.chatHeader}>
         <h4 className={styles.chatTitle}>💬 对话</h4>
         <div className={styles.headerActions}>
+          <FullModelSelect
+            providerId={selectedProviderId}
+            modelName={selectedModelName}
+            onChange={setModelSelection}
+          />
           <ReasoningDepthSwitch value={reasoningDepth} onChange={setReasoningDepth} />
           <Tooltip title="清空对话">
             <Button
