@@ -9,6 +9,7 @@
 -- 第一部分: 表重命名 (复数 → 单数)
 -- ============================================================
 
+RENAME TABLE `settings` TO `setting`;
 RENAME TABLE `conversations` TO `conversation`;
 RENAME TABLE `messages` TO `message`;
 RENAME TABLE `memory_entries` TO `memory_entry`;
