@@ -49,7 +49,7 @@ export function useNotification() {
         type: type || 'system_alert',
         title: title || '新通知',
         message: body || '',
-        read: false,
+        isRead: false,
         createdAt: new Date(msg.timestamp).toISOString(),
         actionUrl,
       }
@@ -63,7 +63,7 @@ export function useNotification() {
         type: notif.type,
         title: notif.title,
         body: notif.message,
-        read: false,
+        isRead: false,
         createdAt: msg.timestamp,
       })
     })

@@ -35,7 +35,7 @@ export interface Notification {
   type: NotificationType
   title: string
   message: string
-  read: boolean
+  isRead: boolean
   createdAt: string
   actionUrl?: string
 }
@@ -47,7 +47,7 @@ export interface NotificationMessage {
   type: NotificationType
   title: string
   body: string
-  read: boolean
+  isRead: boolean
   createdAt: number
 }
 

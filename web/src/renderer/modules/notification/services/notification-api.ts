@@ -6,7 +6,7 @@ export interface NotificationListParams {
   page?: number
   pageSize?: number
   type?: NotificationType
-  read?: 0 | 1
+  isRead?: 0 | 1
 }
 
 /** 通知列表响应 */
