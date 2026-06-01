@@ -54,8 +54,8 @@ class ExpertMemberOut(BaseModel):
     tools_json: Optional[List[dict]] = Field(default=None, alias="toolsJson")
     sort_order: int = Field(alias="sortOrder")
     is_enabled: int = Field(alias="enabled")
-    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
-    gmt_modified: Optional[datetime] = Field(default=None, alias="updatedAt")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
 
 
 # ─── 专家团 ───────────────────────────────────────────────
@@ -106,8 +106,8 @@ class ExpertTeamOut(BaseModel):
     version: int
     config_json: Optional[dict] = Field(default=None, alias="configJson")
     members: List[ExpertMemberOut] = []
-    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
-    gmt_modified: Optional[datetime] = Field(default=None, alias="updatedAt")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
 
 
 # ─── 运行记录 ─────────────────────────────────────────────
@@ -130,7 +130,7 @@ class ExpertTeamRunOut(BaseModel):
     started_at: Optional[datetime] = Field(default=None, alias="startedAt")
     finished_at: Optional[datetime] = Field(default=None, alias="finishedAt")
     duration_ms: int = Field(alias="durationMs")
-    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
 
 
 class ExpertTeamExecuteRequest(BaseModel):
@@ -188,8 +188,8 @@ class RoleSkillOut(BaseModel):
     priority: int
     config_override: Optional[dict] = Field(default=None, alias="configOverride")
     is_enabled: int = Field(alias="enabled")
-    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
-    gmt_modified: Optional[datetime] = Field(default=None, alias="updatedAt")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
 
 
 # ─── 角色执行记录 ────────────────────────────────────────
@@ -212,4 +212,4 @@ class ExpertRoleRunOut(BaseModel):
     finished_at: Optional[datetime] = Field(default=None, alias="finishedAt")
     duration_ms: int = Field(alias="durationMs")
     token_usage: int = Field(alias="tokenUsage")
-    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")

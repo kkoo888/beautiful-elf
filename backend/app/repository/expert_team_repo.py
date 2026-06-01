@@ -190,7 +190,7 @@ class ExpertTeamRepository:
         stmt = (
             select(ExpertRoleRun)
             .where(ExpertRoleRun.run_id == run_id, ExpertRoleRun.is_deleted == 0)
-            .order_by(ExpertRoleRun.gmt_create.asc())
+            .order_by(ExpertRoleRun.created_at.asc())
         )
         result = await db.execute(stmt)
         return list(result.scalars().all())
@@ -200,7 +200,7 @@ class ExpertTeamRepository:
         stmt = (
             select(ExpertRoleRun)
             .where(ExpertRoleRun.role_id == role_id, ExpertRoleRun.is_deleted == 0)
-            .order_by(ExpertRoleRun.gmt_create.desc())
+            .order_by(ExpertRoleRun.created_at.desc())
             .offset(offset).limit(limit)
         )
         result = await db.execute(stmt)

@@ -517,8 +517,8 @@ class ExpertTeamService:
                 "priority": b.priority,
                 "configOverride": b.config_override,
                 "enabled": b.is_enabled,
-                "createdAt": str(b.gmt_create) if b.gmt_create else None,
-                "updatedAt": str(b.gmt_modified) if b.gmt_modified else None,
+                "createdAt": str(b.created_at) if b.created_at else None,
+                "updatedAt": str(b.updated_at) if b.updated_at else None,
             })
         return result
 
@@ -612,8 +612,8 @@ class ExpertTeamService:
             "priority": bind.priority,
             "configOverride": bind.config_override,
             "enabled": bind.is_enabled,
-            "createdAt": str(bind.gmt_create) if bind.gmt_create else None,
-            "updatedAt": str(bind.gmt_modified) if bind.gmt_modified else None,
+            "createdAt": str(bind.created_at) if bind.created_at else None,
+            "updatedAt": str(bind.updated_at) if bind.updated_at else None,
         }
 
     def _serialize_role_run(self, run) -> dict:
@@ -632,7 +632,7 @@ class ExpertTeamService:
             "finishedAt": str(run.finished_at) if run.finished_at else None,
             "durationMs": run.duration_ms,
             "tokenUsage": run.token_usage,
-            "createdAt": str(run.gmt_create) if run.gmt_create else None,
+            "createdAt": str(run.created_at) if run.created_at else None,
         }
 
     # ─── 执行专家团（LangGraph 核心）──────────────────
@@ -734,7 +734,7 @@ class ExpertTeamService:
                 "discussion_json": result["discussion"],
                 "round_count": rounds,
                 "token_usage": result["tokenUsage"],
-                "started_at": run.gmt_create,
+                "started_at": run.created_at,
                 "finished_at": end_time,
                 "duration_ms": duration_ms,
             })
@@ -792,8 +792,8 @@ class ExpertTeamService:
             "version": team.version,
             "config_json": team.config_json,
             "members": [ExpertTeamService._serialize_member(m) for m in (members or [])],
-            "created_at": str(team.gmt_create) if team.gmt_create else None,
-            "updated_at": str(team.gmt_modified) if team.gmt_modified else None,
+            "created_at": str(team.created_at) if team.created_at else None,
+            "updated_at": str(team.updated_at) if team.updated_at else None,
         }
 
     @staticmethod
