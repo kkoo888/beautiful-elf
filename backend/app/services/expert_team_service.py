@@ -799,9 +799,9 @@ class ExpertTeamService:
     @staticmethod
     def _serialize_member(member) -> dict:
         """用 Pydantic schema 序列化成员"""
-        return ExpertMemberOut.model_validate(member).model_dump(by_alias=False)
+        return ExpertMemberOut.model_validate(member).model_dump(by_alias=True)
 
     @staticmethod
     def _serialize_run(run) -> dict:
         """用 Pydantic schema 序列化运行记录"""
-        return ExpertTeamRunOut.model_validate(run).model_dump(by_alias=False)
+        return ExpertTeamRunOut.model_validate(run).model_dump(by_alias=True)

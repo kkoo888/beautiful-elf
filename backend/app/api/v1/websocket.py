@@ -19,6 +19,10 @@ async def websocket_endpoint(websocket: WebSocket, channel: str = "default"):
     try:
         while True:
             data = await websocket.receive_json()
+            # 心跳响应：收到 ping 立即回 pong
+            if data.get("type") == "ping":
+                await ws_manager.send_to(websocket, {"type": "pong", "timestamp": data.get("timestamp")})
+                continue
             # 回显 + 广播
             await ws_manager.send_to(websocket, {"type": "ack", "data": data})
             await ws_manager.broadcast(channel, {"type": "message", "from": channel, "data": data})
