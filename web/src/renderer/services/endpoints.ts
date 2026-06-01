@@ -9,7 +9,7 @@ import { API_PREFIX } from '@shared/constants'
 export const CHAT_ENDPOINTS = {
   CONVERSATIONS: `${API_PREFIX}/conversations`,
   CONVERSATION: (id: string) => `${API_PREFIX}/conversations/${id}`,
-  MESSAGES: (conversationId: string) => `${API_PREFIX}/conversations/${conversationId}/messages`,
+  MESSAGES: `${API_PREFIX}/messages`,
   CHAT: (conversationId: string) => `${API_PREFIX}/conversations/${conversationId}/chat`,
 } as const
 

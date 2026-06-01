@@ -117,8 +117,9 @@ export async function fetchMessages(
   conversationId: string,
   params?: { page?: number; pageSize?: number }
 ): Promise<{ items: ChatMessage[]; total: number }> {
-  const resp = await apiClient.get(`/conversations/${conversationId}/messages`, {
+  const resp = await apiClient.get('/messages', {
     params: {
+      conversation_id: conversationId,
       page: params?.page ?? 1,
       page_size: params?.pageSize ?? 50,
     },
@@ -137,7 +138,8 @@ export async function saveMessage(
   content: string,
   tokenCount?: number
 ): Promise<ChatMessage> {
-  const resp = await apiClient.post(`/conversations/${conversationId}/messages`, {
+  const resp = await apiClient.post('/messages', {
+    conversationId: Number(conversationId),
     role,
     content,
     tokenCount: tokenCount ?? 0,

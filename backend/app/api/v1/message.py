@@ -1,5 +1,5 @@
-"""消息记录 API — 嵌套在 /conversations/{id}/messages 下"""
-from fastapi import APIRouter, Depends, Path, Query
+"""消息记录 API — 扁平路由 + query 过滤"""
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,7 +13,7 @@ _service = MessageService()
 
 @router.get("")
 async def list_messages(
-    conversation_id: int = Path(..., description="会话 ID"),
+    conversation_id: int = Query(..., description="会话 ID（必填，用于过滤）"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -24,33 +24,19 @@ async def list_messages(
 
 
 @router.get("/{message_id}")
-async def get_message(
-    conversation_id: int = Path(..., description="会话 ID"),
-    message_id: int = Path(..., description="消息 ID"),
-    db: AsyncSession = Depends(get_db),
-):
+async def get_message(message_id: int, db: AsyncSession = Depends(get_db)):
     """获取单条消息"""
     return ok(await _service.get_by_id(db, message_id))
 
 
 @router.post("")
-async def create_message(
-    conversation_id: int = Path(..., description="会话 ID"),
-    data: MessageCreate = ...,
-    db: AsyncSession = Depends(get_db),
-):
-    """创建消息 — conversation_id 从路径取，body 中无需传"""
-    # 路径中的 conversation_id 覆盖 body 中的
-    data.conversation_id = conversation_id
+async def create_message(data: MessageCreate, db: AsyncSession = Depends(get_db)):
+    """创建消息 — conversation_id 在 body 中必填"""
     return ok(await _service.create(db, data))
 
 
 @router.delete("/{message_id}")
-async def delete_message(
-    conversation_id: int = Path(..., description="会话 ID"),
-    message_id: int = Path(..., description="消息 ID"),
-    db: AsyncSession = Depends(get_db),
-):
+async def delete_message(message_id: int, db: AsyncSession = Depends(get_db)):
     """删除消息"""
     await _service.delete(db, message_id)
     return ok(message="删除成功")

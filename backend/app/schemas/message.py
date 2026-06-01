@@ -8,7 +8,7 @@ class MessageCreate(BaseModel):
     """创建消息"""
     model_config = ConfigDict(populate_by_name=True)
 
-    conversation_id: Optional[int] = Field(default=None, description="会话 ID（由路径提供，body 中可省略）", alias="conversationId")
+    conversation_id: int = Field(..., description="会话 ID", alias="conversationId")
     role: str = Field(..., max_length=32, description="角色 (user/assistant/system/tool)")
     content: str = Field(..., description="消息内容")
     tool_calls: Optional[Any] = Field(default=None, description="工具调用信息", alias="toolCalls")
