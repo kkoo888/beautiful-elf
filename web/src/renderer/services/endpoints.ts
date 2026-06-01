@@ -7,10 +7,10 @@ import { API_PREFIX } from '@shared/constants'
 
 // ─── 聊天 ───
 export const CHAT_ENDPOINTS = {
-  CONVERSATIONS: `${API_PREFIX}/chat/conversations`,
-  CONVERSATION: (id: string) => `${API_PREFIX}/chat/conversations/${id}`,
-  MESSAGES: (conversationId: string) => `${API_PREFIX}/chat/conversations/${conversationId}/messages`,
-  SEND: `${API_PREFIX}/chat/send`,
+  CONVERSATIONS: `${API_PREFIX}/conversations`,
+  CONVERSATION: (id: string) => `${API_PREFIX}/conversations/${id}`,
+  MESSAGES: (conversationId: string) => `${API_PREFIX}/conversations/${conversationId}/messages`,
+  CHAT: (conversationId: string) => `${API_PREFIX}/conversations/${conversationId}/chat`,
 } as const
 
 // ─── 知识库 ───

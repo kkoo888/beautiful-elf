@@ -85,7 +85,7 @@ export async function fetchConversations(params?: {
 export async function createConversation(title?: string): Promise<Conversation> {
   const resp = await apiClient.post('/conversations', {
     title: title ?? '新会话',
-    model_name: '',
+    modelName: '',
   })
   const raw = (resp.data as any)?.data
   if (!raw || typeof raw.id === 'undefined') {
@@ -117,9 +117,8 @@ export async function fetchMessages(
   conversationId: string,
   params?: { page?: number; pageSize?: number }
 ): Promise<{ items: ChatMessage[]; total: number }> {
-  const resp = await apiClient.get('/messages', {
+  const resp = await apiClient.get(`/conversations/${conversationId}/messages`, {
     params: {
-      conversation_id: conversationId,
       page: params?.page ?? 1,
       page_size: params?.pageSize ?? 50,
     },
@@ -138,11 +137,10 @@ export async function saveMessage(
   content: string,
   tokenCount?: number
 ): Promise<ChatMessage> {
-  const resp = await apiClient.post('/messages', {
-    conversation_id: Number(conversationId),
+  const resp = await apiClient.post(`/conversations/${conversationId}/messages`, {
     role,
     content,
-    token_count: tokenCount ?? 0,
+    tokenCount: tokenCount ?? 0,
   })
   return toFrontendMessage((resp.data as any).data)
 }
@@ -160,11 +158,11 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
   const resp = await apiClient.post(
     `/conversations/${request.conversationId}/chat`,
     {
-      provider_id: request.providerId,
-      model_name: request.modelName ?? '',
+      providerId: request.providerId,
+      modelName: request.modelName ?? '',
       messages: [{ role: 'user', content: request.message }],
       temperature: 0.7,
-      max_tokens: 2048,
+      maxTokens: 2048,
       stream: false,
     }
   )
@@ -195,17 +193,21 @@ export function chatStream(
 
   const doStream = async (): Promise<void> => {
     try {
+      const traceId = crypto.randomUUID()
       const resp = await fetch(
         `/api/v1/conversations/${request.conversationId}/chat`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Trace-Id': traceId,
+          },
           body: JSON.stringify({
-            provider_id: request.providerId,
-            model_name: request.modelName ?? '',
+            providerId: request.providerId,
+            modelName: request.modelName ?? '',
             messages: [{ role: 'user', content: request.message }],
             temperature: 0.7,
-            max_tokens: 2048,
+            maxTokens: 2048,
             stream: true,
           }),
           signal: controller.signal,

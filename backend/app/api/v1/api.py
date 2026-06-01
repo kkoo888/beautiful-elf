@@ -37,7 +37,7 @@ api_router.include_router(health.router, tags=["health"])
 
 # 核心业务
 api_router.include_router(conversation.router, prefix="/conversations", tags=["conversation"])
-api_router.include_router(message.router, prefix="/messages", tags=["message"])
+api_router.include_router(message.router, prefix="/conversations/{conversation_id}/messages", tags=["message"])
 api_router.include_router(chat.router, prefix="", tags=["chat"])
 api_router.include_router(schedule.router, prefix="/schedules", tags=["schedule"])
 api_router.include_router(clipboard.router, prefix="/clipboard_items", tags=["clipboard"])
