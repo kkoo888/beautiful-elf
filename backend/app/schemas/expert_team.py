@@ -88,6 +88,7 @@ class ExpertTeamUpdate(BaseModel):
     max_rounds: Optional[int] = Field(default=None, ge=1, le=10, alias="maxRounds")
     is_enabled: Optional[int] = Field(default=None, ge=0, le=1, alias="enabled")
     config_json: Optional[dict] = Field(default=None, alias="configJson")
+    members: Optional[List[ExpertMemberCreate]] = Field(default=None, description="专家成员列表（整体替换）")
 
 
 class ExpertTeamOut(BaseModel):

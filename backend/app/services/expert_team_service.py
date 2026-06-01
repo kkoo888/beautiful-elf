@@ -463,8 +463,31 @@ class ExpertTeamService:
         if not team:
             raise RecordNotFoundError("专家团不存在")
         update_data = data.model_dump(exclude_unset=True, by_alias=False)
+        # members 单独处理，不传给 repo.update_team
+        members_data = update_data.pop("members", None)
         if update_data:
             team = await self.repo.update_team(db, team_id, update_data)
+        # 同步成员：整体替换模式
+        if members_data is not None:
+            old_members = await self.repo.find_members_by_team(db, team_id)
+            old_map = {m.id: m for m in old_members}
+            new_members = []
+            for i, m in enumerate(members_data):
+                m["team_id"] = team_id
+                m["sort_order"] = i
+                if i < len(old_members):
+                    # 更新已有成员
+                    old = old_members[i]
+                    await self.repo.update_member(db, old.id, m)
+                    new_members.append(await self.repo.find_member_by_id(db, old.id))
+                else:
+                    # 新增成员
+                    member = await self.repo.create_member(db, m)
+                    new_members.append(member)
+            # 删除多余成员
+            for j in range(len(members_data), len(old_members)):
+                await self.repo.soft_delete_member(db, old_members[j].id)
+            return self._serialize_team(team, new_members)
         members = await self.repo.find_members_by_team(db, team_id)
         return self._serialize_team(team, members)
 
