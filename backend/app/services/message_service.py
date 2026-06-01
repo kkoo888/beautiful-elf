@@ -47,11 +47,12 @@ class MessageService:
     def _to_dict(msg) -> dict:
         return {
             "id": msg.id,
-            "conversation_id": msg.conversation_id,
+            "conversationId": msg.conversation_id,
             "role": msg.role,
             "content": msg.content,
-            "tool_calls": msg.tool_calls,
-            "tool_call_id": msg.tool_call_id,
-            "token_count": msg.token_count,
-            "created_at": str(msg.created_at) if msg.created_at else None,
+            "toolCalls": msg.tool_calls,
+            "toolCallId": msg.tool_call_id,
+            "tokenCount": msg.token_count,
+            "createdAt": str(msg.created_at) if msg.created_at else None,
+            "updatedAt": str(msg.updated_at) if msg.updated_at else None,
         }

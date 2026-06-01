@@ -48,9 +48,9 @@ class ConversationService:
         return {
             "id": conv.id,
             "title": conv.title,
-            "model_name": conv.model_name,
-            "message_count": conv.message_count,
-            "last_message_at": str(conv.last_message_at) if conv.last_message_at else None,
-            "created_at": str(conv.created_at) if conv.created_at else None,
-            "updated_at": str(conv.updated_at) if conv.updated_at else None,
+            "modelName": conv.model_name,
+            "messageCount": conv.message_count,
+            "lastMessageAt": str(conv.last_message_at) if conv.last_message_at else None,
+            "createdAt": str(conv.created_at) if conv.created_at else None,
+            "updatedAt": str(conv.updated_at) if conv.updated_at else None,
         }

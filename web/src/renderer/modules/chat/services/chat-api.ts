@@ -16,28 +16,28 @@ import type {
   ChatMessage,
 } from '../types/chat'
 
-// ── 后端类型 ─────────────────────────────────────────────────
+// ── 后端类型（snakeToCamel 拦截器已转换为 camelCase）─────────
 
 interface BackendConversation {
   id: number
   title: string
-  model_name: string
-  message_count: number
-  last_message_at: string | null
-  created_at: string
-  updated_at: string
+  modelName: string
+  messageCount: number
+  lastMessageAt: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 interface BackendMessage {
   id: number
-  conversation_id: number
+  conversationId: number
   role: string
   content: string
-  tool_calls: any
-  tool_call_id: string | null
-  token_count: number
-  created_at: string
-  updated_at: string
+  toolCalls: any
+  toolCallId: string | null
+  tokenCount: number
+  createdAt: string
+  updatedAt: string
 }
 
 // ── 转换函数 ─────────────────────────────────────────────────
@@ -46,9 +46,9 @@ function toFrontendConversation(item: BackendConversation): Conversation {
   return {
     id: String(item.id),
     title: item.title || '新会话',
-    createdAt: new Date(item.created_at).getTime(),
-    updatedAt: new Date(item.updated_at).getTime(),
-    messageCount: item.message_count,
+    createdAt: new Date(item.createdAt).getTime(),
+    updatedAt: new Date(item.updatedAt).getTime(),
+    messageCount: item.messageCount ?? 0,
     lastMessage: undefined,
   }
 }
@@ -56,11 +56,11 @@ function toFrontendConversation(item: BackendConversation): Conversation {
 function toFrontendMessage(item: BackendMessage): ChatMessage {
   return {
     id: String(item.id),
-    conversationId: String(item.conversation_id),
+    conversationId: String(item.conversationId),
     role: item.role as ChatMessage['role'],
     content: item.content,
-    createdAt: new Date(item.created_at).getTime(),
-    metadata: item.token_count ? { tokenCount: item.token_count } : undefined,
+    createdAt: new Date(item.createdAt).getTime(),
+    metadata: item.tokenCount ? { tokenCount: item.tokenCount } : undefined,
   }
 }
 
@@ -77,7 +77,7 @@ export async function fetchConversations(params?: {
   const body = resp.data as any
   return {
     items: (body.data ?? []).map(toFrontendConversation),
-    total: body.total ?? 0,
+    total: body.meta?.total ?? 0,
   }
 }
 
@@ -127,7 +127,7 @@ export async function fetchMessages(
   const body = resp.data as any
   return {
     items: (body.data ?? []).map(toFrontendMessage),
-    total: body.total ?? 0,
+    total: body.meta?.total ?? 0,
   }
 }
 
