@@ -62,7 +62,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
         <div className={styles.installSection}>
           <h4 className={styles.sectionTitle}>从文件安装</h4>
           <Dragger
-            accept=".skill,.zip,.tar.gz"
+            accept=".skill,.zip,.tar.gz,.md"
             showUploadList={false}
             customRequest={handleFileUpload}
             disabled={isLoading}
@@ -71,8 +71,8 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
               <p className="ant-upload-drag-icon">
                 <InboxOutlined />
               </p>
-              <p className="ant-upload-text">点击或拖拽 .skill 文件到此区域</p>
-              <p className="ant-upload-hint">支持 .skill、.zip、.tar.gz 格式</p>
+              <p className="ant-upload-text">点击或拖拽技能文件到此区域</p>
+              <p className="ant-upload-hint">支持 .md、.skill、.zip、.tar.gz 格式</p>
             </div>
           </Dragger>
         </div>
