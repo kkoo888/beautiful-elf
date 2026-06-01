@@ -89,7 +89,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
       modelName: m.modelName,
       temperature: m.temperature,
       maxTokens: m.maxTokens,
-      enabled: m.isEnabled ?? 1,
+      enabled: m.enabled ?? 1,
     })) ?? []
   )
 

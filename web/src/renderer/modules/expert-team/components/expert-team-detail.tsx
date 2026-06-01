@@ -75,7 +75,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
               <Space>
                 <Text type="secondary">状态：</Text>
                 <Switch
-                  checked={team.isEnabled === 1}
+                  checked={team.enabled === 1}
                   onChange={handleToggleEnabled}
                   checkedChildren="启用"
                   unCheckedChildren="禁用"
@@ -89,7 +89,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                   type="primary"
                   icon={<PlayCircleOutlined />}
                   onClick={onExecute}
-                  disabled={team.members.length === 0 || team.isEnabled !== 1}
+                  disabled={team.members.length === 0 || team.enabled !== 1}
                 >
                   执行
                 </Button>
@@ -125,7 +125,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
           <Card>
             <Statistic
               title="启用成员"
-              value={team.members.filter((m) => m.isEnabled).length}
+              value={team.members.filter((m) => m.enabled).length}
               suffix={`/ ${team.members.length}`}
             />
           </Card>
@@ -154,7 +154,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                   <Space>
                     <Text strong>{member.name}</Text>
                     <Tag color={getExpertRoleColor(member.role)}>{member.role}</Tag>
-                    {!member.isEnabled && <Tag color="default">已禁用</Tag>}
+                    {!member.enabled && <Tag color="default">已禁用</Tag>}
                   </Space>
                 }
                 description={
