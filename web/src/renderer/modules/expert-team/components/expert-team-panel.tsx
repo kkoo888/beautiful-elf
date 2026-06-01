@@ -1,11 +1,12 @@
 /** 专家团工作流主面板 */
 
-import { Tabs, Button, Space, Typography, Spin, message } from 'antd'
+import { Button, Space, Typography, message, Breadcrumb } from 'antd'
 import {
   PlusOutlined,
   TeamOutlined,
   PlayCircleOutlined,
   HistoryOutlined,
+  ArrowLeftOutlined,
 } from '@ant-design/icons'
 import { useState, useCallback } from 'react'
 import { PageHeader } from '@/components/page-header'
@@ -20,6 +21,8 @@ import type { ExpertTeam, ExpertTeamFormInput, ExpertTeamExecuteInput } from '..
 
 const { Text } = Typography
 
+type ViewMode = 'list' | 'detail' | 'editor' | 'monitor'
+
 /** 专家团工作流主面板 */
 export default function ExpertTeamPanel() {
   const {
@@ -28,7 +31,6 @@ export default function ExpertTeamPanel() {
     selectedId,
     setSelectedId,
     selectedTeam,
-    activeTab,
     setActiveTab,
     runs,
     isRunsLoading,
@@ -42,20 +44,31 @@ export default function ExpertTeamPanel() {
     refreshRuns,
   } = useExpertTeam()
 
+  const [view, setView] = useState<ViewMode>('list')
+
   // 执行抽屉
   const [executeDrawerOpen, setExecuteDrawerOpen] = useState(false)
   const [executeTeam, setExecuteTeam] = useState<ExpertTeam | null>(null)
 
-  // 新建
-  const handleCreate = useCallback(async () => {
-    setActiveTab('editor')
+  // 导航到列表
+  const goList = useCallback(() => {
+    setView('list')
     setSelectedId(null)
-  }, [setActiveTab, setSelectedId])
+    setActiveTab('list')
+  }, [setSelectedId, setActiveTab])
+
+  // 新建
+  const handleCreate = useCallback(() => {
+    setSelectedId(null)
+    setView('editor')
+    setActiveTab('editor')
+  }, [setSelectedId, setActiveTab])
 
   // 编辑
   const handleEdit = useCallback(
     (id: number) => {
       setSelectedId(id)
+      setView('editor')
       setActiveTab('editor')
     },
     [setSelectedId, setActiveTab]
@@ -65,6 +78,7 @@ export default function ExpertTeamPanel() {
   const handleViewDetail = useCallback(
     (id: number) => {
       setSelectedId(id)
+      setView('detail')
       setActiveTab('detail')
     },
     [setSelectedId, setActiveTab]
@@ -79,7 +93,7 @@ export default function ExpertTeamPanel() {
     [deleteTeamMut]
   )
 
-  // 保存（新建/编辑）— mutation onSuccess 自动刷新列表
+  // 保存（新建/编辑）
   const handleSave = useCallback(
     async (input: ExpertTeamFormInput) => {
       if (selectedId) {
@@ -90,9 +104,9 @@ export default function ExpertTeamPanel() {
         setSelectedId(team.id)
         message.success('已创建')
       }
-      setActiveTab('list')
+      goList()
     },
-    [selectedId, createTeamMut, updateTeamMut, setSelectedId, setActiveTab]
+    [selectedId, createTeamMut, updateTeamMut, setSelectedId, goList]
   )
 
   // 执行
@@ -110,116 +124,114 @@ export default function ExpertTeamPanel() {
       const result = await executeTeamMut(executeTeam.id, input)
       message.success(`执行完成！共 ${result.rounds} 轮讨论，耗时 ${(result.durationMs / 1000).toFixed(1)}s`)
       setExecuteDrawerOpen(false)
+      setView('monitor')
       setActiveTab('monitor')
       refreshRuns()
     },
     [executeTeam, executeTeamMut, setActiveTab, refreshRuns]
   )
 
-  // Tab items
-  const tabItems = [
-    {
-      key: 'list',
-      label: (
-        <Space>
-          <TeamOutlined />
-          专家团列表
-        </Space>
-      ),
-      children: (
-        <ExpertTeamList
-          teams={teams}
-          loading={isLoading}
-          onView={handleViewDetail}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onExecute={handleExecute}
-        />
-      ),
-    },
-    {
-      key: 'editor',
-      label: (
-        <Space>
-          <PlusOutlined />
-          {selectedId ? '编辑专家团' : '新建专家团'}
-        </Space>
-      ),
-      children: (
-        <ExpertTeamEditor
-          team={selectedTeam}
-          onSave={handleSave}
-          onCancel={() => setActiveTab('list')}
-          loading={isMutating}
-        />
-      ),
-    },
-    {
-      key: 'detail',
-      label: (
-        <Space>
-          <TeamOutlined />
-          专家团详情
-        </Space>
-      ),
-      children: selectedTeam ? (
-        <ExpertTeamDetail
-          team={selectedTeam}
-          onEdit={() => handleEdit(selectedTeam.id)}
-          onExecute={() => handleExecute(selectedTeam)}
-        />
-      ) : null,
-    },
-    {
-      key: 'monitor',
-      label: (
-        <Space>
-          <HistoryOutlined />
-          运行记录
-          {runsTotal > 0 && <Text type="secondary">({runsTotal})</Text>}
-        </Space>
-      ),
-      children: (
-        <ExpertTeamMonitor
-          runs={runs}
-          loading={isRunsLoading}
-          onRefresh={refreshRuns}
-        />
-      ),
-    },
-  ]
-
-  return (
-    <ModuleErrorBoundary module="expert-team">
-      <div style={{ padding: '0 24px 24px' }}>
+  // 渲染页面标题和返回按钮
+  const renderHeader = () => {
+    if (view === 'list') {
+      return (
         <PageHeader
           title="👥 专家团工作流"
           subtitle="多专家协作，AI 驱动的智能分析"
           extra={
             <Space>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={handleCreate}
-              >
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
                 新建专家团
               </Button>
-              <Button
-                icon={<PlayCircleOutlined />}
-                onClick={() => setActiveTab('monitor')}
-              >
+              <Button icon={<HistoryOutlined />} onClick={() => { setView('monitor'); setActiveTab('monitor') }}>
                 运行记录
               </Button>
             </Space>
           }
         />
+      )
+    }
 
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as typeof activeTab)}
-          items={tabItems}
-          style={{ marginTop: 16 }}
+    const titles: Record<ViewMode, string> = {
+      list: '',
+      detail: '专家团详情',
+      editor: selectedId ? '编辑专家团' : '新建专家团',
+      monitor: '运行记录',
+    }
+
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <Breadcrumb
+          items={[
+            { title: <a onClick={goList}>专家团列表</a> },
+            { title: titles[view] },
+          ]}
+          style={{ marginBottom: 12 }}
         />
+        <Space align="center">
+          <Button icon={<ArrowLeftOutlined />} onClick={goList}>
+            返回列表
+          </Button>
+          <Text strong style={{ fontSize: 16 }}>{titles[view]}</Text>
+        </Space>
+      </div>
+    )
+  }
+
+  // 渲染当前视图
+  const renderView = () => {
+    switch (view) {
+      case 'list':
+        return (
+          <ExpertTeamList
+            teams={teams}
+            loading={isLoading}
+            onView={handleViewDetail}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onExecute={handleExecute}
+          />
+        )
+
+      case 'detail':
+        return selectedTeam ? (
+          <ExpertTeamDetail
+            team={selectedTeam}
+            onEdit={() => handleEdit(selectedTeam.id)}
+            onExecute={() => handleExecute(selectedTeam)}
+          />
+        ) : null
+
+      case 'editor':
+        return (
+          <ExpertTeamEditor
+            key={selectedId ?? 'new'}
+            team={selectedTeam}
+            onSave={handleSave}
+            onCancel={goList}
+            loading={isMutating}
+          />
+        )
+
+      case 'monitor':
+        return (
+          <ExpertTeamMonitor
+            runs={runs}
+            loading={isRunsLoading}
+            onRefresh={refreshRuns}
+          />
+        )
+
+      default:
+        return null
+    }
+  }
+
+  return (
+    <ModuleErrorBoundary module="expert-team">
+      <div style={{ padding: '0 24px 24px' }}>
+        {renderHeader()}
+        {renderView()}
 
         {/* 执行抽屉 */}
         <ExpertTeamExecuteDrawer
