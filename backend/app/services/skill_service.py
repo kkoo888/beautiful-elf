@@ -31,7 +31,16 @@ class SkillService:
         offset = (page - 1) * page_size
         items = await self.repo.find_all(db, offset=offset, limit=page_size, enabled=enabled)
         total = await self.repo.count(db, enabled=enabled)
-        return [self._to_dict(i) for i in items], total
+        result = []
+        for i in items:
+            d = self._to_dict(i)
+            stats = await self.repo.get_stats(db, i.id)
+            d["stats"] = self._stats_to_dict(stats) if stats else {
+                "call_count": 0, "success_count": 0, "fail_count": 0,
+                "avg_duration_ms": 0, "last_called_at": None,
+            }
+            result.append(d)
+        return result, total
 
     async def update(self, db: AsyncSession, id: int, data: SkillUpdate) -> dict:
         item = await self.repo.find_by_id(db, id)

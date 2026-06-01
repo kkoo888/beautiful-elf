@@ -9,6 +9,15 @@ export interface SkillStats {
   lastCalledAt: string | null
 }
 
+/** 技能运行统计 */
+export interface SkillRuntimeStats {
+  callCount: number
+  successCount: number
+  failCount: number
+  avgDurationMs: number
+  lastCalledAt: string | null
+}
+
 /** 技能数据 */
 export interface Skill {
   id: string
@@ -21,6 +30,7 @@ export interface Skill {
   triggerWords: string[]
   dependencies: string[]
   config: Record<string, unknown>
+  stats?: SkillRuntimeStats
   createdAt: string
   updatedAt: string
 }

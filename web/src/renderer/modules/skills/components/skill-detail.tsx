@@ -92,19 +92,19 @@ export function SkillDetail({ open, skill, onClose, onRefine }: SkillDetailProps
           <span className={styles.detailLabel}>使用统计</span>
           <div className={styles.statsGrid}>
             <div className={styles.statCard}>
-              <div className={styles.statValue}>{skill.stats.callCount}</div>
+              <div className={styles.statValue}>{skill.stats?.callCount ?? 0}</div>
               <div className={styles.statLabel}>
                 <ThunderboltOutlined /> 调用次数
               </div>
             </div>
             <div className={styles.statCard}>
-              <div className={styles.statValue}>{(skill.stats.successRate * 100).toFixed(0)}%</div>
+              <div className={styles.statValue}>{skill.stats ? ((skill.stats.callCount > 0 ? skill.stats.successCount / skill.stats.callCount : 0) * 100).toFixed(0) : 0}%</div>
               <div className={styles.statLabel}>
                 <CheckCircleOutlined /> 成功率
               </div>
             </div>
             <div className={styles.statCard}>
-              <div className={styles.statValue}>{formatDuration(skill.stats.avgDuration)}</div>
+              <div className={styles.statValue}>{formatDuration(skill.stats?.avgDurationMs ?? 0)}</div>
               <div className={styles.statLabel}>
                 <ClockCircleOutlined /> 平均耗时
               </div>

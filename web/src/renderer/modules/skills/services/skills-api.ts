@@ -17,7 +17,19 @@ export async function fetchSkills(params?: SkillQueryParams): Promise<PaginatedR
   const resp = await apiClient.get('/skills', { params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, isEnabled: params?.isEnabled } })
   const body = resp.data as any
   return {
-    data: body.data,
+    data: (body.data ?? []).map((item: any) => ({
+      ...item,
+      displayName: item.displayName ?? item.display_name,
+      triggerWords: item.triggerWords ?? item.trigger_words ?? [],
+      isEnabled: item.isEnabled ?? item.is_enabled,
+      stats: item.stats ? {
+        callCount: item.stats.call_count ?? 0,
+        successCount: item.stats.success_count ?? 0,
+        failCount: item.stats.fail_count ?? 0,
+        avgDurationMs: item.stats.avg_duration_ms ?? 0,
+        lastCalledAt: item.stats.last_called_at ?? null,
+      } : undefined,
+    })),
     total: body.total,
     page: body.page,
     pageSize: body.pageSize,

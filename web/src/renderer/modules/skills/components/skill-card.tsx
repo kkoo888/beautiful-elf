@@ -50,19 +50,19 @@ export function SkillCard({ skill, onToggle, onClick, isToggling }: SkillCardPro
           <Tooltip title="调用次数">
             <span className={styles.metaItem}>
               <ThunderboltOutlined className={styles.metaIcon} />
-              {skill.stats.callCount}
+              {skill.stats?.callCount ?? 0}
             </span>
           </Tooltip>
           <Tooltip title="成功率">
             <span className={styles.metaItem}>
               <CheckCircleOutlined className={styles.metaIcon} />
-              {(skill.stats.successRate * 100).toFixed(0)}%
+              {skill.stats ? ((skill.stats.callCount > 0 ? skill.stats.successCount / skill.stats.callCount : 0) * 100).toFixed(0) : 0}%
             </span>
           </Tooltip>
           <Tooltip title="平均耗时">
             <span className={styles.metaItem}>
               <ClockCircleOutlined className={styles.metaIcon} />
-              {formatDuration(skill.stats.avgDuration)}
+              {formatDuration(skill.stats?.avgDurationMs ?? 0)}
             </span>
           </Tooltip>
         </div>
