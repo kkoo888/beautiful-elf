@@ -28,7 +28,13 @@ async def get_message(message_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("")
-async def create_message(data: MessageCreate, db: AsyncSession = Depends(get_db)):
+async def create_message(
+    data: MessageCreate,
+    conversation_id: int = Path(..., description="会话 ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    # URL 路径中的 conversation_id 优先，覆盖 body 中的值
+    data.conversation_id = conversation_id
     return ok(await _service.create(db, data))
 
 

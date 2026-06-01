@@ -139,130 +139,131 @@ export async function saveMessage(
   return toFrontendMessage((resp.data as any).data)
 }
 
-// ── AI 对话 API（mock，后端暂未实现）────────────────────────────
-
-/** 模拟延迟 */
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
-
-/** Mock 响应内容池 */
-const MOCK_RESPONSES: string[] = [
-  '你好！有什么可以帮你的吗？ 😊',
-  '这是一个很好的问题！让我来帮你分析一下。\n\n**关键点：**\n1. 首先需要理解需求\n2. 然后拆解任务\n3. 最后逐步实现',
-  '根据我的理解，这里有几个方案：\n\n- **方案 A**：简单直接\n- **方案 B**：更灵活但复杂\n- **方案 C**：平衡方案\n\n推荐方案 C，兼顾了简洁和灵活性。',
-  '```typescript\nfunction greet(name: string): string {\n  return `Hello, ${name}!`\n}\n\nconsole.log(greet("Beautiful-Elf"))\n```\n\n这段代码展示了基本的 TypeScript 函数定义。',
-  '让我想想... 🤔\n\n这个问题涉及到几个方面：\n\n> 设计原则：单一职责、开闭原则、依赖倒置\n\n建议先从最简单的实现开始，逐步迭代优化。',
-]
-
-const MOCK_MODULES = ['schedule', 'clipboard', 'knowledge', 'translate', 'skills']
+// ── AI 对话 API（真实接口）────────────────────────────────────
 
 /**
- * 发送非流式聊天请求（Mock）
- * TODO: 对接后端 AI 对话接口（需后端新增 /chat 端点）
+ * 发送非流式聊天请求
  */
 export async function chat(request: ChatRequest): Promise<ChatResponse> {
-  await delay(800 + Math.random() * 1200)
+  // 保存用户消息
+  await saveMessage(request.conversationId, 'user', request.message)
 
-  // 保存用户消息到后端
-  try {
-    await saveMessage(request.conversationId, 'user', request.message)
-  } catch {
-    // 忽略保存失败
-  }
+  // 调用后端对话接口
+  const resp = await apiClient.post(
+    `/conversations/${request.conversationId}/chat`,
+    {
+      provider_id: request.providerId,
+      model_name: request.modelName ?? '',
+      messages: [{ role: 'user', content: request.message }],
+      temperature: 0.7,
+      max_tokens: 2048,
+      stream: false,
+    }
+  )
 
-  const responseIndex = Math.floor(Math.random() * MOCK_RESPONSES.length)
-  const isCached = Math.random() > 0.7
-  const intentRoute =
-    Math.random() > 0.6
-      ? {
-          module: MOCK_MODULES[Math.floor(Math.random() * MOCK_MODULES.length)],
-          confidence: 0.7 + Math.random() * 0.3,
-        }
-      : undefined
-
-  const content = MOCK_RESPONSES[responseIndex]
-
-  // 保存 AI 回复到后端
-  try {
-    await saveMessage(request.conversationId, 'assistant', content)
-  } catch {
-    // 忽略保存失败
-  }
-
+  const data = (resp.data as any).data
   return {
     id: crypto.randomUUID(),
-    content,
-    isCached,
-    intentRoute,
-    model: 'qwen2.5:7b',
+    content: data.content ?? '',
+    isCached: false,
+    model: data.model ?? '',
   }
 }
 
 /**
- * 创建流式聊天连接（Mock）
- * TODO: 对接后端流式接口（SSE 或 WebSocket）
+ * 创建流式聊天连接（SSE）
  */
 export function chatStream(
   request: ChatRequest,
   onToken: (token: StreamToken) => void,
   onError?: (error: Error) => void
 ): { abort: () => void } {
-  let aborted = false
+  const controller = new AbortController()
   const messageId = crypto.randomUUID()
-  const responseIndex = Math.floor(Math.random() * MOCK_RESPONSES.length)
-  const fullContent = MOCK_RESPONSES[responseIndex]
-  const chars = [...fullContent]
 
-  // 保存用户消息
+  // 保存用户消息（异步，不阻塞）
   saveMessage(request.conversationId, 'user', request.message).catch(() => {})
 
-  const stream = async (): Promise<void> => {
+  const doStream = async (): Promise<void> => {
     try {
-      await delay(300)
+      const resp = await fetch(
+        `/api/v1/conversations/${request.conversationId}/chat/stream`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider_id: request.providerId,
+            model_name: request.modelName ?? '',
+            messages: [{ role: 'user', content: request.message }],
+            temperature: 0.7,
+            max_tokens: 2048,
+            stream: true,
+          }),
+          signal: controller.signal,
+        }
+      )
 
-      for (let i = 0; i < chars.length; i++) {
-        if (aborted) break
-
-        onToken({
-          content: chars[i],
-          done: false,
-          messageId: i === 0 ? messageId : undefined,
-        })
-
-        await delay(20 + Math.random() * 40)
+      if (!resp.ok) {
+        const errText = await resp.text()
+        throw new Error(`HTTP ${resp.status}: ${errText}`)
       }
 
-      if (!aborted) {
-        onToken({
-          content: '',
-          done: true,
-          messageId: undefined,
-        })
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('No readable stream')
 
-        // 保存完整 AI 回复
-        saveMessage(request.conversationId, 'assistant', fullContent).catch(() => {})
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let firstToken = true
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.error) {
+              onError?.(new Error(data.error))
+              return
+            }
+            if (data.content || data.done) {
+              onToken({
+                content: data.content ?? '',
+                done: data.done,
+                messageId: firstToken ? messageId : undefined,
+              })
+              firstToken = false
+            }
+            if (data.done) return
+          } catch {
+            // skip malformed JSON
+          }
+        }
       }
     } catch (err) {
-      if (!aborted && onError) {
-        onError(err instanceof Error ? err : new Error(String(err)))
+      if ((err as Error).name !== 'AbortError') {
+        onError?.(err instanceof Error ? err : new Error(String(err)))
       }
     }
   }
 
-  stream()
+  doStream()
 
   return {
-    abort: () => {
-      aborted = true
-    },
+    abort: () => controller.abort(),
   }
 }
 
 /**
- * 提交反馈（Mock）
- * TODO: 对接后端反馈接口（可复用 ai-feedback 模块）
+ * 提交反馈
  */
 export async function submitFeedback(request: FeedbackRequest): Promise<FeedbackResponse> {
-  await delay(300 + Math.random() * 500)
-  console.log('[Mock] Feedback submitted:', request)
+  // TODO: 对接后端反馈接口
+  console.log('[Feedback]', request)
   return { success: true }
 }

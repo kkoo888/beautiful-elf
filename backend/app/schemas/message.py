@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class MessageCreate(BaseModel):
-    conversation_id: int = Field(..., description="会话 ID")
+    conversation_id: Optional[int] = Field(default=None, description="会话 ID（从 URL 路径注入）")
     role: str = Field(..., max_length=32, description="角色 (user/assistant/system/tool)")
     content: str = Field(..., description="消息内容")
     tool_calls: Optional[Any] = Field(default=None, description="工具调用信息")

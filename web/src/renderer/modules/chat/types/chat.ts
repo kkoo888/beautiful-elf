@@ -92,6 +92,10 @@ export interface ChatRequest {
   message: string
   /** 推理深度 */
   reasoningDepth: ReasoningDepth
+  /** 供应商 ID */
+  providerId?: number
+  /** 模型名称 */
+  modelName?: string
 }
 
 /** 聊天响应 */

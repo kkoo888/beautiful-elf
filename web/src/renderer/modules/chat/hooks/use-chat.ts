@@ -5,7 +5,7 @@
 
 import { useCallback, useRef } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
-import { chat, chatStream, submitFeedback } from '../services/chat-api'
+import { chat, chatStream, submitFeedback, createConversation } from '../services/chat-api'
 import type {
   ChatMessage,
   Conversation,
@@ -75,27 +75,22 @@ export function useChat(): UseChatReturn {
 
   const abortRef = useRef<{ abort: () => void } | null>(null)
 
-  /** 确保有会话 ID */
-  const ensureConversationId = useCallback((): string => {
+  /** 确保有会话 ID（调用后端创建） */
+  const ensureConversationId = useCallback(async (): Promise<string> => {
     if (currentConversationId) return currentConversationId
-    const id = generateId()
-    useChatStore.getState().addConversation({
-      id,
-      title: '新会话',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      messageCount: 0,
-    })
-    useChatStore.getState().setCurrentConversation(id)
-    return id
+    // 调用后端创建会话，获取真实 ID
+    const conv = await createConversation('新会话')
+    useChatStore.getState().addConversation(conv)
+    useChatStore.getState().setCurrentConversation(conv.id)
+    return conv.id
   }, [currentConversationId])
 
   /** 发送消息（流式） */
   const sendMessage = useCallback(
-    (content: string) => {
+    async (content: string) => {
       if (isLoading || !content.trim()) return
 
-      const convId = ensureConversationId()
+      const convId = await ensureConversationId()
 
       // 添加用户消息
       const userMessage: ChatMessage = {
@@ -130,7 +125,13 @@ export function useChat(): UseChatReturn {
 
       // 流式接收
       abortRef.current = chatStream(
-        { conversationId: convId, message: content.trim(), reasoningDepth },
+        {
+          conversationId: convId,
+          message: content.trim(),
+          reasoningDepth,
+          providerId: selectedProviderId,
+          modelName: selectedModelName,
+        },
         (token: StreamToken) => {
           if (token.done) {
             setIsLoading(false)
@@ -178,7 +179,7 @@ export function useChat(): UseChatReturn {
     async (content: string): Promise<void> => {
       if (isLoading || !content.trim()) return
 
-      const convId = ensureConversationId()
+      const convId = await ensureConversationId()
 
       // 添加用户消息
       const userMessage: ChatMessage = {
@@ -206,6 +207,8 @@ export function useChat(): UseChatReturn {
           conversationId: convId,
           message: content.trim(),
           reasoningDepth,
+          providerId: selectedProviderId,
+          modelName: selectedModelName,
         })
 
         const aiMessage: ChatMessage = {
