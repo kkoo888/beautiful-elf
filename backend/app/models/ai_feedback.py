@@ -15,7 +15,7 @@ class AIFeedback(BaseModel):
     trace_id = Column(String(128), default="", comment="请求链路 ID")
 
     __table_args__ = (
-        Index("idx_feedback_type", "feedback_type"),
-        Index("idx_feedback_conversation", "conversation_id"),
-        Index("idx_feedback_created", "created_at"),
+        Index("idx_ai_feedback_type", "feedback_type"),
+        Index("idx_ai_feedback_conversation", "conversation_id"),
+        Index("idx_ai_feedback_created_at", "created_at"),
     )

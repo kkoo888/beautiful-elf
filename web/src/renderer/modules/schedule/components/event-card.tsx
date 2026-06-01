@@ -33,7 +33,7 @@ export const EventCard = memo<EventCardProps>(function EventCard({
       title={event.title}
     >
       <span className={styles.eventTitle}>{event.title}</span>
-      {showTime && !event.allDay && (
+      {showTime && !event.isAllDay && (
         <span className={styles.eventTime}>{dayjs(event.startTime).format('HH:mm')}</span>
       )}
     </div>

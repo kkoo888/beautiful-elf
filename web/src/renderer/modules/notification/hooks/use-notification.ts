@@ -81,9 +81,9 @@ export function useNotification() {
       }
 
       if (readFilter === 'read') {
-        result = result.filter((n) => n.read)
+        result = result.filter((n) => n.isRead)
       } else if (readFilter === 'unread') {
-        result = result.filter((n) => !n.read)
+        result = result.filter((n) => !n.isRead)
       }
 
       return result

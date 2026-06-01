@@ -14,7 +14,7 @@ import type {
 
 /** 获取技能列表（分页） */
 export async function fetchSkills(params?: SkillQueryParams): Promise<PaginatedResult<Skill>> {
-  const resp = await apiClient.get('/skills', { params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, enabled: params?.enabled } })
+  const resp = await apiClient.get('/skills', { params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, isEnabled: params?.isEnabled } })
   const body = resp.data as any
   return {
     data: body.data,

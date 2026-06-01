@@ -80,7 +80,7 @@ export function ExpertTeamExecuteDrawer({
         <div style={{ marginTop: 8 }}>
           <Space wrap>
             {team.members
-              .filter((m) => m.enabled)
+              .filter((m) => m.isEnabled)
               .map((m) => (
                 <Tag key={m.id} style={{ padding: '4px 8px' }}>
                   <Space size={4}>

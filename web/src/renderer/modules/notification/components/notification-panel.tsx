@@ -55,7 +55,7 @@ export function NotificationPanel() {
             size="small"
             icon={<DeleteOutlined />}
             onClick={clearRead}
-            disabled={notifications.every((n) => !n.read)}
+            disabled={notifications.every((n) => !n.isRead)}
           >
             清除已读
           </Button>

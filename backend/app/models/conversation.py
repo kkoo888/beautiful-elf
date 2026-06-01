@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class Conversation(BaseModel):
-    __tablename__ = "conversations"
+    __tablename__ = "conversation"
 
     title = Column(String(256), nullable=False, default="", comment="会话标题")
     model_name = Column(String(128), default="", comment="对话模型")
@@ -12,14 +12,14 @@ class Conversation(BaseModel):
     last_message_at = Column(DateTime, default=None, comment="最后消息时间")
 
     __table_args__ = (
-        Index("idx_conversations_created", "created_at"),
-        Index("idx_conversations_last_msg", "last_message_at"),
-        Index("idx_conversations_deleted", "deleted"),
+        Index("idx_conversation_created_at", "created_at"),
+        Index("idx_conversation_last_message_at", "last_message_at"),
+        Index("idx_conversation_is_deleted", "is_deleted"),
     )
 
 
 class Message(BaseModel):
-    __tablename__ = "messages"
+    __tablename__ = "message"
 
     conversation_id = Column(BigInteger, nullable=False, comment="会话 ID")
     role = Column(String(32), nullable=False, comment="角色 (user/assistant/system/tool)")
@@ -29,6 +29,6 @@ class Message(BaseModel):
     token_count = Column(Integer, default=0, comment="Token 消耗量")
 
     __table_args__ = (
-        Index("idx_messages_conversation", "conversation_id", "created_at"),
-        Index("idx_messages_role", "role"),
+        Index("idx_message_conversation_created", "conversation_id", "created_at"),
+        Index("idx_message_role", "role"),
     )

@@ -17,7 +17,7 @@ class ConfigRepository:
         """按 key 查询配置"""
         stmt = select(Setting).where(
             Setting.settings_key == key,
-            Setting.deleted == 0,
+            Setting.is_deleted == 0,
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()

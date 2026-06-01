@@ -140,7 +140,7 @@ export async function fetchSchedules(params?: ScheduleQueryParams): Promise<Sche
     const { data } = await apiClient.get('/schedules', { params })
     return (data as { data: Schedule[] }).data
   } catch {
-    let result = mockStore.filter((s) => !s.deleted)
+    let result = mockStore.filter((s) => !s.isDeleted)
 
     if (params?.startDate) {
       const start = new Date(params.startDate).getTime()

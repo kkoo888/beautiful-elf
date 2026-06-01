@@ -1,17 +1,11 @@
 """专家团工作流模型"""
 from sqlalchemy import Column, BigInteger, Integer, String, DateTime, JSON, Text, Index
-from sqlalchemy.orm import column_property
 from app.models.base import BaseModel
 
 
 class ExpertTeam(BaseModel):
     """专家团定义"""
     __tablename__ = "expert_team"
-
-    # 覆盖 BaseModel 的字段，映射到新的数据库列名
-    deleted = None  # type: ignore  # 移除父类的 deleted
-    created_at = None  # type: ignore
-    updated_at = None  # type: ignore
 
     team_name = Column(String(256), nullable=False, comment="专家团名称")
     description = Column(String(1024), default="", comment="专家团描述")
@@ -23,29 +17,9 @@ class ExpertTeam(BaseModel):
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
     version = Column(Integer, nullable=False, default=1, comment="版本号")
     config_json = Column(JSON, default=None, comment="扩展配置")
-    is_deleted = Column(Integer, nullable=False, default=0, comment="是否删除: 1=是 0=否")
-    gmt_create = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", comment="创建时间")
-    gmt_modified = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", onupdate="CURRENT_TIMESTAMP", comment="修改时间")
-
-    # 兼容别名：让 mapper 中的 model.deleted / model.created_at / model.updated_at 正常工作
-    @property
-    def deleted(self):
-        return self.is_deleted
-
-    @deleted.setter
-    def deleted(self, value):
-        self.is_deleted = value
-
-    @property
-    def created_at(self):
-        return self.gmt_create
-
-    @property
-    def updated_at(self):
-        return self.gmt_modified
 
     __table_args__ = (
-        Index("idx_expert_team_deleted_enabled", "is_deleted", "is_enabled"),
+        Index("idx_expert_team_is_deleted_enabled", "is_deleted", "is_enabled"),
         Index("idx_expert_team_category", "category"),
     )
 
@@ -53,10 +27,6 @@ class ExpertTeam(BaseModel):
 class ExpertTeamMember(BaseModel):
     """专家团成员"""
     __tablename__ = "expert_team_member"
-
-    deleted = None  # type: ignore
-    created_at = None  # type: ignore
-    updated_at = None  # type: ignore
 
     team_id = Column(BigInteger, nullable=False, comment="专家团 ID")
     member_name = Column(String(128), nullable=False, comment="专家名称")
@@ -69,38 +39,15 @@ class ExpertTeamMember(BaseModel):
     tools_json = Column(JSON, default=None, comment="可用工具列表")
     sort_order = Column(Integer, default=0, comment="排序顺序")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
-    is_deleted = Column(Integer, nullable=False, default=0, comment="是否删除: 1=是 0=否")
-    gmt_create = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", comment="创建时间")
-    gmt_modified = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", onupdate="CURRENT_TIMESTAMP", comment="修改时间")
-
-    @property
-    def deleted(self):
-        return self.is_deleted
-
-    @deleted.setter
-    def deleted(self, value):
-        self.is_deleted = value
-
-    @property
-    def created_at(self):
-        return self.gmt_create
-
-    @property
-    def updated_at(self):
-        return self.gmt_modified
 
     __table_args__ = (
-        Index("idx_expert_team_member_team", "team_id", "is_deleted"),
+        Index("idx_expert_team_member_team_deleted", "team_id", "is_deleted"),
     )
 
 
 class ExpertTeamRun(BaseModel):
     """专家团运行记录"""
     __tablename__ = "expert_team_run"
-
-    deleted = None  # type: ignore
-    created_at = None  # type: ignore
-    updated_at = None  # type: ignore
 
     team_id = Column(BigInteger, nullable=False, comment="专家团 ID")
     run_status = Column(Integer, nullable=False, default=0, comment="状态: 0=待执行 1=运行中 2=已完成 3=失败 4=已取消")
@@ -114,30 +61,11 @@ class ExpertTeamRun(BaseModel):
     started_at = Column(DateTime, default=None, comment="开始时间")
     finished_at = Column(DateTime, default=None, comment="完成时间")
     duration_ms = Column(Integer, default=0, comment="执行耗时")
-    is_deleted = Column(Integer, nullable=False, default=0, comment="是否删除: 1=是 0=否")
-    gmt_create = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", comment="创建时间")
-    gmt_modified = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", onupdate="CURRENT_TIMESTAMP", comment="修改时间")
-
-    @property
-    def deleted(self):
-        return self.is_deleted
-
-    @deleted.setter
-    def deleted(self, value):
-        self.is_deleted = value
-
-    @property
-    def created_at(self):
-        return self.gmt_create
-
-    @property
-    def updated_at(self):
-        return self.gmt_modified
 
     __table_args__ = (
-        Index("idx_expert_team_run_team", "team_id", "run_status"),
+        Index("idx_expert_team_run_team_status", "team_id", "run_status"),
         Index("idx_expert_team_run_status", "run_status"),
-        Index("idx_expert_team_run_created", "gmt_create"),
+        Index("idx_expert_team_run_created_at", "created_at"),
     )
 
 
@@ -145,48 +73,21 @@ class ExpertRoleSkill(BaseModel):
     """角色技能绑定 — 专家成员可绑定已有技能，执行时按优先级调用"""
     __tablename__ = "expert_role_skill"
 
-    deleted = None  # type: ignore
-    created_at = None  # type: ignore
-    updated_at = None  # type: ignore
-
     role_id = Column(BigInteger, nullable=False, comment="成员 ID (关联 expert_team_member.id)")
-    skill_id = Column(BigInteger, nullable=False, comment="技能 ID (关联 skills.id)")
+    skill_id = Column(BigInteger, nullable=False, comment="技能 ID (关联 skill.id)")
     priority = Column(Integer, default=0, comment="调用优先级 (数值越大越优先)")
     config_override = Column(JSON, default=None, comment="角色级别的技能配置覆盖")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
-    is_deleted = Column(Integer, nullable=False, default=0, comment="是否删除: 1=是 0=否")
-    gmt_create = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", comment="创建时间")
-    gmt_modified = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", onupdate="CURRENT_TIMESTAMP", comment="修改时间")
-
-    @property
-    def deleted(self):
-        return self.is_deleted
-
-    @deleted.setter
-    def deleted(self, value):
-        self.is_deleted = value
-
-    @property
-    def created_at(self):
-        return self.gmt_create
-
-    @property
-    def updated_at(self):
-        return self.gmt_modified
 
     __table_args__ = (
         Index("uk_role_skill", "role_id", "skill_id", unique=True),
-        Index("idx_expert_role_skill_skill", "skill_id"),
+        Index("idx_expert_role_skill_skill_id", "skill_id"),
     )
 
 
 class ExpertRoleRun(BaseModel):
     """角色执行记录 — 每次运行中各专家成员的独立执行记录"""
     __tablename__ = "expert_role_run"
-
-    deleted = None  # type: ignore
-    created_at = None  # type: ignore
-    updated_at = None  # type: ignore
 
     run_id = Column(BigInteger, nullable=False, comment="运行记录 ID (关联 expert_team_run.id)")
     role_id = Column(BigInteger, nullable=False, comment="成员 ID (关联 expert_team_member.id)")
@@ -201,28 +102,9 @@ class ExpertRoleRun(BaseModel):
     finished_at = Column(DateTime, default=None, comment="完成时间")
     duration_ms = Column(Integer, default=0, comment="执行耗时 (毫秒)")
     token_usage = Column(Integer, default=0, comment="token 消耗")
-    is_deleted = Column(Integer, nullable=False, default=0, comment="是否删除: 1=是 0=否")
-    gmt_create = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", comment="创建时间")
-    gmt_modified = Column(DateTime, nullable=False, server_default="CURRENT_TIMESTAMP", onupdate="CURRENT_TIMESTAMP", comment="修改时间")
-
-    @property
-    def deleted(self):
-        return self.is_deleted
-
-    @deleted.setter
-    def deleted(self, value):
-        self.is_deleted = value
-
-    @property
-    def created_at(self):
-        return self.gmt_create
-
-    @property
-    def updated_at(self):
-        return self.gmt_modified
 
     __table_args__ = (
-        Index("idx_expert_role_run_run", "run_id"),
-        Index("idx_expert_role_run_role", "role_id"),
+        Index("idx_expert_role_run_run_id", "run_id"),
+        Index("idx_expert_role_run_role_id", "role_id"),
         Index("idx_expert_role_run_status", "run_status"),
     )

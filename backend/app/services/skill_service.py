@@ -88,7 +88,7 @@ class SkillService:
             "source": item.source,
             "trigger_words": item.trigger_words,
             "dependencies": item.dependencies,
-            "enabled": item.enabled,
+            "isEnabled": item.is_enabled,
             "config": item.config,
             "created_at": str(item.created_at) if item.created_at else None,
             "updated_at": str(item.updated_at) if item.updated_at else None,

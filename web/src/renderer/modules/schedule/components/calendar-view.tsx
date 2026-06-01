@@ -123,7 +123,7 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
       const dateKey = day.format('YYYY-MM-DD')
       const events = schedulesByDate.get(dateKey) ?? []
       return events.filter((e) => {
-        if (e.allDay) return hour === 0
+        if (e.isAllDay) return hour === 0
         const h = dayjs(e.startTime).hour()
         return h === hour
       })
@@ -220,7 +220,7 @@ export const CalendarView = memo<CalendarViewProps>(function CalendarView({
                       }}
                     >
                       <div className={styles.timeEventTitle}>{evt.title}</div>
-                      {!evt.allDay && (
+                      {!evt.isAllDay && (
                         <div className={styles.timeEventTime}>
                           {dayjs(evt.startTime).format('HH:mm')} -{' '}
                           {dayjs(evt.endTime).format('HH:mm')}

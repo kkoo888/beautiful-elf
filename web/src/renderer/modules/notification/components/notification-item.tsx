@@ -20,9 +20,9 @@ export function NotificationItem({ notification, onRead }: NotificationItemProps
 
   return (
     <div
-      className={`${styles.item} ${notification.read ? styles.itemRead : styles.itemUnread}`}
+      className={`${styles.item} ${notification.isRead ? styles.itemRead : styles.itemUnread}`}
       onClick={() => {
-        if (!notification.read) onRead(notification.id)
+        if (!notification.isRead) onRead(notification.id)
       }}
     >
       <div className={styles.itemHeader}>
@@ -33,7 +33,7 @@ export function NotificationItem({ notification, onRead }: NotificationItemProps
       <div className={styles.itemMessage}>{notification.message}</div>
       <div className={styles.itemFooter}>
         <span className={styles.itemTime}>{timeStr}</span>
-        {!notification.read && <span className={styles.itemDot} />}
+        {!notification.isRead && <span className={styles.itemDot} />}
       </div>
     </div>
   )

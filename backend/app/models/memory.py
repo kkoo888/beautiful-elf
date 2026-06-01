@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class MemoryEntry(BaseModel):
-    __tablename__ = "memory_entries"
+    __tablename__ = "memory_entry"
 
     conversation_id = Column(BigInteger, default=None, comment="来源会话 ID")
     summary = Column(Text, nullable=False, comment="记忆摘要")
@@ -13,7 +13,7 @@ class MemoryEntry(BaseModel):
     qdrant_point_id = Column(String(128), default=None, comment="Qdrant 向量 ID")
 
     __table_args__ = (
-        Index("idx_memory_conversation", "conversation_id"),
-        Index("idx_memory_importance", "importance"),
-        Index("idx_memory_deleted", "deleted"),
+        Index("idx_memory_entry_conversation", "conversation_id"),
+        Index("idx_memory_entry_importance", "importance"),
+        Index("idx_memory_entry_is_deleted", "is_deleted"),
     )

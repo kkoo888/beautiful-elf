@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class PetAttribute(BaseModel):
-    __tablename__ = "pet_attributes"
+    __tablename__ = "pet_attribute"
 
     hunger = Column(Integer, nullable=False, default=100, comment="饥饿值 (0-100)")
     clean = Column(Integer, nullable=False, default=100, comment="清洁值 (0-100)")
@@ -17,13 +17,13 @@ class PetAttribute(BaseModel):
 
 
 class PetInteraction(BaseModel):
-    __tablename__ = "pet_interactions"
+    __tablename__ = "pet_interaction"
 
     pet_attribute_id = Column(BigInteger, nullable=False, comment="宠物属性 ID")
     interaction_type = Column(Integer, nullable=False, comment="互动类型")
     effect_json = Column(JSON, default=None, comment="属性变化效果")
 
     __table_args__ = (
-        Index("idx_pet_interactions_type", "interaction_type"),
-        Index("idx_pet_interactions_created", "created_at"),
+        Index("idx_pet_interaction_type", "interaction_type"),
+        Index("idx_pet_interaction_created_at", "created_at"),
     )

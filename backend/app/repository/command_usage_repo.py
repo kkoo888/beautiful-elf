@@ -21,7 +21,7 @@ class CommandUsageRepository:
         try:
             stmt = select(CommandUsage).where(
                 CommandUsage.command_id == command_id,
-                CommandUsage.deleted == 0,
+                CommandUsage.is_deleted == 0,
             )
             result = await db.execute(stmt)
             return result.scalar_one_or_none()
@@ -47,7 +47,7 @@ class CommandUsageRepository:
         try:
             stmt = (
                 select(CommandUsage)
-                .where(CommandUsage.deleted == 0)
+                .where(CommandUsage.is_deleted == 0)
                 .order_by(CommandUsage.use_count.desc())
                 .limit(limit)
             )

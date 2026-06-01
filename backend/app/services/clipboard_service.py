@@ -58,7 +58,7 @@ class ClipboardService:
             "id": item.id,
             "content": item.content,
             "content_type": item.content_type,
-            "pinned": item.pinned,
+            "isPinned": item.is_pinned,
             "source_app": item.source_app,
             "created_at": str(item.created_at) if item.created_at else None,
             "updated_at": str(item.updated_at) if item.updated_at else None,

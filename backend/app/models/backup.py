@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class BackupRecord(BaseModel):
-    __tablename__ = "backup_records"
+    __tablename__ = "backup_record"
 
     backup_type = Column(Integer, nullable=False, comment="备份类型")
     file_path = Column(String(512), nullable=False, comment="备份文件路径")
@@ -13,7 +13,7 @@ class BackupRecord(BaseModel):
     error_message = Column(String(1024), default="", comment="失败原因")
 
     __table_args__ = (
-        Index("idx_backup_type", "backup_type"),
-        Index("idx_backup_status", "status"),
-        Index("idx_backup_created", "created_at"),
+        Index("idx_backup_record_type", "backup_type"),
+        Index("idx_backup_record_status", "status"),
+        Index("idx_backup_record_created_at", "created_at"),
     )

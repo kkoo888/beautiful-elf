@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class Workflow(BaseModel):
-    __tablename__ = "workflows"
+    __tablename__ = "workflow"
 
     name = Column(String(256), nullable=False, comment="工作流名称")
     description = Column(String(1024), default="", comment="工作流描述")
@@ -12,17 +12,17 @@ class Workflow(BaseModel):
     trigger_type = Column(Integer, nullable=False, default=0, comment="触发方式")
     cron_expr = Column(String(64), default="", comment="cron 表达式")
     event_trigger = Column(String(256), default="", comment="事件触发条件")
-    enabled = Column(Integer, nullable=False, default=1, comment="是否启用")
+    is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
     version = Column(Integer, nullable=False, default=1, comment="版本号")
 
     __table_args__ = (
-        Index("idx_workflows_enabled", "deleted", "enabled"),
-        Index("idx_workflows_trigger", "trigger_type"),
+        Index("idx_workflow_is_deleted_enabled", "is_deleted", "is_enabled"),
+        Index("idx_workflow_trigger_type", "trigger_type"),
     )
 
 
 class WorkflowRun(BaseModel):
-    __tablename__ = "workflow_runs"
+    __tablename__ = "workflow_run"
 
     workflow_id = Column(BigInteger, nullable=False, comment="工作流 ID")
     status = Column(Integer, nullable=False, default=0, comment="状态")
@@ -35,14 +35,14 @@ class WorkflowRun(BaseModel):
     duration_ms = Column(Integer, default=0, comment="执行耗时")
 
     __table_args__ = (
-        Index("idx_wf_runs_workflow", "workflow_id", "status"),
-        Index("idx_wf_runs_status", "status"),
-        Index("idx_wf_runs_created", "created_at"),
+        Index("idx_workflow_run_workflow_status", "workflow_id", "status"),
+        Index("idx_workflow_run_status", "status"),
+        Index("idx_workflow_run_created_at", "created_at"),
     )
 
 
 class WorkflowStepRun(BaseModel):
-    __tablename__ = "workflow_step_runs"
+    __tablename__ = "workflow_step_run"
 
     run_id = Column(BigInteger, nullable=False, comment="运行记录 ID")
     step_name = Column(String(128), nullable=False, comment="节点名称")
@@ -56,6 +56,6 @@ class WorkflowStepRun(BaseModel):
     duration_ms = Column(Integer, default=0, comment="执行耗时")
 
     __table_args__ = (
-        Index("idx_step_runs_run", "run_id", "step_name"),
-        Index("idx_step_runs_status", "status"),
+        Index("idx_workflow_step_run_run_name", "run_id", "step_name"),
+        Index("idx_workflow_step_run_status", "status"),
     )

@@ -13,7 +13,7 @@ import type {
 
 /** 获取工具列表（分页） */
 export async function fetchTools(params?: ToolQueryParams): Promise<PaginatedResult<ToolInfo>> {
-  const resp = await apiClient.get('/tools', { params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, enabled: params?.enabled } })
+  const resp = await apiClient.get('/tools', { params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, isEnabled: params?.isEnabled } })
   const body = resp.data as any
   return {
     data: body.data,

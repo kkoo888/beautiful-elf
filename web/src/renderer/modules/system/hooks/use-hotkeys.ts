@@ -34,7 +34,7 @@ export function useHotkeys() {
   /** 检查快捷键冲突（返回冲突的 HotkeyConfig） */
   const checkConflict = useCallback(
     (shortcut: string, excludeId?: string): HotkeyConfig | undefined => {
-      return hotkeys.find((h) => h.shortcut === shortcut && h.id !== excludeId && h.enabled)
+      return hotkeys.find((h) => h.shortcut === shortcut && h.id !== excludeId && h.isEnabled)
     },
     [hotkeys]
   )

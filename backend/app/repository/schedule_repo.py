@@ -26,7 +26,7 @@ class ScheduleRepository:
         end_time: Optional[datetime] = None,
     ) -> List[Schedule]:
         """分页查询，支持时间范围过滤"""
-        stmt = select(Schedule).where(Schedule.deleted == 0)
+        stmt = select(Schedule).where(Schedule.is_deleted == 0)
         if start_time:
             stmt = stmt.where(Schedule.start_time >= start_time)
         if end_time:
@@ -42,7 +42,7 @@ class ScheduleRepository:
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
     ) -> int:
-        count_stmt = select(func.count()).select_from(Schedule).where(Schedule.deleted == 0)
+        count_stmt = select(func.count()).select_from(Schedule).where(Schedule.is_deleted == 0)
         if start_time:
             count_stmt = count_stmt.where(Schedule.start_time >= start_time)
         if end_time:

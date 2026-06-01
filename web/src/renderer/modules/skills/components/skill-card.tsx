@@ -35,7 +35,7 @@ export function SkillCard({ skill, onToggle, onClick, isToggling }: SkillCardPro
             <span className={styles.cardVersion}>v{skill.version}</span>
           </div>
           <Switch
-            checked={skill.enabled}
+            checked={skill.isEnabled}
             onChange={handleToggle}
             loading={isToggling}
             size="small"

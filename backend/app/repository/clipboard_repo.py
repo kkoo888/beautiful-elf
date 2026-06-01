@@ -44,4 +44,4 @@ class ClipboardRepository:
         item = await self.find_by_id(db, id)
         if not item:
             return None
-        return await self.mapper.update(db, id, {"pinned": 0 if item.pinned else 1})
+        return await self.mapper.update(db, id, {"is_pinned": 0 if item.is_pinned else 1})

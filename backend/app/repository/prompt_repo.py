@@ -41,7 +41,7 @@ class PromptRepository:
     async def get_max_version(self, db: AsyncSession, name: str) -> int:
         """获取某个 name 的最大版本号"""
         stmt = select(func.coalesce(func.max(Prompt.version), 0)).where(
-            Prompt.name == name, Prompt.deleted == 0
+            Prompt.name == name, Prompt.is_deleted == 0
         )
         result = await db.execute(stmt)
         return result.scalar() or 0
@@ -49,7 +49,7 @@ class PromptRepository:
     async def find_active_by_name(self, db: AsyncSession, name: str) -> Optional[Prompt]:
         """获取某个 name 当前激活的版本"""
         stmt = select(Prompt).where(
-            Prompt.name == name, Prompt.is_active == 1, Prompt.deleted == 0
+            Prompt.name == name, Prompt.is_active == 1, Prompt.is_deleted == 0
         )
         result = await db.execute(stmt)
         return result.scalars().first()
@@ -59,7 +59,7 @@ class PromptRepository:
         from sqlalchemy import update as sa_update
         stmt = (
             sa_update(Prompt)
-            .where(Prompt.name == name, Prompt.is_active == 1, Prompt.deleted == 0)
+            .where(Prompt.name == name, Prompt.is_active == 1, Prompt.is_deleted == 0)
             .values(is_active=0)
         )
         result = await db.execute(stmt)
@@ -70,7 +70,7 @@ class PromptRepository:
         """获取某个 name 的所有版本列表"""
         stmt = (
             select(Prompt)
-            .where(Prompt.name == name, Prompt.deleted == 0)
+            .where(Prompt.name == name, Prompt.is_deleted == 0)
             .order_by(Prompt.version.desc())
         )
         result = await db.execute(stmt)

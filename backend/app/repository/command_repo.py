@@ -16,7 +16,7 @@ class CommandRepository:
         return await self.mapper.find_by_id(db, id)
 
     async def find_by_name(self, db: AsyncSession, name: str) -> Optional[Command]:
-        stmt = select(Command).where(Command.name == name, Command.deleted == 0)
+        stmt = select(Command).where(Command.name == name, Command.is_deleted == 0)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -44,7 +44,7 @@ class CommandRepository:
     async def record_usage(self, db: AsyncSession, command_id: int) -> None:
         """记录命令使用（更新或创建 usage 记录）"""
         stmt = select(CommandUsage).where(
-            CommandUsage.command_id == command_id, CommandUsage.deleted == 0
+            CommandUsage.command_id == command_id, CommandUsage.is_deleted == 0
         )
         result = await db.execute(stmt)
         usage = result.scalar_one_or_none()

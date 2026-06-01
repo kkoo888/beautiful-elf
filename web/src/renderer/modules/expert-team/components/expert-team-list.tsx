@@ -92,8 +92,8 @@ export function ExpertTeamList({
       key: 'status',
       width: 80,
       render: (_: unknown, record: ExpertTeam) => (
-        <Tag color={record.enabled ? 'green' : 'default'}>
-          {record.enabled ? '启用' : '禁用'}
+        <Tag color={record.isEnabled ? 'green' : 'default'}>
+          {record.isEnabled ? '启用' : '禁用'}
         </Tag>
       ),
     },

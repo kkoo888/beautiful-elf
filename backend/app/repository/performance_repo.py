@@ -39,7 +39,7 @@ class PerformanceRepo:
             # 找到第 keep 条的 created_at 作为分界线
             subq = (
                 select(PerformanceMetric.created_at)
-                .where(PerformanceMetric.deleted == 0)
+                .where(PerformanceMetric.is_deleted == 0)
                 .order_by(PerformanceMetric.created_at.desc())
                 .offset(keep - 1)
                 .limit(1)
@@ -48,7 +48,7 @@ class PerformanceRepo:
             stmt = (
                 sa_update(PerformanceMetric)
                 .where(
-                    PerformanceMetric.deleted == 0,
+                    PerformanceMetric.is_deleted == 0,
                     PerformanceMetric.created_at < subq,
                 )
                 .values(deleted=1)

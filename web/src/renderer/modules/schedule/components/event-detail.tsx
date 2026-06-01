@@ -94,7 +94,7 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
             <ClockCircleOutlined /> 时间
           </span>
           <span className={styles.detailValue}>
-            {event.allDay
+            {event.isAllDay
               ? isSameDay
                 ? `${startTime.format('YYYY-MM-DD')} 全天`
                 : `${startTime.format('YYYY-MM-DD')} - ${endTime.format('YYYY-MM-DD')} 全天`

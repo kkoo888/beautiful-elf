@@ -18,9 +18,8 @@ class MySQLMapper(Generic[T]):
     async def find_by_id(self, db: AsyncSession, id: int) -> Optional[T]:
         """按 ID 查询（排除软删除）"""
         try:
-            deleted_col = getattr(self.model, 'is_deleted', getattr(self.model, 'deleted', None))
             stmt = select(self.model).where(
-                self.model.id == id, deleted_col == 0
+                self.model.id == id, self.model.is_deleted == 0
             )
             result = await db.execute(stmt)
             return result.scalar_one_or_none()
@@ -37,8 +36,7 @@ class MySQLMapper(Generic[T]):
     ) -> List[T]:
         """分页查询（排除软删除）"""
         try:
-            deleted_col = getattr(self.model, 'is_deleted', getattr(self.model, 'deleted', None))
-            stmt = select(self.model).where(deleted_col == 0)
+            stmt = select(self.model).where(self.model.is_deleted == 0)
             if filters:
                 for key, value in filters.items():
                     if hasattr(self.model, key):
@@ -56,9 +54,8 @@ class MySQLMapper(Generic[T]):
     async def count(self, db: AsyncSession, filters: dict = None) -> int:
         """统计数量（排除软删除）"""
         try:
-            deleted_col = getattr(self.model, 'is_deleted', getattr(self.model, 'deleted', None))
             stmt = select(func.count()).select_from(self.model).where(
-                deleted_col == 0
+                self.model.is_deleted == 0
             )
             if filters:
                 for key, value in filters.items():
@@ -83,10 +80,9 @@ class MySQLMapper(Generic[T]):
     async def update(self, db: AsyncSession, id: int, data: dict) -> Optional[T]:
         """更新记录"""
         try:
-            deleted_col = getattr(self.model, 'is_deleted', getattr(self.model, 'deleted', None))
             stmt = (
                 update(self.model)
-                .where(self.model.id == id, deleted_col == 0)
+                .where(self.model.id == id, self.model.is_deleted == 0)
                 .values(**data)
             )
             await db.execute(stmt)
@@ -98,11 +94,10 @@ class MySQLMapper(Generic[T]):
     async def soft_delete(self, db: AsyncSession, id: int) -> bool:
         """软删除"""
         try:
-            deleted_col = getattr(self.model, 'is_deleted', getattr(self.model, 'deleted', None))
             stmt = (
                 update(self.model)
-                .where(self.model.id == id, deleted_col == 0)
-                .values({deleted_col: 1})
+                .where(self.model.id == id, self.model.is_deleted == 0)
+                .values(is_deleted=1)
             )
             result = await db.execute(stmt)
             await db.flush()

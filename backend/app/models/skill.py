@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class Skill(BaseModel):
-    __tablename__ = "skills"
+    __tablename__ = "skill"
 
     name = Column(String(128), nullable=False, unique=True, comment="技能名称")
     display_name = Column(String(256), default="", comment="显示名称")
@@ -13,16 +13,16 @@ class Skill(BaseModel):
     source = Column(String(256), default="", comment="来源")
     trigger_words = Column(JSON, default=None, comment="触发词列表")
     dependencies = Column(JSON, default=None, comment="依赖技能列表")
-    enabled = Column(Integer, nullable=False, default=1, comment="是否启用")
+    is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
     config = Column(JSON, default=None, comment="技能配置")
 
     __table_args__ = (
-        Index("idx_skills_enabled", "deleted", "enabled"),
+        Index("idx_skill_is_deleted_enabled", "is_deleted", "is_enabled"),
     )
 
 
 class SkillStats(BaseModel):
-    __tablename__ = "skill_stats"
+    __tablename__ = "skill_stat"
 
     skill_id = Column(BigInteger, nullable=False, comment="技能 ID")
     call_count = Column(Integer, nullable=False, default=0, comment="调用次数")
@@ -32,6 +32,6 @@ class SkillStats(BaseModel):
     last_called_at = Column(DateTime, default=None, comment="最后调用时间")
 
     __table_args__ = (
-        Index("idx_skill_stats_skill", "skill_id"),
-        Index("idx_skill_stats_calls", "call_count"),
+        Index("idx_skill_stat_skill_id", "skill_id"),
+        Index("idx_skill_stat_call_count", "call_count"),
     )

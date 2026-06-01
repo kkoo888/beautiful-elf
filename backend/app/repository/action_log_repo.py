@@ -26,7 +26,7 @@ class ActionLogRepository:
         end_time: Optional[datetime] = None,
     ) -> List[ActionLog]:
         try:
-            stmt = select(ActionLog).where(ActionLog.deleted == 0)
+            stmt = select(ActionLog).where(ActionLog.is_deleted == 0)
             if module:
                 stmt = stmt.where(ActionLog.module == module)
             if action:
@@ -53,7 +53,7 @@ class ActionLogRepository:
     ) -> int:
         try:
             from sqlalchemy import func
-            stmt = select(func.count()).select_from(ActionLog).where(ActionLog.deleted == 0)
+            stmt = select(func.count()).select_from(ActionLog).where(ActionLog.is_deleted == 0)
             if module:
                 stmt = stmt.where(ActionLog.module == module)
             if action:

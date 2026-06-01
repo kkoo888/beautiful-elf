@@ -35,7 +35,7 @@ export interface Conversation {
   modelName: string
   messageCount: number
   lastMessageAt: string | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -48,7 +48,7 @@ export interface ChatMessage {
   toolCalls: ToolCall[] | null
   toolCallId: string | null
   tokenCount: number
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -67,12 +67,12 @@ export interface Schedule {
   description: string
   startTime: string
   endTime: string | null
-  allDay: number
+  isAllDay: number
   reminderMinutes: number
-  reminded: number
+  isReminded: number
   repeatType: number
   color: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -82,9 +82,9 @@ export interface ClipboardItem {
   id: string
   content: string
   contentType: number
-  pinned: number
+  isPinned: number
   sourceApp: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -96,7 +96,7 @@ export interface Snippet {
   content: string
   language: string
   useCount: number
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -105,7 +105,7 @@ export interface SnippetTag {
   id: string
   snippetId: string
   tag: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -119,7 +119,7 @@ export interface KnowledgeDocument {
   chunkCount: number
   status: number
   errorMessage: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -132,7 +132,7 @@ export interface MemoryEntry {
   tags: string[] | null
   importance: number
   qdrantPointId: string | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -147,9 +147,9 @@ export interface Skill {
   source: string
   triggerWords: string[] | null
   dependencies: string[] | null
-  enabled: number
+  isEnabled: number
   config: Record<string, unknown> | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -162,7 +162,7 @@ export interface SkillStats {
   failCount: number
   avgDurationMs: number
   lastCalledAt: string | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -176,9 +176,9 @@ export interface Workflow {
   triggerType: number
   cronExpr: string
   eventTrigger: string
-  enabled: number
+  isEnabled: number
   version: number
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -194,7 +194,7 @@ export interface WorkflowRun {
   startedAt: string | null
   finishedAt: string | null
   durationMs: number
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -211,7 +211,7 @@ export interface WorkflowStepRun {
   startedAt: string | null
   finishedAt: string | null
   durationMs: number
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -233,8 +233,8 @@ export interface Tool {
   description: string
   module: string
   jsonSchema: string
-  enabled: number
-  deleted: number
+  isEnabled: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -247,7 +247,7 @@ export interface ToolStats {
   failCount: number
   avgDurationMs: number
   lastCalledAt: string | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -263,7 +263,7 @@ export interface PetAttributes {
   level: number
   exp: number
   lastActiveAt: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -272,7 +272,7 @@ export interface PetInteraction {
   id: string
   interactionType: number
   effectJson: Record<string, unknown> | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -286,7 +286,7 @@ export interface PerformanceMetric {
   diskPercent: number
   diskUsedGb: number
   gpuPercent: number | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -305,9 +305,9 @@ export interface Notification {
   type: NotificationType
   title: string
   message: string
-  read: number
+  isRead: number
   actionUrl: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -352,7 +352,7 @@ export interface SoulConfig {
   background: string
   systemPrompt: string
   isActive: number
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -365,7 +365,7 @@ export interface Prompt {
   version: number
   isActive: number
   description: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -380,7 +380,7 @@ export interface AiFeedback {
   reasonTags: string[] | null
   reasonText: string
   traceId: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -393,9 +393,9 @@ export interface Intent {
   triggerTexts: string[]
   targetModule: string
   metadata: Record<string, unknown> | null
-  enabled: number
+  isEnabled: number
   qdrantPointId: string | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -406,7 +406,7 @@ export interface IntentUsage {
   hitCount: number
   avgConfidence: number
   lastHitAt: string | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -420,8 +420,8 @@ export interface Command {
   shortcutKey: string
   module: string
   commandType: number
-  enabled: number
-  deleted: number
+  isEnabled: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -431,7 +431,7 @@ export interface CommandUsage {
   commandId: string
   useCount: number
   lastUsedAt: string | null
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -444,7 +444,7 @@ export interface BackupRecord {
   fileSize: number
   status: number
   errorMessage: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }
@@ -456,7 +456,7 @@ export interface ActionLog {
   action: string
   paramsSummary: string
   sessionId: string
-  deleted: number
+  isDeleted: number
   createdAt: string
   updatedAt: string
 }

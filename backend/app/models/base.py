@@ -8,7 +8,7 @@ class BaseModel(Base):
     __abstract__ = True
 
     id = Column(BigInteger, primary_key=True, autoincrement=True, comment="主键")
-    deleted = Column(Integer, nullable=False, default=0, comment="软删除 (0=正常, 1=已删除)")
+    is_deleted = Column(Integer, nullable=False, default=0, comment="是否删除: 1=是 0=否")
     created_at = Column(
         DateTime, nullable=False, server_default=func.now(), comment="创建时间"
     )

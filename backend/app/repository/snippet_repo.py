@@ -24,7 +24,7 @@ class SnippetRepository:
             stmt = (
                 select(Snippet)
                 .join(SnippetTag, SnippetTag.snippet_id == Snippet.id)
-                .where(Snippet.deleted == 0, SnippetTag.deleted == 0, SnippetTag.tag == tag)
+                .where(Snippet.is_deleted == 0, SnippetTag.is_deleted == 0, SnippetTag.tag == tag)
                 .order_by(Snippet.use_count.desc())
                 .offset(offset).limit(limit)
             )
@@ -68,7 +68,7 @@ class SnippetRepository:
     async def get_tags(self, db: AsyncSession, snippet_id: int) -> List[str]:
         """获取片段的所有标签"""
         stmt = select(SnippetTag.tag).where(
-            SnippetTag.snippet_id == snippet_id, SnippetTag.deleted == 0
+            SnippetTag.snippet_id == snippet_id, SnippetTag.is_deleted == 0
         )
         result = await db.execute(stmt)
         return [row[0] for row in result.all()]

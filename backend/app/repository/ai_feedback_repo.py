@@ -36,13 +36,13 @@ class AIFeedbackRepository:
         from sqlalchemy import select, func
 
         # 总反馈数
-        total_stmt = select(func.count()).select_from(AIFeedback).where(AIFeedback.deleted == 0)
+        total_stmt = select(func.count()).select_from(AIFeedback).where(AIFeedback.is_deleted == 0)
         total_result = await db.execute(total_stmt)
         total = total_result.scalar() or 0
 
         # 好评数
         like_stmt = select(func.count()).select_from(AIFeedback).where(
-            AIFeedback.deleted == 0, AIFeedback.feedback_type == 0
+            AIFeedback.is_deleted == 0, AIFeedback.feedback_type == 0
         )
         like_result = await db.execute(like_stmt)
         like_count = like_result.scalar() or 0
@@ -52,7 +52,7 @@ class AIFeedbackRepository:
 
         # reason_tags 统计
         tags_stmt = select(AIFeedback.reason_tags).where(
-            AIFeedback.deleted == 0, AIFeedback.reason_tags.isnot(None)
+            AIFeedback.is_deleted == 0, AIFeedback.reason_tags.isnot(None)
         )
         tags_result = await db.execute(tags_stmt)
         all_tags = tags_result.scalars().all()

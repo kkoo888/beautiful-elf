@@ -17,7 +17,7 @@ class SkillRepository:
         return await self.mapper.find_by_id(db, id)
 
     async def find_by_name(self, db: AsyncSession, name: str) -> Optional[Skill]:
-        stmt = select(Skill).where(Skill.name == name, Skill.deleted == 0)
+        stmt = select(Skill).where(Skill.name == name, Skill.is_deleted == 0)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -48,7 +48,7 @@ class SkillRepository:
     async def set_enabled(self, db: AsyncSession, id: int, enabled: int) -> bool:
         stmt = (
             update(Skill)
-            .where(Skill.id == id, Skill.deleted == 0)
+            .where(Skill.id == id, Skill.is_deleted == 0)
             .values(enabled=enabled)
         )
         result = await db.execute(stmt)

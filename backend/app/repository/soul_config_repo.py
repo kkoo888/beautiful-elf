@@ -32,7 +32,7 @@ class SoulConfigRepository:
         """获取当前激活的人格配置"""
         from sqlalchemy import select
         stmt = select(SoulConfig).where(
-            SoulConfig.is_active == 1, SoulConfig.deleted == 0
+            SoulConfig.is_active == 1, SoulConfig.is_deleted == 0
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()

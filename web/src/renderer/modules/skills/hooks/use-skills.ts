@@ -79,7 +79,7 @@ export function useSkills(): UseSkillsReturn {
     [refineMut]
   )
 
-  const enabledSkills = useMemo(() => skills.filter((s) => s.enabled), [skills])
+  const enabledSkills = useMemo(() => skills.filter((s) => s.isEnabled), [skills])
 
   const filteredSkills = useMemo(() => {
     if (!keyword) return skills

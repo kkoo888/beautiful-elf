@@ -86,7 +86,7 @@ class ToolService:
             "description": item.description,
             "module": item.module,
             "json_schema": item.json_schema,
-            "enabled": item.enabled,
+            "isEnabled": item.is_enabled,
             "created_at": str(item.created_at) if item.created_at else None,
             "updated_at": str(item.updated_at) if item.updated_at else None,
         }

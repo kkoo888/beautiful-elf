@@ -41,7 +41,7 @@ class NotificationRepository:
         """标记单条已读"""
         stmt = (
             update(Notification)
-            .where(Notification.id == id, Notification.deleted == 0, Notification.read == 0)
+            .where(Notification.id == id, Notification.is_deleted == 0, Notification.is_read == 0)
             .values(read=1)
         )
         result = await db.execute(stmt)
@@ -52,7 +52,7 @@ class NotificationRepository:
         """标记全部已读"""
         stmt = (
             update(Notification)
-            .where(Notification.deleted == 0, Notification.read == 0)
+            .where(Notification.is_deleted == 0, Notification.is_read == 0)
             .values(read=1)
         )
         result = await db.execute(stmt)

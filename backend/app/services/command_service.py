@@ -67,7 +67,7 @@ class CommandService:
             "shortcut_key": cmd.shortcut_key,
             "module": cmd.module,
             "command_type": cmd.command_type,
-            "enabled": cmd.enabled,
+            "isEnabled": cmd.is_enabled,
             "created_at": str(cmd.created_at) if cmd.created_at else None,
             "updated_at": str(cmd.updated_at) if cmd.updated_at else None,
         }

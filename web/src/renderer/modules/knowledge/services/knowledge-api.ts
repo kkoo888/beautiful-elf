@@ -152,7 +152,7 @@ export async function fetchDocuments(
 
   const { page = 1, pageSize = 10, keyword, fileType, deleted = false } = params
 
-  let filtered = mockDocuments.filter((d) => d.deleted === deleted)
+  let filtered = mockDocuments.filter((d) => d.isDeleted === deleted)
 
   if (keyword) {
     const kw = keyword.toLowerCase()
@@ -204,7 +204,7 @@ export async function deleteDocument(id: string): Promise<void> {
 
   const doc = mockDocuments.find((d) => d.id === id)
   if (doc) {
-    doc.deleted = true
+    doc.isDeleted = true
     doc.updatedAt = new Date().toISOString()
   }
 }
@@ -215,7 +215,7 @@ export async function restoreDocument(id: string): Promise<void> {
 
   const doc = mockDocuments.find((d) => d.id === id)
   if (doc) {
-    doc.deleted = false
+    doc.isDeleted = false
     doc.updatedAt = new Date().toISOString()
   }
 }
@@ -233,7 +233,7 @@ export async function exportKnowledge(): Promise<Blob> {
 
   const exportData = {
     exportedAt: new Date().toISOString(),
-    documents: mockDocuments.filter((d) => !d.deleted),
+    documents: mockDocuments.filter((d) => !d.isDeleted),
     chunks: Object.values(mockChunks).flat(),
   }
 

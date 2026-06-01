@@ -17,7 +17,7 @@ class ToolRepository:
         return await self.mapper.find_by_id(db, id)
 
     async def find_by_name(self, db: AsyncSession, name: str) -> Optional[Tool]:
-        stmt = select(Tool).where(Tool.name == name, Tool.deleted == 0)
+        stmt = select(Tool).where(Tool.name == name, Tool.is_deleted == 0)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -48,7 +48,7 @@ class ToolRepository:
     async def set_enabled(self, db: AsyncSession, id: int, enabled: int) -> bool:
         stmt = (
             update(Tool)
-            .where(Tool.id == id, Tool.deleted == 0)
+            .where(Tool.id == id, Tool.is_deleted == 0)
             .values(enabled=enabled)
         )
         result = await db.execute(stmt)

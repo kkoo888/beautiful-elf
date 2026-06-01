@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class Command(BaseModel):
-    __tablename__ = "commands"
+    __tablename__ = "command"
 
     name = Column(String(128), nullable=False, unique=True, comment="命令名称")
     display_name = Column(String(256), default="", comment="显示名称")
@@ -12,11 +12,11 @@ class Command(BaseModel):
     shortcut_key = Column(String(32), default="", comment="快捷键")
     module = Column(String(64), nullable=False, comment="所属模块")
     command_type = Column(Integer, nullable=False, default=0, comment="类型")
-    enabled = Column(Integer, nullable=False, default=1, comment="是否启用")
+    is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
 
     __table_args__ = (
-        Index("idx_commands_module", "module"),
-        Index("idx_commands_enabled", "deleted", "enabled"),
+        Index("idx_command_module", "module"),
+        Index("idx_command_is_deleted_enabled", "is_deleted", "is_enabled"),
     )
 
 
@@ -28,6 +28,6 @@ class CommandUsage(BaseModel):
     last_used_at = Column(DateTime, default=None, comment="最后使用时间")
 
     __table_args__ = (
-        Index("idx_command_usage_cmd", "command_id"),
-        Index("idx_command_usage_count", "use_count"),
+        Index("idx_command_usage_command_id", "command_id"),
+        Index("idx_command_usage_use_count", "use_count"),
     )

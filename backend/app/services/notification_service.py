@@ -57,7 +57,7 @@ class NotificationService:
             "type": notif.type,
             "title": notif.title,
             "message": notif.message,
-            "read": notif.read,
+            "isRead": notif.is_read,
             "action_url": notif.action_url,
             "created_at": str(notif.created_at) if notif.created_at else None,
             "updated_at": str(notif.updated_at) if notif.updated_at else None,

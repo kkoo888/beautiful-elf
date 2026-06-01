@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class KnowledgeDocument(BaseModel):
-    __tablename__ = "knowledge_documents"
+    __tablename__ = "knowledge_document"
 
     filename = Column(String(512), nullable=False, comment="文件名")
     file_type = Column(String(32), nullable=False, comment="文件类型")
@@ -14,14 +14,14 @@ class KnowledgeDocument(BaseModel):
     error_message = Column(String(1024), default="", comment="失败原因")
 
     __table_args__ = (
-        Index("idx_knowledge_type", "file_type"),
-        Index("idx_knowledge_status", "status"),
-        Index("idx_knowledge_deleted", "deleted"),
+        Index("idx_knowledge_document_file_type", "file_type"),
+        Index("idx_knowledge_document_status", "status"),
+        Index("idx_knowledge_document_is_deleted", "is_deleted"),
     )
 
 
 class KnowledgeChunk(BaseModel):
-    __tablename__ = "knowledge_chunks"
+    __tablename__ = "knowledge_chunk"
 
     document_id = Column(BigInteger, nullable=False, comment="文档 ID")
     chunk_index = Column(Integer, nullable=False, comment="分块序号")
@@ -29,6 +29,6 @@ class KnowledgeChunk(BaseModel):
     qdrant_point_id = Column(String(128), nullable=False, comment="Qdrant 向量 ID")
 
     __table_args__ = (
-        Index("idx_chunks_document", "document_id", "chunk_index"),
-        Index("idx_chunks_qdrant", "qdrant_point_id"),
+        Index("idx_knowledge_chunk_document_index", "document_id", "chunk_index"),
+        Index("idx_knowledge_chunk_qdrant_point", "qdrant_point_id"),
     )

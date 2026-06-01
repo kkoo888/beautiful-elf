@@ -45,8 +45,8 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
                 <Title level={4} style={{ margin: 0 }}>{team.name}</Title>
                 <Space style={{ marginTop: 8 }}>
                   <Tag>{team.category}</Tag>
-                  <Tag color={team.enabled ? 'green' : 'default'}>
-                    {team.enabled ? '启用中' : '已禁用'}
+                  <Tag color={team.isEnabled ? 'green' : 'default'}>
+                    {team.isEnabled ? '启用中' : '已禁用'}
                   </Tag>
                   <Tag color="blue">v{team.version}</Tag>
                 </Space>
@@ -102,7 +102,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
           <Card>
             <Statistic
               title="启用成员"
-              value={team.members.filter((m) => m.enabled).length}
+              value={team.members.filter((m) => m.isEnabled).length}
               suffix={`/ ${team.members.length}`}
             />
           </Card>
@@ -131,7 +131,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
                   <Space>
                     <Text strong>{member.name}</Text>
                     <Tag color={getExpertRoleColor(member.role)}>{member.role}</Tag>
-                    {!member.enabled && <Tag color="default">已禁用</Tag>}
+                    {!member.isEnabled && <Tag color="default">已禁用</Tag>}
                   </Space>
                 }
                 description={

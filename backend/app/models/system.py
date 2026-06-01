@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class Setting(BaseModel):
-    __tablename__ = "settings"
+    __tablename__ = "setting"
 
     settings_key = Column(String(128), nullable=False, unique=True, comment="配置键")
     key_value = Column(Text, nullable=False, comment="配置值 (JSON)")
@@ -12,12 +12,12 @@ class Setting(BaseModel):
     restart_required = Column(Integer, nullable=False, default=0, comment="是否需要重启")
 
     __table_args__ = (
-        Index("idx_settings_deleted", "deleted"),
+        Index("idx_setting_is_deleted", "is_deleted"),
     )
 
 
 class SoulConfig(BaseModel):
-    __tablename__ = "soul_configs"
+    __tablename__ = "soul_config"
 
     name = Column(String(128), nullable=False, comment="助手名称")
     avatar_url = Column(String(512), default="", comment="头像地址")
@@ -28,5 +28,5 @@ class SoulConfig(BaseModel):
     is_active = Column(Integer, nullable=False, default=1, comment="是否激活")
 
     __table_args__ = (
-        Index("idx_soul_active", "is_active"),
+        Index("idx_soul_config_is_active", "is_active"),
     )

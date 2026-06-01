@@ -4,7 +4,7 @@ from app.models.base import BaseModel
 
 
 class Prompt(BaseModel):
-    __tablename__ = "prompts"
+    __tablename__ = "prompt"
 
     name = Column(String(128), nullable=False, comment="Prompt 名称")
     content = Column(Text, nullable=False, comment="Prompt 内容")
@@ -13,6 +13,6 @@ class Prompt(BaseModel):
     description = Column(String(512), default="", comment="版本说明")
 
     __table_args__ = (
-        Index("idx_prompts_name", "name", "version"),
-        Index("idx_prompts_active", "name", "is_active"),
+        Index("idx_prompt_name_version", "name", "version"),
+        Index("idx_prompt_is_active", "name", "is_active"),
     )

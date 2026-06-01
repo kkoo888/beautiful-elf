@@ -81,8 +81,8 @@ export function SkillDetail({ open, skill, onClose, onRefine }: SkillDetailProps
           </div>
           <div className={styles.detailRow}>
             <span className={styles.detailRowLabel}>状态</span>
-            <Tag color={skill.enabled ? 'green' : 'default'}>
-              {skill.enabled ? '已启用' : '已禁用'}
+            <Tag color={skill.isEnabled ? 'green' : 'default'}>
+              {skill.isEnabled ? '已启用' : '已禁用'}
             </Tag>
           </div>
         </div>
