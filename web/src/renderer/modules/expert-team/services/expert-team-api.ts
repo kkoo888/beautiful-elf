@@ -21,7 +21,10 @@ export async function fetchExpertTeams(params?: {
   pageSize?: number
 }): Promise<{ items: ExpertTeam[]; total: number }> {
   const { data } = await apiClient.get('/expert_teams', { params })
-  return data.data
+  return {
+    items: data.data ?? [],
+    total: data.meta?.total ?? 0,
+  }
 }
 
 /** 获取专家团详情 */
@@ -94,7 +97,10 @@ export async function fetchExpertTeamRuns(
   params?: { page?: number; pageSize?: number }
 ): Promise<{ items: ExpertTeamRun[]; total: number }> {
   const { data } = await apiClient.get(`/expert_teams/${teamId}/runs`, { params })
-  return data.data
+  return {
+    items: data.data ?? [],
+    total: data.meta?.total ?? 0,
+  }
 }
 
 /** 获取所有运行记录 */
@@ -104,7 +110,10 @@ export async function fetchAllExpertRuns(params?: {
   pageSize?: number
 }): Promise<{ items: ExpertTeamRun[]; total: number }> {
   const { data } = await apiClient.get('/expert_teams/runs/all', { params })
-  return data.data
+  return {
+    items: data.data ?? [],
+    total: data.meta?.total ?? 0,
+  }
 }
 
 /** 获取运行记录详情 */
