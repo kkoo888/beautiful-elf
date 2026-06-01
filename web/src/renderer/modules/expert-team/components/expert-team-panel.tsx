@@ -41,6 +41,7 @@ export default function ExpertTeamPanel() {
     executeTeamMut,
     isExecuting,
     isMutating,
+    refreshTeams,
     refreshRuns,
   } = useExpertTeam()
 
@@ -199,6 +200,7 @@ export default function ExpertTeamPanel() {
             team={selectedTeam}
             onEdit={() => handleEdit(selectedTeam.id)}
             onExecute={() => handleExecute(selectedTeam)}
+            onRefresh={refreshTeams}
           />
         ) : null
 

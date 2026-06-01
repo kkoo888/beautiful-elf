@@ -12,6 +12,8 @@ import {
   Typography,
   Divider,
   Popconfirm,
+  Switch,
+  Tag,
   message,
 } from 'antd'
 import {
@@ -25,6 +27,14 @@ import type { ExpertTeam, ExpertTeamFormInput, ExpertMemberFormInput } from '../
 
 const { TextArea } = Input
 const { Text } = Typography
+
+/** 预设头像列表 */
+const PRESET_AVATARS = [
+  '🤖', '👨‍💻', '👩‍💻', '🏗️', '🧪', '📋', '🛡️', '📊',
+  '🎨', '🔬', '🎯', '💡', '🔍', '📝', '🧠', '👨‍🔬',
+  '👩‍🔬', '👨‍🏫', '👩‍🏫', '🧙‍♂️', '🦾', '👁️', '🗣️', '🤝',
+  '🎭', '⚖️', '📈', '🗄️', '🌐', '🔧', '⚙️', '🚀',
+]
 
 /** 预设专家角色 */
 const PRESET_EXPERTS: ExpertMemberFormInput[] = [
@@ -78,6 +88,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
       modelName: m.modelName,
       temperature: m.temperature,
       maxTokens: m.maxTokens,
+      enabled: m.isEnabled ?? 1,
     })) ?? []
   )
 
@@ -91,6 +102,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
         systemPrompt: '',
         temperature: 70,
         maxTokens: 2048,
+        enabled: 1,
       },
     ])
   }, [])
@@ -101,7 +113,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
         message.warning(`已存在「${preset.role}」角色`)
         return prev
       }
-      return [...prev, { ...preset }]
+      return [...prev, { ...preset, enabled: 1 }]
     })
   }, [])
 
@@ -256,7 +268,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
               <Card
                 key={index}
                 size="small"
-                style={{ marginBottom: 12 }}
+                style={{ marginBottom: 12, opacity: member.enabled === 0 ? 0.5 : 1 }}
                 title={
                   <Space>
                     <span style={{ fontSize: 20 }}>{member.avatar || '🤖'}</span>
@@ -264,23 +276,38 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                     {member.role && (
                       <Text type="secondary">({member.role})</Text>
                     )}
+                    {member.enabled === 0 && <Tag color="default">已禁用</Tag>}
                   </Space>
                 }
                 extra={
-                  <Popconfirm
-                    title="确定移除此专家？"
-                    onConfirm={() => handleRemoveMember(index)}
-                  >
-                    <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-                  </Popconfirm>
+                  <Space>
+                    <Switch
+                      size="small"
+                      checked={member.enabled !== 0}
+                      onChange={(checked) => handleMemberChange(index, 'enabled', checked ? 1 : 0)}
+                      checkedChildren="启用"
+                      unCheckedChildren="禁用"
+                    />
+                    <Popconfirm
+                      title="确定移除此专家？"
+                      onConfirm={() => handleRemoveMember(index)}
+                    >
+                      <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                    </Popconfirm>
+                  </Space>
                 }
               >
                 <Space style={{ width: '100%' }} size="middle" align="start" wrap>
-                  <Form.Item label="头像" style={{ width: 80, marginBottom: 8 }}>
-                    <Input
-                      value={member.avatar}
-                      onChange={(e) => handleMemberChange(index, 'avatar', e.target.value)}
-                      style={{ textAlign: 'center', fontSize: 20 }}
+                  <Form.Item label="头像" style={{ width: 120, marginBottom: 8 }}>
+                    <Select
+                      value={member.avatar || '🤖'}
+                      onChange={(v) => handleMemberChange(index, 'avatar', v)}
+                      style={{ width: '100%' }}
+                      popupMatchSelectWidth={false}
+                      options={PRESET_AVATARS.map((a) => ({
+                        label: <span style={{ fontSize: 20 }}>{a}</span>,
+                        value: a,
+                      }))}
                     />
                   </Form.Item>
                   <Form.Item label="名称" required style={{ flex: 1, minWidth: 120, marginBottom: 8 }}>

@@ -12,6 +12,8 @@ import {
   Row,
   Col,
   Statistic,
+  Switch,
+  message,
 } from 'antd'
 import {
   EditOutlined,
@@ -19,8 +21,10 @@ import {
   UserOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
+import { useCallback } from 'react'
 import type { ExpertTeam } from '../types'
 import { getExpertRoleColor } from '../types'
+import { updateExpertTeam } from '../services/expert-team-api'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -28,9 +32,20 @@ interface ExpertTeamDetailProps {
   team: ExpertTeam
   onEdit: () => void
   onExecute: () => void
+  onRefresh?: () => void
 }
 
-export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailProps) {
+export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertTeamDetailProps) {
+  const handleToggleEnabled = useCallback(async (checked: boolean) => {
+    try {
+      await updateExpertTeam(team.id, { enabled: checked ? 1 : 0 })
+      message.success(checked ? '已启用' : '已禁用')
+      onRefresh?.()
+    } catch {
+      message.error('操作失败')
+    }
+  }, [team.id, onRefresh])
+
   return (
     <div>
       {/* 头部信息 */}
@@ -45,9 +60,6 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
                 <Title level={4} style={{ margin: 0 }}>{team.name}</Title>
                 <Space style={{ marginTop: 8 }}>
                   <Tag>{team.category}</Tag>
-                  <Tag color={team.isEnabled ? 'green' : 'default'}>
-                    {team.isEnabled ? '启用中' : '已禁用'}
-                  </Tag>
                   <Tag color="blue">v{team.version}</Tag>
                 </Space>
                 {team.description && (
@@ -59,18 +71,29 @@ export function ExpertTeamDetail({ team, onEdit, onExecute }: ExpertTeamDetailPr
             </Space>
           </Col>
           <Col>
-            <Space>
-              <Button icon={<EditOutlined />} onClick={onEdit}>
-                编辑
-              </Button>
-              <Button
-                type="primary"
-                icon={<PlayCircleOutlined />}
-                onClick={onExecute}
-                disabled={team.members.length === 0}
-              >
-                执行
-              </Button>
+            <Space direction="vertical" align="end" size="middle">
+              <Space>
+                <Text type="secondary">状态：</Text>
+                <Switch
+                  checked={team.isEnabled === 1}
+                  onChange={handleToggleEnabled}
+                  checkedChildren="启用"
+                  unCheckedChildren="禁用"
+                />
+              </Space>
+              <Space>
+                <Button icon={<EditOutlined />} onClick={onEdit}>
+                  编辑
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<PlayCircleOutlined />}
+                  onClick={onExecute}
+                  disabled={team.members.length === 0 || team.isEnabled !== 1}
+                >
+                  执行
+                </Button>
+              </Space>
             </Space>
           </Col>
         </Row>
