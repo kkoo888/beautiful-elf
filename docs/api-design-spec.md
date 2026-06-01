@@ -213,6 +213,8 @@
 | AI 反馈 | `/api/v1/ai_feedback` | CRUD + 统计 |
 | 操作日志 | `/api/v1/action_logs` | 查询 + 清理 |
 | 命令统计 | `/api/v1/command_usage` | 记录 + 排行 |
+| 专家团 | `/api/v1/expert_teams` | CRUD + 执行 + 运行记录 |
+| 大模型供应商 | `/api/v1/llm_providers` | CRUD + 启用/禁用切换 |
 | 健康检查 | `/api/v1/health` | 系统状态 |
 | 认证 | `/api/v1/auth` | 登录/注册（预留） |
 

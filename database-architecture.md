@@ -1042,6 +1042,47 @@ expert_team_member (1) ──── (N) expert_role_run
 - `expert_role_runs` 冗余存储 `role_name`，避免每次查运行记录都要 JOIN members 表
 - `expert_role_runs.skills_used` 记录每次执行实际调用了哪些技能及结果
 
+### 40. llm_provider — 大模型供应商配置
+
+```sql
+CREATE TABLE llm_provider (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name            VARCHAR(128)    NOT NULL COMMENT '供应商显示名称',
+    provider_type   VARCHAR(64)     NOT NULL COMMENT '供应商类型: openai/claude/deepseek/ollama/qwen/custom',
+    base_url        VARCHAR(512)    NOT NULL COMMENT 'API 基础地址',
+    api_key         TEXT                                 COMMENT 'API Key (加密存储)',
+    models          JSON            NOT NULL DEFAULT (JSON_ARRAY()) COMMENT '可用模型列表 JSON',
+    is_enabled      TINYINT UNSIGNED NOT NULL DEFAULT 1  COMMENT '是否启用: 1=启用 0=禁用',
+    is_default      TINYINT UNSIGNED NOT NULL DEFAULT 0  COMMENT '是否默认供应商: 1=是 0=否',
+    description     VARCHAR(512)    DEFAULT '' COMMENT '备注说明',
+    is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0  COMMENT '是否删除: 1=是 0=否',
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+    INDEX idx_llm_provider_is_enabled (is_enabled),
+    INDEX idx_llm_provider_type (provider_type),
+    INDEX idx_llm_provider_is_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='大模型供应商配置表';
+```
+
+**models JSON 字段结构**:
+```json
+[
+  {
+    "id": "gpt-4o",
+    "name": "GPT-4o",
+    "context_length": 128000,
+    "supports_vision": true,
+    "supports_tools": true
+  }
+]
+```
+
+**设计说明**:
+- `models` 用 JSON 存储供应商下的模型列表，低频更新、整体读写，不需单独索引模型
+- `api_key` 用 TEXT 类型存储加密后的密钥，前端显示时脱敏处理
+- `is_enabled` 控制供应商是否可用，关闭后前端不展示、后端不调用
+- `is_default` 标记默认供应商，同一时间只有一个默认
+
 ---
 
 ## 🔍 索引策略总览
@@ -1082,6 +1123,9 @@ expert_team_member (1) ──── (N) expert_role_run
 | expert_role_run | (run_id) | 联合 | 按运行记录查各角色执行 |
 | expert_role_run | (role_id) | 单列 | 按角色查历史执行 |
 | expert_role_run | (status) | 单列 | 按状态查角色执行 |
+| llm_provider | (is_enabled) | 单列 | 筛选启用的供应商 |
+| llm_provider | (provider_type) | 单列 | 按类型查供应商 |
+| llm_provider | (is_deleted) | 单列 | 软删除过滤 |
 
 ---
 

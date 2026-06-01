@@ -64,7 +64,9 @@ beautiful-elf/
 │       │   ├── backup.py              # 备份记录
 │       │   ├── ai_feedback.py         # AI 回答反馈
 │       │   ├── prompt.py              # Prompt 版本管理
-│       │   └── action_log.py          # 操作日志
+│       │   ├── action_log.py          # 操作日志
+│       │   ├── expert_team.py         # 专家团 & 成员 & 运行记录
+│       │   └── llm_provider.py        # 🆕 大模型供应商配置
 │       │
 │       ├── schemas/                   # 📝 Pydantic 数据模型（API 请求/响应）
 │       │   ├── __init__.py
@@ -89,7 +91,8 @@ beautiful-elf/
 │       │   ├── prompt.py              # Prompt schema
 │       │   ├── ai_feedback.py         # AI 反馈 schema
 │       │   ├── action_log.py          # 操作日志 schema
-│       │   └── config.py              # 配置 schema
+│       │   ├── config.py              # 配置 schema
+│       │   └── llm_provider.py        # 🆕 大模型供应商 schema
 │       │
 │       ├── services/                  # ⚙️ 业务逻辑层（纯业务编排，不含路由细节）
 │       │   ├── __init__.py
@@ -110,7 +113,8 @@ beautiful-elf/
 │       │   ├── backup_service.py
 │       │   ├── prompt_service.py
 │       │   ├── ai_feedback_service.py
-│       │   └── action_log_service.py
+│       │   ├── action_log_service.py
+│       │   └── llm_provider_service.py  # 🆕 大模型供应商 service
 │       │
 │       ├── repository/                # 💾 数据访问层（封装数据库 CRUD 操作）
 │       │   ├── __init__.py
@@ -131,7 +135,8 @@ beautiful-elf/
 │       │   ├── backup_repo.py
 │       │   ├── prompt_repo.py
 │       │   ├── ai_feedback_repo.py
-│       │   └── action_log_repo.py
+│       │   ├── action_log_repo.py
+│       │   └── llm_provider_repo.py     # 🆕 大模型供应商 repo
 │       │
 │       ├── mappers/                   # 🔄 数据映射器（封装具体存储引擎操作）
 │       │   ├── __init__.py
@@ -166,7 +171,8 @@ beautiful-elf/
 │       │       ├── prompt.py          # Prompt 管理
 │       │       ├── ai_feedback.py     # AI 反馈
 │       │       ├── action_log.py      # 操作日志
-│       │       └── config.py          # 配置管理（/{key} 通配放最后）
+│       │       ├── config.py          # 配置管理（/{key} 通配放最后）
+│       │       └── llm_provider.py    # 🆕 大模型供应商 CRUD
 │       │
 │       ├── tasks/                     # 📋 Celery 异步任务
 │       │   └── __init__.py
