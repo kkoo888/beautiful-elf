@@ -33,7 +33,7 @@ class ExpertTeamRepository:
         if category:
             filters["category"] = category
         if enabled is not None:
-            filters["enabled"] = enabled
+            filters["is_enabled"] = enabled
         return await self.team_mapper.find_all(db, filters=filters, offset=offset, limit=limit)
 
     async def count_teams(
@@ -43,7 +43,7 @@ class ExpertTeamRepository:
         if category:
             filters["category"] = category
         if enabled is not None:
-            filters["enabled"] = enabled
+            filters["is_enabled"] = enabled
         return await self.team_mapper.count(db, filters=filters)
 
     async def create_team(self, db: AsyncSession, data: dict) -> ExpertTeam:
@@ -60,7 +60,7 @@ class ExpertTeamRepository:
     async def find_members_by_team(self, db: AsyncSession, team_id: int) -> List[ExpertTeamMember]:
         stmt = (
             select(ExpertTeamMember)
-            .where(ExpertTeamMember.team_id == team_id, ExpertTeamMember.deleted == 0)
+            .where(ExpertTeamMember.team_id == team_id, ExpertTeamMember.is_deleted == 0)
             .order_by(ExpertTeamMember.sort_order.asc())
         )
         result = await db.execute(stmt)
@@ -72,7 +72,7 @@ class ExpertTeamRepository:
             return []
         stmt = (
             select(ExpertTeamMember)
-            .where(ExpertTeamMember.team_id.in_(team_ids), ExpertTeamMember.deleted == 0)
+            .where(ExpertTeamMember.team_id.in_(team_ids), ExpertTeamMember.is_deleted == 0)
             .order_by(ExpertTeamMember.sort_order.asc())
         )
         result = await db.execute(stmt)
@@ -116,13 +116,13 @@ class ExpertTeamRepository:
     ) -> List[ExpertTeamRun]:
         filters = {}
         if status is not None:
-            filters["status"] = status
+            filters["run_status"] = status
         return await self.run_mapper.find_all(db, filters=filters, offset=offset, limit=limit)
 
     async def count_all_runs(self, db: AsyncSession, status: Optional[int] = None) -> int:
         filters = {}
         if status is not None:
-            filters["status"] = status
+            filters["run_status"] = status
         return await self.run_mapper.count(db, filters=filters)
 
     async def create_run(self, db: AsyncSession, data: dict) -> ExpertTeamRun:
@@ -137,7 +137,7 @@ class ExpertTeamRepository:
         """查询角色绑定的所有技能"""
         stmt = (
             select(ExpertRoleSkill)
-            .where(ExpertRoleSkill.role_id == role_id, ExpertRoleSkill.deleted == 0)
+            .where(ExpertRoleSkill.role_id == role_id, ExpertRoleSkill.is_deleted == 0)
             .order_by(ExpertRoleSkill.priority.desc())
         )
         result = await db.execute(stmt)
@@ -149,7 +149,7 @@ class ExpertTeamRepository:
             return []
         stmt = (
             select(ExpertRoleSkill)
-            .where(ExpertRoleSkill.role_id.in_(role_ids), ExpertRoleSkill.deleted == 0)
+            .where(ExpertRoleSkill.role_id.in_(role_ids), ExpertRoleSkill.is_deleted == 0)
             .order_by(ExpertRoleSkill.priority.desc())
         )
         result = await db.execute(stmt)
@@ -163,7 +163,7 @@ class ExpertTeamRepository:
         stmt = select(ExpertRoleSkill).where(
             ExpertRoleSkill.role_id == role_id,
             ExpertRoleSkill.skill_id == skill_id,
-            ExpertRoleSkill.deleted == 0,
+            ExpertRoleSkill.is_deleted == 0,
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
@@ -189,8 +189,8 @@ class ExpertTeamRepository:
         """查询某次运行的所有角色执行记录"""
         stmt = (
             select(ExpertRoleRun)
-            .where(ExpertRoleRun.run_id == run_id, ExpertRoleRun.deleted == 0)
-            .order_by(ExpertRoleRun.created_at.asc())
+            .where(ExpertRoleRun.run_id == run_id, ExpertRoleRun.is_deleted == 0)
+            .order_by(ExpertRoleRun.gmt_create.asc())
         )
         result = await db.execute(stmt)
         return list(result.scalars().all())
@@ -199,8 +199,8 @@ class ExpertTeamRepository:
         """查询某角色的历史执行记录"""
         stmt = (
             select(ExpertRoleRun)
-            .where(ExpertRoleRun.role_id == role_id, ExpertRoleRun.deleted == 0)
-            .order_by(ExpertRoleRun.created_at.desc())
+            .where(ExpertRoleRun.role_id == role_id, ExpertRoleRun.is_deleted == 0)
+            .order_by(ExpertRoleRun.gmt_create.desc())
             .offset(offset).limit(limit)
         )
         result = await db.execute(stmt)

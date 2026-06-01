@@ -61,8 +61,8 @@
                               │
                               ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  MySQL: expert_teams / expert_roles / expert_role_skills             │
-│         expert_team_runs / expert_role_runs                          │
+│  MySQL: expert_team / expert_team_member / expert_role_skill           │
+│         expert_team_run / expert_role_run                              │
 │  Qdrant: knowledge_chunks (技能检索)                                  │
 │  Redis: Celery 消息队列 + 流式事件转发                                │
 └──────────────────────────────────────────────────────────────────────┘
@@ -71,128 +71,133 @@
 
 ## 二、数据库设计
 
-### 1. expert_teams — 专家团
+### 1. expert_team — 专家团
 
 ```sql
-CREATE TABLE expert_teams (
-    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name            VARCHAR(256)    NOT NULL COMMENT '专家团名称',
-    description     VARCHAR(1024)   DEFAULT '' COMMENT '专家团描述',
-    avatar          VARCHAR(512)    DEFAULT '' COMMENT '头像 URL',
-    system_prompt   TEXT            DEFAULT NULL COMMENT '专家团系统提示词 (定义整体协作规则)',
-    max_concurrent_roles TINYINT    NOT NULL DEFAULT 3 COMMENT '最大并发角色数 (防止资源争抢)',
-    timeout_seconds INT UNSIGNED    NOT NULL DEFAULT 300 COMMENT '单次任务超时 (秒)',
-    enabled         TINYINT         NOT NULL DEFAULT 1 COMMENT '是否启用',
-    sort_order      INT             NOT NULL DEFAULT 0 COMMENT '排序权重',
-    deleted         TINYINT         NOT NULL DEFAULT 0,
-    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_expert_teams_enabled (deleted, enabled)
+CREATE TABLE expert_team (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  team_name VARCHAR(256) NOT NULL COMMENT '专家团名称',
+  description VARCHAR(1024) DEFAULT '' COMMENT '专家团描述',
+  icon VARCHAR(64) DEFAULT '👥' COMMENT '图标',
+  category VARCHAR(64) DEFAULT '通用' COMMENT '分类',
+  orchestrator_prompt TEXT COMMENT '编排器系统提示词',
+  synthesizer_prompt TEXT COMMENT '汇总器系统提示词',
+  max_rounds INT NOT NULL DEFAULT 3 COMMENT '最大讨论轮次',
+  is_enabled TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否启用: 1=是 0=否',
+  version INT NOT NULL DEFAULT 1 COMMENT '版本号',
+  config_json JSON COMMENT '扩展配置',
+  is_deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+  gmt_create DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  gmt_modified DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+  INDEX idx_expert_team_deleted_enabled (is_deleted, is_enabled),
+  INDEX idx_expert_team_category (category)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团';
 ```
 
-### 2. expert_roles — 专家团角色
+### 2. expert_team_member — 专家团成员
 
 ```sql
-CREATE TABLE expert_roles (
-    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    team_id         BIGINT UNSIGNED NOT NULL COMMENT '所属专家团 ID',
-    name            VARCHAR(128)    NOT NULL COMMENT '角色名称 (如: 研究员、编码者、审查员)',
-    display_name    VARCHAR(256)    DEFAULT '' COMMENT '显示名称',
-    description     VARCHAR(1024)   DEFAULT '' COMMENT '角色职责描述',
-    avatar          VARCHAR(512)    DEFAULT '' COMMENT '角色头像/图标',
-    role_type       VARCHAR(64)     NOT NULL DEFAULT 'worker' COMMENT '角色类型 (orchestrator/worker/reviewer)',
-    system_prompt   TEXT            DEFAULT NULL COMMENT '角色系统提示词 (定义行为准则、输出格式)',
-    llm_model       VARCHAR(128)    DEFAULT NULL COMMENT '使用的 LLM 模型 (为空则用默认)',
-    temperature     DECIMAL(2,1)    DEFAULT NULL COMMENT '模型温度 (0.0-2.0)',
-    max_tokens      INT UNSIGNED    DEFAULT NULL COMMENT '最大输出 token 数',
-    execution_order TINYINT         NOT NULL DEFAULT 0 COMMENT '执行顺序 (0=并行, >0=串行)',
-    depends_on      JSON            DEFAULT NULL COMMENT '依赖的角色 ID 列表',
-    enabled         TINYINT         NOT NULL DEFAULT 1,
-    sort_order      INT             NOT NULL DEFAULT 0,
-    deleted         TINYINT         NOT NULL DEFAULT 0,
-    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_expert_roles_team (team_id, deleted),
-    INDEX idx_expert_roles_type (role_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团角色';
+CREATE TABLE expert_team_member (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  team_id BIGINT UNSIGNED NOT NULL COMMENT '所属专家团 ID',
+  member_name VARCHAR(128) NOT NULL COMMENT '专家名称',
+  member_role VARCHAR(128) NOT NULL COMMENT '专家角色 (如: 架构师、测试专家)',
+  avatar VARCHAR(64) DEFAULT '🤖' COMMENT '头像 emoji',
+  system_prompt TEXT NOT NULL COMMENT '专家系统提示词',
+  model_name VARCHAR(128) DEFAULT '' COMMENT '使用的模型名称 (为空用默认)',
+  temperature INT DEFAULT 70 COMMENT '温度参数 (x100 存储, 70=0.7)',
+  max_tokens INT DEFAULT 2048 COMMENT '最大生成 token 数',
+  tools_json JSON COMMENT '可用工具列表',
+  sort_order INT DEFAULT 0 COMMENT '排序顺序',
+  is_enabled TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否启用: 1=是 0=否',
+  is_deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+  gmt_create DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  gmt_modified DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+  INDEX idx_expert_team_member_team (team_id, is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团成员';
 ```
 
-### 3. expert_role_skills — 角色技能绑定
+### 3. expert_role_skill — 角色技能绑定
 
 ```sql
-CREATE TABLE expert_role_skills (
-    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    role_id         BIGINT UNSIGNED NOT NULL COMMENT '角色 ID',
-    skill_id        BIGINT UNSIGNED NOT NULL COMMENT '技能 ID (关联 skills 表)',
-    priority        TINYINT         NOT NULL DEFAULT 0 COMMENT '调用优先级 (数值越大越优先)',
-    config_override JSON            DEFAULT NULL COMMENT '角色级别的技能配置覆盖',
-    enabled         TINYINT         NOT NULL DEFAULT 1,
-    deleted         TINYINT         NOT NULL DEFAULT 0,
-    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_role_skill (role_id, skill_id),
-    INDEX idx_role_skills_role (role_id),
-    INDEX idx_role_skills_skill (skill_id)
+CREATE TABLE expert_role_skill (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  role_id BIGINT UNSIGNED NOT NULL COMMENT '成员 ID (关联 expert_team_member.id)',
+  skill_id BIGINT UNSIGNED NOT NULL COMMENT '技能 ID (关联 skills.id)',
+  priority TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '调用优先级 (数值越大越优先)',
+  config_override JSON COMMENT '角色级别的技能配置覆盖',
+  is_enabled TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否启用: 1=是 0=否',
+  is_deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+  gmt_create DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  gmt_modified DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+  UNIQUE KEY uk_role_skill (role_id, skill_id),
+  INDEX idx_expert_role_skill_skill (skill_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色技能绑定';
 ```
 
-### 4. expert_team_runs — 专家团运行记录
+### 4. expert_team_run — 专家团运行记录
 
 ```sql
-CREATE TABLE expert_team_runs (
-    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    team_id         BIGINT UNSIGNED NOT NULL COMMENT '专家团 ID',
-    status          TINYINT         NOT NULL DEFAULT 0 COMMENT '状态 (0=待运行, 1=运行中, 2=成功, 3=失败, 4=已取消)',
-    task_input      TEXT            NOT NULL COMMENT '任务描述',
-    output_json     JSON            DEFAULT NULL COMMENT '最终输出结果',
-    error_message   VARCHAR(2048)   DEFAULT '' COMMENT '错误信息',
-    started_at      DATETIME        DEFAULT NULL,
-    finished_at     DATETIME        DEFAULT NULL,
-    duration_ms     INT UNSIGNED    DEFAULT 0,
-    deleted         TINYINT         NOT NULL DEFAULT 0,
-    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_team_runs_team (team_id, status),
-    INDEX idx_team_runs_created (created_at)
+CREATE TABLE expert_team_run (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  team_id BIGINT UNSIGNED NOT NULL COMMENT '专家团 ID',
+  run_status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '状态: 0=待执行 1=运行中 2=已完成 3=失败 4=已取消',
+  trigger_type TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '触发方式: 0=手动 1=定时 2=事件',
+  input_text TEXT COMMENT '用户输入',
+  output_text TEXT COMMENT '最终输出',
+  discussion_json JSON COMMENT '讨论过程记录 [{round, expertName, expertRole, content, timestamp}]',
+  error_message VARCHAR(2048) DEFAULT '' COMMENT '错误信息',
+  round_count INT DEFAULT 0 COMMENT '实际讨论轮次',
+  token_usage INT DEFAULT 0 COMMENT '总 token 消耗',
+  started_at DATETIME DEFAULT NULL COMMENT '开始时间',
+  finished_at DATETIME DEFAULT NULL COMMENT '完成时间',
+  duration_ms INT DEFAULT 0 COMMENT '执行耗时 (毫秒)',
+  is_deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+  gmt_create DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  gmt_modified DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+  INDEX idx_expert_team_run_team (team_id, run_status),
+  INDEX idx_expert_team_run_status (run_status),
+  INDEX idx_expert_team_run_created (gmt_create)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团运行记录';
 ```
 
-### 5. expert_role_runs — 角色执行记录
+### 5. expert_role_run — 角色执行记录
 
 ```sql
-CREATE TABLE expert_role_runs (
-    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    run_id          BIGINT UNSIGNED NOT NULL COMMENT '运行记录 ID',
-    role_id         BIGINT UNSIGNED NOT NULL COMMENT '角色 ID',
-    role_name       VARCHAR(128)    NOT NULL COMMENT '角色名称 (冗余，避免 JOIN)',
-    status          TINYINT         NOT NULL DEFAULT 0 COMMENT '状态 (0=待运行, 1=运行中, 2=成功, 3=失败, 4=跳过)',
-    input_json      JSON            DEFAULT NULL COMMENT '角色输入',
-    output_json     JSON            DEFAULT NULL COMMENT '角色输出',
-    skills_used     JSON            DEFAULT NULL COMMENT '实际调用的技能列表 [{skill_id, name, result}]',
-    error_message   VARCHAR(2048)   DEFAULT '',
-    started_at      DATETIME        DEFAULT NULL,
-    finished_at     DATETIME        DEFAULT NULL,
-    duration_ms     INT UNSIGNED    DEFAULT 0,
-    deleted         TINYINT         NOT NULL DEFAULT 0,
-    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_role_runs_run (run_id),
-    INDEX idx_role_runs_role (role_id),
-    INDEX idx_role_runs_status (status)
+CREATE TABLE expert_role_run (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  run_id BIGINT UNSIGNED NOT NULL COMMENT '运行记录 ID (关联 expert_team_run.id)',
+  role_id BIGINT UNSIGNED NOT NULL COMMENT '成员 ID (关联 expert_team_member.id)',
+  role_name VARCHAR(128) NOT NULL COMMENT '成员名称 (冗余，避免 JOIN)',
+  run_status TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '状态: 0=待运行 1=运行中 2=成功 3=失败 4=跳过',
+  round_num INT DEFAULT 0 COMMENT '所在讨论轮次',
+  input_json JSON COMMENT '角色输入 (子任务 + 上下文)',
+  output_json JSON COMMENT '角色输出 (分析结果)',
+  skills_used JSON COMMENT '实际调用的技能列表 [{skill_id, name, status, result}]',
+  error_message VARCHAR(2048) DEFAULT '' COMMENT '错误信息',
+  started_at DATETIME DEFAULT NULL COMMENT '开始时间',
+  finished_at DATETIME DEFAULT NULL COMMENT '完成时间',
+  duration_ms INT DEFAULT 0 COMMENT '执行耗时 (毫秒)',
+  token_usage INT DEFAULT 0 COMMENT 'token 消耗',
+  is_deleted TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+  gmt_create DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  gmt_modified DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+  INDEX idx_expert_role_run_run (run_id),
+  INDEX idx_expert_role_run_role (role_id),
+  INDEX idx_expert_role_run_status (run_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色执行记录';
 ```
 
 ### ER 关系图
 
 ```
-expert_teams (1) ──────── (N) expert_roles
+expert_team (1) ──────── (N) expert_team_member
                                   │
                                   │ (N)
                                   ▼
-                            expert_role_skills (N) ──── (1) skills
+                            expert_role_skill (N) ──── (1) skills
 
-expert_team_runs (1) ──── (N) expert_role_runs
+expert_team_run (1) ──── (N) expert_role_run
 ```
 
 ---
@@ -399,7 +404,7 @@ def orchestrator(state: ExpertTeamState) -> dict:
     json_str = content[content.find('{') : content.rfind('}')+1]
     plan = json.loads(json_str)
 
-    # 记录到 expert_team_runs
+    # 记录到 expert_team_run
     save_team_run(state["run_id"], status=1, plan=plan)  # 1=运行中
 
     # 流式推送：编排完成（通过 LangGraph get_stream_writer，前端 stream_mode=["custom"] 接收）

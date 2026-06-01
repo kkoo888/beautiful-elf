@@ -516,9 +516,9 @@ class ExpertTeamService:
                 "skillDescription": skill.get("description", "") if skill else "",
                 "priority": b.priority,
                 "configOverride": b.config_override,
-                "enabled": b.enabled,
-                "createdAt": str(b.created_at) if b.created_at else None,
-                "updatedAt": str(b.updated_at) if b.updated_at else None,
+                "enabled": b.is_enabled,
+                "createdAt": str(b.gmt_create) if b.gmt_create else None,
+                "updatedAt": str(b.gmt_modified) if b.gmt_modified else None,
             })
         return result
 
@@ -586,7 +586,7 @@ class ExpertTeamService:
             "run_id": run_id,
             "role_id": role_id,
             "role_name": role_name,
-            "status": 1,  # 运行中
+            "run_status": 1,  # 运行中
             "round_num": round_num,
             "started_at": datetime.now(),
         })
@@ -596,7 +596,7 @@ class ExpertTeamService:
                                 error: str = "", tokens: int = 0) -> None:
         """完成角色执行记录"""
         await self.repo.update_role_run(db, role_run_id, {
-            "status": status,
+            "run_status": status,
             "output_json": {"output": output} if output else None,
             "skills_used": skills_used or [],
             "error_message": error[:2048] if error else "",
@@ -611,9 +611,9 @@ class ExpertTeamService:
             "skillId": bind.skill_id,
             "priority": bind.priority,
             "configOverride": bind.config_override,
-            "enabled": bind.enabled,
-            "createdAt": str(bind.created_at) if bind.created_at else None,
-            "updatedAt": str(bind.updated_at) if bind.updated_at else None,
+            "enabled": bind.is_enabled,
+            "createdAt": str(bind.gmt_create) if bind.gmt_create else None,
+            "updatedAt": str(bind.gmt_modified) if bind.gmt_modified else None,
         }
 
     def _serialize_role_run(self, run) -> dict:
@@ -622,7 +622,7 @@ class ExpertTeamService:
             "runId": run.run_id,
             "roleId": run.role_id,
             "roleName": run.role_name,
-            "status": run.status,
+            "status": run.run_status,
             "roundNum": run.round_num,
             "inputJson": run.input_json,
             "outputJson": run.output_json,
@@ -632,7 +632,7 @@ class ExpertTeamService:
             "finishedAt": str(run.finished_at) if run.finished_at else None,
             "durationMs": run.duration_ms,
             "tokenUsage": run.token_usage,
-            "createdAt": str(run.created_at) if run.created_at else None,
+            "createdAt": str(run.gmt_create) if run.gmt_create else None,
         }
 
     # ─── 执行专家团（LangGraph 核心）──────────────────
@@ -646,7 +646,7 @@ class ExpertTeamService:
             raise RecordNotFoundError("专家团不存在")
 
         members = await self.repo.find_members_by_team(db, team_id)
-        enabled_members = [m for m in members if m.enabled == 1]
+        enabled_members = [m for m in members if m.is_enabled == 1]
         if not enabled_members:
             raise RecordNotFoundError("专家团没有启用的成员")
 
@@ -655,7 +655,7 @@ class ExpertTeamService:
         # 创建运行记录
         run = await self.repo.create_run(db, {
             "team_id": team_id,
-            "status": 1,  # 运行中
+            "run_status": 1,  # 运行中
             "trigger_type": 0,
             "input_text": request.input_text,
         })
@@ -729,12 +729,12 @@ class ExpertTeamService:
 
             # 更新运行记录
             await self.repo.update_run(db, run.id, {
-                "status": 2,  # 已完成
+                "run_status": 2,  # 已完成
                 "output_text": result["output"],
                 "discussion_json": result["discussion"],
                 "round_count": rounds,
                 "token_usage": result["tokenUsage"],
-                "started_at": run.created_at,
+                "started_at": run.gmt_create,
                 "finished_at": end_time,
                 "duration_ms": duration_ms,
             })
@@ -744,7 +744,7 @@ class ExpertTeamService:
         except Exception as e:
             logger.error(f"专家团执行失败: {e}", exc_info=True)
             await self.repo.update_run(db, run.id, {
-                "status": 3,  # 失败
+                "run_status": 3,  # 失败
                 "error_message": str(e)[:2048],
                 "finished_at": datetime.now(),
             })
@@ -781,19 +781,19 @@ class ExpertTeamService:
         """序列化专家团"""
         return {
             "id": team.id,
-            "name": team.name,
+            "name": team.team_name,
             "description": team.description,
             "icon": team.icon,
             "category": team.category,
             "orchestrator_prompt": team.orchestrator_prompt,
             "synthesizer_prompt": team.synthesizer_prompt,
             "max_rounds": team.max_rounds,
-            "enabled": team.enabled,
+            "enabled": team.is_enabled,
             "version": team.version,
             "config_json": team.config_json,
             "members": [ExpertTeamService._serialize_member(m) for m in (members or [])],
-            "created_at": str(team.created_at) if team.created_at else None,
-            "updated_at": str(team.updated_at) if team.updated_at else None,
+            "created_at": str(team.gmt_create) if team.gmt_create else None,
+            "updated_at": str(team.gmt_modified) if team.gmt_modified else None,
         }
 
     @staticmethod

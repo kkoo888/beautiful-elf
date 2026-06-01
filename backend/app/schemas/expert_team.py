@@ -10,8 +10,8 @@ class ExpertMemberCreate(BaseModel):
     """创建专家成员"""
     model_config = ConfigDict(populate_by_name=True)
 
-    name: str = Field(..., min_length=1, max_length=128, description="专家名称")
-    role: str = Field(..., min_length=1, max_length=128, description="专家角色")
+    member_name: str = Field(..., min_length=1, max_length=128, description="专家名称", alias="name")
+    member_role: str = Field(..., min_length=1, max_length=128, description="专家角色", alias="role")
     avatar: str = Field(default="🤖", max_length=64, description="头像 emoji", alias="avatar")
     system_prompt: str = Field(..., min_length=1, description="专家系统提示词", alias="systemPrompt")
     model_name: str = Field(default="", max_length=128, description="模型名称", alias="modelName")
@@ -19,15 +19,15 @@ class ExpertMemberCreate(BaseModel):
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数", alias="maxTokens")
     tools_json: Optional[List[dict]] = Field(default=None, description="可用工具列表", alias="toolsJson")
     sort_order: int = Field(default=0, description="排序顺序", alias="sortOrder")
-    enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
+    is_enabled: int = Field(default=1, ge=0, le=1, description="是否启用", alias="enabled")
 
 
 class ExpertMemberUpdate(BaseModel):
     """更新专家成员"""
     model_config = ConfigDict(populate_by_name=True)
 
-    name: Optional[str] = Field(default=None, max_length=128)
-    role: Optional[str] = Field(default=None, max_length=128)
+    member_name: Optional[str] = Field(default=None, max_length=128, alias="name")
+    member_role: Optional[str] = Field(default=None, max_length=128, alias="role")
     avatar: Optional[str] = Field(default=None, max_length=64)
     system_prompt: Optional[str] = Field(default=None, alias="systemPrompt")
     model_name: Optional[str] = Field(default=None, max_length=128, alias="modelName")
@@ -35,7 +35,7 @@ class ExpertMemberUpdate(BaseModel):
     max_tokens: Optional[int] = Field(default=None, ge=1, le=8192, alias="maxTokens")
     tools_json: Optional[List[dict]] = Field(default=None, alias="toolsJson")
     sort_order: Optional[int] = Field(default=None, alias="sortOrder")
-    enabled: Optional[int] = Field(default=None, ge=0, le=1)
+    is_enabled: Optional[int] = Field(default=None, ge=0, le=1, alias="enabled")
 
 
 class ExpertMemberOut(BaseModel):
@@ -44,8 +44,8 @@ class ExpertMemberOut(BaseModel):
 
     id: int
     team_id: int = Field(alias="teamId")
-    name: str
-    role: str
+    member_name: str = Field(alias="name")
+    member_role: str = Field(alias="role")
     avatar: str
     system_prompt: str = Field(alias="systemPrompt")
     model_name: str = Field(alias="modelName")
@@ -53,9 +53,9 @@ class ExpertMemberOut(BaseModel):
     max_tokens: int = Field(alias="maxTokens")
     tools_json: Optional[List[dict]] = Field(default=None, alias="toolsJson")
     sort_order: int = Field(alias="sortOrder")
-    enabled: int
-    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
-    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
+    is_enabled: int = Field(alias="enabled")
+    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
+    gmt_modified: Optional[datetime] = Field(default=None, alias="updatedAt")
 
 
 # ─── 专家团 ───────────────────────────────────────────────
@@ -64,7 +64,7 @@ class ExpertTeamCreate(BaseModel):
     """创建专家团"""
     model_config = ConfigDict(populate_by_name=True)
 
-    name: str = Field(..., min_length=1, max_length=256, description="专家团名称")
+    team_name: str = Field(..., min_length=1, max_length=256, description="专家团名称", alias="name")
     description: str = Field(default="", max_length=1024, description="描述")
     icon: str = Field(default="👥", max_length=64, description="图标")
     category: str = Field(default="通用", max_length=64, description="分类")
@@ -79,14 +79,14 @@ class ExpertTeamUpdate(BaseModel):
     """更新专家团"""
     model_config = ConfigDict(populate_by_name=True)
 
-    name: Optional[str] = Field(default=None, max_length=256)
+    team_name: Optional[str] = Field(default=None, max_length=256, alias="name")
     description: Optional[str] = Field(default=None, max_length=1024)
     icon: Optional[str] = Field(default=None, max_length=64)
     category: Optional[str] = Field(default=None, max_length=64)
     orchestrator_prompt: Optional[str] = Field(default=None, alias="orchestratorPrompt")
     synthesizer_prompt: Optional[str] = Field(default=None, alias="synthesizerPrompt")
     max_rounds: Optional[int] = Field(default=None, ge=1, le=10, alias="maxRounds")
-    enabled: Optional[int] = Field(default=None, ge=0, le=1)
+    is_enabled: Optional[int] = Field(default=None, ge=0, le=1, alias="enabled")
     config_json: Optional[dict] = Field(default=None, alias="configJson")
 
 
@@ -95,19 +95,19 @@ class ExpertTeamOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
-    name: str
+    team_name: str = Field(alias="name")
     description: str
     icon: str
     category: str
     orchestrator_prompt: str = Field(alias="orchestratorPrompt")
     synthesizer_prompt: str = Field(alias="synthesizerPrompt")
     max_rounds: int = Field(alias="maxRounds")
-    enabled: int
+    is_enabled: int = Field(alias="enabled")
     version: int
     config_json: Optional[dict] = Field(default=None, alias="configJson")
     members: List[ExpertMemberOut] = []
-    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
-    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
+    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
+    gmt_modified: Optional[datetime] = Field(default=None, alias="updatedAt")
 
 
 # ─── 运行记录 ─────────────────────────────────────────────
@@ -119,7 +119,7 @@ class ExpertTeamRunOut(BaseModel):
     id: int
     team_id: int = Field(alias="teamId")
     team_name: str = Field(default="", alias="teamName")
-    status: int
+    run_status: int = Field(alias="status")
     trigger_type: int = Field(alias="triggerType")
     input_text: str = Field(alias="inputText")
     output_text: str = Field(alias="outputText")
@@ -130,7 +130,7 @@ class ExpertTeamRunOut(BaseModel):
     started_at: Optional[datetime] = Field(default=None, alias="startedAt")
     finished_at: Optional[datetime] = Field(default=None, alias="finishedAt")
     duration_ms: int = Field(alias="durationMs")
-    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
 
 
 class ExpertTeamExecuteRequest(BaseModel):
@@ -163,7 +163,7 @@ class RoleSkillCreate(BaseModel):
     skill_id: int = Field(..., description="技能 ID", alias="skillId")
     priority: int = Field(default=0, ge=0, description="调用优先级", alias="priority")
     config_override: Optional[dict] = Field(default=None, description="配置覆盖", alias="configOverride")
-    enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
+    is_enabled: int = Field(default=1, ge=0, le=1, description="是否启用", alias="enabled")
 
 
 class RoleSkillUpdate(BaseModel):
@@ -172,7 +172,7 @@ class RoleSkillUpdate(BaseModel):
 
     priority: Optional[int] = Field(default=None, ge=0)
     config_override: Optional[dict] = Field(default=None, alias="configOverride")
-    enabled: Optional[int] = Field(default=None, ge=0, le=1)
+    is_enabled: Optional[int] = Field(default=None, ge=0, le=1, alias="enabled")
 
 
 class RoleSkillOut(BaseModel):
@@ -187,9 +187,9 @@ class RoleSkillOut(BaseModel):
     skill_description: str = Field(default="", alias="skillDescription")
     priority: int
     config_override: Optional[dict] = Field(default=None, alias="configOverride")
-    enabled: int
-    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
-    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
+    is_enabled: int = Field(alias="enabled")
+    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
+    gmt_modified: Optional[datetime] = Field(default=None, alias="updatedAt")
 
 
 # ─── 角色执行记录 ────────────────────────────────────────
@@ -202,7 +202,7 @@ class ExpertRoleRunOut(BaseModel):
     run_id: int = Field(alias="runId")
     role_id: int = Field(alias="roleId")
     role_name: str = Field(alias="roleName")
-    status: int
+    run_status: int = Field(alias="status")
     round_num: int = Field(alias="roundNum")
     input_json: Optional[dict] = Field(default=None, alias="inputJson")
     output_json: Optional[dict] = Field(default=None, alias="outputJson")
@@ -212,4 +212,4 @@ class ExpertRoleRunOut(BaseModel):
     finished_at: Optional[datetime] = Field(default=None, alias="finishedAt")
     duration_ms: int = Field(alias="durationMs")
     token_usage: int = Field(alias="tokenUsage")
-    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    gmt_create: Optional[datetime] = Field(default=None, alias="createdAt")
