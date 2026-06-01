@@ -144,7 +144,7 @@ export interface LLMProvider {
   baseUrl: string
   apiKey: string
   models: LLMModelItem[]
-  enabled: number  // 1=启用 0=禁用
+  isEnabled: number  // 1=启用 0=禁用（P3C: is_xxx 命名）
   isDefault: number  // 1=默认 0=非默认
   description: string
   createdAt?: string
@@ -158,7 +158,7 @@ export interface LLMProviderPayload {
   baseUrl: string
   apiKey: string
   models?: LLMModelItem[]
-  enabled?: number
+  isEnabled?: number
   isDefault?: number
   description?: string
 }

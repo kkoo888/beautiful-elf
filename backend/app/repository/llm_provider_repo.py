@@ -28,7 +28,7 @@ class LLMProviderRepository:
     async def find_enabled(self, db: AsyncSession) -> List[LLMProvider]:
         """获取所有启用的供应商"""
         return await self.mapper.find_all(
-            db, filters={"enabled": 1}, offset=0, limit=100
+            db, filters={"is_enabled": 1}, offset=0, limit=100
         )
 
     async def find_by_type(self, db: AsyncSession, provider_type: str) -> Optional[LLMProvider]:

@@ -19,7 +19,7 @@ class ProviderCreate(BaseModel):
     base_url: str
     api_key: str = ""
     models: List[LLMModelItem] = []
-    enabled: int = 1
+    is_enabled: int = 1
     is_default: int = 0
     description: str = ""
 
@@ -31,7 +31,7 @@ class ProviderUpdate(BaseModel):
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     models: Optional[List[LLMModelItem]] = None
-    enabled: Optional[int] = None
+    is_enabled: Optional[int] = None
     is_default: Optional[int] = None
     description: Optional[str] = None
 
@@ -44,7 +44,7 @@ class ProviderOut(BaseModel):
     base_url: str
     api_key: str  # 返回时脱敏为 ****
     models: List[LLMModelItem]
-    enabled: int
+    is_enabled: int
     is_default: int
     description: str
     created_at: Optional[str] = None

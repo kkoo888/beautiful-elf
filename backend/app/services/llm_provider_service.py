@@ -1,34 +1,34 @@
 """大模型供应商 Service"""
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.llm_provider_repo import LLMProviderRepository
-from app.schemas.llm_provider import ProviderCreate, ProviderUpdate, ProviderOut
-from app.core.exceptions import RecordNotFoundError, DuplicateEntryError
+from app.schemas.llm_provider import ProviderCreate, ProviderUpdate
+from app.core.exceptions import RecordNotFoundError
 
 
 class LLMProviderService:
     def __init__(self):
         self.repo = LLMProviderRepository()
 
-    async def list(self, db: AsyncSession, page: int = 1, page_size: int = 100) -> Tuple[list, int]:
-        """供应商列表"""
+    async def list(self, db: AsyncSession, page: int = 1, page_size: int = 20) -> Tuple[list, int]:
+        """供应商列表（分页）"""
         offset = (page - 1) * page_size
         items = await self.repo.find_all(db, offset=offset, limit=page_size)
         total = await self.repo.count(db)
-        return [self._to_out(p) for p in items], total
+        return [self._to_dict(p) for p in items], total
 
     async def list_enabled(self, db: AsyncSession) -> List[dict]:
         """获取所有启用的供应商（用于前端模型选择）"""
         items = await self.repo.find_enabled(db)
-        return [self._to_out(p) for p in items]
+        return [self._to_dict(p) for p in items]
 
     async def get(self, db: AsyncSession, provider_id: int) -> dict:
         """获取单个供应商"""
         provider = await self.repo.find_by_id(db, provider_id)
         if not provider:
             raise RecordNotFoundError(f"供应商 {provider_id} 不存在")
-        return self._to_out(provider)
+        return self._to_dict(provider)
 
     async def create(self, db: AsyncSession, data: ProviderCreate) -> dict:
         """创建供应商"""
@@ -37,7 +37,7 @@ class LLMProviderService:
             await self.repo.clear_default(db)
 
         provider = await self.repo.create(db, data.model_dump())
-        return self._to_out(provider)
+        return self._to_dict(provider)
 
     async def update(self, db: AsyncSession, provider_id: int, data: ProviderUpdate) -> dict:
         """更新供应商"""
@@ -52,7 +52,7 @@ class LLMProviderService:
             await self.repo.clear_default(db)
 
         provider = await self.repo.update(db, provider_id, update_data)
-        return self._to_out(provider)
+        return self._to_dict(provider)
 
     async def toggle_enabled(self, db: AsyncSession, provider_id: int) -> dict:
         """切换启用/禁用状态"""
@@ -60,9 +60,9 @@ class LLMProviderService:
         if not existing:
             raise RecordNotFoundError(f"供应商 {provider_id} 不存在")
 
-        new_enabled = 0 if existing.enabled == 1 else 1
-        provider = await self.repo.update(db, provider_id, {"enabled": new_enabled})
-        return self._to_out(provider)
+        new_enabled = 0 if existing.is_enabled == 1 else 1
+        provider = await self.repo.update(db, provider_id, {"is_enabled": new_enabled})
+        return self._to_dict(provider)
 
     async def delete(self, db: AsyncSession, provider_id: int) -> bool:
         """删除供应商"""
@@ -72,23 +72,16 @@ class LLMProviderService:
         return True
 
     @staticmethod
-    def _mask_key(api_key: str) -> str:
-        """API Key 脱敏"""
-        if not api_key or len(api_key) <= 8:
-            return "****"
-        return api_key[:4] + "****" + api_key[-4:]
-
-    @staticmethod
-    def _to_out(provider) -> dict:
-        """转换为输出格式"""
+    def _to_dict(provider) -> dict:
+        """转换为输出字典（snake_case，由 api-client 统一转 camelCase）"""
         return {
             "id": provider.id,
             "name": provider.name,
             "provider_type": provider.provider_type,
             "base_url": provider.base_url,
-            "api_key": provider.api_key,  # 前端负责脱敏显示
+            "api_key": provider.api_key,
             "models": provider.models or [],
-            "enabled": provider.enabled,
+            "is_enabled": provider.is_enabled,
             "is_default": provider.is_default,
             "description": provider.description or "",
             "created_at": str(provider.created_at) if provider.created_at else None,

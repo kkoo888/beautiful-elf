@@ -25,7 +25,6 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  StarOutlined,
   StarFilled,
   CloudOutlined,
   ApiOutlined,
@@ -46,7 +45,6 @@ import type {
   LLMModelItem,
 } from '../types/settings'
 import { PROVIDER_PRESETS } from '../types/settings'
-import styles from './settings-panel.module.css'
 
 const { Text } = Typography
 
@@ -99,8 +97,8 @@ export function LlmProviderSettings() {
     form.resetFields()
     form.setFieldsValue({
       providerType: 'openai',
-      enabled: 1,
-      isDefault: 0,
+      isEnabled: true,
+      isDefault: false,
     })
     setModalOpen(true)
   }, [form])
@@ -115,8 +113,8 @@ export function LlmProviderSettings() {
         baseUrl: provider.baseUrl,
         apiKey: provider.apiKey,
         description: provider.description,
-        enabled: provider.enabled,
-        isDefault: provider.isDefault,
+        isEnabled: provider.isEnabled === 1,
+        isDefault: provider.isDefault === 1,
         modelsJson: JSON.stringify(provider.models, null, 2),
       })
       setModalOpen(true)
@@ -144,7 +142,7 @@ export function LlmProviderSettings() {
         baseUrl: values.baseUrl,
         apiKey: values.apiKey || '',
         models,
-        enabled: values.enabled ? 1 : 0,
+        isEnabled: values.isEnabled ? 1 : 0,
         isDefault: values.isDefault ? 1 : 0,
         description: values.description || '',
       }
@@ -231,7 +229,7 @@ export function LlmProviderSettings() {
               key={p.id}
               size="small"
               style={{
-                opacity: p.enabled ? 1 : 0.6,
+                opacity: p.isEnabled ? 1 : 0.6,
                 borderLeft: `3px solid ${TYPE_COLORS[p.providerType] || '#6b7280'}`,
               }}
             >
@@ -248,10 +246,10 @@ export function LlmProviderSettings() {
                       <Tag icon={<StarFilled />} color="gold">默认</Tag>
                     )}
                     <Tag
-                      icon={p.enabled ? <CheckCircleFilled /> : <CloseCircleFilled />}
-                      color={p.enabled ? 'success' : 'default'}
+                      icon={p.isEnabled ? <CheckCircleFilled /> : <CloseCircleFilled />}
+                      color={p.isEnabled ? 'success' : 'default'}
                     >
-                      {p.enabled ? '已启用' : '已禁用'}
+                      {p.isEnabled ? '已启用' : '已禁用'}
                     </Tag>
                   </Space>
                   <div style={{ marginTop: 6 }}>
@@ -278,9 +276,9 @@ export function LlmProviderSettings() {
 
                 {/* 右侧操作 */}
                 <Space size={4}>
-                  <Tooltip title={p.enabled ? '点击禁用' : '点击启用'}>
+                  <Tooltip title={p.isEnabled ? '点击禁用' : '点击启用'}>
                     <Switch
-                      checked={p.enabled === 1}
+                      checked={p.isEnabled === 1}
                       onChange={() => void handleToggle(p.id)}
                       size="small"
                     />
@@ -361,7 +359,7 @@ export function LlmProviderSettings() {
           </Form.Item>
 
           <Space size={24}>
-            <Form.Item name="enabled" label="启用" valuePropName="checked">
+            <Form.Item name="isEnabled" label="启用" valuePropName="checked">
               <Switch />
             </Form.Item>
             <Form.Item name="isDefault" label="设为默认" valuePropName="checked">

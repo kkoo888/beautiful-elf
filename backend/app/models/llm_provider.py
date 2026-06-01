@@ -12,11 +12,11 @@ class LLMProvider(BaseModel):
     base_url = Column(String(512), nullable=False, comment="API 基础地址")
     api_key = Column(Text, default="", comment="API Key (加密存储)")
     models = Column(JSON, nullable=False, default=list, comment="可用模型列表 JSON")
-    enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=启用 0=禁用")
+    is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=启用 0=禁用")
     is_default = Column(Integer, nullable=False, default=0, comment="是否默认供应商: 1=是 0=否")
     description = Column(String(512), default="", comment="备注说明")
 
     __table_args__ = (
-        Index("idx_llm_provider_enabled", "enabled"),
+        Index("idx_llm_provider_is_enabled", "is_enabled"),
         Index("idx_llm_provider_type", "provider_type"),
     )
