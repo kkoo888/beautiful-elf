@@ -79,6 +79,8 @@ export function useChat(): UseChatReturn {
   const ensureConversationId = useCallback(async (): Promise<string> => {
     if (currentConversationId) return currentConversationId
     const conv = await createConversation('新会话')
+    console.log('[Chat] createConversation result:', conv)
+    if (!conv) throw new Error('createConversation returned undefined')
     useChatStore.getState().addConversation(conv)
     useChatStore.getState().setCurrentConversation(conv.id)
     return conv.id
