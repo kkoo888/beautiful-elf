@@ -174,6 +174,7 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
 
 /**
  * 创建流式聊天连接（SSE）
+ * 单一端点: POST /conversations/{id}/chat, body 中 stream=true
  */
 export function chatStream(
   request: ChatRequest,
@@ -189,7 +190,7 @@ export function chatStream(
   const doStream = async (): Promise<void> => {
     try {
       const resp = await fetch(
-        `/api/v1/conversations/${request.conversationId}/chat/stream`,
+        `/api/v1/conversations/${request.conversationId}/chat`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
