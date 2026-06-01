@@ -66,14 +66,16 @@ interface BackendSoulConfig {
 
 // ── 转换函数 ─────────────────────────────────────────────────
 
-function toFrontendSoul(data: BackendSoulConfig): SoulConfig {
+function toFrontendSoul(data: Record<string, unknown>): SoulConfig {
+  // 响应拦截器已将 snake_case 转 camelCase:
+  //   avatar_url → avatarUrl, speaking_style → speakingStyle, background → background
   return {
-    name: data.name,
-    avatar: data.avatar,
-    personality: data.personality ?? [],
-    speakingStyle: data.speaking_style ?? '温柔亲切',
-    emotionalTendency: data.emotional_tendency ?? 60,
-    backgroundStory: data.background_story ?? '',
+    name: (data.name as string) ?? '',
+    avatar: (data.avatarUrl as string) ?? '',
+    personality: (data.personality as string[]) ?? [],
+    speakingStyle: (data.speakingStyle as string) ?? '温柔亲切',
+    emotionalTendency: (data.emotionalTendency as number) ?? 60,
+    backgroundStory: (data.background as string) ?? '',
   }
 }
 
@@ -87,8 +89,9 @@ export async function getSettings(): Promise<AppSettings> {
   try {
     const resp = await apiClient.get('/configs/app_settings')
     const item = (resp.data as any).data as BackendConfigItem
-    if (item?.value) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(item.value) }
+    // 响应拦截器已将 snake_case 转 camelCase: key_value → keyValue
+    if (item?.keyValue) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(item.keyValue) }
     }
   } catch {
     // key 不存在时返回默认值
@@ -144,28 +147,24 @@ export async function getSoulConfig(): Promise<SoulConfig> {
  * 先尝试查找已有的活跃配置来更新，没有则创建
  */
 export async function saveSoulConfig(config: SoulConfig): Promise<SoulConfig> {
+  // 请求拦截器会自动 camelCase → snake_case
+  // 后端字段: name, avatar_url, personality, speaking_style, background, system_prompt
+  const payload = {
+    name: config.name,
+    avatarUrl: config.avatar,
+    personality: config.personality,
+    speakingStyle: config.speakingStyle,
+    background: config.backgroundStory,
+    systemPrompt: '',
+  }
   try {
     // 尝试获取当前活跃配置
     const resp = await apiClient.get('/soul_configs/active')
     const existing = (resp.data as any).data as BackendSoulConfig
-    await apiClient.put(`/soul_configs/${existing.id}`, {
-      name: config.name,
-      avatar: config.avatar,
-      personality: config.personality,
-      speaking_style: config.speakingStyle,
-      emotional_tendency: config.emotionalTendency,
-      background_story: config.backgroundStory,
-    })
+    await apiClient.put(`/soul_configs/${existing.id}`, payload)
   } catch {
     // 没有活跃配置，创建新的
-    await apiClient.post('/soul_configs', {
-      name: config.name,
-      avatar: config.avatar,
-      personality: config.personality,
-      speaking_style: config.speakingStyle,
-      emotional_tendency: config.emotionalTendency,
-      background_story: config.backgroundStory,
-    })
+    await apiClient.post('/soul_configs', payload)
   }
   return config
 }
