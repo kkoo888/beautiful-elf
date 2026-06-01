@@ -1,16 +1,16 @@
-"""AI 对话 API — 统一入口，支持所有 LLM 供应商"""
+"""AI 对话 API — POST /conversations/{id}/chat (action 模式)"""
 
 import json
-import uuid
 from fastapi import APIRouter, Depends, Path
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.services.llm_chat_service import LLMChatService
 from app.services.message_service import MessageService
+from app.schemas.message import MessageCreate
 from app.schemas.response import ok, fail
 
 router = APIRouter()
@@ -50,18 +50,16 @@ async def chat(
             max_tokens=data.max_tokens,
         )
 
-        # 保存 AI 回复到数据库
+        # 保存 AI 回复
         try:
-            await _msg_service.create(db, type("Msg", (), {
-                "conversation_id": conversation_id,
-                "role": "assistant",
-                "content": result["content"],
-                "tool_calls": None,
-                "tool_call_id": None,
-                "token_count": result.get("token_count", 0),
-            })())
+            await _msg_service.create(db, MessageCreate(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=result["content"],
+                token_count=result.get("token_count", 0),
+            ))
         except Exception:
-            pass  # 保存失败不影响回复
+            pass
 
         return ok(result)
     except Exception as e:
@@ -95,16 +93,13 @@ async def chat_stream(
 
             # 流结束后保存 AI 回复
             try:
-                from app.core.database import AsyncSessionLocal
                 async with AsyncSessionLocal() as save_db:
-                    await _msg_service.create(save_db, type("Msg", (), {
-                        "conversation_id": conversation_id,
-                        "role": "assistant",
-                        "content": full_content,
-                        "tool_calls": None,
-                        "tool_call_id": None,
-                        "token_count": 0,
-                    })())
+                    await _msg_service.create(save_db, MessageCreate(
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=full_content,
+                        token_count=0,
+                    ))
                     await save_db.commit()
             except Exception:
                 pass
