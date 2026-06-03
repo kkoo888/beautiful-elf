@@ -1,7 +1,7 @@
 /**
  * 技能文件夹解析 + 安全扫描工具
  *
- * 26 项检测规则，基于 skill-vetter / skill-security-scanner / CertiK 合集。
+ * 36 项检测规则，基于 skill-vetter / skill-security-scanner / OWASP Agentic AI / CSA MAESTRO。
  * 纯前端正则实现，无需后端接口。
  */
 
@@ -231,6 +231,140 @@ const ruleSilentInstall: ScanRule = {
   scan: (c, f) => findMatches(c, /pip\s+install(?!\s+-r\s+requirements)|npm\s+install(?!\s+--save)|yarn\s+add|apt\s+install|brew\s+install|cargo\s+install|gem\s+install/gi, /\.[\w]+$/i, f),
 }
 
+// ─── 新增规则（2026-06-04 补充）────────────────────────────
+
+/** HIGH-8: CLI 工具外发行为 — 通用检测所有 CLI 工具的数据外发能力 */
+const ruleCliExfiltration: ScanRule = {
+  id: 'cli-exfiltration',
+  category: 'CLI 工具外发数据',
+  level: 'high',
+  description: '检测 curl/wget/scp/rsync/nc 等 CLI 工具向外部发送数据的行为',
+  scan: (c, f) => {
+    const patterns = [
+      // curl 数据外发
+      /curl\s+[^\n]*(-d|--data|--data-raw|--data-binary|--data-urlencode|-F|--form|-T|--upload-file)\s+/gi,
+      // wget POST 数据
+      /wget\s+[^\n]*--post-(data|file|body)\s+/gi,
+      // scp/rsync 向外部传输
+      /\b(scp|rsync)\s+[^\n]*@/gi,
+      // nc/ncat/socat 发送数据（非反弹 Shell 已单独检测的部分）
+      /\b(nc|ncat|socat)\s+[^\n]*([<>|]|--send-only|-w)\s+/gi,
+      // sftp/ftp 文件传输
+      /\b(sftp|ftp|lftp)\s+[^\n]*\d{1,3}\./gi,
+      // ssh 远程执行命令
+      /\bssh\s+[^\n]*@.*['"`;]/gi,
+      // git push 到外部仓库
+      /\bgit\s+push\s+(git@|https?:\/\/)/gi,
+      // telnet 发送数据
+      /\btelnet\s+\d{1,3}\.\d{1,3}/gi,
+    ]
+    const results: { line: number; snippet: string }[] = []
+    const lines = c.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      for (const p of patterns) {
+        p.lastIndex = 0
+        if (p.test(lines[i])) {
+          results.push({ line: i + 1, snippet: lines[i].trim().slice(0, 120) })
+          break
+        }
+      }
+    }
+    return results.length > 0 ? results : null
+  },
+}
+
+/** HIGH-9: DNS 隧道/数据渗出 — 通过 DNS 查询编码外发数据 */
+const ruleDnsTunnel: ScanRule = {
+  id: 'dns-tunnel',
+  category: 'DNS 隧道渗出',
+  level: 'high',
+  description: '检测通过 DNS 查询编码数据外发（DNS tunneling）的行为',
+  scan: (c, f) => findMatches(c, /\b(dig|nslookup|host)\s+[^\n]*\$\(|iodine|dnscat|dns2tcp|dnsinject|\bDNS_TUNNEL\b/gi),
+}
+
+/** HIGH-10: 网络嗅探/抓包 — 监听网络流量 */
+const ruleNetworkSniffing: ScanRule = {
+  id: 'network-sniffing',
+  category: '网络嗅探抓包',
+  level: 'high',
+  description: '检测 tcpdump/wireshark 等网络流量监听行为',
+  scan: (c, f) => findMatches(c, /\b(tcpdump|tshark|wireshark|ettercap|bettercap|arpspoof|dsniff)\b/gi),
+}
+
+/** HIGH-11: Docker/容器逃逸 — 利用容器特权模式突破隔离 */
+const ruleContainerEscape: ScanRule = {
+  id: 'container-escape',
+  category: '容器逃逸',
+  level: 'high',
+  description: '检测 Docker --privileged、挂载宿主机文件系统等容器逃逸行为',
+  scan: (c, f) => findMatches(c, /docker\s+run\s+[^\n]*--privileged|docker\s+run\s+[^\n]*-v\s*\/:|docker\s+run\s+[^\n]*--pid=host|docker\s+run\s+[^\n]*--net=host|nsenter\s+-t\s+1|\/proc\/1\/ns\/|chroot\s+\/host/gi),
+}
+
+/** HIGH-12: 供应链篡改 — 修改依赖清单注入恶意包 */
+const ruleSupplyChain: ScanRule = {
+  id: 'supply-chain',
+  category: '供应链篡改',
+  level: 'high',
+  description: '检测向 package.json/requirements.txt 等依赖文件注入可疑包的行为',
+  fileFilter: /(package\.json|requirements.*\.txt|Gemfile|go\.mod|Cargo\.toml|pom\.xml|build\.gradle)/i,
+  scan: (c, f) => {
+    const suspicious = /[a-z0-9]{20,}|typosquat|malware|backdoor|trojan/i
+    const lines = c.split('\n')
+    const results: { line: number; snippet: string }[] = []
+    for (let i = 0; i < lines.length; i++) {
+      if (suspicious.test(lines[i])) {
+        results.push({ line: i + 1, snippet: lines[i].trim().slice(0, 120) })
+      }
+    }
+    return results.length > 0 ? results : null
+  },
+}
+
+/** MEDIUM-9: Webhook/回调 URL — 数据外发到外部收集服务 */
+const ruleWebhookExfil: ScanRule = {
+  id: 'webhook-exfil',
+  category: 'Webhook 外发数据',
+  level: 'medium',
+  description: '检测向 webhook.site/requestbin/pipedream 等数据收集服务发送数据',
+  scan: (c, f) => findMatches(c, /webhook\.site|requestbin\.net|pipedream\.com|hookbin\.com|burpcollaborator|interact\.sh|canarytokens\.com|oast\.(fun|pro|dev)/gi),
+}
+
+/** MEDIUM-10: 剪贴板/屏幕截取 — 读取用户隐私 */
+const ruleScreenCapture: ScanRule = {
+  id: 'screen-capture',
+  category: '剪贴板/屏幕截取',
+  level: 'medium',
+  description: '检测读取剪贴板内容或截取屏幕的行为',
+  scan: (c, f) => findMatches(c, /\b(xclip|xsel|pbpaste|wl-paste)\b|\b(scrot|import|gnome-screenshot|screencapture|flameshot)\b|\bxdotool\s+getactivewindow/gi),
+}
+
+/** MEDIUM-11: 文件系统监听 — 监控文件变化 */
+const ruleFsWatch: ScanRule = {
+  id: 'fs-watch',
+  category: '文件系统监听',
+  level: 'medium',
+  description: '检测 inotifywait/fswatch 等文件变化监听行为',
+  scan: (c, f) => findMatches(c, /\b(inotifywait|inotifywatch|fswatch|watchman|entr)\b/gi),
+}
+
+/** MEDIUM-12: 时间炸弹/延迟执行 — 延迟触发恶意代码 */
+const ruleTimeBomb: ScanRule = {
+  id: 'time-bomb',
+  category: '时间炸弹',
+  level: 'medium',
+  description: '检测 sleep + 后台执行、at/cron 调度等延迟触发行为',
+  scan: (c, f) => findMatches(c, /\bsleep\s+\d{3,}|nohup\s+.*&|\bat\s+\d{1,2}:\d{2}|\bat\s+now\s+\+|\bbg\b.*\bdisown\b/gi),
+}
+
+/** MEDIUM-13: GPG/加密载荷 — 加密后外发数据 */
+const ruleEncryptedPayload: ScanRule = {
+  id: 'encrypted-payload',
+  category: '加密载荷',
+  level: 'medium',
+  description: '检测使用 GPG/age/openssl 加密数据（可能用于隐蔽外发）',
+  scan: (c, f) => findMatches(c, /\bgpg\s+(-e|--encrypt)|\bage\s+(-e|--encrypt)|\bopenssl\s+(enc|aes|rsa)\b/gi),
+}
+
 // ─── MEDIUM（7 项）────────────────────────────────
 
 const ruleBase64Payload: ScanRule = {
@@ -378,10 +512,12 @@ const ruleVersionCheck: ScanRule = {
 const ALL_RULES: ScanRule[] = [
   // CRITICAL
   ruleRemoteExec, ruleInjection, ruleSecrets, ruleCredentialTheft, ruleReverseShell, rulePromptInjection,
-  // HIGH
+  // HIGH（原有 + 新增）
   ruleExfiltration, rulePersistence, rulePrivilegeEscalation, ruleObfuscation, ruleMemoryAccess, ruleBrowserTheft, ruleSilentInstall,
-  // MEDIUM
+  ruleCliExfiltration, ruleDnsTunnel, ruleNetworkSniffing, ruleContainerEscape, ruleSupplyChain,
+  // MEDIUM（原有 + 新增）
   ruleBase64Payload, ruleAnomalousNetwork, ruleRawIP, ruleHighEntropy, ruleDangerousShell, ruleEnvReading, ruleFileOverreach, ruleProcessOps,
+  ruleWebhookExfil, ruleScreenCapture, ruleFsWatch, ruleTimeBomb, ruleEncryptedPayload,
   // LOW
   ruleHiddenChars, rulePermissionMismatch,
 ]
