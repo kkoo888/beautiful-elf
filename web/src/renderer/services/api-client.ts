@@ -1,12 +1,20 @@
+/**
+ * HTTP 客户端
+ *
+ * 后端 CamelModel 已统一返回 camelCase，前端全链路 camelCase。
+ * 请求/响应拦截器仅保留 trace_id 注入和错误处理，不做字段名转换。
+ *
+ * @see http-client skill — interceptors, error handling, security patterns
+ */
+
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
-import { camelToSnake, snakeToCamel } from '@/utils'
 import { handleApiError } from './api-error'
 import type { ApiResponse } from '@/types'
 
 /**
  * Axios 实例
- * 含请求/响应拦截器、camelCase↔snake_case 转换、trace_id 注入
+ * baseURL + timeout + JSON headers
  */
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}${API_PREFIX}`,
@@ -16,34 +24,23 @@ const apiClient: AxiosInstance = axios.create({
   },
 })
 
-// 请求拦截器：camelCase → snake_case + trace_id 注入
+// ── 请求拦截器 ─────────────────────────────────────────────
+// 注入 trace_id，便于全链路追踪。不做 camelToSnake 转换（后端已支持 camelCase）。
+
 apiClient.interceptors.request.use(
   (config) => {
-    // 字段名转换：camelCase → snake_case
-    if (config.data && typeof config.data === 'object') {
-      config.data = camelToSnake(config.data)
-    }
-
-    // 生成 trace_id 并注入请求头
-    const traceId = crypto.randomUUID()
-    config.headers['X-Trace-Id'] = traceId
-
+    config.headers['X-Trace-Id'] = crypto.randomUUID()
     return config
   },
   (error) => Promise.reject(error)
 )
 
-// 响应拦截器：snake_case → camelCase + 错误处理
+// ── 响应拦截器 ─────────────────────────────────────────────
+// 统一错误处理。不做 snakeToCamel 转换（后端 CamelModel 已返回 camelCase）。
+
 apiClient.interceptors.response.use(
-  (response: AxiosResponse<ApiResponse<unknown>>) => {
-    // 字段名转换：snake_case → camelCase
-    if (response.data && typeof response.data === 'object') {
-      response.data = snakeToCamel(response.data) as ApiResponse<unknown>
-    }
-    return response
-  },
+  (response: AxiosResponse<ApiResponse<unknown>>) => response,
   (error) => {
-    // 统一错误处理
     const message = handleApiError(error)
     return Promise.reject(new Error(message))
   }

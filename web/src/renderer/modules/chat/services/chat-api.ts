@@ -1,8 +1,8 @@
 /**
  * 聊天 API 服务
  *
- * 对接后端会话（conversation）和消息（message）管理接口。
- * AI 对话接口后端暂未实现，保留 mock 并标注 TODO。
+ * 后端 CamelModel 已统一返回 camelCase，直接透传。
+ * 类型转换仅做 id: number→string 等业务适配。
  */
 
 import { apiClient } from '@/services/api-client'
@@ -16,33 +16,9 @@ import type {
   ChatMessage,
 } from '../types/chat'
 
-// ── 后端类型（snakeToCamel 拦截器已转换为 camelCase）─────────
+// ── 转换函数（业务适配，非字段名转换）────────────────────────
 
-interface BackendConversation {
-  id: number
-  title: string
-  modelName: string
-  messageCount: number
-  lastMessageAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-interface BackendMessage {
-  id: number
-  conversationId: number
-  role: string
-  content: string
-  toolCalls: any
-  toolCallId: string | null
-  tokenCount: number
-  createdAt: string
-  updatedAt: string
-}
-
-// ── 转换函数 ─────────────────────────────────────────────────
-
-function toFrontendConversation(item: BackendConversation): Conversation {
+function toFrontendConversation(item: any): Conversation {
   return {
     id: String(item.id),
     title: item.title || '新会话',
@@ -53,7 +29,7 @@ function toFrontendConversation(item: BackendConversation): Conversation {
   }
 }
 
-function toFrontendMessage(item: BackendMessage): ChatMessage {
+function toFrontendMessage(item: any): ChatMessage {
   return {
     id: String(item.id),
     conversationId: String(item.conversationId),
@@ -64,7 +40,7 @@ function toFrontendMessage(item: BackendMessage): ChatMessage {
   }
 }
 
-// ── 会话管理 API（真实接口）────────────────────────────────────
+// ── 会话管理 API ─────────────────────────────────────────────
 
 /** 获取会话列表 */
 export async function fetchConversations(params?: {
@@ -72,7 +48,7 @@ export async function fetchConversations(params?: {
   pageSize?: number
 }): Promise<{ items: Conversation[]; total: number }> {
   const resp = await apiClient.get('/conversations', {
-    params: { page: params?.page ?? 1, page_size: params?.pageSize ?? 50 },
+    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
   })
   const body = resp.data as any
   return {
@@ -88,9 +64,7 @@ export async function createConversation(title?: string): Promise<Conversation> 
     modelName: '',
   })
   const raw = (resp.data as any)?.data
-  if (!raw) {
-    throw new Error('创建会话失败：后端返回数据为空')
-  }
+  if (!raw) throw new Error('创建会话失败：后端返回数据为空')
   return toFrontendConversation(raw)
 }
 
@@ -110,7 +84,7 @@ export async function deleteConversationApi(id: string): Promise<void> {
   await apiClient.delete(`/conversations/${id}`)
 }
 
-// ── 消息管理 API（真实接口）────────────────────────────────────
+// ── 消息管理 API ─────────────────────────────────────────────
 
 /** 获取会话消息列表 */
 export async function fetchMessages(
@@ -119,9 +93,9 @@ export async function fetchMessages(
 ): Promise<{ items: ChatMessage[]; total: number }> {
   const resp = await apiClient.get('/messages', {
     params: {
-      conversation_id: conversationId,
+      conversationId,
       page: params?.page ?? 1,
-      page_size: params?.pageSize ?? 50,
+      pageSize: params?.pageSize ?? 50,
     },
   })
   const body = resp.data as any
@@ -147,16 +121,12 @@ export async function saveMessage(
   return toFrontendMessage((resp.data as any).data)
 }
 
-// ── AI 对话 API（真实接口）────────────────────────────────────
+// ── AI 对话 API ──────────────────────────────────────────────
 
-/**
- * 发送非流式聊天请求
- */
+/** 发送非流式聊天请求 */
 export async function chat(request: ChatRequest): Promise<ChatResponse> {
-  // 保存用户消息
   await saveMessage(request.conversationId, 'user', request.message)
 
-  // 调用后端对话接口
   const resp = await apiClient.post(
     `/conversations/${request.conversationId}/chat`,
     {
@@ -190,7 +160,6 @@ export function chatStream(
   const controller = new AbortController()
   const messageId = crypto.randomUUID()
 
-  // 保存用户消息（异步，不阻塞）
   saveMessage(request.conversationId, 'user', request.message).catch(() => {})
 
   const doStream = async (): Promise<void> => {
@@ -267,14 +236,10 @@ export function chatStream(
 
   doStream()
 
-  return {
-    abort: () => controller.abort(),
-  }
+  return { abort: () => controller.abort() }
 }
 
-/**
- * 提交反馈
- */
+/** 提交反馈 */
 export async function submitFeedback(request: FeedbackRequest): Promise<FeedbackResponse> {
   // TODO: 对接后端反馈接口
   console.log('[Feedback]', request)

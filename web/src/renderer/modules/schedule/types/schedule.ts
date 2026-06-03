@@ -28,7 +28,7 @@ export const REMINDER_OPTIONS = [
 /** 日历视图模式 */
 export type CalendarViewMode = 'month' | 'week' | 'day'
 
-/** 日程表单输入（前端用 camelCase，提交时拦截器转 snake_case） */
+/** 日程表单输入（前端统一 camelCase，后端 CamelModel 已支持） */
 export interface ScheduleFormInput {
   title: string
   description?: string

@@ -1,4 +1,9 @@
-/** 日程 API 服务（mock 实现，后续替换为真实 API） */
+/**
+ * 日程 API 服务
+ *
+ * 后端 CamelModel 已统一返回 camelCase，请求/响应直接透传。
+ * mock 数据也统一为 camelCase。
+ */
 
 import { apiClient } from '@/services/api-client'
 import type { Schedule } from '@/types'
@@ -25,7 +30,7 @@ const mockSchedules: Schedule[] = [
     reminderMinutes: 15,
     color: '#3b82f6',
     repeatType: 2,
-    deleted: 0,
+    isDeleted: 0,
     createdAt: iso(new Date(today.getTime() - 7 * 86400_000)),
     updatedAt: iso(today),
   },
@@ -39,7 +44,7 @@ const mockSchedules: Schedule[] = [
     reminderMinutes: 1440,
     color: '#ef4444',
     repeatType: 0,
-    deleted: 0,
+    isDeleted: 0,
     createdAt: iso(new Date(today.getTime() - 14 * 86400_000)),
     updatedAt: iso(today),
   },
@@ -53,7 +58,7 @@ const mockSchedules: Schedule[] = [
     reminderMinutes: 30,
     color: '#22c55e',
     repeatType: 0,
-    deleted: 0,
+    isDeleted: 0,
     createdAt: iso(new Date(today.getTime() - 86400_000)),
     updatedAt: iso(today),
   },
@@ -66,7 +71,7 @@ const mockSchedules: Schedule[] = [
     reminderMinutes: 10,
     color: '#a855f7',
     repeatType: 1,
-    deleted: 0,
+    isDeleted: 0,
     createdAt: iso(new Date(today.getTime() - 30 * 86400_000)),
     updatedAt: iso(today),
   },
@@ -79,7 +84,7 @@ const mockSchedules: Schedule[] = [
     reminderMinutes: 5,
     color: '#06b6d4',
     repeatType: 0,
-    deleted: 0,
+    isDeleted: 0,
     createdAt: iso(today),
     updatedAt: iso(today),
   },
@@ -92,7 +97,7 @@ const mockSchedules: Schedule[] = [
     reminderMinutes: 30,
     color: '#ec4899',
     repeatType: 1,
-    deleted: 0,
+    isDeleted: 0,
     createdAt: iso(new Date(today.getTime() - 30 * 86400_000)),
     updatedAt: iso(today),
   },
@@ -105,7 +110,7 @@ const mockSchedules: Schedule[] = [
     reminderMinutes: 60,
     color: '#f97316',
     repeatType: 0,
-    deleted: 0,
+    isDeleted: 0,
     createdAt: iso(today),
     updatedAt: iso(today),
   },
@@ -118,7 +123,7 @@ const mockSchedules: Schedule[] = [
     reminderMinutes: 1440,
     color: '#ec4899',
     repeatType: 0,
-    deleted: 0,
+    isDeleted: 0,
     createdAt: iso(today),
     updatedAt: iso(today),
   },
@@ -135,7 +140,6 @@ function delay(ms = 300): Promise<void> {
 /** 获取日程列表 */
 export async function fetchSchedules(params?: ScheduleQueryParams): Promise<Schedule[]> {
   await delay()
-  // 尝试真实 API，失败则用 mock
   try {
     const { data } = await apiClient.get('/schedules', { params })
     return (data as { data: Schedule[] }).data
@@ -178,7 +182,7 @@ export async function createSchedule(input: ScheduleFormInput): Promise<Schedule
       reminderMinutes: input.reminderMinutes,
       color: input.color,
       repeatType: input.repeat === 'daily' ? 1 : input.repeat === 'weekly' ? 2 : input.repeat === 'monthly' ? 3 : 0,
-      deleted: 0,
+      isDeleted: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -221,7 +225,7 @@ export async function deleteSchedule(id: string): Promise<void> {
   } catch {
     const idx = mockStore.findIndex((s) => s.id === id)
     if (idx !== -1) {
-      mockStore[idx] = { ...mockStore[idx], deleted: 1, updatedAt: new Date().toISOString() }
+      mockStore[idx] = { ...mockStore[idx], isDeleted: 1, updatedAt: new Date().toISOString() }
     }
   }
 }

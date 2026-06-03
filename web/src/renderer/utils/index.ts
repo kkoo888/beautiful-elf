@@ -15,6 +15,9 @@ export { encrypt, decrypt } from './crypto'
 
 /**
  * camelCase 转 snake_case（深层递归，支持数组）
+ *
+ * @deprecated 后端 CamelModel 已统一返回 camelCase，不再需要字段名转换。
+ *             保留此函数仅供对接第三方 snake_case API 时使用。
  */
 export function camelToSnake(obj: unknown): unknown {
   if (Array.isArray(obj)) return obj.map(camelToSnake)
@@ -31,6 +34,9 @@ export function camelToSnake(obj: unknown): unknown {
 
 /**
  * snake_case 转 camelCase（深层递归，支持数组）
+ *
+ * @deprecated 后端 CamelModel 已统一返回 camelCase，不再需要字段名转换。
+ *             保留此函数仅供对接第三方 snake_case API 时使用。
  */
 export function snakeToCamel(obj: unknown): unknown {
   if (Array.isArray(obj)) return obj.map(snakeToCamel)

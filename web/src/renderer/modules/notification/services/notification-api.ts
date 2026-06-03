@@ -1,3 +1,9 @@
+/**
+ * 通知 API 服务
+ *
+ * 后端 CamelModel 已统一返回 camelCase，直接透传。
+ */
+
 import { apiClient } from '@/services/api-client'
 import type { Notification, NotificationType } from '../types/notification'
 

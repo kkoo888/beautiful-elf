@@ -1,34 +1,12 @@
+/**
+ * 代码片段 API 服务
+ *
+ * 后端 CamelModel 已统一返回 camelCase，直接透传。
+ */
+
 import { apiClient } from '@/services/api-client'
 import type { PaginatedResponse } from '@/types'
 import type { Snippet, SnippetFormData, SnippetQueryParams } from '../types/snippets'
-
-// ── 类型映射：后端 snake_case ↔ 前端 camelCase ──────────────────
-
-interface BackendSnippet {
-  id: number
-  title: string
-  content: string
-  language: string
-  use_count: number
-  tags: string[]
-  created_at: string
-  updated_at: string
-}
-
-function toFrontend(item: BackendSnippet): Snippet {
-  return {
-    id: String(item.id),
-    title: item.title,
-    content: item.content,
-    language: item.language,
-    tags: item.tags ?? [],
-    useCount: item.use_count ?? 0,
-    createdAt: item.created_at,
-    updatedAt: item.updated_at,
-  }
-}
-
-// ── API 函数 ──────────────────────────────────────────────────
 
 /** 获取片段列表 */
 export async function fetchSnippets(
@@ -37,12 +15,21 @@ export async function fetchSnippets(
   const resp = await apiClient.get('/snippets', {
     params: {
       page: params?.page ?? 1,
-      page_size: params?.pageSize ?? 20,
+      pageSize: params?.pageSize ?? 20,
       tag: params?.tags?.[0], // 后端只支持单 tag 过滤
     },
   })
   const body = resp.data as any
-  let items: Snippet[] = (body.data ?? []).map(toFrontend)
+  let items: Snippet[] = (body.data ?? []).map((item: any) => ({
+    id: String(item.id),
+    title: item.title,
+    content: item.content,
+    language: item.language,
+    tags: item.tags ?? [],
+    useCount: item.useCount ?? 0,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  }))
 
   // 前端关键词过滤（后端暂不支持 keyword）
   if (params?.keyword) {
@@ -67,7 +54,7 @@ export async function fetchSnippets(
     items,
     total: body.total ?? items.length,
     page: body.page ?? params?.page ?? 1,
-    pageSize: body.page_size ?? params?.pageSize ?? 20,
+    pageSize: body.pageSize ?? params?.pageSize ?? 20,
   }
 }
 
@@ -79,7 +66,8 @@ export async function createSnippet(data: SnippetFormData): Promise<Snippet> {
     language: data.language,
     tags: data.tags,
   })
-  return toFrontend((resp.data as any).data)
+  const raw = (resp.data as any).data
+  return { ...raw, id: String(raw.id) }
 }
 
 /** 更新片段 */
@@ -90,7 +78,8 @@ export async function updateSnippet(id: string, data: SnippetFormData): Promise<
     language: data.language,
     tags: data.tags,
   })
-  return toFrontend((resp.data as any).data)
+  const raw = (resp.data as any).data
+  return { ...raw, id: String(raw.id) }
 }
 
 /** 删除片段 */
@@ -105,10 +94,9 @@ export async function recordSnippetUse(id: string): Promise<void> {
 
 /** 获取所有已用标签（前端聚合，后端无此接口） */
 export async function fetchAllTags(): Promise<string[]> {
-  // 从全量列表中聚合标签
-  const resp = await apiClient.get('/snippets', { params: { page: 1, page_size: 100 } })
+  const resp = await apiClient.get('/snippets', { params: { page: 1, pageSize: 100 } })
   const body = resp.data as any
-  const items: BackendSnippet[] = body.data ?? []
+  const items: any[] = body.data ?? []
   const tags = new Set<string>()
   items.forEach((s) => (s.tags ?? []).forEach((t: string) => tags.add(t)))
   return Array.from(tags).sort()

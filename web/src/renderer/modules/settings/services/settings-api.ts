@@ -1,4 +1,9 @@
-/** 设置系统 API 服务（对接后端 config + soul_config 接口） */
+/**
+ * 设置系统 API 服务
+ *
+ * 后端 CamelModel 已统一返回 camelCase，直接透传。
+ * camelToSnake/snakeToCamel 转换已移除。
+ */
 
 import { apiClient } from '@/services/api-client'
 import type { AppSettings, SoulConfig, OllamaModel, ConnectionTestResult } from '../types/settings'
@@ -40,35 +45,9 @@ const DEFAULT_SOUL: SoulConfig = {
   backgroundStory: '',
 }
 
-// ── 后端类型 ─────────────────────────────────────────────────
-
-interface BackendConfigItem {
-  id: number
-  key: string
-  value: string
-  description: string
-  created_at: string
-  updated_at: string
-}
-
-interface BackendSoulConfig {
-  id: number
-  name: string
-  avatar: string
-  personality: string[]
-  speaking_style: string
-  emotional_tendency: number
-  background_story: string
-  is_active: number
-  created_at: string
-  updated_at: string
-}
-
-// ── 转换函数 ─────────────────────────────────────────────────
+// ── 转换函数（业务映射，非字段名转换）────────────────────────
 
 function toFrontendSoul(data: Record<string, unknown>): SoulConfig {
-  // 响应拦截器已将 snake_case 转 camelCase:
-  //   avatar_url → avatarUrl, speaking_style → speakingStyle, background → background
   return {
     name: (data.name as string) ?? '',
     avatar: (data.avatarUrl as string) ?? '',
@@ -81,15 +60,11 @@ function toFrontendSoul(data: Record<string, unknown>): SoulConfig {
 
 // ── API 函数 ─────────────────────────────────────────────────
 
-/**
- * 获取应用设置
- * 后端用 key-value 存储，我们将整个 settings 存为 key="app_settings"
- */
+/** 获取应用设置 */
 export async function getSettings(): Promise<AppSettings> {
   try {
     const resp = await apiClient.get('/configs/app_settings')
-    const item = (resp.data as any).data as BackendConfigItem
-    // 响应拦截器已将 snake_case 转 camelCase: key_value → keyValue
+    const item = (resp.data as any).data
     if (item?.keyValue) {
       return { ...DEFAULT_SETTINGS, ...JSON.parse(item.keyValue) }
     }
@@ -99,9 +74,7 @@ export async function getSettings(): Promise<AppSettings> {
   return { ...DEFAULT_SETTINGS }
 }
 
-/**
- * 保存应用设置（部分更新）
- */
+/** 保存应用设置（部分更新） */
 export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings()
   const merged: AppSettings = {
@@ -113,13 +86,11 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
   const jsonStr = JSON.stringify(merged)
 
   try {
-    // 尝试更新
     await apiClient.put('/configs/app_settings', {
       keyValue: jsonStr,
       description: '应用设置（JSON）',
     })
   } catch {
-    // 不存在则创建
     await apiClient.post('/configs', {
       settingsKey: 'app_settings',
       keyValue: jsonStr,
@@ -130,9 +101,7 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
   return merged
 }
 
-/**
- * 获取灵魂配置
- */
+/** 获取灵魂配置 */
 export async function getSoulConfig(): Promise<SoulConfig> {
   try {
     const resp = await apiClient.get('/soul_configs/active')
@@ -142,13 +111,8 @@ export async function getSoulConfig(): Promise<SoulConfig> {
   }
 }
 
-/**
- * 保存灵魂配置
- * 先尝试查找已有的活跃配置来更新，没有则创建
- */
+/** 保存灵魂配置 */
 export async function saveSoulConfig(config: SoulConfig): Promise<SoulConfig> {
-  // 请求拦截器会自动 camelCase → snake_case
-  // 后端字段: name, avatar_url, personality, speaking_style, background, system_prompt
   const payload = {
     name: config.name,
     avatarUrl: config.avatar,
@@ -158,21 +122,16 @@ export async function saveSoulConfig(config: SoulConfig): Promise<SoulConfig> {
     systemPrompt: '',
   }
   try {
-    // 尝试获取当前活跃配置
     const resp = await apiClient.get('/soul_configs/active')
-    const existing = (resp.data as any).data as BackendSoulConfig
+    const existing = (resp.data as any).data
     await apiClient.put(`/soul_configs/${existing.id}`, payload)
   } catch {
-    // 没有活跃配置，创建新的
     await apiClient.post('/soul_configs', payload)
   }
   return config
 }
 
-/**
- * 测试 Ollama 连接
- * 前端本地测试，不走后端
- */
+/** 测试 Ollama 连接 */
 export async function testConnection(baseUrl: string): Promise<ConnectionTestResult> {
   try {
     const controller = new AbortController()
@@ -188,9 +147,7 @@ export async function testConnection(baseUrl: string): Promise<ConnectionTestRes
   }
 }
 
-/**
- * 获取可用模型列表
- */
+/** 获取可用模型列表 */
 export async function fetchModels(baseUrl?: string): Promise<OllamaModel[]> {
   const url = baseUrl ?? 'http://localhost:11434'
   try {
@@ -208,56 +165,41 @@ export async function fetchModels(baseUrl?: string): Promise<OllamaModel[]> {
 }
 
 // ── 大模型供应商 API ─────────────────────────────────────────
-// 注意：api-client 已自动将 snake_case 响应转为 camelCase，无需手动映射
 
 import type { LLMProvider, LLMProviderPayload } from '../types/settings'
 
-/**
- * 获取所有供应商列表
- */
+/** 获取所有供应商列表 */
 export async function getProviders(): Promise<LLMProvider[]> {
-  const resp = await apiClient.get('/llm_providers', { params: { page: 1, page_size: 100 } })
+  const resp = await apiClient.get('/llm_providers', { params: { page: 1, pageSize: 100 } })
   const data = (resp.data as any).data
-  // ok_page 格式: { items, total, page, pageSize }
-  const items = data?.items ?? data ?? []
-  return items
+  return data?.items ?? data ?? []
 }
 
-/**
- * 获取所有启用的供应商
- */
+/** 获取所有启用的供应商 */
 export async function getEnabledProviders(): Promise<LLMProvider[]> {
   const resp = await apiClient.get('/llm_providers/enabled')
   return (resp.data as any).data ?? []
 }
 
-/**
- * 创建供应商
- */
+/** 创建供应商 */
 export async function createProvider(payload: LLMProviderPayload): Promise<LLMProvider> {
   const resp = await apiClient.post('/llm_providers', payload)
   return (resp.data as any).data
 }
 
-/**
- * 更新供应商
- */
+/** 更新供应商 */
 export async function updateProvider(id: number, payload: Partial<LLMProviderPayload>): Promise<LLMProvider> {
   const resp = await apiClient.put(`/llm_providers/${id}`, payload)
   return (resp.data as any).data
 }
 
-/**
- * 切换供应商启用/禁用状态
- */
+/** 切换供应商启用/禁用状态 */
 export async function toggleProvider(id: number): Promise<LLMProvider> {
   const resp = await apiClient.put(`/llm_providers/${id}/toggle`)
   return (resp.data as any).data
 }
 
-/**
- * 删除供应商
- */
+/** 删除供应商 */
 export async function deleteProvider(id: number): Promise<void> {
   await apiClient.delete(`/llm_providers/${id}`)
 }

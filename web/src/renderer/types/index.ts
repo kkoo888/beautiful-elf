@@ -1,8 +1,7 @@
 /**
  * 类型定义统一导出
  *
- * 命名规约：前端统一 camelCase，API 拦截器自动转换 snake_case ↔ camelCase
- * 字段对齐：所有类型与数据库表结构一一对应（camelCase 版本）
+ * 命名规约：前后端全链路 camelCase，后端 CamelModel 自动映射。
  */
 
 // API 通用类型

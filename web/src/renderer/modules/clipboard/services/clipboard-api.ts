@@ -1,19 +1,14 @@
+/**
+ * 剪贴板 API 服务
+ *
+ * 后端 CamelModel 已统一返回 camelCase，直接透传，无需转换。
+ * contentType 映射（数字↔字符串）属于业务逻辑，保留。
+ */
+
 import { apiClient } from '@/services/api-client'
 import type { ClipboardItem, ClipboardListParams, ClipboardListResponse } from '../types/clipboard'
 
-// ── 类型映射：后端 snake_case ↔ 前端 camelCase ──────────────────
-
-interface BackendClipboardItem {
-  id: number
-  content: string
-  content_type: number
-  pinned: number
-  source_app: string
-  created_at: string | null
-  updated_at: string | null
-}
-
-/** 后端 content_type 数字 → 前端 contentType 字符串 */
+/** 后端 contentType 数字 → 前端字符串 */
 function mapContentType(ct: number): ClipboardItem['contentType'] {
   switch (ct) {
     case 1: return 'code'
@@ -23,7 +18,7 @@ function mapContentType(ct: number): ClipboardItem['contentType'] {
   }
 }
 
-/** 前端 contentType 字符串 → 后端 content_type 数字 */
+/** 前端 contentType 字符串 → 后端数字 */
 function unmapContentType(ct: ClipboardItem['contentType']): number {
   switch (ct) {
     case 'code': return 1
@@ -33,29 +28,23 @@ function unmapContentType(ct: ClipboardItem['contentType']): number {
   }
 }
 
-function toFrontend(item: BackendClipboardItem): ClipboardItem {
-  return {
-    id: String(item.id),
-    content: item.content,
-    contentType: mapContentType(item.content_type),
-    isPinned: item.pinned === 1,
-    copiedAt: item.updated_at ?? item.created_at ?? new Date().toISOString(),
-    createdAt: item.created_at ?? new Date().toISOString(),
-  }
-}
-
-// ── API 函数 ──────────────────────────────────────────────────
-
 /** 获取剪贴板列表 */
 export async function fetchClipboardList(
   params: ClipboardListParams = {}
 ): Promise<ClipboardListResponse> {
   const { page = 1, pageSize = 20, keyword } = params
   const resp = await apiClient.get('/clipboard_items', {
-    params: { page, page_size: pageSize },
+    params: { page, pageSize },
   })
   const body = resp.data as any
-  const items: ClipboardItem[] = (body.data ?? []).map(toFrontend)
+  const items: ClipboardItem[] = (body.data ?? []).map((item: any) => ({
+    id: String(item.id),
+    content: item.content,
+    contentType: mapContentType(item.contentType),
+    isPinned: item.pinned === 1,
+    copiedAt: item.updatedAt ?? item.createdAt ?? new Date().toISOString(),
+    createdAt: item.createdAt ?? new Date().toISOString(),
+  }))
 
   // 前端关键词过滤（后端暂不支持 keyword 搜索）
   let filtered = items
@@ -74,7 +63,7 @@ export async function fetchClipboardList(
     items: filtered,
     total: body.total ?? filtered.length,
     page: body.page ?? page,
-    pageSize: body.page_size ?? pageSize,
+    pageSize: body.pageSize ?? pageSize,
   }
 }
 
@@ -84,9 +73,15 @@ export async function createClipboardItem(
 ): Promise<ClipboardItem> {
   const resp = await apiClient.post('/clipboard_items', {
     content: data.content,
-    content_type: unmapContentType(data.contentType),
+    contentType: unmapContentType(data.contentType),
   })
-  return toFrontend((resp.data as any).data)
+  const raw = (resp.data as any).data
+  return {
+    ...raw,
+    id: String(raw.id),
+    contentType: mapContentType(raw.contentType),
+    isPinned: raw.pinned === 1,
+  }
 }
 
 /** 删除剪贴板条目 */
@@ -97,5 +92,11 @@ export async function deleteClipboardItem(id: string): Promise<void> {
 /** 固定/取消固定 */
 export async function togglePinClipboardItem(id: string): Promise<ClipboardItem> {
   const resp = await apiClient.put(`/clipboard_items/${id}/pin`)
-  return toFrontend((resp.data as any).data)
+  const raw = (resp.data as any).data
+  return {
+    ...raw,
+    id: String(raw.id),
+    contentType: mapContentType(raw.contentType),
+    isPinned: raw.pinned === 1,
+  }
 }

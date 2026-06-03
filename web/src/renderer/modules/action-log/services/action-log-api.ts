@@ -1,3 +1,9 @@
+/**
+ * 操作日志 API 服务
+ *
+ * 后端 CamelModel 已统一返回 camelCase，请求参数也用 camelCase。
+ */
+
 import { apiClient } from '@/services/api-client'
 import type { ActionLog } from '../types/action-log'
 
