@@ -16,7 +16,7 @@ export async function fetchSnippets(params?: SnippetQueryParams): Promise<Pagina
   )
 
   let mapped: Snippet[] = items.map((item: any) => ({
-    id: String(item.id), title: item.title, content: item.content, language: item.language,
+    id: item.id, title: item.title, content: item.content, language: item.language,
     tags: item.tags ?? [], useCount: item.useCount ?? 0, createdAt: item.createdAt, updatedAt: item.updatedAt,
   }))
 
@@ -38,21 +38,21 @@ export async function createSnippet(data: SnippetFormData): Promise<Snippet> {
   const raw = extractData(await apiClient.post('/snippets', {
     title: data.title, content: data.content, language: data.language, tags: data.tags,
   })) as any
-  return { ...raw, id: String(raw.id) }
+  return raw
 }
 
-export async function updateSnippet(id: string, data: SnippetFormData): Promise<Snippet> {
+export async function updateSnippet(id: number, data: SnippetFormData): Promise<Snippet> {
   const raw = extractData(await apiClient.put(`/snippets/${id}`, {
     title: data.title, content: data.content, language: data.language, tags: data.tags,
   })) as any
-  return { ...raw, id: String(raw.id) }
+  return raw
 }
 
-export async function deleteSnippet(id: string): Promise<void> {
+export async function deleteSnippet(id: number): Promise<void> {
   await apiClient.delete(`/snippets/${id}`)
 }
 
-export async function recordSnippetUse(id: string): Promise<void> {
+export async function recordSnippetUse(id: number): Promise<void> {
   await apiClient.post(`/snippets/${id}/use`)
 }
 

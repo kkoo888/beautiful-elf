@@ -1,6 +1,6 @@
 /** 代码片段 */
 export interface Snippet {
-  id: string
+  id: number
   title: string
   content: string
   language: string
