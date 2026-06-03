@@ -68,7 +68,7 @@ export function SkillCard({ skill, onToggle, onClick, isToggling }: SkillCardPro
         </div>
 
         {/* 触发词标签 */}
-        {skill.triggerWords.length > 0 && (
+        {skill.triggerWords && skill.triggerWords.length > 0 && (
           <div className={styles.cardTags}>
             {skill.triggerWords.slice(0, 4).map((word) => (
               <Tag key={word} className={styles.tag} color="orange">

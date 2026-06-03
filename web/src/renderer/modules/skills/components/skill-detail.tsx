@@ -45,7 +45,7 @@ v${skill.version}
 
 ## 触发词
 
-${skill.triggerWords.map((w) => `- \`${w}\``).join('\n') || '无'}
+${(skill.triggerWords ?? []).map((w) => `- \`${w}\``).join('\n') || '无'}
 
 ## 使用示例
 
@@ -53,7 +53,7 @@ ${skill.triggerWords.map((w) => `- \`${w}\``).join('\n') || '无'}
 
 ## 依赖
 
-${skill.dependencies.length > 0 ? skill.dependencies.map((d) => `- ${d}`).join('\n') : '无外部依赖'}
+${(skill.dependencies ?? []).length > 0 ? (skill.dependencies ?? []).map((d) => `- ${d}`).join('\n') : '无外部依赖'}
 `
 }
 
@@ -113,13 +113,13 @@ export function SkillDetail({ open, skill, onClose, onRefine }: SkillDetailProps
         </div>
 
         {/* 依赖 */}
-        {skill.dependencies.length > 0 && (
+        {(skill.dependencies ?? []).length > 0 && (
           <div className={styles.detailSection}>
             <span className={styles.detailLabel}>
               <LinkOutlined /> 依赖
             </span>
             <div className={styles.dependencies}>
-              {skill.dependencies.map((dep) => (
+              {(skill.dependencies ?? []).map((dep) => (
                 <Tag key={dep} className={styles.depTag}>
                   {dep}
                 </Tag>
@@ -132,7 +132,7 @@ export function SkillDetail({ open, skill, onClose, onRefine }: SkillDetailProps
         <div className={styles.detailSection}>
           <span className={styles.detailLabel}>触发词</span>
           <div className={styles.dependencies}>
-            {skill.triggerWords.map((word) => (
+            {(skill.triggerWords ?? []).map((word) => (
               <Tag key={word} color="orange" className={styles.depTag}>
                 {word}
               </Tag>

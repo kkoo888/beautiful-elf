@@ -88,7 +88,7 @@ export function useSkills(): UseSkillsReturn {
       (s) =>
         s.name.toLowerCase().includes(kw) ||
         s.description.toLowerCase().includes(kw) ||
-        s.triggerWords.some((t) => t.toLowerCase().includes(kw))
+        (s.triggerWords ?? []).some((t) => t.toLowerCase().includes(kw))
     )
   }, [skills, keyword])
 
