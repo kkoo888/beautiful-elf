@@ -1,12 +1,12 @@
 /**
  * 设置系统 API 服务
  *
- * 后端 CamelModel 已统一返回 camelCase，直接透传。
- * camelToSnake/snakeToCamel 转换已移除。
+ * 使用 extractData 消除 as any。后端 CamelModel 已统一返回 camelCase。
  */
 
-import { apiClient } from '@/services/api-client'
+import { apiClient, extractData } from '@/services/api-client'
 import type { AppSettings, SoulConfig, OllamaModel, ConnectionTestResult } from '../types/settings'
+import type { LLMProvider, LLMProviderPayload } from '../types/settings'
 
 // ── 默认值 ──────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ const DEFAULT_SOUL: SoulConfig = {
   backgroundStory: '',
 }
 
-// ── 转换函数（业务映射，非字段名转换）────────────────────────
+// ── 转换函数（业务映射）─────────────────────────────────────
 
 function toFrontendSoul(data: Record<string, unknown>): SoulConfig {
   return {
@@ -63,10 +63,9 @@ function toFrontendSoul(data: Record<string, unknown>): SoulConfig {
 /** 获取应用设置 */
 export async function getSettings(): Promise<AppSettings> {
   try {
-    const resp = await apiClient.get('/configs/app_settings')
-    const item = (resp.data as any).data
+    const item = extractData(await apiClient.get('/configs/app_settings')) as Record<string, unknown>
     if (item?.keyValue) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(item.keyValue) }
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(item.keyValue as string) }
     }
   } catch {
     // key 不存在时返回默认值
@@ -104,8 +103,8 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
 /** 获取灵魂配置 */
 export async function getSoulConfig(): Promise<SoulConfig> {
   try {
-    const resp = await apiClient.get('/soul_configs/active')
-    return toFrontendSoul((resp.data as any).data)
+    const data = extractData(await apiClient.get('/soul_configs/active')) as Record<string, unknown>
+    return toFrontendSoul(data)
   } catch {
     return { ...DEFAULT_SOUL }
   }
@@ -122,8 +121,7 @@ export async function saveSoulConfig(config: SoulConfig): Promise<SoulConfig> {
     systemPrompt: '',
   }
   try {
-    const resp = await apiClient.get('/soul_configs/active')
-    const existing = (resp.data as any).data
+    const existing = extractData(await apiClient.get('/soul_configs/active')) as Record<string, unknown>
     await apiClient.put(`/soul_configs/${existing.id}`, payload)
   } catch {
     await apiClient.post('/soul_configs', payload)
@@ -166,37 +164,30 @@ export async function fetchModels(baseUrl?: string): Promise<OllamaModel[]> {
 
 // ── 大模型供应商 API ─────────────────────────────────────────
 
-import type { LLMProvider, LLMProviderPayload } from '../types/settings'
-
 /** 获取所有供应商列表 */
 export async function getProviders(): Promise<LLMProvider[]> {
-  const resp = await apiClient.get('/llm_providers', { params: { page: 1, pageSize: 100 } })
-  const data = (resp.data as any).data
+  const data = extractData(await apiClient.get('/llm_providers', { params: { page: 1, pageSize: 100 } })) as any
   return data?.items ?? data ?? []
 }
 
 /** 获取所有启用的供应商 */
 export async function getEnabledProviders(): Promise<LLMProvider[]> {
-  const resp = await apiClient.get('/llm_providers/enabled')
-  return (resp.data as any).data ?? []
+  return (extractData(await apiClient.get('/llm_providers/enabled')) as LLMProvider[]) ?? []
 }
 
 /** 创建供应商 */
 export async function createProvider(payload: LLMProviderPayload): Promise<LLMProvider> {
-  const resp = await apiClient.post('/llm_providers', payload)
-  return (resp.data as any).data
+  return extractData(await apiClient.post('/llm_providers', payload))
 }
 
 /** 更新供应商 */
 export async function updateProvider(id: number, payload: Partial<LLMProviderPayload>): Promise<LLMProvider> {
-  const resp = await apiClient.put(`/llm_providers/${id}`, payload)
-  return (resp.data as any).data
+  return extractData(await apiClient.put(`/llm_providers/${id}`, payload))
 }
 
 /** 切换供应商启用/禁用状态 */
 export async function toggleProvider(id: number): Promise<LLMProvider> {
-  const resp = await apiClient.put(`/llm_providers/${id}/toggle`)
-  return (resp.data as any).data
+  return extractData(await apiClient.put(`/llm_providers/${id}/toggle`))
 }
 
 /** 删除供应商 */

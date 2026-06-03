@@ -1,39 +1,42 @@
 /**
  * API 响应通用类型
+ *
+ * 后端 FastAPI + Pydantic CamelModel 统一返回 camelCase。
+ * 前端全链路 camelCase，无需字段名转换。
  */
 
 /** API 统一响应格式 */
 export interface ApiResponse<T> {
-  code: string
+  code: number
   message: string
   data: T
-  request_id: string
+  requestId?: string
 }
 
-/** 分页响应格式 */
+/** 分页响应格式（与后端 PaginatedResponse 对齐） */
 export interface PaginatedResponse<T> {
   items: T[]
   total: number
   page: number
-  page_size: number
+  pageSize: number
 }
 
 /** API 错误响应 */
 export interface ApiErrorResponse {
-  code: string
+  code: number
   message: string
   detail?: string
-  request_id: string
+  requestId?: string
 }
 
 /** 分页请求参数 */
 export interface PaginationParams {
   page?: number
-  page_size?: number
+  pageSize?: number
 }
 
 /** 排序参数 */
 export interface SortParams {
-  sort_by?: string
-  sort_order?: 'asc' | 'desc'
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
 }

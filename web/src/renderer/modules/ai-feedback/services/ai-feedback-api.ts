@@ -1,37 +1,28 @@
-import { apiClient } from '@/services/api-client'
+/**
+ * AI 反馈 API 服务
+ */
+
+import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type { AIFeedback, AIFeedbackStats } from '../types/ai_feedback'
 
 export async function createAIFeedback(data: {
-  conversationId: number | null
-  question: string
-  answer: string
-  feedbackType: number
-  reasonTags: string[] | null
-  reasonText: string
-  traceId: string
+  conversationId: number | null; question: string; answer: string
+  feedbackType: number; reasonTags: string[] | null; reasonText: string; traceId: string
 }): Promise<AIFeedback> {
-  const resp = await apiClient.post('/ai_feedback/', data)
-  return (resp.data as any).data
+  return extractData(await apiClient.post('/ai_feedback/', data))
 }
 
 export async function fetchAIFeedbacks(params: {
-  page?: number
-  pageSize?: number
-  feedbackType?: number
-} = {}): Promise<{ data: AIFeedback[]; total: number }> {
-  const resp = await apiClient.get('/ai_feedback/', { params })
-  return {
-    data: (resp.data as any).data,
-    total: (resp.data as any).total,
-  }
+  page?: number; pageSize?: number; feedbackType?: number
+} = {}): Promise<{ items: AIFeedback[]; total: number }> {
+  const { items, total } = extractPaginated(await apiClient.get('/ai_feedback/', { params }) as any)
+  return { items, total }
 }
 
 export async function fetchAIFeedbackById(id: number): Promise<AIFeedback> {
-  const resp = await apiClient.get(`/ai_feedback/${id}`)
-  return (resp.data as any).data
+  return extractData(await apiClient.get(`/ai_feedback/${id}`))
 }
 
 export async function fetchAIFeedbackStats(): Promise<AIFeedbackStats> {
-  const resp = await apiClient.get('/ai_feedback/stats')
-  return (resp.data as any).data
+  return extractData(await apiClient.get('/ai_feedback/stats'))
 }

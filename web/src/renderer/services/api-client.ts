@@ -2,15 +2,16 @@
  * HTTP 客户端
  *
  * 后端 CamelModel 已统一返回 camelCase，前端全链路 camelCase。
- * 请求/响应拦截器仅保留 trace_id 注入和错误处理，不做字段名转换。
+ * 提供统一的响应提取函数，消除 `as any` 类型逃逸。
  *
  * @see http-client skill — interceptors, error handling, security patterns
+ * @see fastapi skill — Pydantic CamelModel alias_generator=to_camel
  */
 
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 import { handleApiError } from './api-error'
-import type { ApiResponse } from '@/types'
+import type { ApiResponse, PaginatedResponse } from '@/types'
 
 /**
  * Axios 实例
@@ -46,4 +47,33 @@ apiClient.interceptors.response.use(
   }
 )
 
-export { apiClient }
+// ── 响应提取工具 ───────────────────────────────────────────
+
+/**
+ * 从 ApiResponse<T> 中提取 data 字段
+ *
+ * @example
+ * const user = extractData(await apiClient.get<User>('/users/1'))
+ */
+function extractData<T>(resp: AxiosResponse<ApiResponse<T>>): T {
+  return resp.data.data
+}
+
+/**
+ * 从分页 ApiResponse<T[]> 中提取 items + total
+ * 统一返回格式为 { items, total }，与后端 PaginatedResponse 对齐。
+ *
+ * @example
+ * const { items, total } = extractPaginated(await apiClient.get<User[]>('/users'))
+ */
+function extractPaginated<T>(resp: AxiosResponse<ApiResponse<T[]>>): PaginatedResponse<T> {
+  const body = resp.data
+  return {
+    items: body.data ?? [],
+    total: (body as any).total ?? (body as any).meta?.total ?? 0,
+    page: (body as any).page ?? 1,
+    pageSize: (body as any).pageSize ?? (body.data?.length ?? 0),
+  }
+}
+
+export { apiClient, extractData, extractPaginated }

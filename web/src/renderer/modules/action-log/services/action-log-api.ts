@@ -1,51 +1,30 @@
 /**
  * 操作日志 API 服务
- *
- * 后端 CamelModel 已统一返回 camelCase，请求参数也用 camelCase。
  */
 
-import { apiClient } from '@/services/api-client'
+import { apiClient, extractData } from '@/services/api-client'
 import type { ActionLog } from '../types/action-log'
 
-/** 操作日志列表查询参数 */
 export interface ActionLogListParams {
-  page?: number
-  pageSize?: number
-  module?: string
-  action?: string
-  startTime?: string
-  endTime?: string
+  page?: number; pageSize?: number; module?: string; action?: string; startTime?: string; endTime?: string
 }
 
-/** 操作日志列表响应 */
 export interface ActionLogListResponse {
-  data: ActionLog[]
-  total: number
-  page: number
-  pageSize: number
+  data: ActionLog[]; total: number; page: number; pageSize: number
 }
 
-/** 创建操作日志参数 */
 export interface CreateActionLogParams {
-  module: string
-  action: string
-  paramsSummary: string
-  sessionId: string
+  module: string; action: string; paramsSummary: string; sessionId: string
 }
 
-/** 创建操作日志 */
 export async function createActionLog(data: CreateActionLogParams): Promise<ActionLog> {
-  const resp = await apiClient.post('/action_logs', data)
-  return (resp.data as any).data
+  return extractData(await apiClient.post('/action_logs', data))
 }
 
-/** 获取操作日志列表 */
 export async function fetchActionLogs(params?: ActionLogListParams): Promise<ActionLogListResponse> {
-  const resp = await apiClient.get('/action_logs', { params })
-  return (resp.data as any).data
+  return extractData(await apiClient.get('/action_logs', { params })) as ActionLogListResponse
 }
 
-/** 清理旧日志 */
 export async function cleanupActionLogs(days: number): Promise<void> {
   await apiClient.delete('/action_logs/cleanup', { params: { days } })
 }

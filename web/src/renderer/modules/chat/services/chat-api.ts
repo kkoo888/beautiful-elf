@@ -1,24 +1,19 @@
 /**
  * 聊天 API 服务
  *
- * 后端 CamelModel 已统一返回 camelCase，直接透传。
+ * 使用 extractData / extractPaginated 消除 as any。
  * 类型转换仅做 id: number→string 等业务适配。
  */
 
-import { apiClient } from '@/services/api-client'
+import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type {
-  ChatRequest,
-  ChatResponse,
-  FeedbackRequest,
-  FeedbackResponse,
-  StreamToken,
-  Conversation,
-  ChatMessage,
+  ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse,
+  StreamToken, Conversation, ChatMessage,
 } from '../types/chat'
 
-// ── 转换函数（业务适配，非字段名转换）────────────────────────
+// ── 业务适配（id 类型转换）──────────────────────────────────
 
-function toFrontendConversation(item: any): Conversation {
+function adaptConversation(item: any): Conversation {
   return {
     id: String(item.id),
     title: item.title || '新会话',
@@ -29,7 +24,7 @@ function toFrontendConversation(item: any): Conversation {
   }
 }
 
-function toFrontendMessage(item: any): ChatMessage {
+function adaptMessage(item: any): ChatMessage {
   return {
     id: String(item.id),
     conversationId: String(item.conversationId),
@@ -44,39 +39,30 @@ function toFrontendMessage(item: any): ChatMessage {
 
 /** 获取会话列表 */
 export async function fetchConversations(params?: {
-  page?: number
-  pageSize?: number
+  page?: number; pageSize?: number
 }): Promise<{ items: Conversation[]; total: number }> {
-  const resp = await apiClient.get('/conversations', {
-    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
-  })
-  const body = resp.data as any
-  return {
-    items: (body.data ?? []).map(toFrontendConversation),
-    total: body.meta?.total ?? 0,
-  }
+  const { items, total } = extractPaginated(
+    await apiClient.get('/conversations', {
+      params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
+    }) as any
+  )
+  return { items: items.map(adaptConversation), total }
 }
 
 /** 创建会话 */
 export async function createConversation(title?: string): Promise<Conversation> {
-  const resp = await apiClient.post('/conversations', {
-    title: title ?? '新会话',
-    modelName: '',
-  })
-  const raw = (resp.data as any)?.data
+  const raw = extractData(await apiClient.post('/conversations', {
+    title: title ?? '新会话', modelName: '',
+  }))
   if (!raw) throw new Error('创建会话失败：后端返回数据为空')
-  return toFrontendConversation(raw)
+  return adaptConversation(raw)
 }
 
 /** 更新会话 */
-export async function updateConversation(
-  id: string,
-  data: { title?: string }
-): Promise<Conversation> {
-  const resp = await apiClient.put(`/conversations/${id}`, data)
-  const raw = (resp.data as any)?.data
+export async function updateConversation(id: string, data: { title?: string }): Promise<Conversation> {
+  const raw = extractData(await apiClient.put(`/conversations/${id}`, data))
   if (!raw) throw new Error('更新会话失败：后端返回数据异常')
-  return toFrontendConversation(raw)
+  return adaptConversation(raw)
 }
 
 /** 删除会话 */
@@ -88,37 +74,25 @@ export async function deleteConversationApi(id: string): Promise<void> {
 
 /** 获取会话消息列表 */
 export async function fetchMessages(
-  conversationId: string,
-  params?: { page?: number; pageSize?: number }
+  conversationId: string, params?: { page?: number; pageSize?: number }
 ): Promise<{ items: ChatMessage[]; total: number }> {
-  const resp = await apiClient.get('/messages', {
-    params: {
-      conversationId,
-      page: params?.page ?? 1,
-      pageSize: params?.pageSize ?? 50,
-    },
-  })
-  const body = resp.data as any
-  return {
-    items: (body.data ?? []).map(toFrontendMessage),
-    total: body.meta?.total ?? 0,
-  }
+  const { items, total } = extractPaginated(
+    await apiClient.get('/messages', {
+      params: { conversationId, page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
+    }) as any
+  )
+  return { items: items.map(adaptMessage), total }
 }
 
 /** 保存消息到后端 */
 export async function saveMessage(
-  conversationId: string,
-  role: 'user' | 'assistant' | 'system',
-  content: string,
-  tokenCount?: number
+  conversationId: string, role: 'user' | 'assistant' | 'system',
+  content: string, tokenCount?: number
 ): Promise<ChatMessage> {
-  const resp = await apiClient.post('/messages', {
-    conversationId: Number(conversationId),
-    role,
-    content,
-    tokenCount: tokenCount ?? 0,
-  })
-  return toFrontendMessage((resp.data as any).data)
+  const raw = extractData(await apiClient.post('/messages', {
+    conversationId: Number(conversationId), role, content, tokenCount: tokenCount ?? 0,
+  }))
+  return adaptMessage(raw)
 }
 
 // ── AI 对话 API ──────────────────────────────────────────────
@@ -126,25 +100,14 @@ export async function saveMessage(
 /** 发送非流式聊天请求 */
 export async function chat(request: ChatRequest): Promise<ChatResponse> {
   await saveMessage(request.conversationId, 'user', request.message)
-
-  const resp = await apiClient.post(
-    `/conversations/${request.conversationId}/chat`,
-    {
-      providerId: request.providerId,
-      modelName: request.modelName ?? '',
-      messages: [{ role: 'user', content: request.message }],
-      temperature: 0.7,
-      maxTokens: 2048,
-      stream: false,
-    }
-  )
-
-  const data = (resp.data as any).data
+  const data = extractData(await apiClient.post(`/conversations/${request.conversationId}/chat`, {
+    providerId: request.providerId, modelName: request.modelName ?? '',
+    messages: [{ role: 'user', content: request.message }],
+    temperature: 0.7, maxTokens: 2048, stream: false,
+  })) as any
   return {
-    id: crypto.randomUUID(),
-    content: data.content ?? '',
-    isCached: false,
-    model: data.model ?? '',
+    id: crypto.randomUUID(), content: data.content ?? '',
+    isCached: false, model: data.model ?? '',
   }
 }
 
@@ -164,31 +127,18 @@ export function chatStream(
 
   const doStream = async (): Promise<void> => {
     try {
-      const traceId = crypto.randomUUID()
-      const resp = await fetch(
-        `/api/v1/conversations/${request.conversationId}/chat`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Trace-Id': traceId,
-          },
-          body: JSON.stringify({
-            providerId: request.providerId,
-            modelName: request.modelName ?? '',
-            messages: [{ role: 'user', content: request.message }],
-            temperature: 0.7,
-            maxTokens: 2048,
-            stream: true,
-          }),
-          signal: controller.signal,
-        }
-      )
+      const resp = await fetch(`/api/v1/conversations/${request.conversationId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Trace-Id': crypto.randomUUID() },
+        body: JSON.stringify({
+          providerId: request.providerId, modelName: request.modelName ?? '',
+          messages: [{ role: 'user', content: request.message }],
+          temperature: 0.7, maxTokens: 2048, stream: true,
+        }),
+        signal: controller.signal,
+      })
 
-      if (!resp.ok) {
-        const errText = await resp.text()
-        throw new Error(`HTTP ${resp.status}: ${errText}`)
-      }
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
 
       const reader = resp.body?.getReader()
       if (!reader) throw new Error('No readable stream')
@@ -209,22 +159,13 @@ export function chatStream(
           if (!line.startsWith('data: ')) continue
           try {
             const data = JSON.parse(line.slice(6))
-            if (data.error) {
-              onError?.(new Error(data.error))
-              return
-            }
+            if (data.error) { onError?.(new Error(data.error)); return }
             if (data.content || data.done) {
-              onToken({
-                content: data.content ?? '',
-                done: data.done,
-                messageId: firstToken ? messageId : undefined,
-              })
+              onToken({ content: data.content ?? '', done: data.done, messageId: firstToken ? messageId : undefined })
               firstToken = false
             }
             if (data.done) return
-          } catch {
-            // skip malformed JSON
-          }
+          } catch { /* skip malformed JSON */ }
         }
       }
     } catch (err) {
@@ -235,7 +176,6 @@ export function chatStream(
   }
 
   doStream()
-
   return { abort: () => controller.abort() }
 }
 

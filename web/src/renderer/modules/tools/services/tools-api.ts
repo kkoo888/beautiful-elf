@@ -1,6 +1,8 @@
-/** 工具管理 API 服务 */
+/**
+ * 工具管理 API 服务
+ */
 
-import { apiClient } from '@/services/api-client'
+import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type {
   ToolInfo,
   ToolStats,
@@ -13,26 +15,21 @@ import type {
 
 /** 获取工具列表（分页） */
 export async function fetchTools(params?: ToolQueryParams): Promise<PaginatedResult<ToolInfo>> {
-  const resp = await apiClient.get('/tools', { params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, isEnabled: params?.isEnabled } })
-  const body = resp.data as any
-  return {
-    data: body.data,
-    total: body.total,
-    page: body.page,
-    pageSize: body.pageSize,
-  }
+  const resp = await apiClient.get('/tools', {
+    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, isEnabled: params?.isEnabled },
+  })
+  const { items, total, page, pageSize } = extractPaginated(resp as any)
+  return { data: items, total, page, pageSize }
 }
 
 /** 创建工具 */
 export async function createTool(input: CreateToolInput): Promise<ToolInfo> {
-  const resp = await apiClient.post('/tools', input)
-  return (resp.data as any).data
+  return extractData(await apiClient.post('/tools', input))
 }
 
 /** 更新工具 */
 export async function updateTool(id: string, input: UpdateToolInput): Promise<ToolInfo> {
-  const resp = await apiClient.put(`/tools/${id}`, input)
-  return (resp.data as any).data
+  return extractData(await apiClient.put(`/tools/${id}`, input))
 }
 
 /** 删除工具 */
@@ -42,20 +39,17 @@ export async function deleteTool(id: string): Promise<void> {
 
 /** 启用工具 */
 export async function enableTool(id: string): Promise<ToolInfo> {
-  const resp = await apiClient.patch(`/tools/${id}/enable`)
-  return (resp.data as any).data
+  return extractData(await apiClient.patch(`/tools/${id}/enable`))
 }
 
 /** 禁用工具 */
 export async function disableTool(id: string): Promise<ToolInfo> {
-  const resp = await apiClient.patch(`/tools/${id}/disable`)
-  return (resp.data as any).data
+  return extractData(await apiClient.patch(`/tools/${id}/disable`))
 }
 
 /** 获取工具统计 */
 export async function fetchToolStats(id: string): Promise<ToolStats> {
-  const resp = await apiClient.get(`/tools/${id}/stats`)
-  return (resp.data as any).data
+  return extractData(await apiClient.get(`/tools/${id}/stats`))
 }
 
 /** 记录工具调用 */
@@ -67,6 +61,5 @@ export async function recordToolCall(id: string, success: boolean, durationMs: n
 
 /** 获取工具统计汇总 */
 export async function fetchToolStatsSummary(): Promise<ToolStatsSummary> {
-  const resp = await apiClient.get('/tools/stats/summary')
-  return (resp.data as any).data
+  return extractData(await apiClient.get('/tools/stats/summary'))
 }
