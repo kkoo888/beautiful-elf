@@ -16,11 +16,11 @@ _service = NotificationService()
 async def list_notifications(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
-    type: Optional[str] = Query(default=None),
-    read: Optional[int] = Query(default=None),
+    notif_type: Optional[str] = Query(default=None, alias="type"),
+    read_status: Optional[int] = Query(default=None, alias="read"),
     db: AsyncSession = Depends(get_db),
 ):
-    items, total = await _service.list(db, page, page_size, type, read)
+    items, total = await _service.list(db, page, page_size, notif_type, read_status)
     return ok_page(items, total, page, page_size)
 
 
