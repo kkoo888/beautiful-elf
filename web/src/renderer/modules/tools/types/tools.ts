@@ -3,7 +3,7 @@
 /** 工具注册信息 */
 export interface ToolInfo {
   /** 工具 ID */
-  id: string
+  id: number
   /** 工具名称 */
   name: string
   /** 显示名称 */
@@ -15,7 +15,7 @@ export interface ToolInfo {
   /** JSON Schema */
   jsonSchema: Record<string, unknown>
   /** 是否启用 */
-  enabled: boolean
+  isEnabled: number
   /** 创建时间 */
   createdAt: string
   /** 更新时间 */
@@ -55,7 +55,7 @@ export type ToolStatus = 'active' | 'inactive' | 'error'
 export interface ToolQueryParams {
   page?: number
   pageSize?: number
-  enabled?: number
+  isEnabled?: number
 }
 
 /** 工具创建参数 */
