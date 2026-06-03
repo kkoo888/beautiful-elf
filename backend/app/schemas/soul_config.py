@@ -1,11 +1,11 @@
 """人格配置 Schema"""
 from typing import Optional, Any, List
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class SoulConfigCreate(BaseModel):
+class SoulConfigCreate(CamelModel):
     name: str = Field(..., max_length=128, description="助手名称")
     avatar_url: str = Field(default="", max_length=512, description="头像地址")
     personality: List[str] = Field(..., description="性格标签")
@@ -15,7 +15,7 @@ class SoulConfigCreate(BaseModel):
     is_active: int = Field(default=1, ge=0, le=1, description="是否激活")
 
 
-class SoulConfigUpdate(BaseModel):
+class SoulConfigUpdate(CamelModel):
     name: Optional[str] = Field(default=None, max_length=128, description="助手名称")
     avatar_url: Optional[str] = Field(default=None, max_length=512, description="头像地址")
     personality: Optional[List[str]] = Field(default=None, description="性格标签")

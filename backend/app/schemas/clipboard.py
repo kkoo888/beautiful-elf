@@ -1,33 +1,27 @@
 """剪贴板 Schema"""
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
-from app.schemas.base import CamelModel, to_camel
+from pydantic import Field
+from app.schemas.base import CamelModel
 
 
-class ClipboardItemCreate(BaseModel):
+class ClipboardItemCreate(CamelModel):
     """创建剪贴板条目"""
-    model_config = ConfigDict(populate_by_name=True)
-
     content: str
-    content_type: int = Field(0, alias="contentType")
-    source_app: str = Field("", alias="sourceApp")
+    content_type: int = Field(0)
+    source_app: str = Field("")
 
 
-class ClipboardItemUpdate(BaseModel):
+class ClipboardItemUpdate(CamelModel):
     """更新剪贴板条目"""
-    model_config = ConfigDict(populate_by_name=True)
-
     content: Optional[str] = None
-    content_type: Optional[int] = Field(None, alias="contentType")
-    source_app: Optional[str] = Field(None, alias="sourceApp")
+    content_type: Optional[int] = None
+    source_app: Optional[str] = None
 
 
-class ClipboardItemPin(BaseModel):
+class ClipboardItemPin(CamelModel):
     """固定/取消固定"""
-    model_config = ConfigDict(populate_by_name=True)
-
-    is_pinned: int = Field(..., alias="isPinned")
+    is_pinned: int
 
 
 class ClipboardItemOut(CamelModel):

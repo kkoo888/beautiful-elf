@@ -1,24 +1,20 @@
-"""会话管理 Schema — camelCase 请求/响应"""
+"""会话管理 Schema — 统一 camelCase"""
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class ConversationCreate(BaseModel):
+class ConversationCreate(CamelModel):
     """创建会话"""
-    model_config = ConfigDict(populate_by_name=True)
-
     title: str = Field(default="", max_length=256, description="会话标题")
-    model_name: str = Field(default="", max_length=128, description="对话模型", alias="modelName")
+    model_name: str = Field(default="", max_length=128, description="对话模型")
 
 
-class ConversationUpdate(BaseModel):
+class ConversationUpdate(CamelModel):
     """更新会话"""
-    model_config = ConfigDict(populate_by_name=True)
-
     title: Optional[str] = Field(default=None, max_length=256, description="会话标题")
-    model_name: Optional[str] = Field(default=None, max_length=128, description="对话模型", alias="modelName")
+    model_name: Optional[str] = Field(default=None, max_length=128, description="对话模型")
 
 
 class ConversationOut(CamelModel):

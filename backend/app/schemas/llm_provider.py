@@ -1,10 +1,10 @@
 """大模型供应商 Schema"""
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class LLMModelItem(BaseModel):
+class LLMModelItem(CamelModel):
     """模型列表中的单个模型"""
     id: str
     name: str
@@ -13,7 +13,7 @@ class LLMModelItem(BaseModel):
     supports_tools: bool = False
 
 
-class ProviderCreate(BaseModel):
+class ProviderCreate(CamelModel):
     """创建供应商"""
     name: str
     provider_type: str  # openai/claude/deepseek/ollama/custom
@@ -25,7 +25,7 @@ class ProviderCreate(BaseModel):
     description: str = ""
 
 
-class ProviderUpdate(BaseModel):
+class ProviderUpdate(CamelModel):
     """更新供应商"""
     name: Optional[str] = None
     provider_type: Optional[str] = None

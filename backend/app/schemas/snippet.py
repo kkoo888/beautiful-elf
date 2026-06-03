@@ -1,10 +1,10 @@
 """代码片段 Schema"""
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class SnippetCreate(BaseModel):
+class SnippetCreate(CamelModel):
     """创建代码片段"""
     title: str = Field(..., min_length=1, max_length=256, description="片段标题")
     content: str = Field(..., min_length=1, description="代码内容")
@@ -12,7 +12,7 @@ class SnippetCreate(BaseModel):
     tags: List[str] = Field(default_factory=list, description="标签列表")
 
 
-class SnippetUpdate(BaseModel):
+class SnippetUpdate(CamelModel):
     """更新代码片段"""
     title: Optional[str] = Field(None, min_length=1, max_length=256, description="片段标题")
     content: Optional[str] = Field(None, min_length=1, description="代码内容")
@@ -32,7 +32,7 @@ class SnippetOut(CamelModel):
     updated_at: str
 
 
-class SnippetQuery(BaseModel):
+class SnippetQuery(CamelModel):
     """代码片段查询参数"""
     language: Optional[str] = Field(None, description="按语言筛选")
     tag: Optional[str] = Field(None, description="按标签筛选")

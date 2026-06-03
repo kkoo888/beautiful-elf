@@ -1,11 +1,11 @@
 """AI 回答反馈 Schema"""
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class AIFeedbackCreate(BaseModel):
+class AIFeedbackCreate(CamelModel):
     conversation_id: Optional[int] = Field(default=None, description="会话 ID")
     question: str = Field(..., description="用户问题")
     answer: str = Field(..., description="AI 回答")

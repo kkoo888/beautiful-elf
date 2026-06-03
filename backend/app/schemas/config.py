@@ -1,10 +1,9 @@
 """配置管理 Schema"""
 from typing import Optional
-from pydantic import BaseModel
 from app.schemas.base import CamelModel
 
 
-class SettingCreate(BaseModel):
+class SettingCreate(CamelModel):
     """创建配置"""
     settings_key: str
     key_value: str
@@ -12,7 +11,7 @@ class SettingCreate(BaseModel):
     restart_required: int = 0
 
 
-class SettingUpdate(BaseModel):
+class SettingUpdate(CamelModel):
     """更新配置"""
     key_value: Optional[str] = None
     description: Optional[str] = None

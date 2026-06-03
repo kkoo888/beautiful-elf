@@ -1,11 +1,10 @@
 """备份管理 Schema"""
-from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class BackupCreate(BaseModel):
+class BackupCreate(CamelModel):
     backup_type: int = Field(..., ge=0, le=2, description="备份类型: 0=MySQL, 1=Redis, 2=全量")
     file_path: str = Field(..., max_length=512, description="备份文件路径")
     file_size: int = Field(default=0, ge=0, description="文件大小 (字节)")
@@ -13,7 +12,7 @@ class BackupCreate(BaseModel):
     error_message: str = Field(default="", max_length=1024, description="失败原因")
 
 
-class BackupStatusUpdate(BaseModel):
+class BackupStatusUpdate(CamelModel):
     status: int = Field(..., ge=1, le=2, description="状态: 1=成功, 2=失败")
     error_message: str = Field(default="", max_length=1024, description="失败原因")
     file_size: int = Field(default=0, ge=0, description="文件大小 (字节)")

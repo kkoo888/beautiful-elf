@@ -1,10 +1,10 @@
 """宠物属性 Schema"""
 from typing import Optional, List, Any
-from pydantic import BaseModel, Field
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class PetAttributeUpdate(BaseModel):
+class PetAttributeUpdate(CamelModel):
     """更新宠物属性"""
     hunger: Optional[int] = Field(None, ge=0, le=100, description="饥饿值")
     clean: Optional[int] = Field(None, ge=0, le=100, description="清洁值")
@@ -30,7 +30,7 @@ class PetAttributeOut(CamelModel):
     updated_at: str
 
 
-class PetInteractionCreate(BaseModel):
+class PetInteractionCreate(CamelModel):
     """创建互动记录"""
     interaction_type: int = Field(..., ge=0, description="互动类型")
     effect_json: Optional[Any] = Field(None, description="属性变化效果")
@@ -45,12 +45,12 @@ class PetInteractionOut(CamelModel):
     created_at: str
 
 
-class ModelScanRequest(BaseModel):
+class ModelScanRequest(CamelModel):
     """扫描模型目录请求"""
     dir_path: str = Field(..., description="模型目录路径")
 
 
-class ModelInfo(BaseModel):
+class ModelInfo(CamelModel):
     """模型文件信息"""
     name: str = Field(..., description="模型文件名")
     path: str = Field(..., description="模型完整路径")
@@ -63,6 +63,6 @@ class ModelScanResponse(CamelModel):
     models: List[ModelInfo]
 
 
-class ModelSwitchRequest(BaseModel):
+class ModelSwitchRequest(CamelModel):
     """切换模型请求"""
     model_path: str = Field(..., description="模型文件完整路径")

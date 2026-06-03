@@ -1,35 +1,31 @@
 """日程管理 Schema"""
 from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class ScheduleCreate(BaseModel):
+class ScheduleCreate(CamelModel):
     """创建日程"""
-    model_config = ConfigDict(populate_by_name=True)
-
     title: str
     description: str = ""
-    start_time: datetime = Field(..., alias="startTime")
-    end_time: Optional[datetime] = Field(None, alias="endTime")
-    is_all_day: int = Field(0, alias="isAllDay")
-    reminder_minutes: int = Field(0, alias="reminderMinutes")
-    repeat_type: int = Field(0, alias="repeatType")
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    is_all_day: int = 0
+    reminder_minutes: int = 0
+    repeat_type: int = 0
     color: str = ""
 
 
-class ScheduleUpdate(BaseModel):
+class ScheduleUpdate(CamelModel):
     """更新日程"""
-    model_config = ConfigDict(populate_by_name=True)
-
     title: Optional[str] = None
     description: Optional[str] = None
-    start_time: Optional[datetime] = Field(None, alias="startTime")
-    end_time: Optional[datetime] = Field(None, alias="endTime")
-    is_all_day: Optional[int] = Field(None, alias="isAllDay")
-    reminder_minutes: Optional[int] = Field(None, alias="reminderMinutes")
-    repeat_type: Optional[int] = Field(None, alias="repeatType")
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    is_all_day: Optional[int] = None
+    reminder_minutes: Optional[int] = None
+    repeat_type: Optional[int] = None
     color: Optional[str] = None
 
 

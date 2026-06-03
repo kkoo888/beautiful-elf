@@ -1,11 +1,10 @@
 """行为日志 Schema"""
-from typing import Optional
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-class ActionLogCreate(BaseModel):
+class ActionLogCreate(CamelModel):
     module: str = Field(..., max_length=64, description="模块名")
     action: str = Field(..., max_length=128, description="行为动作")
     params_summary: str = Field(default="", max_length=512, description="参数摘要")
