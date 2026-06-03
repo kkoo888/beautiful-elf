@@ -1,7 +1,7 @@
 export type PetInteractionType = 'feed' | 'clean' | 'chat' | 'play'
 
 export interface PetInteraction {
-  id: string
+  id: number
   type: PetInteractionType
   effect: string
   createdAt: string
