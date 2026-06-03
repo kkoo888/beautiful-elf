@@ -38,7 +38,7 @@ interface ExpertTeamDetailProps {
 export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertTeamDetailProps) {
   const handleToggleEnabled = useCallback(async (checked: boolean) => {
     try {
-      await updateExpertTeam(team.id, { enabled: checked ? 1 : 0 })
+      await updateExpertTeam(team.id, { isEnabled: checked ? 1 : 0 })
       message.success(checked ? '已启用' : '已禁用')
       onRefresh?.()
     } catch {
@@ -57,7 +57,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                 {team.icon}
               </Avatar>
               <div>
-                <Title level={4} style={{ margin: 0 }}>{team.name}</Title>
+                <Title level={4} style={{ margin: 0 }}>{team.teamName}</Title>
                 <Space style={{ marginTop: 8 }}>
                   <Tag>{team.category}</Tag>
                   <Tag color="blue">v{team.version}</Tag>
@@ -75,7 +75,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
               <Space>
                 <Text type="secondary">状态：</Text>
                 <Switch
-                  checked={team.enabled === 1}
+                  checked={team.isEnabled === 1}
                   onChange={handleToggleEnabled}
                   checkedChildren="启用"
                   unCheckedChildren="禁用"
@@ -89,7 +89,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                   type="primary"
                   icon={<PlayCircleOutlined />}
                   onClick={onExecute}
-                  disabled={team.members.length === 0 || team.enabled !== 1}
+                  disabled={team.members.length === 0 || team.isEnabled !== 1}
                 >
                   执行
                 </Button>
@@ -125,7 +125,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
           <Card>
             <Statistic
               title="启用成员"
-              value={team.members.filter((m) => m.enabled).length}
+              value={team.members.filter((m) => m.isEnabled).length}
               suffix={`/ ${team.members.length}`}
             />
           </Card>
@@ -142,8 +142,8 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                 avatar={
                   <Avatar
                     style={{
-                      backgroundColor: getExpertRoleColor(member.role) + '20',
-                      color: getExpertRoleColor(member.role),
+                      backgroundColor: getExpertRoleColor(member.memberRole) + '20',
+                      color: getExpertRoleColor(member.memberRole),
                       fontSize: 24,
                     }}
                   >
@@ -152,9 +152,9 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                 }
                 title={
                   <Space>
-                    <Text strong>{member.name}</Text>
-                    <Tag color={getExpertRoleColor(member.role)}>{member.role}</Tag>
-                    {!member.enabled && <Tag color="default">已禁用</Tag>}
+                    <Text strong>{member.memberName}</Text>
+                    <Tag color={getExpertRoleColor(member.memberRole)}>{member.memberRole}</Tag>
+                    {!member.isEnabled && <Tag color="default">已禁用</Tag>}
                   </Space>
                 }
                 description={

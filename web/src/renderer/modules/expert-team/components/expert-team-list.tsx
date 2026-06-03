@@ -40,7 +40,7 @@ export function ExpertTeamList({
             {record.icon}
           </Avatar>
           <Space direction="vertical" size={0}>
-            <Text strong>{record.name}</Text>
+            <Text strong>{record.teamName}</Text>
             {record.description && (
               <Text type="secondary" style={{ fontSize: 12 }} ellipsis={{ tooltip: true }}>
                 {record.description}
@@ -64,7 +64,7 @@ export function ExpertTeamList({
       render: (_: unknown, record: ExpertTeam) => (
         <Space size={4} wrap>
           {record.members.slice(0, 5).map((m) => (
-            <Tooltip key={m.id} title={`${m.name} (${m.role})`}>
+            <Tooltip key={m.id} title={`${m.memberName} (${m.memberRole})`}>
               <Avatar size={28} style={{ fontSize: 16, backgroundColor: '#e6f7ff' }}>
                 {m.avatar}
               </Avatar>
@@ -92,8 +92,8 @@ export function ExpertTeamList({
       key: 'status',
       width: 80,
       render: (_: unknown, record: ExpertTeam) => (
-        <Tag color={record.enabled ? 'green' : 'default'}>
-          {record.enabled ? '启用' : '禁用'}
+        <Tag color={record.isEnabled ? 'green' : 'default'}>
+          {record.isEnabled ? '启用' : '禁用'}
         </Tag>
       ),
     },

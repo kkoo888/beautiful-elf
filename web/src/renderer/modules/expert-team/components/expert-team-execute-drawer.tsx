@@ -50,7 +50,7 @@ export function ExpertTeamExecuteDrawer({
       title={
         <Space>
           <span style={{ fontSize: 24 }}>{team.icon}</span>
-          <span>执行「{team.name}」</span>
+          <span>执行「{team.teamName}」</span>
         </Space>
       }
       open={open}
@@ -80,13 +80,13 @@ export function ExpertTeamExecuteDrawer({
         <div style={{ marginTop: 8 }}>
           <Space wrap>
             {team.members
-              .filter((m) => m.enabled)
+              .filter((m) => m.isEnabled)
               .map((m) => (
                 <Tag key={m.id} style={{ padding: '4px 8px' }}>
                   <Space size={4}>
                     <span>{m.avatar}</span>
-                    <span>{m.name}</span>
-                    <Text type="secondary">({m.role})</Text>
+                    <span>{m.memberName}</span>
+                    <Text type="secondary">({m.memberRole})</Text>
                   </Space>
                 </Tag>
               ))}

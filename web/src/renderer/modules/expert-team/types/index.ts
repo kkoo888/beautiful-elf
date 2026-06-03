@@ -6,8 +6,8 @@
 export interface ExpertMember {
   id: number
   teamId: number
-  name: string
-  role: string
+  memberName: string
+  memberRole: string
   avatar: string
   systemPrompt: string
   modelName: string
@@ -15,22 +15,22 @@ export interface ExpertMember {
   maxTokens: number
   toolsJson: Record<string, unknown>[] | null
   sortOrder: number
-  enabled: number
+  isEnabled: number
   createdAt: string | null
   updatedAt: string | null
 }
 
 /** 创建专家成员表单 */
 export interface ExpertMemberFormInput {
-  name: string
-  role: string
+  memberName: string
+  memberRole: string
   avatar?: string
   systemPrompt: string
   modelName?: string
   temperature?: number
   maxTokens?: number
   toolsJson?: Record<string, unknown>[]
-  enabled?: number
+  isEnabled?: number
 }
 
 // ─── 专家团 ──────────────────────────────────────────────
@@ -38,14 +38,14 @@ export interface ExpertMemberFormInput {
 /** 专家团 */
 export interface ExpertTeam {
   id: number
-  name: string
+  teamName: string
   description: string
   icon: string
   category: string
   orchestratorPrompt: string
   synthesizerPrompt: string
   maxRounds: number
-  enabled: number
+  isEnabled: number
   version: number
   configJson: Record<string, unknown> | null
   members: ExpertMember[]
@@ -55,7 +55,7 @@ export interface ExpertTeam {
 
 /** 创建专家团表单 */
 export interface ExpertTeamFormInput {
-  name: string
+  teamName: string
   description?: string
   icon?: string
   category?: string
@@ -68,14 +68,14 @@ export interface ExpertTeamFormInput {
 
 /** 更新专家团表单 */
 export interface ExpertTeamUpdateInput {
-  name?: string
+  teamName?: string
   description?: string
   icon?: string
   category?: string
   orchestratorPrompt?: string
   synthesizerPrompt?: string
   maxRounds?: number
-  enabled?: number
+  isEnabled?: number
   configJson?: Record<string, unknown>
 }
 

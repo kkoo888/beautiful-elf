@@ -40,32 +40,32 @@ const PRESET_AVATARS = [
 /** 预设专家角色 */
 const PRESET_EXPERTS: ExpertMemberFormInput[] = [
   {
-    name: '架构师',
-    role: '架构师',
+    memberName: '架构师',
+    memberRole: '架构师',
     avatar: '🏗️',
     systemPrompt: '你是一位资深软件架构师，擅长系统设计、技术选型、性能优化。请从架构角度分析问题，关注可扩展性、可维护性和性能。',
   },
   {
-    name: '测试专家',
-    role: '测试专家',
+    memberName: '测试专家',
+    memberRole: '测试专家',
     avatar: '🧪',
     systemPrompt: '你是一位经验丰富的测试专家，擅长发现潜在问题、设计测试策略。请从质量保障角度分析问题，关注边界情况、异常场景和回归风险。',
   },
   {
-    name: '产品经理',
-    role: '产品经理',
+    memberName: '产品经理',
+    memberRole: '产品经理',
     avatar: '📋',
     systemPrompt: '你是一位敏锐的产品经理，擅长用户需求分析、产品规划。请从用户体验和商业价值角度分析问题，关注用户痛点和市场竞争力。',
   },
   {
-    name: '安全专家',
-    role: '安全专家',
+    memberName: '安全专家',
+    memberRole: '安全专家',
     avatar: '🛡️',
     systemPrompt: '你是一位安全专家，擅长安全审计、风险评估。请从安全角度分析问题，关注数据安全、权限控制和潜在攻击面。',
   },
   {
-    name: '数据专家',
-    role: '数据专家',
+    memberName: '数据专家',
+    memberRole: '数据专家',
     avatar: '📊',
     systemPrompt: '你是一位数据专家，擅长数据分析、数据建模。请从数据角度分析问题，关注数据质量、数据流和指标体系。',
   },
@@ -82,14 +82,14 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
   const [form] = Form.useForm()
   const [members, setMembers] = useState<ExpertMemberFormInput[]>(
     team?.members.map((m) => ({
-      name: m.name,
-      role: m.role,
+      memberName: m.memberName,
+      memberRole: m.memberRole,
       avatar: m.avatar,
       systemPrompt: m.systemPrompt,
       modelName: m.modelName,
       temperature: m.temperature,
       maxTokens: m.maxTokens,
-      enabled: m.enabled ?? 1,
+      isEnabled: m.isEnabled ?? 1,
     })) ?? []
   )
 
@@ -97,21 +97,21 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
     setMembers((prev) => [
       ...prev,
       {
-        name: '',
-        role: '',
+        memberName: '',
+        memberRole: '',
         avatar: '🤖',
         systemPrompt: '',
         temperature: 70,
         maxTokens: 2048,
-        enabled: 1,
+        isEnabled: 1,
       },
     ])
   }, [])
 
   const handleAddPreset = useCallback((preset: ExpertMemberFormInput) => {
     setMembers((prev) => {
-      if (prev.some((m) => m.role === preset.role)) {
-        message.warning(`已存在「${preset.role}」角色`)
+      if (prev.some((m) => m.memberRole === preset.memberRole)) {
+        message.warning(`已存在「${preset.memberRole}」角色`)
         return prev
       }
       return [...prev, { ...preset, enabled: 1 }]
@@ -141,14 +141,14 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
       }
 
       for (let i = 0; i < members.length; i++) {
-        if (!members[i].name || !members[i].role || !members[i].systemPrompt) {
+        if (!members[i].memberName || !members[i].memberRole || !members[i].systemPrompt) {
           message.warning(`专家 #${i + 1} 的名称、角色和提示词不能为空`)
           return
         }
       }
 
       const input: ExpertTeamFormInput = {
-        name: values.name,
+        teamName: values.teamName,
         description: values.description ?? '',
         icon: values.icon ?? '👥',
         category: values.category ?? '通用',
@@ -170,7 +170,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
         form={form}
         layout="vertical"
         initialValues={{
-          name: team?.name ?? '',
+          teamName: team?.teamName ?? '',
           description: team?.description ?? '',
           icon: team?.icon ?? '👥',
           category: team?.category ?? '通用',
@@ -186,7 +186,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
               <Input placeholder="👥" style={{ textAlign: 'center', fontSize: 24 }} />
             </Form.Item>
             <Form.Item
-              name="name"
+              name="teamName"
               label="专家团名称"
               rules={[{ required: true, message: '请输入名称' }]}
               style={{ flex: 1, minWidth: 200 }}
@@ -244,12 +244,12 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                 placeholder="快速添加预设专家"
                 style={{ width: 200 }}
                 onChange={(value) => {
-                  const preset = PRESET_EXPERTS.find((p) => p.role === value)
+                  const preset = PRESET_EXPERTS.find((p) => p.memberRole === value)
                   if (preset) handleAddPreset(preset)
                 }}
                 options={PRESET_EXPERTS.map((p) => ({
-                  label: `${p.avatar} ${p.name}`,
-                  value: p.role,
+                  label: `${p.avatar} ${p.memberName}`,
+                  value: p.memberRole,
                 }))}
                 allowClear
               />
@@ -269,23 +269,23 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
               <Card
                 key={index}
                 size="small"
-                style={{ marginBottom: 12, opacity: member.enabled === 0 ? 0.5 : 1 }}
+                style={{ marginBottom: 12, opacity: member.isEnabled === 0 ? 0.5 : 1 }}
                 title={
                   <Space>
                     <span style={{ fontSize: 20 }}>{member.avatar || '🤖'}</span>
-                    <Text strong>{member.name || `专家 #${index + 1}`}</Text>
-                    {member.role && (
-                      <Text type="secondary">({member.role})</Text>
+                    <Text strong>{member.memberName || `专家 #${index + 1}`}</Text>
+                    {member.memberRole && (
+                      <Text type="secondary">({member.memberRole})</Text>
                     )}
-                    {member.enabled === 0 && <Tag color="default">已禁用</Tag>}
+                    {member.isEnabled === 0 && <Tag color="default">已禁用</Tag>}
                   </Space>
                 }
                 extra={
                   <Space>
                     <Switch
                       size="small"
-                      checked={member.enabled !== 0}
-                      onChange={(checked) => handleMemberChange(index, 'enabled', checked ? 1 : 0)}
+                      checked={member.isEnabled !== 0}
+                      onChange={(checked) => handleMemberChange(index, 'isEnabled', checked ? 1 : 0)}
                       checkedChildren="启用"
                       unCheckedChildren="禁用"
                     />
@@ -313,15 +313,15 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                   </Form.Item>
                   <Form.Item label="名称" required style={{ flex: 1, minWidth: 120, marginBottom: 8 }}>
                     <Input
-                      value={member.name}
-                      onChange={(e) => handleMemberChange(index, 'name', e.target.value)}
+                      value={member.memberName}
+                      onChange={(e) => handleMemberChange(index, 'memberName', e.target.value)}
                       placeholder="专家名称"
                     />
                   </Form.Item>
                   <Form.Item label="角色" required style={{ flex: 1, minWidth: 120, marginBottom: 8 }}>
                     <Input
-                      value={member.role}
-                      onChange={(e) => handleMemberChange(index, 'role', e.target.value)}
+                      value={member.memberRole}
+                      onChange={(e) => handleMemberChange(index, 'memberRole', e.target.value)}
                       placeholder="如: 架构师"
                     />
                   </Form.Item>
