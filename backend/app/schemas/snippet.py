@@ -1,5 +1,6 @@
 """代码片段 Schema"""
 from typing import Optional, List
+from datetime import datetime
 from pydantic import Field
 from app.schemas.base import CamelModel
 
@@ -28,8 +29,8 @@ class SnippetOut(CamelModel):
     language: str
     use_count: int
     tags: List[str] = Field(default_factory=list)
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class SnippetQuery(CamelModel):

@@ -1,5 +1,6 @@
 """命令面板 Schema"""
 from typing import Optional
+from datetime import datetime
 from pydantic import Field
 from app.schemas.base import CamelModel
 
@@ -37,8 +38,8 @@ class CommandOut(CamelModel):
     command_type: int
     is_enabled: int
     use_count: int = 0
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class CommandQuery(CamelModel):

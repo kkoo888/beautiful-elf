@@ -1,5 +1,6 @@
 """大模型供应商 Schema"""
 from typing import Optional, List
+from datetime import datetime
 from pydantic import Field
 from app.schemas.base import CamelModel
 
@@ -48,5 +49,5 @@ class ProviderOut(CamelModel):
     is_enabled: int
     is_default: int
     description: str
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

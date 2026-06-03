@@ -1,5 +1,6 @@
 """宠物属性 Schema"""
 from typing import Optional, List, Any
+from datetime import datetime
 from pydantic import Field
 from app.schemas.base import CamelModel
 
@@ -25,9 +26,9 @@ class PetAttributeOut(CamelModel):
     intimacy: int
     level: int
     exp: int
-    last_active_at: str
-    created_at: str
-    updated_at: str
+    last_active_at: datetime
+    created_at: datetime
+    updated_at: datetime
 
 
 class PetInteractionCreate(CamelModel):
@@ -42,7 +43,7 @@ class PetInteractionOut(CamelModel):
     pet_attribute_id: int
     interaction_type: int
     effect_json: Optional[Any] = None
-    created_at: str
+    created_at: datetime
 
 
 class ModelScanRequest(CamelModel):

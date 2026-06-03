@@ -1,5 +1,6 @@
 """配置管理 Schema"""
 from typing import Optional
+from datetime import datetime
 from app.schemas.base import CamelModel
 
 
@@ -25,5 +26,5 @@ class SettingOut(CamelModel):
     key_value: str
     description: str
     restart_required: int
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
