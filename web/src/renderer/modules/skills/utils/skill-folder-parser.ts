@@ -1,8 +1,9 @@
 /**
  * 技能文件夹解析 + 安全扫描工具
  *
- * 36 项检测规则，基于 skill-vetter / skill-security-scanner / OWASP Agentic AI / CSA MAESTRO。
- * 纯前端正则实现，无需后端接口。
+ * 35 条正则规则 + 6 项结构分析，基于 skill-vetter / skill-security-scanner / OWASP Agentic AI / CSA MAESTRO。
+ * 正则规则纯前端实现，无需后端接口。
+ * GitHub 仓库信誉检查需要网络请求（可选）。
  */
 
 import type { SkillFolderParsed, ScanResult, ScanIssue, RiskLevel } from '../types/skills'
@@ -522,11 +523,42 @@ const ALL_RULES: ScanRule[] = [
   ruleHiddenChars, rulePermissionMismatch,
 ]
 
+// ─── 可执行文件扩展名 ─────────────────────────────
+
+const EXECUTABLE_EXTENSIONS = new Set([
+  '.sh', '.bash', '.zsh', '.fish', '.csh', '.ksh',
+  '.py', '.pyc', '.pyw',
+  '.js', '.mjs', '.cjs',
+  '.ts', '.tsx', '.mts',
+  '.rb', '.pl', '.lua', '.php', '.r', '.R',
+  '.exe', '.dll', '.so', '.dylib', '.bin', '.com', '.msi',
+  '.bat', '.cmd', '.ps1', '.psm1', '.vbs', '.vba', '.wsf', '.jse',
+  '.jar', '.class', '.war',
+  '.go', '.rs', '.swift', '.kt', '.scala',
+  '.appimage', '.deb', '.rpm', '.dmg', '.pkg',
+])
+
+const SUSPICIOUS_FILENAMES = [
+  /^\./,                    // 隐藏文件
+  /\.(bak|old|tmp|swp)$/,  // 临时/备份文件
+  /\.(enc|gpg|pgp)$/,      // 加密文件
+  /__MACOSX/,               // macOS 元数据
+  /Thumbs\.db$/i,           // Windows 缩略图
+]
+
 // ─── 主扫描函数 ─────────────────────────────────
 
-function runScan(files: { path: string; decodedContent: string }[]): ScanResult {
+interface FileWithMeta {
+  path: string
+  decodedContent: string
+  size: number
+}
+
+function runScan(files: FileWithMeta[]): ScanResult {
   const issues: ScanIssue[] = []
   let hasSkillMd = false
+
+  // ── 结构检查 ──────────────────────────────────
 
   // 检查文件结构
   hasSkillMd = files.some((f) => f.path === 'SKILL.md' || f.path.endsWith('/SKILL.md'))
@@ -554,7 +586,87 @@ function runScan(files: { path: string; decodedContent: string }[]): ScanResult 
     } catch { /* ignore */ }
   }
 
-  // 遍历所有文件执行规则
+  // [新增] 可执行文件检测 — 技能包里有没有脚本/二进制
+  const execFiles = files.filter((f) => {
+    const ext = f.path.lastIndexOf('.') >= 0 ? f.path.slice(f.path.lastIndexOf('.')).toLowerCase() : ''
+    return EXECUTABLE_EXTENSIONS.has(ext)
+  })
+  if (execFiles.length === 0) {
+    // 纯文本/Markdown 技能，风险天然低
+    issues.push({
+      level: 'info',
+      category: '文件结构分析',
+      message: '技能包不含任何可执行文件，风险较低',
+    })
+  } else {
+    issues.push({
+      level: 'medium',
+      category: '可执行文件',
+      message: `发现 ${execFiles.length} 个可执行文件，需要重点审查`,
+      snippet: execFiles.map((f) => f.path).join(', ').slice(0, 200),
+    })
+  }
+
+  // [新增] 可疑文件名检测 — 隐藏文件、备份文件、加密文件
+  for (const file of files) {
+    for (const pattern of SUSPICIOUS_FILENAMES) {
+      if (pattern.test(file.path)) {
+        issues.push({
+          level: 'low',
+          category: '可疑文件名',
+          message: `发现可疑文件: ${file.path}`,
+          file: file.path,
+        })
+        break
+      }
+    }
+  }
+
+  // [新增] 文件体积异常检测 — 单文件 > 50KB 的文本文件可能隐藏载荷
+  for (const file of files) {
+    if (file.size > 50 * 1024) {
+      const ext = file.path.slice(file.path.lastIndexOf('.')).toLowerCase()
+      const textExts = ['.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.xml', '.csv', '.log']
+      if (textExts.includes(ext) || !ext) {
+        issues.push({
+          level: 'medium',
+          category: '文件体积异常',
+          message: `文本文件体积异常 (${(file.size / 1024).toFixed(0)}KB)，可能包含隐藏载荷`,
+          file: file.path,
+          snippet: `${(file.size / 1024).toFixed(0)}KB`,
+        })
+      }
+    }
+  }
+
+  // [新增] 声明功能 vs 实际能力对比 — SKILL.md 说的和代码做的是否匹配
+  const skillMdFile = files.find((f) => f.path === 'SKILL.md' || f.path.endsWith('/SKILL.md'))
+  if (skillMdFile) {
+    const desc = skillMdFile.decodedContent.toLowerCase()
+    const isSimpleSkill = /天气|计算|格式化|翻译|笔记|提醒|timer|weather|format|note|calculator|convert|模板|template|snippet/i.test(desc)
+    const hasCodeFiles = files.some((f) => {
+      const ext = f.path.slice(f.path.lastIndexOf('.')).toLowerCase()
+      return ['.py', '.js', '.ts', '.sh', '.rb', '.go', '.rs'].includes(ext)
+    })
+    const hasNetworkInCode = files.some((f) =>
+      /fetch\s*\(|axios\.|requests\.(get|post)|urllib|httpx|curl\s|wget\s|\.post\s*\(/i.test(f.decodedContent)
+    )
+
+    if (isSimpleSkill && hasCodeFiles && hasNetworkInCode) {
+      issues.push({
+        level: 'high',
+        category: '声明与实际不符',
+        message: 'SKILL.md 声明简单功能，但包含网络请求代码，行为与声明不一致',
+      })
+    }
+  }
+
+  // [新增] GitHub 仓库信誉检查（仅提示，不做阻断）
+  // 注意：此检查需要网络请求，由调用方在 parseSkillFolder 之外处理
+  // 这里只检查是否从 GitHub 导入（通过 source 标记判断）
+
+  // ── 规则扫描 ──────────────────────────────────
+
   for (const file of files) {
     for (const rule of ALL_RULES) {
       const matches = rule.scan(file.decodedContent, file.path)
@@ -590,18 +702,64 @@ function runScan(files: { path: string; decodedContent: string }[]): ScanResult 
 
 // ─── 导出 ─────────────────────────────────
 
+/** GitHub 仓库信誉检查结果 */
+export interface GitHubRepoCheck {
+  stars: number
+  forks: number
+  lastPush: string
+  openIssues: number
+  warnings: string[]
+  verdict: 'trusted' | 'caution' | 'unknown'
+}
+
+/**
+ * 检查 GitHub 仓库信誉（需要网络请求，单独调用）
+ * @param repo "user/repo" 格式
+ */
+export async function checkGitHubRepo(repo: string): Promise<GitHubRepoCheck> {
+  const warnings: string[] = []
+  try {
+    const resp = await fetch(`https://api.github.com/repos/${repo}`)
+    if (!resp.ok) {
+      return { stars: 0, forks: 0, lastPush: '', openIssues: 0, warnings: ['无法获取仓库信息'], verdict: 'unknown' }
+    }
+    const data = await resp.json()
+    const stars = data.stargazers_count ?? 0
+    const forks = data.forks_count ?? 0
+    const lastPush = data.pushed_at ?? ''
+    const openIssues = data.open_issues_count ?? 0
+
+    if (stars < 5) warnings.push(`⭐ 仅 ${stars} 星，知名度低`)
+    if (forks < 2) warnings.push(`🍴 仅 ${forks} 个 fork，社区参与度低`)
+
+    // 最后推送超过 6 个月
+    if (lastPush) {
+      const monthsAgo = (Date.now() - new Date(lastPush).getTime()) / (1000 * 60 * 60 * 24 * 30)
+      if (monthsAgo > 6) warnings.push(`📅 最后更新于 ${Math.floor(monthsAgo)} 个月前，可能已废弃`)
+    }
+
+    let verdict: GitHubRepoCheck['verdict'] = 'trusted'
+    if (warnings.length >= 2) verdict = 'caution'
+    if (stars === 0 && forks === 0) verdict = 'unknown'
+
+    return { stars, forks, lastPush, openIssues, warnings, verdict }
+  } catch {
+    return { stars: 0, forks: 0, lastPush: '', openIssues: 0, warnings: ['网络请求失败'], verdict: 'unknown' }
+  }
+}
+
 export async function parseSkillFolder(fileList: FileList): Promise<SkillFolderParsed> {
   const files = Array.from(fileList)
   const firstPath = files[0]?.webkitRelativePath ?? ''
   const folderName = firstPath.split('/')[0] || 'unnamed-skill'
 
   // 读取所有文件
-  const fileContents: { path: string; content: string; decodedContent: string }[] = []
+  const fileContents: FileWithMeta[] = []
   for (const file of files) {
     const relativePath = file.webkitRelativePath.replace(`${folderName}/`, '')
     const textContent = await readAsText(file).catch(() => '')
     const base64Content = await readAsBase64(file).catch(() => '')
-    fileContents.push({ path: relativePath, content: base64Content, decodedContent: textContent })
+    fileContents.push({ path: relativePath, content: base64Content, decodedContent: textContent, size: file.size })
   }
 
   // 解析 SKILL.md

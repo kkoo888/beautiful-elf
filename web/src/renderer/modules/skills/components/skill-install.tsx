@@ -23,7 +23,7 @@ import {
   InfoCircleOutlined,
 } from '@ant-design/icons'
 import type { InstallSkillInput, SkillFolderParsed, ScanResult, RiskLevel } from '../types/skills'
-import { parseSkillFolder } from '../utils/skill-folder-parser'
+import { parseSkillFolder, checkGitHubRepo } from '../utils/skill-folder-parser'
 import styles from './skills-panel.module.css'
 
 const { Text } = Typography
@@ -105,7 +105,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
   }, [])
 
   // ─── GitHub 导入 ──────────────────────────────
-  const handleGithubImport = useCallback(() => {
+  const handleGithubImport = useCallback(async () => {
     if (!githubUrl.trim()) {
       message.warning('请输入 GitHub 仓库地址')
       return
@@ -117,7 +117,26 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
     setFormVersion('1.0.0')
     setFormTriggerWords('')
     setFormDependencies('')
-    // GitHub 导入暂不做前端扫描（文件不在本地），直接到编辑步骤
+
+    // 检查 GitHub 仓库信誉
+    const repoPath = githubUrl.trim()
+      .replace(/^https?:\/\/github\.com\//, '')
+      .replace(/\.git$/, '')
+      .replace(/^git@github\.com:/, '')
+    if (repoPath.includes('/') && !repoPath.startsWith('http')) {
+      try {
+        const repoCheck = await checkGitHubRepo(repoPath)
+        if (repoCheck.warnings.length > 0) {
+          const warnText = repoCheck.warnings.join('\n')
+          if (repoCheck.verdict === 'caution') {
+            message.warning(`仓库信誉警告:\n${warnText}`, 6)
+          } else if (repoCheck.verdict === 'unknown') {
+            message.info(`仓库信息:\n${warnText}`, 4)
+          }
+        }
+      } catch { /* 静默失败 */ }
+    }
+
     setParsed(null)
     setStep('edit')
   }, [githubUrl])
