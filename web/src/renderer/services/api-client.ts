@@ -78,7 +78,7 @@ function extractPaginated<T>(resp: AxiosResponse<ApiResponse<T[]>>): PaginatedRe
     items: body.data ?? [],
     total: meta.total ?? 0,
     page: meta.page ?? 1,
-    pageSize: meta.page_size ?? meta.pageSize ?? (body.data?.length ?? 0),
+    pageSize: meta.pageSize ?? (body.data?.length ?? 0),
   }
 }
 

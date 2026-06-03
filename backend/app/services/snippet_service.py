@@ -72,7 +72,7 @@ class SnippetService:
             "title": s.title,
             "content": s.content,
             "language": s.language,
-            "use_count": s.use_count,
-            "created_at": str(s.created_at) if s.created_at else None,
-            "updated_at": str(s.updated_at) if s.updated_at else None,
+            "useCount": s.use_count,
+            "createdAt": str(s.created_at) if s.created_at else None,
+            "updatedAt": str(s.updated_at) if s.updated_at else None,
         }

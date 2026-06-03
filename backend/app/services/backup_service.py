@@ -46,11 +46,11 @@ class BackupService:
     def _to_dict(item) -> dict:
         return {
             "id": item.id,
-            "backup_type": item.backup_type,
-            "file_path": item.file_path,
-            "file_size": item.file_size,
+            "backupType": item.backup_type,
+            "filePath": item.file_path,
+            "fileSize": item.file_size,
             "status": item.status,
-            "error_message": item.error_message,
-            "created_at": str(item.created_at) if item.created_at else None,
-            "updated_at": str(item.updated_at) if item.updated_at else None,
+            "errorMessage": item.error_message,
+            "createdAt": str(item.created_at) if item.created_at else None,
+            "updatedAt": str(item.updated_at) if item.updated_at else None,
         }

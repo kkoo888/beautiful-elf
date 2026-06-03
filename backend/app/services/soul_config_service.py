@@ -54,12 +54,12 @@ class SoulConfigService:
         return {
             "id": config.id,
             "name": config.name,
-            "avatar_url": config.avatar_url,
+            "avatarUrl": config.avatar_url,
             "personality": config.personality,
-            "speaking_style": config.speaking_style,
+            "speakingStyle": config.speaking_style,
             "background": config.background,
-            "system_prompt": config.system_prompt,
-            "is_active": config.is_active,
-            "created_at": str(config.created_at) if config.created_at else None,
-            "updated_at": str(config.updated_at) if config.updated_at else None,
+            "systemPrompt": config.system_prompt,
+            "isActive": config.is_active,
+            "createdAt": str(config.created_at) if config.created_at else None,
+            "updatedAt": str(config.updated_at) if config.updated_at else None,
         }

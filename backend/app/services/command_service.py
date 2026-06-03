@@ -55,19 +55,19 @@ class CommandService:
         if not cmd:
             raise RecordNotFoundError("命令不存在")
         await self.repo.record_usage(db, cmd_id)
-        return {"command_id": cmd_id, "recorded": True}
+        return {"commandId": cmd_id, "recorded": True}
 
     @staticmethod
     def _to_dict(cmd) -> dict:
         return {
             "id": cmd.id,
             "name": cmd.name,
-            "display_name": cmd.display_name,
+            "displayName": cmd.display_name,
             "description": cmd.description,
-            "shortcut_key": cmd.shortcut_key,
+            "shortcutKey": cmd.shortcut_key,
             "module": cmd.module,
-            "command_type": cmd.command_type,
+            "commandType": cmd.command_type,
             "isEnabled": cmd.is_enabled,
-            "created_at": str(cmd.created_at) if cmd.created_at else None,
-            "updated_at": str(cmd.updated_at) if cmd.updated_at else None,
+            "createdAt": str(cmd.created_at) if cmd.created_at else None,
+            "updatedAt": str(cmd.updated_at) if cmd.updated_at else None,
         }

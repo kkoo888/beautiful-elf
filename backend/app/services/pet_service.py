@@ -112,12 +112,12 @@ class PetService:
         for item in items:
             result.append({
                 "id": item.id,
-                "pet_attribute_id": item.pet_attribute_id,
-                "interaction_type": item.interaction_type,
-                "interaction_type_name": INTERACTION_TYPE_NAMES.get(item.interaction_type, "unknown"),
-                "effect_desc": INTERACTION_EFFECT_DESC.get(item.interaction_type, ""),
-                "effect_json": item.effect_json,
-                "created_at": str(item.created_at) if item.created_at else None,
+                "petAttributeId": item.pet_attribute_id,
+                "interactionType": item.interaction_type,
+                "interactionTypeName": INTERACTION_TYPE_NAMES.get(item.interaction_type, "unknown"),
+                "effectDesc": INTERACTION_EFFECT_DESC.get(item.interaction_type, ""),
+                "effectJson": item.effect_json,
+                "createdAt": str(item.created_at) if item.created_at else None,
             })
 
         return result, total
@@ -218,7 +218,7 @@ class PetService:
             "intimacy": pet.intimacy,
             "level": pet.level,
             "exp": pet.exp,
-            "last_active_at": str(pet.last_active_at) if pet.last_active_at else None,
-            "created_at": str(pet.created_at) if pet.created_at else None,
-            "updated_at": str(pet.updated_at) if pet.updated_at else None,
+            "lastActiveAt": str(pet.last_active_at) if pet.last_active_at else None,
+            "createdAt": str(pet.created_at) if pet.created_at else None,
+            "updatedAt": str(pet.updated_at) if pet.updated_at else None,
         }

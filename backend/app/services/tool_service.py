@@ -82,23 +82,25 @@ class ToolService:
         return {
             "id": item.id,
             "name": item.name,
-            "display_name": item.display_name,
+            "displayName": item.display_name,
             "description": item.description,
             "module": item.module,
-            "json_schema": item.json_schema,
+            "jsonSchema": item.json_schema,
             "isEnabled": item.is_enabled,
-            "created_at": str(item.created_at) if item.created_at else None,
-            "updated_at": str(item.updated_at) if item.updated_at else None,
+            "createdAt": str(item.created_at) if item.created_at else None,
+            "updatedAt": str(item.updated_at) if item.updated_at else None,
         }
 
     @staticmethod
     def _stats_to_dict(stats) -> dict:
         return {
             "id": stats.id,
-            "tool_id": stats.tool_id,
-            "call_count": stats.call_count,
-            "success_count": stats.success_count,
-            "fail_count": stats.fail_count,
-            "avg_duration_ms": stats.avg_duration_ms,
-            "last_called_at": str(stats.last_called_at) if stats.last_called_at else None,
+            "toolId": stats.tool_id,
+            "callCount": stats.call_count,
+            "successCount": stats.success_count,
+            "failCount": stats.fail_count,
+            "avgDurationMs": stats.avg_duration_ms,
+            "lastCalledAt": str(stats.last_called_at) if stats.last_called_at else None,
+            "createdAt": str(stats.created_at) if stats.created_at else None,
+            "updatedAt": str(stats.updated_at) if stats.updated_at else None,
         }

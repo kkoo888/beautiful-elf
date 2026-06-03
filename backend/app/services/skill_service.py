@@ -36,8 +36,8 @@ class SkillService:
             d = self._to_dict(i)
             stats = await self.repo.get_stats(db, i.id)
             d["stats"] = self._stats_to_dict(stats) if stats else {
-                "call_count": 0, "success_count": 0, "fail_count": 0,
-                "avg_duration_ms": 0, "last_called_at": None,
+                "callCount": 0, "successCount": 0, "failCount": 0,
+                "avgDurationMs": 0, "lastCalledAt": None,
             }
             result.append(d)
         return result, total
@@ -91,26 +91,28 @@ class SkillService:
         return {
             "id": item.id,
             "name": item.name,
-            "display_name": item.display_name,
+            "displayName": item.display_name,
             "description": item.description,
             "version": item.version,
             "source": item.source,
-            "trigger_words": item.trigger_words,
+            "triggerWords": item.trigger_words,
             "dependencies": item.dependencies,
             "isEnabled": item.is_enabled,
             "config": item.config,
-            "created_at": str(item.created_at) if item.created_at else None,
-            "updated_at": str(item.updated_at) if item.updated_at else None,
+            "createdAt": str(item.created_at) if item.created_at else None,
+            "updatedAt": str(item.updated_at) if item.updated_at else None,
         }
 
     @staticmethod
     def _stats_to_dict(stats) -> dict:
         return {
             "id": stats.id,
-            "skill_id": stats.skill_id,
-            "call_count": stats.call_count,
-            "success_count": stats.success_count,
-            "fail_count": stats.fail_count,
-            "avg_duration_ms": stats.avg_duration_ms,
-            "last_called_at": str(stats.last_called_at) if stats.last_called_at else None,
+            "skillId": stats.skill_id,
+            "callCount": stats.call_count,
+            "successCount": stats.success_count,
+            "failCount": stats.fail_count,
+            "avgDurationMs": stats.avg_duration_ms,
+            "lastCalledAt": str(stats.last_called_at) if stats.last_called_at else None,
+            "createdAt": str(stats.created_at) if stats.created_at else None,
+            "updatedAt": str(stats.updated_at) if stats.updated_at else None,
         }

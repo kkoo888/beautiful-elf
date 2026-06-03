@@ -51,8 +51,8 @@ class ActionLogService:
             "id": item.id,
             "module": item.module,
             "action": item.action,
-            "params_summary": item.params_summary,
-            "session_id": item.session_id,
-            "created_at": str(item.created_at) if item.created_at else None,
-            "updated_at": str(item.updated_at) if item.updated_at else None,
+            "paramsSummary": item.params_summary,
+            "sessionId": item.session_id,
+            "createdAt": str(item.created_at) if item.created_at else None,
+            "updatedAt": str(item.updated_at) if item.updated_at else None,
         }

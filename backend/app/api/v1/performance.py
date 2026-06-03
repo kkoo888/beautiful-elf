@@ -18,7 +18,7 @@ def _get_service() -> PerformanceService:
 async def get_current_status(service: PerformanceService = Depends(_get_service)):
     """获取当前系统状态"""
     data = await service.get_current_status()
-    return ok(data.model_dump())
+    return ok(data.model_dump(by_alias=True))
 
 
 @router.get("/metrics")
@@ -29,7 +29,7 @@ async def get_metrics(
 ):
     """获取历史采样数据"""
     data = await service.get_metrics(db, limit=limit)
-    return ok([item.model_dump() for item in data])
+    return ok([item.model_dump(by_alias=True) for item in data])
 
 
 @router.post("/collect")
@@ -39,4 +39,4 @@ async def manual_collect(
 ):
     """手动触发一次采样（开发用）"""
     record = await service.collect_and_store(db)
-    return ok(record.model_dump())
+    return ok(record.model_dump(by_alias=True))

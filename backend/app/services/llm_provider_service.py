@@ -73,17 +73,17 @@ class LLMProviderService:
 
     @staticmethod
     def _to_dict(provider) -> dict:
-        """转换为输出字典（snake_case，由 api-client 统一转 camelCase）"""
+        """转换为输出字典（camelCase）"""
         return {
             "id": provider.id,
             "name": provider.name,
-            "provider_type": provider.provider_type,
-            "base_url": provider.base_url,
-            "api_key": provider.api_key,
+            "providerType": provider.provider_type,
+            "baseUrl": provider.base_url,
+            "apiKey": provider.api_key,
             "models": provider.models or [],
-            "is_enabled": provider.is_enabled,
-            "is_default": provider.is_default,
+            "isEnabled": provider.is_enabled,
+            "isDefault": provider.is_default,
             "description": provider.description or "",
-            "created_at": str(provider.created_at) if provider.created_at else None,
-            "updated_at": str(provider.updated_at) if provider.updated_at else None,
+            "createdAt": str(provider.created_at) if provider.created_at else None,
+            "updatedAt": str(provider.updated_at) if provider.updated_at else None,
         }

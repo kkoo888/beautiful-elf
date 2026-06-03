@@ -60,10 +60,10 @@ class ConfigService:
     def _to_dict(setting) -> dict:
         return {
             "id": setting.id,
-            "settings_key": setting.settings_key,
-            "key_value": setting.key_value,
+            "settingsKey": setting.settings_key,
+            "keyValue": setting.key_value,
             "description": setting.description,
-            "restart_required": setting.restart_required,
-            "created_at": str(setting.created_at) if setting.created_at else None,
-            "updated_at": str(setting.updated_at) if setting.updated_at else None,
+            "restartRequired": setting.restart_required,
+            "createdAt": str(setting.created_at) if setting.created_at else None,
+            "updatedAt": str(setting.updated_at) if setting.updated_at else None,
         }

@@ -53,12 +53,12 @@ class NotificationService:
     def _to_dict(notif) -> dict:
         return {
             "id": notif.id,
-            "event_id": notif.event_id,
+            "eventId": notif.event_id,
             "type": notif.type,
             "title": notif.title,
             "message": notif.message,
             "isRead": notif.is_read,
-            "action_url": notif.action_url,
-            "created_at": str(notif.created_at) if notif.created_at else None,
-            "updated_at": str(notif.updated_at) if notif.updated_at else None,
+            "actionUrl": notif.action_url,
+            "createdAt": str(notif.created_at) if notif.created_at else None,
+            "updatedAt": str(notif.updated_at) if notif.updated_at else None,
         }

@@ -31,7 +31,7 @@ def ok(data: Any = None, message: str = "操作成功") -> dict:
 def ok_page(
     data: Any, total: int, page: int = 1, page_size: int = 20
 ) -> dict:
-    """分页成功响应"""
+    """分页成功响应 — meta 字段统一 camelCase"""
     return {
         "code": "SUCCESS",
         "message": "操作成功",
@@ -39,7 +39,7 @@ def ok_page(
         "meta": {
             "total": total,
             "page": page,
-            "page_size": page_size,
+            "pageSize": page_size,
         },
     }
 

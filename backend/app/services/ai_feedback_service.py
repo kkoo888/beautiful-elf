@@ -40,13 +40,13 @@ class AIFeedbackService:
     def _to_dict(item) -> dict:
         return {
             "id": item.id,
-            "conversation_id": item.conversation_id,
+            "conversationId": item.conversation_id,
             "question": item.question,
             "answer": item.answer,
-            "feedback_type": item.feedback_type,
-            "reason_tags": item.reason_tags,
-            "reason_text": item.reason_text,
-            "trace_id": item.trace_id,
-            "created_at": str(item.created_at) if item.created_at else None,
-            "updated_at": str(item.updated_at) if item.updated_at else None,
+            "feedbackType": item.feedback_type,
+            "reasonTags": item.reason_tags,
+            "reasonText": item.reason_text,
+            "traceId": item.trace_id,
+            "createdAt": str(item.created_at) if item.created_at else None,
+            "updatedAt": str(item.updated_at) if item.updated_at else None,
         }

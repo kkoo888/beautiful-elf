@@ -43,9 +43,9 @@ class CommandUsageService:
     def _to_dict(item) -> dict:
         return {
             "id": item.id,
-            "command_id": item.command_id,
-            "use_count": item.use_count,
-            "last_used_at": str(item.last_used_at) if item.last_used_at else None,
-            "created_at": str(item.created_at) if item.created_at else None,
-            "updated_at": str(item.updated_at) if item.updated_at else None,
+            "commandId": item.command_id,
+            "useCount": item.use_count,
+            "lastUsedAt": str(item.last_used_at) if item.last_used_at else None,
+            "createdAt": str(item.created_at) if item.created_at else None,
+            "updatedAt": str(item.updated_at) if item.updated_at else None,
         }

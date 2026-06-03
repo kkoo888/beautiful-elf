@@ -80,8 +80,8 @@ class PromptService:
             "name": item.name,
             "content": item.content,
             "version": item.version,
-            "is_active": item.is_active,
+            "isActive": item.is_active,
             "description": item.description,
-            "created_at": str(item.created_at) if item.created_at else None,
-            "updated_at": str(item.updated_at) if item.updated_at else None,
+            "createdAt": str(item.created_at) if item.created_at else None,
+            "updatedAt": str(item.updated_at) if item.updated_at else None,
         }
