@@ -229,6 +229,99 @@
   margin-left: 2px;
 }
 
+/* ─── 安全扫描报告 ──────────────────────────── */
+
+.scanReport {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scanSummary {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.scanSummaryItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 48px;
+}
+
+.scanSummaryItem span:first-child {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.scanIssues {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.scanIssueGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scanIssueGroupTitle {
+  font-size: 13px;
+  font-weight: 600;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-border-secondary, #f0f0f0);
+}
+
+.scanIssueItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--color-bg-text-hover, rgba(0, 0, 0, 0.02));
+  border-radius: 8px;
+  border-left: 3px solid var(--color-border-secondary, #d9d9d9);
+}
+
+.scanIssueItem:has(+ .scanIssueItem) {
+  /* 相邻项间距 */
+}
+
+.scanIssueCategory {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary, #333);
+}
+
+.scanIssueMessage {
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+  line-height: 1.5;
+}
+
+.scanIssueFile {
+  font-size: 11px;
+  color: var(--color-text-secondary, #999);
+  font-family: monospace;
+}
+
+.scanIssueSnippet {
+  font-size: 11px;
+  color: var(--color-text-secondary, #8c8c8c);
+  background: var(--color-bg-container, #fafafa);
+  padding: 4px 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+}
+
 /* ─── 详情面板 ──────────────────────────── */
 
 .detailContent {

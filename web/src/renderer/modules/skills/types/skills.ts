@@ -38,6 +38,46 @@ export interface Skill {
 /** 安装来源类型 */
 export type InstallSource = 'folder' | 'github'
 
+/** 风险等级 */
+export type RiskLevel = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+/** 扫描判定结果 */
+export type ScanVerdict = 'safe' | 'caution' | 'danger'
+
+/** 单条扫描问题 */
+export interface ScanIssue {
+  /** 风险等级 */
+  level: RiskLevel
+  /** 检测类别 */
+  category: string
+  /** 问题描述（中文） */
+  message: string
+  /** 命中的文件路径 */
+  file?: string
+  /** 命中的行号 */
+  line?: number
+  /** 命中的原始内容（截取片段） */
+  snippet?: string
+}
+
+/** 安全扫描结果 */
+export interface ScanResult {
+  /** 扫描的文件数 */
+  fileCount: number
+  /** 问题列表 */
+  issues: ScanIssue[]
+  /** 各级别计数 */
+  summary: {
+    critical: number
+    high: number
+    medium: number
+    low: number
+    info: number
+  }
+  /** 综合判定 */
+  verdict: ScanVerdict
+}
+
 /** 文件夹解析结果（选完文件夹后、确认安装前的中间状态） */
 export interface SkillFolderParsed {
   /** 文件夹名（默认作为技能名称） */
@@ -54,6 +94,8 @@ export interface SkillFolderParsed {
   extractedDependencies?: string[]
   /** 文件夹内文件列表（路径 + 内容） */
   files: { path: string; content: string }[]
+  /** 安全扫描结果 */
+  scanResult: ScanResult
 }
 
 /** 安装请求参数 */

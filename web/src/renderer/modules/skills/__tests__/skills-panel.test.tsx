@@ -143,7 +143,7 @@ describe('SkillsPanel', () => {
     })
     await user.click(screen.getByText('安装技能'))
     await waitFor(() => {
-      expect(screen.getByText(/从文件夹安装/)).toBeDefined()
+      expect(screen.getByText(/选择技能文件夹/)).toBeDefined()
     })
   })
 
