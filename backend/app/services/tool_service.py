@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.tool_repo import ToolRepository
-from app.schemas.tool import ToolCreate, ToolUpdate
+from app.schemas.tool import ToolCreate, ToolUpdate, ToolOut, ToolStatsOut
 from app.core.exceptions import RecordNotFoundError, DuplicateEntryError
 
 
@@ -79,28 +79,8 @@ class ToolService:
 
     @staticmethod
     def _to_dict(item) -> dict:
-        return {
-            "id": item.id,
-            "name": item.name,
-            "displayName": item.display_name,
-            "description": item.description,
-            "module": item.module,
-            "jsonSchema": item.json_schema,
-            "isEnabled": item.is_enabled,
-            "createdAt": str(item.created_at) if item.created_at else None,
-            "updatedAt": str(item.updated_at) if item.updated_at else None,
-        }
+        return ToolOut.model_validate(item).model_dump(by_alias=True)
 
     @staticmethod
     def _stats_to_dict(stats) -> dict:
-        return {
-            "id": stats.id,
-            "toolId": stats.tool_id,
-            "callCount": stats.call_count,
-            "successCount": stats.success_count,
-            "failCount": stats.fail_count,
-            "avgDurationMs": stats.avg_duration_ms,
-            "lastCalledAt": str(stats.last_called_at) if stats.last_called_at else None,
-            "createdAt": str(stats.created_at) if stats.created_at else None,
-            "updatedAt": str(stats.updated_at) if stats.updated_at else None,
-        }
+        return ToolStatsOut.model_validate(stats).model_dump(by_alias=True)

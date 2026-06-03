@@ -71,9 +71,9 @@ async def app_error_handler(request: Request, exc: AppError):
         content={
             "code": exc.code,
             "message": exc.message,
-            "user_tip": exc.user_tip,
+            "userTip": exc.user_tip,
             "data": None,
-            "request_id": getattr(request.state, "trace_id", ""),
+            "requestId": getattr(request.state, "trace_id", ""),
         },
     )
 
@@ -86,9 +86,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "code": "SYSTEM_INTERNAL_ERROR",
             "message": "服务器内部错误",
-            "user_tip": "系统繁忙，请稍后重试",
+            "userTip": "系统繁忙，请稍后重试",
             "data": None,
-            "request_id": getattr(request.state, "trace_id", ""),
+            "requestId": getattr(request.state, "trace_id", ""),
         },
     )
 

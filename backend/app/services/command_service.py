@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.command_repo import CommandRepository
-from app.schemas.command import CommandCreate, CommandUpdate
+from app.schemas.command import CommandCreate, CommandUpdate, CommandOut
 from app.core.exceptions import RecordNotFoundError, DuplicateEntryError
 
 
@@ -59,15 +59,4 @@ class CommandService:
 
     @staticmethod
     def _to_dict(cmd) -> dict:
-        return {
-            "id": cmd.id,
-            "name": cmd.name,
-            "displayName": cmd.display_name,
-            "description": cmd.description,
-            "shortcutKey": cmd.shortcut_key,
-            "module": cmd.module,
-            "commandType": cmd.command_type,
-            "isEnabled": cmd.is_enabled,
-            "createdAt": str(cmd.created_at) if cmd.created_at else None,
-            "updatedAt": str(cmd.updated_at) if cmd.updated_at else None,
-        }
+        return CommandOut.model_validate(cmd).model_dump(by_alias=True)

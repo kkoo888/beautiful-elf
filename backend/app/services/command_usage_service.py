@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.command_usage_repo import CommandUsageRepository
+from app.schemas.command_usage import CommandUsageOut
 
 
 class CommandUsageService:
@@ -41,11 +42,4 @@ class CommandUsageService:
 
     @staticmethod
     def _to_dict(item) -> dict:
-        return {
-            "id": item.id,
-            "commandId": item.command_id,
-            "useCount": item.use_count,
-            "lastUsedAt": str(item.last_used_at) if item.last_used_at else None,
-            "createdAt": str(item.created_at) if item.created_at else None,
-            "updatedAt": str(item.updated_at) if item.updated_at else None,
-        }
+        return CommandUsageOut.model_validate(item).model_dump(by_alias=True)

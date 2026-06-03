@@ -3,8 +3,10 @@ from typing import Any, Optional, List
 from pydantic import BaseModel
 import uuid
 
+from app.schemas.base import CamelModel
 
-class ApiResponse(BaseModel):
+
+class ApiResponse(CamelModel):
     """统一 API 响应"""
     code: str = "SUCCESS"
     message: str = "操作成功"
@@ -13,7 +15,7 @@ class ApiResponse(BaseModel):
     request_id: str = ""
 
 
-class PageResponse(BaseModel):
+class PageResponse(CamelModel):
     """分页响应（继承 ApiResponse，增加 meta）"""
     code: str = "SUCCESS"
     message: str = "操作成功"
@@ -54,9 +56,9 @@ def fail(
     return {
         "code": code,
         "message": message,
-        "user_tip": user_tip,
+        "userTip": user_tip,
         "data": None,
-        "request_id": request_id or str(uuid.uuid4()),
+        "requestId": request_id or str(uuid.uuid4()),
     }
 
 

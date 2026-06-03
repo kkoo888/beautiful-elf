@@ -3,7 +3,7 @@ from typing import Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.ai_feedback_repo import AIFeedbackRepository
-from app.schemas.ai_feedback import AIFeedbackCreate
+from app.schemas.ai_feedback import AIFeedbackCreate, AIFeedbackOut
 from app.core.exceptions import RecordNotFoundError
 
 
@@ -38,15 +38,4 @@ class AIFeedbackService:
 
     @staticmethod
     def _to_dict(item) -> dict:
-        return {
-            "id": item.id,
-            "conversationId": item.conversation_id,
-            "question": item.question,
-            "answer": item.answer,
-            "feedbackType": item.feedback_type,
-            "reasonTags": item.reason_tags,
-            "reasonText": item.reason_text,
-            "traceId": item.trace_id,
-            "createdAt": str(item.created_at) if item.created_at else None,
-            "updatedAt": str(item.updated_at) if item.updated_at else None,
-        }
+        return AIFeedbackOut.model_validate(item).model_dump(by_alias=True)

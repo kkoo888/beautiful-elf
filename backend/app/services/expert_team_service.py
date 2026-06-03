@@ -31,7 +31,7 @@ from app.schemas.expert_team import (
     ExpertMemberCreate, ExpertMemberOut,
     ExpertTeamRunOut, ExpertTeamExecuteRequest,
     DiscussionMessage,
-    RoleSkillCreate, RoleSkillUpdate,
+    RoleSkillCreate, RoleSkillUpdate, RoleSkillOut, ExpertRoleRunOut,
 )
 from app.core.exceptions import RecordNotFoundError
 from app.services.ollama_service import OllamaClient, get_chat_model
@@ -628,35 +628,10 @@ class ExpertTeamService:
         })
 
     def _serialize_skill_bind(self, bind) -> dict:
-        return {
-            "id": bind.id,
-            "roleId": bind.role_id,
-            "skillId": bind.skill_id,
-            "priority": bind.priority,
-            "configOverride": bind.config_override,
-            "enabled": bind.is_enabled,
-            "createdAt": str(bind.created_at) if bind.created_at else None,
-            "updatedAt": str(bind.updated_at) if bind.updated_at else None,
-        }
+        return RoleSkillOut.model_validate(bind).model_dump(by_alias=True)
 
     def _serialize_role_run(self, run) -> dict:
-        return {
-            "id": run.id,
-            "runId": run.run_id,
-            "roleId": run.role_id,
-            "roleName": run.role_name,
-            "status": run.run_status,
-            "roundNum": run.round_num,
-            "inputJson": run.input_json,
-            "outputJson": run.output_json,
-            "skillsUsed": run.skills_used,
-            "errorMessage": run.error_message,
-            "startedAt": str(run.started_at) if run.started_at else None,
-            "finishedAt": str(run.finished_at) if run.finished_at else None,
-            "durationMs": run.duration_ms,
-            "tokenUsage": run.token_usage,
-            "createdAt": str(run.created_at) if run.created_at else None,
-        }
+        return ExpertRoleRunOut.model_validate(run).model_dump(by_alias=True)
 
     # ─── 执行专家团（LangGraph 核心）──────────────────
 
@@ -802,22 +777,11 @@ class ExpertTeamService:
     @staticmethod
     def _serialize_team(team, members=None) -> dict:
         """序列化专家团"""
-        return {
-            "id": team.id,
-            "name": team.team_name,
-            "description": team.description,
-            "icon": team.icon,
-            "category": team.category,
-            "orchestrator_prompt": team.orchestrator_prompt,
-            "synthesizer_prompt": team.synthesizer_prompt,
-            "max_rounds": team.max_rounds,
-            "enabled": team.is_enabled,
-            "version": team.version,
-            "config_json": team.config_json,
-            "members": [ExpertTeamService._serialize_member(m) for m in (members or [])],
-            "created_at": str(team.created_at) if team.created_at else None,
-            "updated_at": str(team.updated_at) if team.updated_at else None,
-        }
+        # 先用 schema 序列化基础字段
+        data = ExpertTeamOut.model_validate(team).model_dump(by_alias=True)
+        # 补充成员列表（可能不在 ORM 对象上）
+        data["members"] = [ExpertTeamService._serialize_member(m) for m in (members or [])]
+        return data
 
     @staticmethod
     def _serialize_member(member) -> dict:

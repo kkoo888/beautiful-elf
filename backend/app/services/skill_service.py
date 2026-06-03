@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.skill_repo import SkillRepository
-from app.schemas.skill import SkillCreate, SkillUpdate
+from app.schemas.skill import SkillCreate, SkillUpdate, SkillOut, SkillStatsOut
 from app.core.exceptions import RecordNotFoundError, DuplicateEntryError
 
 
@@ -11,18 +11,26 @@ class SkillService:
     def __init__(self):
         self.repo = SkillRepository()
 
+    @staticmethod
+    def _serialize(item) -> dict:
+        return SkillOut.model_validate(item).model_dump(by_alias=True)
+
+    @staticmethod
+    def _serialize_stats(stats) -> dict:
+        return SkillStatsOut.model_validate(stats).model_dump(by_alias=True)
+
     async def create(self, db: AsyncSession, data: SkillCreate) -> dict:
         existing = await self.repo.find_by_name(db, data.name)
         if existing:
             raise DuplicateEntryError(f"技能名称 '{data.name}' 已存在")
         item = await self.repo.create(db, data.model_dump())
-        return self._to_dict(item)
+        return self._serialize(item)
 
     async def get_by_id(self, db: AsyncSession, id: int) -> dict:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
-        return self._to_dict(item)
+        return self._serialize(item)
 
     async def list(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
@@ -33,9 +41,9 @@ class SkillService:
         total = await self.repo.count(db, enabled=enabled)
         result = []
         for i in items:
-            d = self._to_dict(i)
+            d = self._serialize(i)
             stats = await self.repo.get_stats(db, i.id)
-            d["stats"] = self._stats_to_dict(stats) if stats else {
+            d["stats"] = self._serialize_stats(stats) if stats else {
                 "callCount": 0, "successCount": 0, "failCount": 0,
                 "avgDurationMs": 0, "lastCalledAt": None,
             }
@@ -48,9 +56,9 @@ class SkillService:
             raise RecordNotFoundError("技能不存在")
         update_data = data.model_dump(exclude_unset=True)
         if not update_data:
-            return self._to_dict(item)
+            return self._serialize(item)
         updated = await self.repo.update(db, id, update_data)
-        return self._to_dict(updated)
+        return self._serialize(updated)
 
     async def delete(self, db: AsyncSession, id: int) -> bool:
         item = await self.repo.find_by_id(db, id)
@@ -64,7 +72,7 @@ class SkillService:
             raise RecordNotFoundError("技能不存在")
         await self.repo.set_enabled(db, id, 1)
         updated = await self.repo.find_by_id(db, id)
-        return self._to_dict(updated)
+        return self._serialize(updated)
 
     async def disable(self, db: AsyncSession, id: int) -> dict:
         item = await self.repo.find_by_id(db, id)
@@ -72,47 +80,16 @@ class SkillService:
             raise RecordNotFoundError("技能不存在")
         await self.repo.set_enabled(db, id, 0)
         updated = await self.repo.find_by_id(db, id)
-        return self._to_dict(updated)
+        return self._serialize(updated)
 
     async def record_call(
         self, db: AsyncSession, skill_id: int, success: bool, duration_ms: int,
     ) -> dict:
         stats = await self.repo.record_call(db, skill_id, success, duration_ms)
-        return self._stats_to_dict(stats)
+        return self._serialize_stats(stats)
 
     async def get_stats(self, db: AsyncSession, skill_id: int) -> dict:
         stats = await self.repo.get_stats(db, skill_id)
         if not stats:
             raise RecordNotFoundError("技能统计数据不存在")
-        return self._stats_to_dict(stats)
-
-    @staticmethod
-    def _to_dict(item) -> dict:
-        return {
-            "id": item.id,
-            "name": item.name,
-            "displayName": item.display_name,
-            "description": item.description,
-            "version": item.version,
-            "source": item.source,
-            "triggerWords": item.trigger_words,
-            "dependencies": item.dependencies,
-            "isEnabled": item.is_enabled,
-            "config": item.config,
-            "createdAt": str(item.created_at) if item.created_at else None,
-            "updatedAt": str(item.updated_at) if item.updated_at else None,
-        }
-
-    @staticmethod
-    def _stats_to_dict(stats) -> dict:
-        return {
-            "id": stats.id,
-            "skillId": stats.skill_id,
-            "callCount": stats.call_count,
-            "successCount": stats.success_count,
-            "failCount": stats.fail_count,
-            "avgDurationMs": stats.avg_duration_ms,
-            "lastCalledAt": str(stats.last_called_at) if stats.last_called_at else None,
-            "createdAt": str(stats.created_at) if stats.created_at else None,
-            "updatedAt": str(stats.updated_at) if stats.updated_at else None,
-        }
+        return self._serialize_stats(stats)

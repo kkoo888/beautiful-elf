@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.pet_repo import PetRepository
-from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate
+from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate, PetAttributeOut
 from app.core.exceptions import RecordNotFoundError
 
 # 互动类型映射
@@ -209,16 +209,4 @@ class PetService:
 
     @staticmethod
     def _to_dict(pet) -> dict:
-        return {
-            "id": pet.id,
-            "hunger": pet.hunger,
-            "clean": pet.clean,
-            "mood": pet.mood,
-            "health": pet.health,
-            "intimacy": pet.intimacy,
-            "level": pet.level,
-            "exp": pet.exp,
-            "lastActiveAt": str(pet.last_active_at) if pet.last_active_at else None,
-            "createdAt": str(pet.created_at) if pet.created_at else None,
-            "updatedAt": str(pet.updated_at) if pet.updated_at else None,
-        }
+        return PetAttributeOut.model_validate(pet).model_dump(by_alias=True)

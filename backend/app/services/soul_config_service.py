@@ -3,7 +3,7 @@ from typing import List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.soul_config_repo import SoulConfigRepository
-from app.schemas.soul_config import SoulConfigCreate, SoulConfigUpdate
+from app.schemas.soul_config import SoulConfigCreate, SoulConfigUpdate, SoulConfigOut
 from app.core.exceptions import RecordNotFoundError
 
 
@@ -51,15 +51,4 @@ class SoulConfigService:
 
     @staticmethod
     def _to_dict(config) -> dict:
-        return {
-            "id": config.id,
-            "name": config.name,
-            "avatarUrl": config.avatar_url,
-            "personality": config.personality,
-            "speakingStyle": config.speaking_style,
-            "background": config.background,
-            "systemPrompt": config.system_prompt,
-            "isActive": config.is_active,
-            "createdAt": str(config.created_at) if config.created_at else None,
-            "updatedAt": str(config.updated_at) if config.updated_at else None,
-        }
+        return SoulConfigOut.model_validate(config).model_dump(by_alias=True)

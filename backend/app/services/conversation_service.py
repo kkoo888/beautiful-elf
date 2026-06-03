@@ -3,7 +3,7 @@ from typing import List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.conversation_repo import ConversationRepository
-from app.schemas.conversation import ConversationCreate, ConversationUpdate
+from app.schemas.conversation import ConversationCreate, ConversationUpdate, ConversationOut
 from app.core.exceptions import RecordNotFoundError
 
 
@@ -45,12 +45,4 @@ class ConversationService:
 
     @staticmethod
     def _to_dict(conv) -> dict:
-        return {
-            "id": conv.id,
-            "title": conv.title,
-            "modelName": conv.model_name,
-            "messageCount": conv.message_count,
-            "lastMessageAt": str(conv.last_message_at) if conv.last_message_at else None,
-            "createdAt": str(conv.created_at) if conv.created_at else None,
-            "updatedAt": str(conv.updated_at) if conv.updated_at else None,
-        }
+        return ConversationOut.model_validate(conv).model_dump(by_alias=True)

@@ -3,7 +3,7 @@ from typing import Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.prompt_repo import PromptRepository
-from app.schemas.prompt import PromptCreate, PromptUpdate
+from app.schemas.prompt import PromptCreate, PromptUpdate, PromptOut
 from app.core.exceptions import RecordNotFoundError
 
 
@@ -75,13 +75,4 @@ class PromptService:
 
     @staticmethod
     def _to_dict(item) -> dict:
-        return {
-            "id": item.id,
-            "name": item.name,
-            "content": item.content,
-            "version": item.version,
-            "isActive": item.is_active,
-            "description": item.description,
-            "createdAt": str(item.created_at) if item.created_at else None,
-            "updatedAt": str(item.updated_at) if item.updated_at else None,
-        }
+        return PromptOut.model_validate(item).model_dump(by_alias=True)

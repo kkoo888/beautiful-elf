@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.notification_repo import NotificationRepository
-from app.schemas.notification import NotificationCreate
+from app.schemas.notification import NotificationCreate, NotificationOut
 from app.core.exceptions import RecordNotFoundError
 
 
@@ -51,14 +51,4 @@ class NotificationService:
 
     @staticmethod
     def _to_dict(notif) -> dict:
-        return {
-            "id": notif.id,
-            "eventId": notif.event_id,
-            "type": notif.type,
-            "title": notif.title,
-            "message": notif.message,
-            "isRead": notif.is_read,
-            "actionUrl": notif.action_url,
-            "createdAt": str(notif.created_at) if notif.created_at else None,
-            "updatedAt": str(notif.updated_at) if notif.updated_at else None,
-        }
+        return NotificationOut.model_validate(notif).model_dump(by_alias=True)

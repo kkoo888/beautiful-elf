@@ -3,7 +3,7 @@ from typing import Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.backup_repo import BackupRepository
-from app.schemas.backup import BackupCreate, BackupStatusUpdate
+from app.schemas.backup import BackupCreate, BackupStatusUpdate, BackupOut
 from app.core.exceptions import RecordNotFoundError
 
 
@@ -11,15 +11,19 @@ class BackupService:
     def __init__(self):
         self.repo = BackupRepository()
 
+    @staticmethod
+    def _serialize(item) -> dict:
+        return BackupOut.model_validate(item).model_dump(by_alias=True)
+
     async def create(self, db: AsyncSession, data: BackupCreate) -> dict:
         item = await self.repo.create(db, data.model_dump())
-        return self._to_dict(item)
+        return self._serialize(item)
 
     async def get_by_id(self, db: AsyncSession, id: int) -> dict:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("备份记录不存在")
-        return self._to_dict(item)
+        return self._serialize(item)
 
     async def list(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
@@ -31,7 +35,7 @@ class BackupService:
             backup_type=backup_type, status=status,
         )
         total = await self.repo.count(db, backup_type=backup_type, status=status)
-        return [self._to_dict(i) for i in items], total
+        return [self._serialize(i) for i in items], total
 
     async def update_status(self, db: AsyncSession, id: int, data: BackupStatusUpdate) -> dict:
         item = await self.repo.find_by_id(db, id)
@@ -40,17 +44,4 @@ class BackupService:
         update_data = data.model_dump(exclude_unset=True)
         await self.repo.update(db, id, update_data)
         updated = await self.repo.find_by_id(db, id)
-        return self._to_dict(updated)
-
-    @staticmethod
-    def _to_dict(item) -> dict:
-        return {
-            "id": item.id,
-            "backupType": item.backup_type,
-            "filePath": item.file_path,
-            "fileSize": item.file_size,
-            "status": item.status,
-            "errorMessage": item.error_message,
-            "createdAt": str(item.created_at) if item.created_at else None,
-            "updatedAt": str(item.updated_at) if item.updated_at else None,
-        }
+        return self._serialize(updated)

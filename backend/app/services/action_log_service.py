@@ -4,16 +4,20 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.action_log_repo import ActionLogRepository
-from app.schemas.action_log import ActionLogCreate
+from app.schemas.action_log import ActionLogCreate, ActionLogOut
 
 
 class ActionLogService:
     def __init__(self):
         self.repo = ActionLogRepository()
 
+    @staticmethod
+    def _serialize(item) -> dict:
+        return ActionLogOut.model_validate(item).model_dump(by_alias=True)
+
     async def create(self, db: AsyncSession, data: ActionLogCreate) -> dict:
         item = await self.repo.create(db, data.model_dump())
-        return self._to_dict(item)
+        return self._serialize(item)
 
     async def list(
         self,
@@ -39,20 +43,8 @@ class ActionLogService:
             db, module=module, action=action,
             start_time=start_time, end_time=end_time,
         )
-        return [self._to_dict(i) for i in items], total
+        return [self._serialize(i) for i in items], total
 
     async def cleanup_old(self, db: AsyncSession, days: int = 7) -> int:
         """清理 N 天前的日志"""
         return await self.repo.cleanup_old(db, days)
-
-    @staticmethod
-    def _to_dict(item) -> dict:
-        return {
-            "id": item.id,
-            "module": item.module,
-            "action": item.action,
-            "paramsSummary": item.params_summary,
-            "sessionId": item.session_id,
-            "createdAt": str(item.created_at) if item.created_at else None,
-            "updatedAt": str(item.updated_at) if item.updated_at else None,
-        }

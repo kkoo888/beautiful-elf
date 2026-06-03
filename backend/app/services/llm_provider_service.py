@@ -3,7 +3,7 @@ from typing import List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.llm_provider_repo import LLMProviderRepository
-from app.schemas.llm_provider import ProviderCreate, ProviderUpdate
+from app.schemas.llm_provider import ProviderCreate, ProviderUpdate, ProviderOut
 from app.core.exceptions import RecordNotFoundError
 
 
@@ -74,16 +74,4 @@ class LLMProviderService:
     @staticmethod
     def _to_dict(provider) -> dict:
         """转换为输出字典（camelCase）"""
-        return {
-            "id": provider.id,
-            "name": provider.name,
-            "providerType": provider.provider_type,
-            "baseUrl": provider.base_url,
-            "apiKey": provider.api_key,
-            "models": provider.models or [],
-            "isEnabled": provider.is_enabled,
-            "isDefault": provider.is_default,
-            "description": provider.description or "",
-            "createdAt": str(provider.created_at) if provider.created_at else None,
-            "updatedAt": str(provider.updated_at) if provider.updated_at else None,
-        }
+        return ProviderOut.model_validate(provider).model_dump(by_alias=True)
