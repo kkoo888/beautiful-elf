@@ -30,24 +30,24 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
 
 /** 通知数据（与 @/types Notification 对齐，额外支持 eventId 去重） */
 export interface Notification {
-  id: string
+  id: number
   eventId?: string
   type: NotificationType
   title: string
   message: string
-  isRead: boolean
+  isRead: number
   createdAt: string
   actionUrl?: string
 }
 
 /** 通知弹窗消息格式（用于 showNotification） */
 export interface NotificationMessage {
-  id: string
+  id: number
   eventId?: string
   type: NotificationType
   title: string
   body: string
-  isRead: boolean
+  isRead: number
   createdAt: number
 }
 

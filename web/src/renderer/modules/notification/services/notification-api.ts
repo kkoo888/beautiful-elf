@@ -12,7 +12,7 @@ export interface CreateNotificationParams { eventId?: string; type: Notification
 
 export async function fetchNotifications(params?: NotificationListParams): Promise<NotificationListResponse> {
   return extractData(await apiClient.get('/notifications', {
-    params: { page: params?.page, pageSize: params?.pageSize, type: params?.type, isRead: params?.isRead },
+    params: { page: params?.page, pageSize: params?.pageSize, type: params?.type, read: params?.isRead },
   })) as NotificationListResponse
 }
 
@@ -20,11 +20,11 @@ export async function createNotification(data: CreateNotificationParams): Promis
   return extractData(await apiClient.post('/notifications', data))
 }
 
-export async function deleteNotification(id: string): Promise<void> {
+export async function deleteNotification(id: number): Promise<void> {
   await apiClient.delete(`/notifications/${id}`)
 }
 
-export async function markRead(id: string): Promise<void> {
+export async function markRead(id: number): Promise<void> {
   await apiClient.put(`/notifications/${id}/read`)
 }
 
