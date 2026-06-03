@@ -141,6 +141,11 @@ export function FullModelSelect({
   const [loading, setLoading] = useState(true)
   const [selectedPid, setSelectedPid] = useState<number | undefined>(providerId)
 
+  // 同步外部 prop 变化到内部状态
+  useEffect(() => {
+    setSelectedPid(providerId)
+  }, [providerId])
+
   useEffect(() => {
     void (async () => {
       try {
