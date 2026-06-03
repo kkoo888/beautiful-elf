@@ -36,12 +36,42 @@ export interface Skill {
 }
 
 /** 安装来源类型 */
-export type InstallSource = 'file' | 'github'
+export type InstallSource = 'folder' | 'github'
+
+/** 文件夹解析结果（选完文件夹后、确认安装前的中间状态） */
+export interface SkillFolderParsed {
+  /** 文件夹名（默认作为技能名称） */
+  folderName: string
+  /** SKILL.md 中提取的 name */
+  extractedName?: string
+  /** SKILL.md 中提取的 description */
+  extractedDescription?: string
+  /** metadata.json 中提取的 version */
+  extractedVersion?: string
+  /** SKILL.md 中提取的触发词 */
+  extractedTriggerWords?: string[]
+  /** metadata.json 中提取的依赖 */
+  extractedDependencies?: string[]
+  /** 文件夹内文件列表（路径 + 内容） */
+  files: { path: string; content: string }[]
+}
 
 /** 安装请求参数 */
 export interface InstallSkillInput {
   source: InstallSource
-  /** .skill 文件内容（base64）或 GitHub 仓库地址 */
+  /** 技能名称（文件夹名，用户可改） */
+  name: string
+  /** 显示名称 */
+  displayName?: string
+  /** 技能简介 */
+  description: string
+  /** 版本号 */
+  version?: string
+  /** 触发词 */
+  triggerWords?: string[]
+  /** 依赖技能 */
+  dependencies?: string[]
+  /** 文件夹内容（base64 zip）或 GitHub 仓库地址 */
   content: string
 }
 

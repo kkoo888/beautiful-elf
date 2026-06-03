@@ -48,12 +48,15 @@ export async function recordSkillCall(id: number, success: boolean, durationMs: 
 }
 
 export async function installSkill(input: InstallSkillInput): Promise<Skill> {
-  const name = input.source === 'github'
-    ? input.content.split('/').pop()?.replace('.git', '') || 'imported-skill'
-    : `imported-${Date.now()}`
   return extractData(await apiClient.post('/skills', {
-    name, displayName: name, description: `从${input.source === 'github' ? 'GitHub' : '文件'}导入`,
-    source: input.source, config: { content: input.content },
+    name: input.name,
+    displayName: input.displayName || input.name,
+    description: input.description,
+    version: input.version ?? '1.0.0',
+    source: input.source,
+    triggerWords: input.triggerWords ?? [],
+    dependencies: input.dependencies ?? [],
+    config: { content: input.content },
   }))
 }
 

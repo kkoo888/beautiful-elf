@@ -13,6 +13,7 @@ export type {
   Skill,
   SkillStats,
   InstallSkillInput,
+  SkillFolderParsed,
   RefineResult,
   RefineSkillInput,
   ChainNode,

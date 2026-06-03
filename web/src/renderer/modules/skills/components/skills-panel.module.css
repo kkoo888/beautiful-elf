@@ -156,13 +156,13 @@
 .installContent {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .installSection {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .sectionTitle {
@@ -183,6 +183,50 @@
 
 .githubInput input {
   flex: 1;
+}
+
+/* ─── 文件夹选择 ──────────────────────────── */
+
+.folderDropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  border: 2px dashed var(--color-border-secondary, #d9d9d9);
+  border-radius: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+  text-align: center;
+}
+
+.folderDropzone:hover {
+  border-color: var(--color-primary, #f97316);
+  background: var(--color-bg-text-hover, rgba(249, 115, 22, 0.04));
+}
+
+/* ─── 编辑表单 ──────────────────────────── */
+
+.folderPreview {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--color-bg-text-hover, rgba(0, 0, 0, 0.02));
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.formLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary, #333);
+}
+
+.required {
+  color: var(--color-error, #ff4d4f);
+  margin-left: 2px;
 }
 
 /* ─── 详情面板 ──────────────────────────── */
