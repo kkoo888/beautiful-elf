@@ -2,11 +2,7 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
-
-
-def to_camel(s: str) -> str:
-    parts = s.split("_")
-    return parts[0] + "".join(w.capitalize() for w in parts[1:])
+from app.schemas.base import CamelModel, to_camel
 
 
 class ClipboardItemCreate(BaseModel):
@@ -34,10 +30,8 @@ class ClipboardItemPin(BaseModel):
     is_pinned: int = Field(..., alias="isPinned")
 
 
-class ClipboardItemOut(BaseModel):
+class ClipboardItemOut(CamelModel):
     """剪贴板输出"""
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
     id: int
     content: str
     content_type: int

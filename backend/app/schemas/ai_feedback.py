@@ -2,6 +2,7 @@
 from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.base import CamelModel
 
 
 class AIFeedbackCreate(BaseModel):
@@ -14,7 +15,7 @@ class AIFeedbackCreate(BaseModel):
     trace_id: str = Field(default="", max_length=128, description="请求链路 ID")
 
 
-class AIFeedbackOut(BaseModel):
+class AIFeedbackOut(CamelModel):
     id: int
     conversation_id: Optional[int]
     question: str
@@ -25,5 +26,3 @@ class AIFeedbackOut(BaseModel):
     trace_id: str
     created_at: datetime
     updated_at: datetime
-
-    model_config = {"from_attributes": True}

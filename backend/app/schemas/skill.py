@@ -2,11 +2,7 @@
 from typing import Optional, List, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
-
-
-def to_camel(s: str) -> str:
-    parts = s.split("_")
-    return parts[0] + "".join(w.capitalize() for w in parts[1:])
+from app.schemas.base import CamelModel
 
 
 class SkillCreate(BaseModel):
@@ -34,9 +30,7 @@ class SkillUpdate(BaseModel):
     config: Optional[Any] = Field(default=None, description="技能配置")
 
 
-class SkillOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
+class SkillOut(CamelModel):
     id: int
     name: str
     display_name: str
@@ -51,9 +45,7 @@ class SkillOut(BaseModel):
     updated_at: datetime
 
 
-class SkillStatsOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
+class SkillStatsOut(CamelModel):
     id: int
     skill_id: int
     call_count: int

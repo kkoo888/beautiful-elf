@@ -2,6 +2,7 @@
 from typing import Optional, Any, List
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.base import CamelModel
 
 
 class SoulConfigCreate(BaseModel):
@@ -24,7 +25,7 @@ class SoulConfigUpdate(BaseModel):
     is_active: Optional[int] = Field(default=None, ge=0, le=1, description="是否激活")
 
 
-class SoulConfigOut(BaseModel):
+class SoulConfigOut(CamelModel):
     id: int
     name: str
     avatar_url: str
@@ -35,5 +36,3 @@ class SoulConfigOut(BaseModel):
     is_active: int
     created_at: datetime
     updated_at: datetime
-
-    model_config = {"from_attributes": True}

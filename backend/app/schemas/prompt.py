@@ -2,6 +2,7 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.base import CamelModel
 
 
 class PromptCreate(BaseModel):
@@ -15,7 +16,7 @@ class PromptUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=512, description="版本说明")
 
 
-class PromptOut(BaseModel):
+class PromptOut(CamelModel):
     id: int
     name: str
     content: str
@@ -24,5 +25,3 @@ class PromptOut(BaseModel):
     description: str
     created_at: datetime
     updated_at: datetime
-
-    model_config = {"from_attributes": True}

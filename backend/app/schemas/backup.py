@@ -2,6 +2,7 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.base import CamelModel
 
 
 class BackupCreate(BaseModel):
@@ -18,7 +19,7 @@ class BackupStatusUpdate(BaseModel):
     file_size: int = Field(default=0, ge=0, description="文件大小 (字节)")
 
 
-class BackupOut(BaseModel):
+class BackupOut(CamelModel):
     id: int
     backup_type: int
     file_path: str
@@ -27,5 +28,3 @@ class BackupOut(BaseModel):
     error_message: str
     created_at: datetime
     updated_at: datetime
-
-    model_config = {"from_attributes": True}

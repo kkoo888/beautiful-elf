@@ -2,11 +2,7 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
-
-
-def to_camel(s: str) -> str:
-    parts = s.split("_")
-    return parts[0] + "".join(w.capitalize() for w in parts[1:])
+from app.schemas.base import CamelModel
 
 
 class NotificationCreate(BaseModel):
@@ -28,9 +24,7 @@ class NotificationUpdate(BaseModel):
     action_url: Optional[str] = Field(default=None, max_length=512, description="跳转地址", alias="actionUrl")
 
 
-class NotificationOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
+class NotificationOut(CamelModel):
     id: int
     event_id: str
     type: str

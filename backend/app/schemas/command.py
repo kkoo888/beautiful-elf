@@ -1,12 +1,7 @@
 """命令面板 Schema"""
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
-
-
-def to_camel(s: str) -> str:
-    """snake_case → camelCase"""
-    parts = s.split("_")
-    return parts[0] + "".join(w.capitalize() for w in parts[1:])
+from app.schemas.base import CamelModel
 
 
 class CommandCreate(BaseModel):
@@ -35,10 +30,8 @@ class CommandUpdate(BaseModel):
     is_enabled: Optional[int] = Field(None, ge=0, le=1, description="是否启用", alias="isEnabled")
 
 
-class CommandOut(BaseModel):
+class CommandOut(CamelModel):
     """命令输出"""
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
     id: int
     name: str
     display_name: str

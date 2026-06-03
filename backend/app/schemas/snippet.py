@@ -1,6 +1,7 @@
 """代码片段 Schema"""
 from typing import Optional, List
 from pydantic import BaseModel, Field
+from app.schemas.base import CamelModel
 
 
 class SnippetCreate(BaseModel):
@@ -19,7 +20,7 @@ class SnippetUpdate(BaseModel):
     tags: Optional[List[str]] = Field(None, description="标签列表")
 
 
-class SnippetOut(BaseModel):
+class SnippetOut(CamelModel):
     """代码片段输出"""
     id: int
     title: str
@@ -29,9 +30,6 @@ class SnippetOut(BaseModel):
     tags: List[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
-
-    class Config:
-        from_attributes = True
 
 
 class SnippetQuery(BaseModel):

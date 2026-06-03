@@ -2,6 +2,7 @@
 from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
+from app.schemas.base import CamelModel
 
 
 # ─── 专家成员 ─────────────────────────────────────────────
@@ -12,10 +13,10 @@ class ExpertMemberCreate(BaseModel):
 
     member_name: str = Field(..., min_length=1, max_length=128, description="专家名称", alias="name")
     member_role: str = Field(..., min_length=1, max_length=128, description="专家角色", alias="role")
-    avatar: str = Field(default="🤖", max_length=64, description="头像 emoji", alias="avatar")
+    avatar: str = Field(default="🤖", max_length=64, description="头像 emoji")
     system_prompt: str = Field(..., min_length=1, description="专家系统提示词", alias="systemPrompt")
     model_name: str = Field(default="", max_length=128, description="模型名称", alias="modelName")
-    temperature: int = Field(default=70, ge=0, le=200, description="温度 (x100)", alias="temperature")
+    temperature: int = Field(default=70, ge=0, le=200, description="温度 (x100)")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数", alias="maxTokens")
     tools_json: Optional[List[dict]] = Field(default=None, description="可用工具列表", alias="toolsJson")
     sort_order: int = Field(default=0, description="排序顺序", alias="sortOrder")
@@ -39,7 +40,7 @@ class ExpertMemberUpdate(BaseModel):
 
 
 class ExpertMemberOut(BaseModel):
-    """专家成员输出"""
+    """专家成员输出 — 使用自定义 alias（字段重命名，非纯 camelCase 转换）"""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
@@ -92,7 +93,7 @@ class ExpertTeamUpdate(BaseModel):
 
 
 class ExpertTeamOut(BaseModel):
-    """专家团输出"""
+    """专家团输出 — 使用自定义 alias（字段重命名，非纯 camelCase 转换）"""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
@@ -114,7 +115,7 @@ class ExpertTeamOut(BaseModel):
 # ─── 运行记录 ─────────────────────────────────────────────
 
 class ExpertTeamRunOut(BaseModel):
-    """运行记录输出"""
+    """运行记录输出 — 使用自定义 alias（字段重命名，非纯 camelCase 转换）"""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
@@ -162,7 +163,7 @@ class RoleSkillCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     skill_id: int = Field(..., description="技能 ID", alias="skillId")
-    priority: int = Field(default=0, ge=0, description="调用优先级", alias="priority")
+    priority: int = Field(default=0, ge=0, description="调用优先级")
     config_override: Optional[dict] = Field(default=None, description="配置覆盖", alias="configOverride")
     is_enabled: int = Field(default=1, ge=0, le=1, description="是否启用", alias="enabled")
 
@@ -177,7 +178,7 @@ class RoleSkillUpdate(BaseModel):
 
 
 class RoleSkillOut(BaseModel):
-    """角色技能绑定输出"""
+    """角色技能绑定输出 — 使用自定义 alias"""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
@@ -196,7 +197,7 @@ class RoleSkillOut(BaseModel):
 # ─── 角色执行记录 ────────────────────────────────────────
 
 class ExpertRoleRunOut(BaseModel):
-    """角色执行记录输出"""
+    """角色执行记录输出 — 使用自定义 alias"""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int

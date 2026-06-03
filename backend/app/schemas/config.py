@@ -1,6 +1,7 @@
 """配置管理 Schema"""
 from typing import Optional
 from pydantic import BaseModel
+from app.schemas.base import CamelModel
 
 
 class SettingCreate(BaseModel):
@@ -18,7 +19,7 @@ class SettingUpdate(BaseModel):
     restart_required: Optional[int] = None
 
 
-class SettingOut(BaseModel):
+class SettingOut(CamelModel):
     """配置输出"""
     id: int
     settings_key: str
@@ -27,6 +28,3 @@ class SettingOut(BaseModel):
     restart_required: int
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-
-    class Config:
-        from_attributes = True

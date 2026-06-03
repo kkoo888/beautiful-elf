@@ -2,11 +2,7 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
-
-
-def to_camel(s: str) -> str:
-    parts = s.split("_")
-    return parts[0] + "".join(w.capitalize() for w in parts[1:])
+from app.schemas.base import CamelModel
 
 
 class ScheduleCreate(BaseModel):
@@ -37,10 +33,8 @@ class ScheduleUpdate(BaseModel):
     color: Optional[str] = None
 
 
-class ScheduleOut(BaseModel):
+class ScheduleOut(CamelModel):
     """日程输出"""
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
     id: int
     title: str
     description: str

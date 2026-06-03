@@ -2,9 +2,10 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
+from app.schemas.base import CamelModel
 
 
-class PerformanceMetricOut(BaseModel):
+class PerformanceMetricOut(CamelModel):
     """性能指标输出"""
     id: int
     cpu_percent: float
@@ -15,11 +16,8 @@ class PerformanceMetricOut(BaseModel):
     gpu_percent: Optional[float] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class CurrentStatusOut(BaseModel):
+class CurrentStatusOut(CamelModel):
     """当前系统状态"""
     cpu_percent: float
     memory_percent: float

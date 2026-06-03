@@ -2,6 +2,7 @@
 from typing import Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
+from app.schemas.base import CamelModel
 
 
 class MessageCreate(BaseModel):
@@ -25,16 +26,14 @@ class MessageUpdate(BaseModel):
     token_count: Optional[int] = Field(default=None, description="Token 消耗量", alias="tokenCount")
 
 
-class MessageOut(BaseModel):
+class MessageOut(CamelModel):
     """消息输出"""
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-
     id: int
-    conversation_id: int = Field(alias="conversationId")
+    conversation_id: int
     role: str
     content: str
-    tool_calls: Optional[Any] = Field(default=None, alias="toolCalls")
-    tool_call_id: Optional[str] = Field(default=None, alias="toolCallId")
-    token_count: int = Field(alias="tokenCount")
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    tool_calls: Optional[Any] = None
+    tool_call_id: Optional[str] = None
+    token_count: int
+    created_at: datetime
+    updated_at: datetime

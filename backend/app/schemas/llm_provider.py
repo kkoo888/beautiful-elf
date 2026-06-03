@@ -1,6 +1,7 @@
 """大模型供应商 Schema"""
 from typing import Optional, List
 from pydantic import BaseModel
+from app.schemas.base import CamelModel
 
 
 class LLMModelItem(BaseModel):
@@ -36,7 +37,7 @@ class ProviderUpdate(BaseModel):
     description: Optional[str] = None
 
 
-class ProviderOut(BaseModel):
+class ProviderOut(CamelModel):
     """供应商输出"""
     id: int
     name: str
@@ -49,6 +50,3 @@ class ProviderOut(BaseModel):
     description: str
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-
-    class Config:
-        from_attributes = True

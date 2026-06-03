@@ -1,6 +1,7 @@
 """宠物属性 Schema"""
 from typing import Optional, List, Any
 from pydantic import BaseModel, Field
+from app.schemas.base import CamelModel
 
 
 class PetAttributeUpdate(BaseModel):
@@ -14,7 +15,7 @@ class PetAttributeUpdate(BaseModel):
     exp: Optional[int] = Field(None, ge=0, description="经验值")
 
 
-class PetAttributeOut(BaseModel):
+class PetAttributeOut(CamelModel):
     """宠物属性输出"""
     id: int
     hunger: int
@@ -28,9 +29,6 @@ class PetAttributeOut(BaseModel):
     created_at: str
     updated_at: str
 
-    class Config:
-        from_attributes = True
-
 
 class PetInteractionCreate(BaseModel):
     """创建互动记录"""
@@ -38,16 +36,13 @@ class PetInteractionCreate(BaseModel):
     effect_json: Optional[Any] = Field(None, description="属性变化效果")
 
 
-class PetInteractionOut(BaseModel):
+class PetInteractionOut(CamelModel):
     """互动记录输出"""
     id: int
     pet_attribute_id: int
     interaction_type: int
     effect_json: Optional[Any] = None
     created_at: str
-
-    class Config:
-        from_attributes = True
 
 
 class ModelScanRequest(BaseModel):
@@ -62,7 +57,7 @@ class ModelInfo(BaseModel):
     size: int = Field(..., description="文件大小（字节）")
 
 
-class ModelScanResponse(BaseModel):
+class ModelScanResponse(CamelModel):
     """扫描模型目录响应"""
     dir_path: str
     models: List[ModelInfo]

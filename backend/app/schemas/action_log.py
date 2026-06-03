@@ -2,6 +2,7 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.base import CamelModel
 
 
 class ActionLogCreate(BaseModel):
@@ -11,7 +12,7 @@ class ActionLogCreate(BaseModel):
     session_id: str = Field(default="", max_length=128, description="会话 ID")
 
 
-class ActionLogOut(BaseModel):
+class ActionLogOut(CamelModel):
     id: int
     module: str
     action: str
@@ -19,5 +20,3 @@ class ActionLogOut(BaseModel):
     session_id: str
     created_at: datetime
     updated_at: datetime
-
-    model_config = {"from_attributes": True}

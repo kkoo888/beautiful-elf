@@ -2,11 +2,7 @@
 from typing import Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
-
-
-def to_camel(s: str) -> str:
-    parts = s.split("_")
-    return parts[0] + "".join(w.capitalize() for w in parts[1:])
+from app.schemas.base import CamelModel
 
 
 class ToolCreate(BaseModel):
@@ -28,9 +24,7 @@ class ToolUpdate(BaseModel):
     json_schema: Optional[Any] = Field(default=None, description="参数 JSON Schema", alias="jsonSchema")
 
 
-class ToolOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
+class ToolOut(CamelModel):
     id: int
     name: str
     display_name: str
@@ -42,9 +36,7 @@ class ToolOut(BaseModel):
     updated_at: datetime
 
 
-class ToolStatsOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
+class ToolStatsOut(CamelModel):
     id: int
     tool_id: int
     call_count: int
