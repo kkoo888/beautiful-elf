@@ -50,12 +50,12 @@ export async function createClipboardItem(
 }
 
 /** 删除剪贴板条目 */
-export async function deleteClipboardItem(id: string): Promise<void> {
+export async function deleteClipboardItem(id: number): Promise<void> {
   await apiClient.delete(`/clipboard_items/${id}`)
 }
 
 /** 固定/取消固定 */
-export async function togglePinClipboardItem(id: string): Promise<ClipboardItem> {
+export async function togglePinClipboardItem(id: number): Promise<ClipboardItem> {
   const raw = extractData(await apiClient.put(`/clipboard_items/${id}/pin`)) as any
   return { ...raw, id: String(raw.id), contentType: mapContentType(raw.contentType), isPinned: raw.pinned === 1 }
 }

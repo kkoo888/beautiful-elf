@@ -3,12 +3,12 @@ export type ClipboardContentType = 'text' | 'code' | 'image' | 'link'
 
 /** 剪贴板条目 */
 export interface ClipboardItem {
-  id: string
+  id: number
   content: string
   contentType: ClipboardContentType
   /** 代码语言标识（仅 contentType === 'code' 时有效） */
   language?: string
-  isPinned: boolean
+  isPinned: number
   copiedAt: string
   createdAt: string
 }
