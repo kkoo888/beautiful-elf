@@ -466,22 +466,6 @@ const ruleHiddenChars: ScanRule = {
   },
 }
 
-const rulePermissionMismatch: ScanRule = {
-  id: 'permission-mismatch',
-  category: '权限声明不匹配',
-  level: 'low',
-  description: 'SKILL.md 声明的功能与实际代码行为不一致',
-  scan: (c, f) => {
-    if (!/SKILL\.md$/i.test(f)) return null
-    const hasNetworkWords = /网络|http|api|请求|fetch|request|web|search|搜索/i.test(c)
-    const declaresSimple = /天气|计算|格式化|翻译|笔记|提醒|timer|weather|format|note/i.test(c)
-    if (hasNetworkWords && declaresSimple) {
-      return [{ line: 0, snippet: '声明简单功能但包含网络请求代码' }]
-    }
-    return null
-  },
-}
-
 const ruleProcessOps: ScanRule = {
   id: 'process-ops',
   category: '进程操作',
@@ -489,6 +473,8 @@ const ruleProcessOps: ScanRule = {
   description: '检测创建/杀死系统进程的行为',
   scan: (c, f) => findMatches(c, /\bkill\s+-\d|\bpkill\b|\bxkill\b|\bfork\s*\(|\bspawn\s*\(|\bexecFile\s*\(|\bchild_process\b|\bsubprocess\b|\bos\.fork\b|\bos\.spawn\b/gi, /\.[\w]+$/i, f),
 }
+
+// permission-mismatch 已删除，由结构分析中的「声明与实际能力对比」替代
 
 // ─── INFO（2 项）────────────────────────────────
 
@@ -520,7 +506,7 @@ const ALL_RULES: ScanRule[] = [
   ruleBase64Payload, ruleAnomalousNetwork, ruleRawIP, ruleHighEntropy, ruleDangerousShell, ruleEnvReading, ruleFileOverreach, ruleProcessOps,
   ruleWebhookExfil, ruleScreenCapture, ruleFsWatch, ruleTimeBomb, ruleEncryptedPayload,
   // LOW
-  ruleHiddenChars, rulePermissionMismatch,
+  ruleHiddenChars,
 ]
 
 // ─── 可执行文件扩展名 ─────────────────────────────
@@ -640,25 +626,100 @@ function runScan(files: FileWithMeta[]): ScanResult {
     }
   }
 
-  // [新增] 声明功能 vs 实际能力对比 — SKILL.md 说的和代码做的是否匹配
+  // [增强] 声明功能 vs 实际能力对比 — 多维度交叉检测
   const skillMdFile = files.find((f) => f.path === 'SKILL.md' || f.path.endsWith('/SKILL.md'))
   if (skillMdFile) {
     const desc = skillMdFile.decodedContent.toLowerCase()
-    const isSimpleSkill = /天气|计算|格式化|翻译|笔记|提醒|timer|weather|format|note|calculator|convert|模板|template|snippet/i.test(desc)
-    const hasCodeFiles = files.some((f) => {
-      const ext = f.path.slice(f.path.lastIndexOf('.')).toLowerCase()
-      return ['.py', '.js', '.ts', '.sh', '.rb', '.go', '.rs'].includes(ext)
-    })
-    const hasNetworkInCode = files.some((f) =>
-      /fetch\s*\(|axios\.|requests\.(get|post)|urllib|httpx|curl\s|wget\s|\.post\s*\(/i.test(f.decodedContent)
-    )
 
-    if (isSimpleSkill && hasCodeFiles && hasNetworkInCode) {
+    // 声明类型分类
+    const declaredSimple = /天气|计算|格式化|翻译|笔记|提醒|timer|weather|format|note|calculator|convert|模板|template|snippet|日历|calendar|todo|备忘|字典|dict|汇率|exchange|单位换算|unit/i.test(desc)
+    const declaredData = /数据|分析|统计|图表|报告|chart|analysis|data|dashboard|可视化|visuali/i.test(desc)
+    const declaredContent = /写作|文章|文档|内容|writing|content|blog|博客|markdown|编辑|edit/i.test(desc)
+    const declaredDev = /代码|开发|调试|测试|code|dev|debug|test|lint|review|部署|deploy|ci|cd/i.test(desc)
+    const declaredSecurity = /安全|security|audit|审计|扫描|scan|漏洞|vulnerability|渗透|pentest/i.test(desc)
+
+    // 实际行为分类（扫描所有文件内容）
+    const allContent = files.map((f) => f.decodedContent).join('\n')
+    const hasNetwork = /fetch\s*\(|axios\.|requests\.(get|post|put)|urllib|httpx|curl\s|wget\s|\.post\s*\(|XMLHttpRequest|WebSocket|new\s+Request/gi.test(allContent)
+    const hasFileSystem = /\bfs\.(read|write|unlink|mkdir|rename|copy)|open\s*\([^)]*['"'][rw]|os\.(listdir|remove|makedirs)|pathlib|shutil/gi.test(allContent)
+    const hasSystemExec = /\bexec\s*\(|\bspawn\s*\(|\bos\.system\s*\(|\bsubprocess\b|\bchild_process\b|\bos\.popen\b/gi.test(allContent)
+    const hasCredentialAccess = /~\/\.ssh|~\/\.aws|~\/\.config|\.env\b|credentials?|token|api[_-]?key|secret/gi.test(allContent)
+    const hasPersistence = /crontab|systemctl|\/etc\/init\.d|\.bashrc|\.zshrc|launchd|schtasks/gi.test(allContent)
+
+    // 交叉检测：声明简单功能但行为复杂
+    if (declaredSimple) {
+      if (hasNetwork) {
+        issues.push({
+          level: 'high',
+          category: '声明与实际不符',
+          message: '声明为简单工具类技能，但包含网络请求行为',
+          snippet: '声明: 简单工具 → 实际: 有网络请求',
+        })
+      }
+      if (hasSystemExec) {
+        issues.push({
+          level: 'critical',
+          category: '声明与实际不符',
+          message: '声明为简单工具类技能，但包含系统命令执行',
+          snippet: '声明: 简单工具 → 实际: 有 exec/system 调用',
+        })
+      }
+      if (hasCredentialAccess) {
+        issues.push({
+          level: 'critical',
+          category: '声明与实际不符',
+          message: '声明为简单工具类技能，但访问凭证/密钥文件',
+          snippet: '声明: 简单工具 → 实际: 读取 ~/.ssh/.aws 等',
+        })
+      }
+    }
+
+    // 声明数据分析但有系统执行
+    if (declaredData && hasSystemExec) {
       issues.push({
         level: 'high',
         category: '声明与实际不符',
-        message: 'SKILL.md 声明简单功能，但包含网络请求代码，行为与声明不一致',
+        message: '声明为数据分析技能，但包含系统命令执行（应只做数据处理）',
+        snippet: '声明: 数据分析 → 实际: 有 exec/system 调用',
       })
+    }
+
+    // 声明内容/写作但有文件系统写入
+    if (declaredContent && hasFileSystem) {
+      issues.push({
+        level: 'medium',
+        category: '声明与实际不符',
+        message: '声明为内容创作技能，但包含文件系统操作',
+        snippet: '声明: 内容创作 → 实际: 有文件读写操作',
+      })
+    }
+
+    // 声明开发工具但有持久化行为
+    if (declaredDev && hasPersistence) {
+      issues.push({
+        level: 'high',
+        category: '声明与实际不符',
+        message: '声明为开发辅助技能，但包含持久化行为（crontab/systemctl）',
+        snippet: '声明: 开发工具 → 实际: 有持久化操作',
+      })
+    }
+
+    // 没有声明任何类型，但有高危行为（无声明 + 有行为 = 更可疑）
+    if (!declaredSimple && !declaredData && !declaredContent && !declaredDev && !declaredSecurity) {
+      if (hasCredentialAccess) {
+        issues.push({
+          level: 'high',
+          category: '行为缺乏声明',
+          message: 'SKILL.md 未说明用途，但代码访问凭证/密钥文件',
+        })
+      }
+      if (hasSystemExec && hasNetwork) {
+        issues.push({
+          level: 'high',
+          category: '行为缺乏声明',
+          message: 'SKILL.md 未说明用途，但同时有系统执行和网络请求',
+        })
+      }
     }
   }
 
