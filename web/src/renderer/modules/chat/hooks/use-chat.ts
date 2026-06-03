@@ -48,8 +48,8 @@ interface UseChatReturn {
   clearMessages: () => void
   /** 停止生成 */
   stopGeneration: () => void
-  /** 创建新会话（本地） */
-  createLocalConversation: () => void
+  /** 创建新会话（调后端 API） */
+  createConversation: () => Promise<void>
   /** 切换会话 */
   switchConversation: (id: string) => void
   /** 删除会话 */
@@ -297,17 +297,11 @@ export function useChat(): UseChatReturn {
     setIsLoading(false)
   }, [setIsLoading])
 
-  /** 创建新会话（本地） */
-  const createLocalConversation = useCallback(() => {
-    const id = crypto.randomUUID()
-    useChatStore.getState().addConversation({
-      id,
-      title: '新会话',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      messageCount: 0,
-    })
-    useChatStore.getState().setCurrentConversation(id)
+  /** 创建新会话（调后端 API） */
+  const handleCreateConversation = useCallback(async () => {
+    const conv = await createConversation('新会话')
+    useChatStore.getState().addConversation(conv)
+    useChatStore.getState().setCurrentConversation(conv.id)
     useChatStore.getState().clearMessages()
   }, [])
 
@@ -337,7 +331,7 @@ export function useChat(): UseChatReturn {
     submitFeedback: handleFeedback,
     clearMessages,
     stopGeneration,
-    createLocalConversation,
+    createConversation: handleCreateConversation,
     switchConversation,
     deleteConversation,
   }
