@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Path
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from typing import List, Optional
 
 from app.core.database import get_db, AsyncSessionLocal
 from app.services.llm_chat_service import LLMChatService
@@ -30,8 +30,8 @@ class ChatRequest(BaseModel):
     """对话请求"""
     model_config = ConfigDict(populate_by_name=True)
 
-    provider_id: int = Field(..., description="供应商 ID", alias="providerId")
-    model_name: str = Field(..., description="模型名称", alias="modelName")
+    provider_id: Optional[int] = Field(default=None, description="供应商 ID（必填）", alias="providerId")
+    model_name: str = Field(default="", description="模型名称", alias="modelName")
     messages: List[ChatMessage] = Field(..., description="对话历史")
     temperature: float = Field(default=0.7, ge=0, le=2, description="温度")
     max_tokens: int = Field(default=2048, ge=1, le=32768, description="最大 token", alias="maxTokens")
@@ -45,6 +45,9 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ):
     """AI 对话 — stream=true 返回 SSE，stream=false 返回 JSON"""
+    if data.provider_id is None:
+        return fail("NO_PROVIDER", "请先选择 AI 供应商", "请在设置中选择供应商和模型")
+
     messages = [{"role": m.role, "content": m.content} for m in data.messages]
 
     if data.stream:

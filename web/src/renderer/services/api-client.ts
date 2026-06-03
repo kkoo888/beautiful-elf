@@ -61,7 +61,11 @@ apiClient.interceptors.response.use(
  * const user = extractData(await apiClient.get<User>('/users/1'))
  */
 function extractData<T>(resp: AxiosResponse<ApiResponse<T>>): T {
-  return resp.data.data
+  const body = resp.data as any
+  if (body.code && body.code !== 'SUCCESS') {
+    throw new Error(body.userTip || body.message || '请求失败')
+  }
+  return body.data
 }
 
 /**

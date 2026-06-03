@@ -11,8 +11,8 @@ class Skill(BaseModel):
     description = Column(String(1024), default="", comment="技能描述")
     version = Column(String(32), default="1.0.0", comment="版本号")
     source = Column(String(256), default="", comment="来源")
-    trigger_words = Column(JSON, default=None, comment="触发词列表")
-    dependencies = Column(JSON, default=None, comment="依赖技能列表")
+    trigger_words = Column(JSON, default=list, comment="触发词列表")
+    dependencies = Column(JSON, default=list, comment="依赖技能列表")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
     config = Column(JSON, default=None, comment="技能配置")
 

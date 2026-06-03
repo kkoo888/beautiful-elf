@@ -27,8 +27,8 @@ export interface Skill {
   version: string
   source: string
   enabled: boolean
-  triggerWords: string[] | null
-  dependencies: string[] | null
+  triggerWords: string[]
+  dependencies: string[]
   config: Record<string, unknown>
   stats?: SkillRuntimeStats
   createdAt: string
