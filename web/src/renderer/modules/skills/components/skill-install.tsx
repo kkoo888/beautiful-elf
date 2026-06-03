@@ -11,10 +11,8 @@ import {
   message,
   Steps,
   Space,
-  FolderOpenOutlined,
-  GithubOutlined,
-  FileOutlined,
 } from 'antd'
+import { FolderOpenOutlined, GithubOutlined, FileOutlined } from '@ant-design/icons'
 import type { InstallSkillInput, SkillFolderParsed } from '../types/skills'
 import { parseSkillFolder } from '../utils/skill-folder-parser'
 import styles from './skills-panel.module.css'
