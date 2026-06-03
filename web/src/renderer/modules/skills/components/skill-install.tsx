@@ -58,6 +58,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
   const folderInputRef = useRef<HTMLInputElement>(null)
   const [parsed, setParsed] = useState<SkillFolderParsed | null>(null)
   const [githubUrl, setGithubUrl] = useState('')
+  const [githubChecking, setGithubChecking] = useState(false)
 
   // 编辑表单
   const [formName, setFormName] = useState('')
@@ -71,6 +72,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
     setStep('source')
     setParsed(null)
     setGithubUrl('')
+    setGithubChecking(false)
     setFormName('')
     setFormDisplayName('')
     setFormDescription('')
@@ -118,17 +120,15 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
     setFormTriggerWords('')
     setFormDependencies('')
 
-    // 先跳转，不阻塞用户
-    setParsed(null)
-    setStep('edit')
-
-    // 后台检查仓库信誉（不阻塞）
+    // 必须等仓库信誉检查完成
     const repoPath = githubUrl.trim()
       .replace(/^https?:\/\/github\.com\//, '')
       .replace(/\.git$/, '')
       .replace(/^git@github\.com:/, '')
     if (repoPath.includes('/') && !repoPath.startsWith('http')) {
-      checkGitHubRepo(repoPath).then((repoCheck) => {
+      setGithubChecking(true)
+      try {
+        const repoCheck = await checkGitHubRepo(repoPath)
         if (repoCheck.warnings.length > 0) {
           const warnText = repoCheck.warnings.join('\n')
           if (repoCheck.verdict === 'caution') {
@@ -137,8 +137,15 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
             message.info(`ℹ️ 仓库信息:\n${warnText}`, 4)
           }
         }
-      }).catch(() => { /* 静默失败 */ })
+      } catch {
+        message.warning('仓库信誉检查失败，请谨慎安装')
+      } finally {
+        setGithubChecking(false)
+      }
     }
+
+    setParsed(null)
+    setStep('edit')
   }, [githubUrl])
 
   // ─── 确认安装 ──────────────────────────────
@@ -323,9 +330,10 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
                 value={githubUrl}
                 onChange={(e) => setGithubUrl(e.target.value)}
                 onPressEnter={() => void handleGithubImport()}
+                disabled={githubChecking}
               />
-              <Button type="primary" onClick={() => void handleGithubImport()}>
-                下一步
+              <Button type="primary" onClick={() => void handleGithubImport()} loading={githubChecking}>
+                {githubChecking ? '检查仓库信誉中...' : '下一步'}
               </Button>
             </div>
             <Text type="secondary" style={{ fontSize: 12 }}>
