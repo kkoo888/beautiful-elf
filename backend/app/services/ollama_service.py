@@ -77,8 +77,31 @@ def update_config_cache(key: str, value) -> None:
     _config_cache[key] = value
 
 
+# ── 模块级共享 httpx 客户端（连接池复用） ──────────────────
+_shared_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_shared_client() -> httpx.AsyncClient:
+    """获取模块级共享 httpx 客户端，所有 OllamaClient 实例复用同一连接池"""
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(120.0, connect=10.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _shared_client
+
+
+async def close_ollama_client() -> None:
+    """关闭共享 httpx 客户端（应用关闭时调用）"""
+    global _shared_client
+    if _shared_client and not _shared_client.is_closed:
+        await _shared_client.aclose()
+        _shared_client = None
+
+
 class OllamaClient:
-    """Ollama API 客户端 — 封装 HTTP 调用"""
+    """Ollama API 客户端 — 封装 HTTP 调用，复用模块级连接池"""
 
     def __init__(self, host: Optional[str] = None, model: Optional[str] = None):
         self.host = (host or get_host()).rstrip("/")
@@ -116,27 +139,27 @@ class OllamaClient:
             },
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            try:
-                resp = await client.post(f"{self.host}/api/chat", json=payload)
-                resp.raise_for_status()
-                data = resp.json()
+        client = _get_shared_client()
+        try:
+            resp = await client.post(f"{self.host}/api/chat", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
 
-                return {
-                    "content": data.get("message", {}).get("content", ""),
-                    "model": data.get("model", use_model),
-                    "total_duration": data.get("total_duration", 0),
-                    "eval_count": data.get("eval_count", 0),
-                }
-            except httpx.TimeoutException:
-                logger.error(f"Ollama 调用超时: model={use_model}")
-                raise RuntimeError(f"Ollama 模型 {use_model} 响应超时，请检查服务状态")
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Ollama HTTP 错误: {e.response.status_code} - {e.response.text}")
-                raise RuntimeError(f"Ollama 返回错误: {e.response.status_code}")
-            except Exception as e:
-                logger.error(f"Ollama 调用异常: {e}")
-                raise RuntimeError(f"Ollama 调用失败: {e}")
+            return {
+                "content": data.get("message", {}).get("content", ""),
+                "model": data.get("model", use_model),
+                "total_duration": data.get("total_duration", 0),
+                "eval_count": data.get("eval_count", 0),
+            }
+        except httpx.TimeoutException:
+            logger.error(f"Ollama 调用超时: model={use_model}")
+            raise RuntimeError(f"Ollama 模型 {use_model} 响应超时，请检查服务状态")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Ollama HTTP 错误: {e.response.status_code} - {e.response.text}")
+            raise RuntimeError(f"Ollama 返回错误: {e.response.status_code}")
+        except Exception as e:
+            logger.error(f"Ollama 调用异常: {e}")
+            raise RuntimeError(f"Ollama 调用失败: {e}")
 
     async def chat_stream(
         self,
@@ -160,50 +183,50 @@ class OllamaClient:
             },
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            try:
-                async with client.stream("POST", f"{self.host}/api/chat", json=payload) as resp:
-                    resp.raise_for_status()
-                    async for line in resp.aiter_lines():
-                        if line:
-                            try:
-                                data = json.loads(line)
-                                content = data.get("message", {}).get("content", "")
-                                if content:
-                                    yield content
-                                if data.get("done"):
-                                    break
-                            except json.JSONDecodeError:
-                                continue
-            except Exception as e:
-                logger.error(f"Ollama 流式调用异常: {e}")
-                raise RuntimeError(f"Ollama 流式调用失败: {e}")
+        client = _get_shared_client()
+        try:
+            async with client.stream("POST", f"{self.host}/api/chat", json=payload) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line:
+                        try:
+                            data = json.loads(line)
+                            content = data.get("message", {}).get("content", "")
+                            if content:
+                                yield content
+                            if data.get("done"):
+                                break
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            logger.error(f"Ollama 流式调用异常: {e}")
+            raise RuntimeError(f"Ollama 流式调用失败: {e}")
 
     async def embeddings(self, text: str, model: Optional[str] = None) -> List[float]:
         """调用 Ollama Embeddings API"""
         use_model = model or get_embed_model()
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            try:
-                resp = await client.post(
-                    f"{self.host}/api/embeddings",
-                    json={"model": use_model, "prompt": text},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return data.get("embedding", [])
-            except Exception as e:
-                logger.error(f"Ollama Embedding 调用异常: {e}")
-                raise RuntimeError(f"Ollama Embedding 失败: {e}")
+        client = _get_shared_client()
+        try:
+            resp = await client.post(
+                f"{self.host}/api/embeddings",
+                json={"model": use_model, "prompt": text},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("embedding", [])
+        except Exception as e:
+            logger.error(f"Ollama Embedding 调用异常: {e}")
+            raise RuntimeError(f"Ollama Embedding 失败: {e}")
 
     async def health_check(self) -> dict:
         """检查 Ollama 服务状态"""
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            try:
-                resp = await client.get(f"{self.host}/api/tags")
-                resp.raise_for_status()
-                data = resp.json()
-                models = [m["name"] for m in data.get("models", [])]
-                return {"status": "ok", "models": models, "host": self.host}
-            except Exception as e:
-                return {"status": "error", "message": str(e), "host": self.host}
+        try:
+            client = _get_shared_client()
+            resp = await client.get(f"{self.host}/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+            models = [m["name"] for m in data.get("models", [])]
+            return {"status": "ok", "models": models, "host": self.host}
+        except Exception as e:
+            return {"status": "error", "message": str(e), "host": self.host}

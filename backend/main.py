@@ -41,6 +41,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # 清理资源
+    from app.services.ollama_service import close_ollama_client
+    await close_ollama_client()
     await close_db()
     await close_redis()
     logger.info("Beautiful-Elf 后端已停止")
