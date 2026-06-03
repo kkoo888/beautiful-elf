@@ -13,7 +13,7 @@ export default function ChatPanel() {
   const {
     conversations,
     currentConversationId,
-    createConversation,
+    createLocalConversation,
     switchConversation,
     deleteConversation,
   } = useChat()
@@ -44,7 +44,7 @@ export default function ChatPanel() {
             <ConversationList
               conversations={conversations}
               currentId={currentConversationId}
-              onCreate={createConversation}
+              onCreate={createLocalConversation}
               onSwitch={switchConversation}
               onDelete={deleteConversation}
             />
