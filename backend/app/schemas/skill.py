@@ -49,3 +49,54 @@ class SkillStatsOut(CamelModel):
     fail_count: int
     avg_duration_ms: int
     last_called_at: Optional[datetime]
+
+
+class SkillInstallResult(CamelModel):
+    """技能安装结果（扫描通过时返回）"""
+    id: int
+    name: str
+    display_name: str
+    description: str
+    version: str
+    source: str
+    trigger_words: Optional[List[str]] = []
+    dependencies: Optional[List[str]] = []
+    is_enabled: int
+    config: Optional[Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScanIssueOut(CamelModel):
+    """扫描问题"""
+    level: str
+    category: str
+    message: str
+    file: Optional[str] = None
+    line: Optional[int] = None
+    snippet: Optional[str] = None
+
+
+class ScanResultOut(CamelModel):
+    """扫描结果"""
+    file_count: int
+    issues: List[ScanIssueOut] = []
+    summary: dict = {}
+    verdict: str = "safe"
+
+
+class SkillScanWarning(CamelModel):
+    """扫描有问题时的返回"""
+    name: str
+    display_name: str
+    description: str
+    version: str
+    source: str
+    trigger_words: Optional[List[str]] = []
+    dependencies: Optional[List[str]] = []
+    scan_result: ScanResultOut
+
+
+class SkillConfirmInput(CamelModel):
+    """用户确认强制安装"""
+    name: str = Field(..., max_length=128, description="技能名称")

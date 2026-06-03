@@ -67,3 +67,73 @@ export async function toggleSkill(id: number, enabled: boolean): Promise<Skill> 
 export async function refineSkill(id: number, prompt?: string): Promise<RefineResult> {
   return extractData(await apiClient.post(`/skills/${id}/refine`, { prompt }))
 }
+
+/** 安装技能（zip 上传）— 返回安装结果或扫描警告 */
+export async function installSkillZip(input: {
+  zipBlob: Blob
+  name: string
+  displayName?: string
+  description: string
+  version?: string
+  source?: string
+  triggerWords?: string[]
+  dependencies?: string[]
+}): Promise<{ installed: boolean; scanResult?: import('../types/skills').ScanResult; data?: Skill }> {
+  const form = new FormData()
+  form.append('file', input.zipBlob, `${input.name}.zip`)
+  form.append('name', input.name)
+  form.append('display_name', input.displayName || input.name)
+  form.append('description', input.description)
+  form.append('version', input.version ?? '1.0.0')
+  form.append('source', input.source ?? 'folder')
+  form.append('trigger_words', (input.triggerWords ?? []).join(','))
+  form.append('dependencies', (input.dependencies ?? []).join(','))
+
+  try {
+    const data = extractData(await apiClient.post('/skills/install', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    }))
+    return { installed: true, data }
+  } catch (err: any) {
+    // 后端返回 SKILL_SCAN_WARNING 时，axios 会 reject
+    // 从 error response 中提取扫描结果
+    const resp = err?.response?.data
+    if (resp?.code === 'SKILL_SCAN_WARNING' && resp?.data) {
+      return { installed: false, scanResult: resp.data.scanResult }
+    }
+    throw err
+  }
+}
+
+/** 用户确认忽略风险后强制安装 */
+export async function confirmInstallZip(input: {
+  zipBlob: Blob
+  name: string
+  displayName?: string
+  description: string
+  version?: string
+  source?: string
+  triggerWords?: string[]
+  dependencies?: string[]
+}): Promise<Skill> {
+  const form = new FormData()
+  form.append('file', input.zipBlob, `${input.name}.zip`)
+  form.append('name', input.name)
+  form.append('display_name', input.displayName || input.name)
+  form.append('description', input.description)
+  form.append('version', input.version ?? '1.0.0')
+  form.append('source', input.source ?? 'folder')
+  form.append('trigger_words', (input.triggerWords ?? []).join(','))
+  form.append('dependencies', (input.dependencies ?? []).join(','))
+
+  return extractData(await apiClient.post('/skills/confirm', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  }))
+}
+
+/** 取消安装时清理后端已解压的文件 */
+export async function cleanupSkillDir(name: string): Promise<void> {
+  await apiClient.post(`/skills/cleanup?name=${encodeURIComponent(name)}`)
+}

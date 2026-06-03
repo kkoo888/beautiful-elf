@@ -12,6 +12,7 @@ import {
   Steps,
   Space,
   Alert,
+  Spin,
 } from 'antd'
 import {
   FolderOpenOutlined,
@@ -21,9 +22,12 @@ import {
   WarningOutlined,
   CloseCircleOutlined,
   InfoCircleOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons'
+import JSZip from 'jszip'
 import type { InstallSkillInput, SkillFolderParsed, ScanResult, RiskLevel } from '../types/skills'
 import { parseSkillFolder, checkGitHubRepo } from '../utils/skill-folder-parser'
+import { installSkillZip, confirmInstallZip, cleanupSkillDir } from '../services/skills-api'
 import styles from './skills-panel.module.css'
 
 const { Text } = Typography
@@ -35,7 +39,7 @@ interface SkillInstallProps {
   isLoading?: boolean
 }
 
-type InstallStep = 'source' | 'scan' | 'edit'
+type InstallStep = 'source' | 'scan' | 'edit' | 'installing' | 'backend-warn'
 
 /** 风险等级配置 */
 const RISK_CONFIG: Record<RiskLevel, { color: string; icon: React.ReactNode; label: string }> = {
@@ -69,6 +73,11 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
   const [formTriggerWords, setFormTriggerWords] = useState('')
   const [formDependencies, setFormDependencies] = useState('')
 
+  // 安装状态
+  const [installing, setInstalling] = useState(false)
+  const [backendScanResult, setBackendScanResult] = useState<ScanResult | null>(null)
+  const [zipBlob, setZipBlob] = useState<Blob | null>(null)
+
   const resetState = useCallback(() => {
     setStep('source')
     setParsed(null)
@@ -81,12 +90,37 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
     setFormVersion('1.0.0')
     setFormTriggerWords('')
     setFormDependencies('')
+    setInstalling(false)
+    setBackendScanResult(null)
+    setZipBlob(null)
   }, [])
 
   const handleClose = useCallback(() => {
+    // 如果有已解压的文件（后端扫描有问题但用户取消），清理后端文件
+    if (backendScanResult && formName) {
+      cleanupSkillDir(formName).catch(() => {})
+    }
     resetState()
     onClose()
-  }, [resetState, onClose])
+  }, [resetState, onClose, backendScanResult, formName])
+
+  // ─── JSZip 打包 ──────────────────────────────
+  const packageAsZip = useCallback(async (files: { path: string; content: string }[]): Promise<Blob> => {
+    const zip = new JSZip()
+    for (const file of files) {
+      // content 是 base64，需要解码为二进制
+      try {
+        const binary = atob(file.content)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        zip.file(file.path, bytes)
+      } catch {
+        // 如果 base64 解码失败，当作纯文本
+        zip.file(file.path, file.content)
+      }
+    }
+    return zip.generateAsync({ type: 'blob' })
+  }, [])
 
   // ─── 文件夹选择 ──────────────────────────────
   const handleFolderSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,7 +156,6 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
     setFormTriggerWords('')
     setFormDependencies('')
 
-    // 必须等仓库信誉检查完成
     const repoPath = githubUrl.trim()
       .replace(/^https?:\/\/github\.com\//, '')
       .replace(/\.git$/, '')
@@ -137,55 +170,145 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
       } finally {
         setGithubChecking(false)
       }
-      // 不自动跳转，等用户看完报告点按钮
       return
     }
 
-    // 非 GitHub 地址直接跳转
     setParsed(null)
     setStep('edit')
   }, [githubUrl])
 
-  // ─── 确认安装 ──────────────────────────────
+  // ─── 确认安装（点安装按钮后） ──────────────────
   const handleConfirm = useCallback(async () => {
     if (!formName.trim()) { message.warning('请输入技能名称'); return }
     if (!formDescription.trim()) { message.warning('请输入技能简介'); return }
 
     const triggerWords = formTriggerWords.split(/[,，]/).map((w) => w.trim()).filter(Boolean)
     const dependencies = formDependencies.split(/[,，]/).map((d) => d.trim()).filter(Boolean)
+    const name = formName.trim()
+    const displayName = formDisplayName.trim() || name
+    const description = formDescription.trim()
+    const version = formVersion.trim() || '1.0.0'
 
+    // 有 parsed（文件夹安装）→ 打包 zip 上传到后端
+    if (parsed) {
+      setInstalling(true)
+      setStep('installing')
+      try {
+        const blob = await packageAsZip(parsed.files)
+        setZipBlob(blob)
+
+        const result = await installSkillZip({
+          zipBlob: blob,
+          name,
+          displayName,
+          description,
+          version,
+          source: 'folder',
+          triggerWords,
+          dependencies,
+        })
+
+        if (result.installed) {
+          message.success(`已安装技能: ${name}`)
+          await onInstall({
+            source: 'folder',
+            name,
+            displayName,
+            description,
+            version,
+            triggerWords,
+            dependencies,
+            content: '', // 后端已处理，这里只是触发前端刷新
+          })
+          handleClose()
+        } else {
+          // 后端扫描有问题，展示后端扫描报告
+          setBackendScanResult(result.scanResult ?? null)
+          setStep('backend-warn')
+        }
+      } catch (err: any) {
+        message.error(err?.message || '安装失败，请重试')
+        setStep('edit')
+      } finally {
+        setInstalling(false)
+      }
+      return
+    }
+
+    // GitHub 导入 → 走原有的 onInstall（base64 方式）
     try {
       await onInstall({
-        source: parsed ? 'folder' : 'github',
+        source: 'github',
+        name,
+        displayName,
+        description,
+        version,
+        triggerWords,
+        dependencies,
+        content: githubUrl.trim(),
+      })
+      message.success(`已安装技能: ${name}`)
+      handleClose()
+    } catch {
+      message.error('安装失败，请重试')
+    }
+  }, [formName, formDisplayName, formDescription, formVersion, formTriggerWords, formDependencies, parsed, githubUrl, onInstall, handleClose, packageAsZip])
+
+  // ─── 后端扫描有问题：忽略风险继续安装 ──────────
+  const handleForceInstall = useCallback(async () => {
+    if (!zipBlob) return
+    setInstalling(true)
+    try {
+      const triggerWords = formTriggerWords.split(/[,，]/).map((w) => w.trim()).filter(Boolean)
+      const dependencies = formDependencies.split(/[,，]/).map((d) => d.trim()).filter(Boolean)
+
+      await confirmInstallZip({
+        zipBlob,
+        name: formName.trim(),
+        displayName: formDisplayName.trim() || formName.trim(),
+        description: formDescription.trim(),
+        version: formVersion.trim() || '1.0.0',
+        source: 'folder',
+        triggerWords,
+        dependencies,
+      })
+
+      message.success(`已安装技能: ${formName.trim()}（已忽略风险）`)
+      await onInstall({
+        source: 'folder',
         name: formName.trim(),
         displayName: formDisplayName.trim() || formName.trim(),
         description: formDescription.trim(),
         version: formVersion.trim() || '1.0.0',
         triggerWords,
         dependencies,
-        content: parsed
-          ? btoa(unescape(encodeURIComponent(JSON.stringify(parsed.files))))
-          : githubUrl.trim(),
+        content: '',
       })
-      message.success(`已安装技能: ${formName.trim()}`)
       handleClose()
-    } catch {
-      message.error('安装失败，请重试')
+    } catch (err: any) {
+      message.error(err?.message || '安装失败，请重试')
+    } finally {
+      setInstalling(false)
     }
-  }, [formName, formDisplayName, formDescription, formVersion, formTriggerWords, formDependencies, parsed, githubUrl, onInstall, handleClose])
+  }, [zipBlob, formName, formDisplayName, formDescription, formVersion, formTriggerWords, formDependencies, onInstall, handleClose])
+
+  // ─── 后端扫描有问题：取消安装 ──────────────────
+  const handleCancelInstall = useCallback(() => {
+    cleanupSkillDir(formName).catch(() => {})
+    resetState()
+    onClose()
+  }, [formName, resetState, onClose])
 
   // ─── 扫描报告渲染 ──────────────────────────────
   const renderScanReport = useCallback((scanResult: ScanResult) => {
     const { issues, summary, verdict, fileCount } = scanResult
     const verdictCfg = VERDICT_CONFIG[verdict]
 
-    // 按级别分组
     const grouped: Record<RiskLevel, typeof issues> = { critical: [], high: [], medium: [], low: [], info: [] }
     for (const issue of issues) grouped[issue.level].push(issue)
 
     return (
       <div className={styles.scanReport}>
-        {/* 判定结果 */}
         <Alert
           type={verdictCfg.color as 'success' | 'warning' | 'error'}
           showIcon
@@ -195,7 +318,6 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
           style={{ marginBottom: 16 }}
         />
 
-        {/* 统计概览 */}
         <div className={styles.scanSummary}>
           {(Object.entries(summary) as [RiskLevel, number][]).map(([level, count]) => (
             count > 0 && (
@@ -207,7 +329,6 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
           ))}
         </div>
 
-        {/* 问题列表 */}
         {issues.length > 0 && (
           <div className={styles.scanIssues}>
             {(['critical', 'high', 'medium', 'low', 'info'] as RiskLevel[]).map((level) =>
@@ -241,7 +362,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
   }, [])
 
   // ─── 主渲染 ──────────────────────────────
-  const stepIndex = step === 'source' ? 0 : step === 'scan' ? 1 : 2
+  const stepIndex = step === 'source' ? 0 : step === 'scan' ? 1 : step === 'edit' || step === 'installing' || step === 'backend-warn' ? 2 : 0
 
   return (
     <Drawer
@@ -272,8 +393,23 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
             <Button onClick={() => parsed ? setStep('scan') : setStep('source')}>上一步</Button>
             <Space>
               <Button onClick={handleClose}>取消</Button>
-              <Button type="primary" onClick={() => void handleConfirm()} loading={isLoading}>
+              <Button type="primary" onClick={() => void handleConfirm()} loading={installing}>
                 确认安装
+              </Button>
+            </Space>
+          </div>
+        ) : step === 'installing' ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
+            <Spin indicator={<LoadingOutlined style={{ fontSize: 20 }} spin />} />
+            <Text style={{ marginLeft: 12 }}>正在安装，请稍候...</Text>
+          </div>
+        ) : step === 'backend-warn' ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Button onClick={handleCancelInstall}>取消安装</Button>
+            <Space>
+              <Button onClick={handleCancelInstall}>取消</Button>
+              <Button type="primary" danger onClick={() => void handleForceInstall()} loading={installing}>
+                忽略风险，继续安装
               </Button>
             </Space>
           </div>
@@ -338,7 +474,6 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
               格式：user/repo 或 https://github.com/user/repo
             </Text>
 
-            {/* GitHub 仓库信誉检查报告 */}
             {repoCheckResult && (
               <div style={{ marginTop: 16 }}>
                 <Alert
@@ -406,7 +541,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
         </div>
       )}
 
-      {/* ─── 步骤二：安全扫描报告 ──────────────── */}
+      {/* ─── 步骤二：前端安全扫描报告 ────────────── */}
       {step === 'scan' && parsed && (
         <div className={styles.installContent}>
           <div className={styles.folderPreview}>
@@ -487,6 +622,30 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ─── 安装中 loading ──────────────────────── */}
+      {step === 'installing' && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0' }}>
+          <Spin size="large" indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />} />
+          <Text style={{ marginTop: 16, fontSize: 16 }}>正在安装技能...</Text>
+          <Text type="secondary" style={{ marginTop: 8 }}>后端正在解压、扫描并安装，请稍候</Text>
+        </div>
+      )}
+
+      {/* ─── 后端扫描有问题：展示报告 ────────────── */}
+      {step === 'backend-warn' && backendScanResult && (
+        <div className={styles.installContent}>
+          <Alert
+            type="warning"
+            showIcon
+            icon={<WarningOutlined />}
+            message={<strong>后端安全扫描发现问题</strong>}
+            description="以下问题由后端全面扫描发现，请确认是否忽略风险继续安装。"
+            style={{ marginBottom: 16 }}
+          />
+          {renderScanReport(backendScanResult)}
         </div>
       )}
     </Drawer>

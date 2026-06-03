@@ -26,6 +26,7 @@
     "@codemirror/lang-python": "^6.2.1",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@hookform/resolvers": "^5.0.1",
+    "jszip": "^3.10.1",
     "@tanstack/react-query": "^5.100.13",
     "@uiw/react-codemirror": "^4.23.7",
     "antd": "^6.4.2",
