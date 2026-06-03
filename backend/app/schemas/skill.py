@@ -33,8 +33,8 @@ class SkillOut(CamelModel):
     description: str
     version: str
     source: str
-    trigger_words: List[str] = Field(default_factory=list)
-    dependencies: List[str] = Field(default_factory=list)
+    trigger_words: Optional[List[str]] = []
+    dependencies: Optional[List[str]] = []
     is_enabled: int
     config: Optional[Any]
     created_at: datetime
