@@ -539,7 +539,8 @@ const EXECUTABLE_EXTENSIONS = new Set([
 ])
 
 const SUSPICIOUS_FILENAMES = [
-  /^\.(?!clawhub|git|github|vscode|idea|DS_Store)/,  // 隐藏文件（排除已知安全目录）
+  // 隐藏文件中的可执行脚本（.clawhub/.git 里的 .json 不报，但 .sh/.py 会报）
+  /^\.[^/]+\.(sh|bash|py|js|ts|rb|pl|exe|bat|ps1|cmd|vbs|dll|so)$/i,
   /\.(bak|old|tmp|swp)$/,  // 临时/备份文件
   /\.(enc|gpg|pgp)$/,      // 加密文件
   /__MACOSX/,               // macOS 元数据
