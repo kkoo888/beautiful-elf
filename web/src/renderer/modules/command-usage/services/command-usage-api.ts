@@ -1,8 +1,9 @@
 /**
  * 命令使用 API 服务
+ * 后端 Query: page, page_size, limit
  */
 
-import { apiClient, extractData, extractPaginated } from '@/services/api-client'
+import { apiClient, extractData } from '@/services/api-client'
 import type { CommandUsage } from '../types/command_usage'
 
 export interface CommandUsageListParams { page?: number; pageSize?: number }
@@ -13,7 +14,9 @@ export async function recordCommandUsage(commandId: number): Promise<CommandUsag
 }
 
 export async function fetchCommandUsages(params?: CommandUsageListParams): Promise<CommandUsageListResponse> {
-  return extractData(await apiClient.get('/command_usage', { params })) as CommandUsageListResponse
+  return extractData(await apiClient.get('/command_usage', {
+    params: { page: params?.page, page_size: params?.pageSize },
+  })) as CommandUsageListResponse
 }
 
 export async function fetchTopCommands(limit: number = 10): Promise<CommandUsage[]> {

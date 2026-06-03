@@ -1,5 +1,6 @@
 /**
  * AI 反馈 API 服务
+ * 后端 Query: page, page_size, feedback_type
  */
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
@@ -15,7 +16,9 @@ export async function createAIFeedback(data: {
 export async function fetchAIFeedbacks(params: {
   page?: number; pageSize?: number; feedbackType?: number
 } = {}): Promise<{ items: AIFeedback[]; total: number }> {
-  const { items, total } = extractPaginated(await apiClient.get('/ai_feedback/', { params }) as any)
+  const { items, total } = extractPaginated(await apiClient.get('/ai_feedback/', {
+    params: { page: params.page, page_size: params.pageSize, feedback_type: params.feedbackType },
+  }) as any)
   return { items, total }
 }
 

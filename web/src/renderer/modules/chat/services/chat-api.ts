@@ -3,6 +3,15 @@
  *
  * 使用 extractData / extractPaginated 消除 as any。
  * 类型转换仅做 id: number→string 等业务适配。
+ *
+ * 后端参数名（FastAPI Query/Path 使用 Python 变量名，即 snake_case）：
+ *   - GET  /messages?conversation_id=&page=&page_size=
+ *   - POST /conversations/{conversation_id}/chat
+ *   - POST /messages body: { conversation_id, role, content, token_count }
+ *   - POST /conversations body: { title, model_name }
+ *
+ * 后端 CamelModel 的 populate_by_name=True 同时接受 camelCase 和 snake_case 请求体，
+ * 但 Query/Path 参数是 Python 变量名，必须用 snake_case。
  */
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
@@ -43,16 +52,19 @@ export async function fetchConversations(params?: {
 }): Promise<{ items: Conversation[]; total: number }> {
   const { items, total } = extractPaginated(
     await apiClient.get('/conversations', {
-      params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
+      params: { page: params?.page ?? 1, page_size: params?.pageSize ?? 50 },
     }) as any
   )
   return { items: items.map(adaptConversation), total }
 }
 
-/** 创建会话 */
+/** 创建会话
+ *  后端 ConversationCreate 字段: title, model_name
+ *  CamelModel alias_generator=to_camel + populate_by_name=True → 同时接受 modelName
+ */
 export async function createConversation(title?: string): Promise<Conversation> {
   const raw = extractData(await apiClient.post('/conversations', {
-    title: title ?? '新会话', modelName: '',
+    title: title ?? '新会话', model_name: '',
   }))
   if (!raw) throw new Error('创建会话失败：后端返回数据为空')
   return adaptConversation(raw)
@@ -72,38 +84,54 @@ export async function deleteConversationApi(id: string): Promise<void> {
 
 // ── 消息管理 API ─────────────────────────────────────────────
 
-/** 获取会话消息列表 */
+/**
+ * 获取会话消息列表
+ * 后端 Query 参数: conversation_id (必填), page, page_size
+ */
 export async function fetchMessages(
   conversationId: string, params?: { page?: number; pageSize?: number }
 ): Promise<{ items: ChatMessage[]; total: number }> {
   const { items, total } = extractPaginated(
     await apiClient.get('/messages', {
-      params: { conversationId, page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
+      params: {
+        conversation_id: Number(conversationId),
+        page: params?.page ?? 1,
+        page_size: params?.pageSize ?? 50,
+      },
     }) as any
   )
   return { items: items.map(adaptMessage), total }
 }
 
-/** 保存消息到后端 */
+/**
+ * 保存消息到后端
+ * 后端 MessageCreate 字段: conversation_id, role, content, token_count
+ * CamelModel alias → 同时接受 conversationId, tokenCount
+ */
 export async function saveMessage(
   conversationId: string, role: 'user' | 'assistant' | 'system',
   content: string, tokenCount?: number
 ): Promise<ChatMessage> {
   const raw = extractData(await apiClient.post('/messages', {
-    conversationId: Number(conversationId), role, content, tokenCount: tokenCount ?? 0,
+    conversation_id: Number(conversationId), role, content, token_count: tokenCount ?? 0,
   }))
   return adaptMessage(raw)
 }
 
 // ── AI 对话 API ──────────────────────────────────────────────
 
-/** 发送非流式聊天请求 */
+/**
+ * 发送非流式聊天请求
+ * 后端路径: POST /conversations/{conversation_id}/chat
+ * 后端 ChatRequest 字段: provider_id (alias=providerId), model_name (alias=modelName),
+ *                        messages, temperature, max_tokens (alias=maxTokens), stream
+ */
 export async function chat(request: ChatRequest): Promise<ChatResponse> {
   await saveMessage(request.conversationId, 'user', request.message)
   const data = extractData(await apiClient.post(`/conversations/${request.conversationId}/chat`, {
-    providerId: request.providerId, modelName: request.modelName ?? '',
+    provider_id: request.providerId, model_name: request.modelName ?? '',
     messages: [{ role: 'user', content: request.message }],
-    temperature: 0.7, maxTokens: 2048, stream: false,
+    temperature: 0.7, max_tokens: 2048, stream: false,
   })) as any
   return {
     id: crypto.randomUUID(), content: data.content ?? '',
@@ -113,7 +141,8 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
 
 /**
  * 创建流式聊天连接（SSE）
- * 单一端点: POST /conversations/{id}/chat, body 中 stream=true
+ * 后端路径: POST /conversations/{conversation_id}/chat
+ * 使用 apiClient baseURL 确保路径一致，通过 fetch 实现流式读取。
  */
 export function chatStream(
   request: ChatRequest,
@@ -127,13 +156,15 @@ export function chatStream(
 
   const doStream = async (): Promise<void> => {
     try {
-      const resp = await fetch(`/api/v1/conversations/${request.conversationId}/chat`, {
+      // 使用 apiClient.defaults.baseURL 拼接完整路径
+      const url = `${apiClient.defaults.baseURL}/conversations/${request.conversationId}/chat`
+      const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Trace-Id': crypto.randomUUID() },
         body: JSON.stringify({
-          providerId: request.providerId, modelName: request.modelName ?? '',
+          provider_id: request.providerId, model_name: request.modelName ?? '',
           messages: [{ role: 'user', content: request.message }],
-          temperature: 0.7, maxTokens: 2048, stream: true,
+          temperature: 0.7, max_tokens: 2048, stream: true,
         }),
         signal: controller.signal,
       })

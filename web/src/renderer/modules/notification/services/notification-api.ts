@@ -1,5 +1,6 @@
 /**
  * 通知 API 服务
+ * 后端 Query: page, page_size, type, is_read
  */
 
 import { apiClient, extractData } from '@/services/api-client'
@@ -10,7 +11,9 @@ export interface NotificationListResponse { data: Notification[]; total: number;
 export interface CreateNotificationParams { eventId?: string; type: NotificationType; title: string; message: string; actionUrl?: string }
 
 export async function fetchNotifications(params?: NotificationListParams): Promise<NotificationListResponse> {
-  return extractData(await apiClient.get('/notifications', { params })) as NotificationListResponse
+  return extractData(await apiClient.get('/notifications', {
+    params: { page: params?.page, page_size: params?.pageSize, type: params?.type, is_read: params?.isRead },
+  })) as NotificationListResponse
 }
 
 export async function createNotification(data: CreateNotificationParams): Promise<Notification> {

@@ -1,5 +1,6 @@
 /**
  * 备份 API 服务
+ * 后端 Query: page, page_size, backup_type, status
  */
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
@@ -14,7 +15,9 @@ export async function createBackup(data: {
 export async function fetchBackups(params: {
   page?: number; pageSize?: number; backupType?: number; status?: number
 } = {}): Promise<{ items: BackupRecord[]; total: number }> {
-  const { items, total } = extractPaginated(await apiClient.get('/backups/', { params }) as any)
+  const { items, total } = extractPaginated(await apiClient.get('/backups/', {
+    params: { page: params.page, page_size: params.pageSize, backup_type: params.backupType, status: params.status },
+  }) as any)
   return { items, total }
 }
 
@@ -22,8 +25,6 @@ export async function fetchBackupById(id: number): Promise<BackupRecord> {
   return extractData(await apiClient.get(`/backups/${id}`))
 }
 
-export async function updateBackupStatus(
-  id: number, data: { status: number; errorMessage?: string; fileSize?: number }
-): Promise<BackupRecord> {
+export async function updateBackupStatus(id: number, data: { status: number; errorMessage?: string; fileSize?: number }): Promise<BackupRecord> {
   return extractData(await apiClient.patch(`/backups/${id}/status`, data))
 }

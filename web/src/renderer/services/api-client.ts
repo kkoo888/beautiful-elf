@@ -1,11 +1,11 @@
 /**
  * HTTP 客户端
  *
- * 后端 CamelModel 已统一返回 camelCase，前端全链路 camelCase。
+ * 后端 FastAPI + Pydantic CamelModel 统一返回 camelCase。
  * 提供统一的响应提取函数，消除 `as any` 类型逃逸。
  *
  * @see http-client skill — interceptors, error handling, security patterns
- * @see fastapi skill — Pydantic CamelModel alias_generator=to_camel
+ * @see fastapi skill — Pydantic CamelModel alias_generator=to_camel, populate_by_name=True
  */
 
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
@@ -26,7 +26,8 @@ const apiClient: AxiosInstance = axios.create({
 })
 
 // ── 请求拦截器 ─────────────────────────────────────────────
-// 注入 trace_id，便于全链路追踪。不做 camelToSnake 转换（后端已支持 camelCase）。
+// 注入 trace_id，便于全链路追踪。不做 camelToSnake 转换。
+// 后端 CamelModel 的 populate_by_name=True 已支持 camelCase 请求体。
 
 apiClient.interceptors.request.use(
   (config) => {
@@ -48,6 +49,10 @@ apiClient.interceptors.response.use(
 )
 
 // ── 响应提取工具 ───────────────────────────────────────────
+// 后端响应格式：
+//   成功: { code: "SUCCESS", message: "...", data: T }
+//   分页: { code: "SUCCESS", message: "...", data: T[], meta: { total, page, page_size } }
+//   失败: { code: "ERROR_CODE", message: "...", data: null, request_id: "..." }
 
 /**
  * 从 ApiResponse<T> 中提取 data 字段
@@ -61,18 +66,19 @@ function extractData<T>(resp: AxiosResponse<ApiResponse<T>>): T {
 
 /**
  * 从分页 ApiResponse<T[]> 中提取 items + total
- * 统一返回格式为 { items, total }，与后端 PaginatedResponse 对齐。
+ * 后端 ok_page() 返回 { data, meta: { total, page, page_size } }
  *
  * @example
  * const { items, total } = extractPaginated(await apiClient.get<User[]>('/users'))
  */
 function extractPaginated<T>(resp: AxiosResponse<ApiResponse<T[]>>): PaginatedResponse<T> {
-  const body = resp.data
+  const body = resp.data as any
+  const meta = body.meta ?? {}
   return {
     items: body.data ?? [],
-    total: (body as any).total ?? (body as any).meta?.total ?? 0,
-    page: (body as any).page ?? 1,
-    pageSize: (body as any).pageSize ?? (body.data?.length ?? 0),
+    total: meta.total ?? 0,
+    page: meta.page ?? 1,
+    pageSize: meta.page_size ?? meta.pageSize ?? (body.data?.length ?? 0),
   }
 }
 

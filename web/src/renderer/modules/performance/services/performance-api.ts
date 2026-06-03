@@ -1,11 +1,11 @@
 /**
  * 性能监控 API 服务
+ * 后端 Query: limit
  */
 
 import { apiClient, extractData } from '@/services/api-client'
 import type { PerformanceMetric } from '../types/performance'
 
-/** 获取历史性能指标 */
 export async function fetchPerformanceMetrics(): Promise<PerformanceMetric[]> {
   const items = extractData(await apiClient.get('/performance/metrics', { params: { limit: 30 } })) as any[]
   return items.map((item) => ({
@@ -14,7 +14,6 @@ export async function fetchPerformanceMetrics(): Promise<PerformanceMetric[]> {
   }))
 }
 
-/** 获取当前系统状态 */
 export async function fetchCurrentStatus(): Promise<{
   cpuPercent: number; memoryPercent: number; memoryUsedMb: number; memoryTotalMb: number
   diskPercent: number; diskUsedGb: number; diskTotalGb: number; gpuPercent: number | null; uptimeSeconds: number

@@ -1,7 +1,8 @@
 /**
  * 剪贴板 API 服务
  *
- * contentType 数字↔字符串映射属于业务逻辑，保留。
+ * 后端 Query 参数: page, page_size → 前端发 page_size
+ * 后端 CamelModel 请求体: populate_by_name=True → 同时接受 camelCase
  */
 
 import { apiClient, extractData } from '@/services/api-client'
@@ -18,17 +19,20 @@ function unmapContentType(ct: ClipboardItem['contentType']): number {
 /** 获取剪贴板列表 */
 export async function fetchClipboardList(params: ClipboardListParams = {}): Promise<ClipboardListResponse> {
   const { page = 1, pageSize = 20, keyword } = params
-  const body = extractData(await apiClient.get('/clipboard_items', { params: { page, pageSize } })) as any
-  const items: ClipboardItem[] = (body ?? []).map((item: any) => ({
+  const items = extractData(await apiClient.get('/clipboard_items', {
+    params: { page, page_size: pageSize },
+  })) as any[]
+
+  const mapped: ClipboardItem[] = items.map((item) => ({
     id: String(item.id), content: item.content, contentType: mapContentType(item.contentType),
     isPinned: item.pinned === 1, copiedAt: item.updatedAt ?? item.createdAt ?? new Date().toISOString(),
     createdAt: item.createdAt ?? new Date().toISOString(),
   }))
 
-  let filtered = items
+  let filtered = mapped
   if (keyword) {
     const lower = keyword.toLowerCase()
-    filtered = items.filter((item) => item.content.toLowerCase().includes(lower))
+    filtered = mapped.filter((item) => item.content.toLowerCase().includes(lower))
   }
   filtered.sort((a, b) => (a.isPinned !== b.isPinned ? (a.isPinned ? -1 : 1) : 0))
 
