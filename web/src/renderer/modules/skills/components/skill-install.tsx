@@ -59,6 +59,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
   const [parsed, setParsed] = useState<SkillFolderParsed | null>(null)
   const [githubUrl, setGithubUrl] = useState('')
   const [githubChecking, setGithubChecking] = useState(false)
+  const [repoCheckResult, setRepoCheckResult] = useState<import('../utils/skill-folder-parser').GitHubRepoCheck | null>(null)
 
   // 编辑表单
   const [formName, setFormName] = useState('')
@@ -73,6 +74,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
     setParsed(null)
     setGithubUrl('')
     setGithubChecking(false)
+    setRepoCheckResult(null)
     setFormName('')
     setFormDisplayName('')
     setFormDescription('')
@@ -129,21 +131,17 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
       setGithubChecking(true)
       try {
         const repoCheck = await checkGitHubRepo(repoPath)
-        if (repoCheck.warnings.length > 0) {
-          const warnText = repoCheck.warnings.join('\n')
-          if (repoCheck.verdict === 'caution') {
-            message.warning(`⚠️ 仓库信誉警告:\n${warnText}`, 6)
-          } else if (repoCheck.verdict === 'unknown') {
-            message.info(`ℹ️ 仓库信息:\n${warnText}`, 4)
-          }
-        }
+        setRepoCheckResult(repoCheck)
       } catch {
-        message.warning('仓库信誉检查失败，请谨慎安装')
+        setRepoCheckResult({ stars: 0, forks: 0, lastPush: '', openIssues: 0, warnings: ['网络请求失败'], verdict: 'unknown' })
       } finally {
         setGithubChecking(false)
       }
+      // 不自动跳转，等用户看完报告点按钮
+      return
     }
 
+    // 非 GitHub 地址直接跳转
     setParsed(null)
     setStep('edit')
   }, [githubUrl])
@@ -339,6 +337,71 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
             <Text type="secondary" style={{ fontSize: 12 }}>
               格式：user/repo 或 https://github.com/user/repo
             </Text>
+
+            {/* GitHub 仓库信誉检查报告 */}
+            {repoCheckResult && (
+              <div style={{ marginTop: 16 }}>
+                <Alert
+                  type={repoCheckResult.verdict === 'trusted' ? 'success' : repoCheckResult.verdict === 'caution' ? 'warning' : 'info'}
+                  showIcon
+                  icon={repoCheckResult.verdict === 'trusted' ? <CheckCircleOutlined /> : <WarningOutlined />}
+                  message={<strong>仓库信誉检查</strong>}
+                  description={
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+                        <div>
+                          <span style={{ color: repoCheckResult.stars >= 10 ? '#52c41a' : repoCheckResult.stars >= 5 ? '#faad14' : '#ff4d4f', fontWeight: 600 }}>
+                            {repoCheckResult.stars >= 10 ? '✅' : repoCheckResult.stars >= 5 ? '⚠️' : '❌'} ⭐ {repoCheckResult.stars} Stars
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: repoCheckResult.forks >= 5 ? '#52c41a' : repoCheckResult.forks >= 2 ? '#faad14' : '#ff4d4f', fontWeight: 600 }}>
+                            {repoCheckResult.forks >= 5 ? '✅' : repoCheckResult.forks >= 2 ? '⚠️' : '❌'} 🍴 {repoCheckResult.forks} Forks
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ fontWeight: 600 }}>
+                            {repoCheckResult.lastPush
+                              ? (() => {
+                                  const days = Math.floor((Date.now() - new Date(repoCheckResult.lastPush).getTime()) / (1000 * 60 * 60 * 24))
+                                  return days < 30
+                                    ? `✅ 📅 ${days} 天前更新`
+                                    : days < 180
+                                    ? `⚠️ 📅 ${days} 天前更新`
+                                    : `❌ 📅 ${days} 天前更新（可能已废弃）`
+                                })()
+                              : '❌ 📅 更新时间未知'}
+                          </span>
+                        </div>
+                      </div>
+                      {repoCheckResult.warnings.length > 0 && (
+                        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+                          {repoCheckResult.warnings.map((w, i) => (
+                            <div key={i} style={{ color: '#fa8c16', fontSize: 13, marginBottom: 4 }}>⚠️ {w}</div>
+                          ))}
+                        </div>
+                      )}
+                      {repoCheckResult.warnings.length === 0 && (
+                        <div style={{ color: '#52c41a', fontSize: 13 }}>✅ 未发现信誉问题</div>
+                      )}
+                    </div>
+                  }
+                  style={{ marginBottom: 12 }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <Button onClick={() => { setRepoCheckResult(null); setGithubUrl('') }}>重新输入</Button>
+                  {repoCheckResult.verdict === 'caution' ? (
+                    <Button type="primary" danger onClick={() => { setRepoCheckResult(null); setParsed(null); setStep('edit') }}>
+                      忽略风险，继续安装
+                    </Button>
+                  ) : (
+                    <Button type="primary" onClick={() => { setRepoCheckResult(null); setParsed(null); setStep('edit') }}>
+                      继续安装
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
