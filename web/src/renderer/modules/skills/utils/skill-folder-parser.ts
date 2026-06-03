@@ -646,6 +646,43 @@ function runScan(files: FileWithMeta[]): ScanResult {
     const hasCredentialAccess = /~\/\.ssh|~\/\.aws|~\/\.config|\.env\b|credentials?|token|api[_-]?key|secret/gi.test(allContent)
     const hasPersistence = /crontab|systemctl|\/etc\/init\.d|\.bashrc|\.zshrc|launchd|schtasks/gi.test(allContent)
 
+    // 透明度提示：不管声明什么，告知用户该技能的实际行为能力
+    if (hasNetwork) {
+      issues.push({
+        level: 'info',
+        category: '行为透明度',
+        message: '该技能包含网络请求能力（可访问外部地址）',
+      })
+    }
+    if (hasFileSystem) {
+      issues.push({
+        level: 'info',
+        category: '行为透明度',
+        message: '该技能包含文件系统操作能力（可读写文件）',
+      })
+    }
+    if (hasSystemExec) {
+      issues.push({
+        level: 'info',
+        category: '行为透明度',
+        message: '该技能包含系统命令执行能力（可执行 Shell 命令）',
+      })
+    }
+    if (hasCredentialAccess) {
+      issues.push({
+        level: 'info',
+        category: '行为透明度',
+        message: '该技能涉及凭证/密钥文件访问',
+      })
+    }
+    if (hasPersistence) {
+      issues.push({
+        level: 'info',
+        category: '行为透明度',
+        message: '该技能包含持久化能力（可修改自启动/计划任务）',
+      })
+    }
+
     // 交叉检测：声明简单功能但行为复杂
     if (declaredSimple) {
       if (hasNetwork) {
