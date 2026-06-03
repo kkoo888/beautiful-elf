@@ -118,27 +118,27 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
     setFormTriggerWords('')
     setFormDependencies('')
 
-    // 检查 GitHub 仓库信誉
+    // 先跳转，不阻塞用户
+    setParsed(null)
+    setStep('edit')
+
+    // 后台检查仓库信誉（不阻塞）
     const repoPath = githubUrl.trim()
       .replace(/^https?:\/\/github\.com\//, '')
       .replace(/\.git$/, '')
       .replace(/^git@github\.com:/, '')
     if (repoPath.includes('/') && !repoPath.startsWith('http')) {
-      try {
-        const repoCheck = await checkGitHubRepo(repoPath)
+      checkGitHubRepo(repoPath).then((repoCheck) => {
         if (repoCheck.warnings.length > 0) {
           const warnText = repoCheck.warnings.join('\n')
           if (repoCheck.verdict === 'caution') {
-            message.warning(`仓库信誉警告:\n${warnText}`, 6)
+            message.warning(`⚠️ 仓库信誉警告:\n${warnText}`, 6)
           } else if (repoCheck.verdict === 'unknown') {
-            message.info(`仓库信息:\n${warnText}`, 4)
+            message.info(`ℹ️ 仓库信息:\n${warnText}`, 4)
           }
         }
-      } catch { /* 静默失败 */ }
+      }).catch(() => { /* 静默失败 */ })
     }
-
-    setParsed(null)
-    setStep('edit')
   }, [githubUrl])
 
   // ─── 确认安装 ──────────────────────────────
