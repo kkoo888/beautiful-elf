@@ -16,7 +16,7 @@ export async function createActionLog(data: CreateActionLogParams): Promise<Acti
 
 export async function fetchActionLogs(params?: ActionLogListParams): Promise<ActionLogListResponse> {
   return extractData(await apiClient.get('/action_logs', {
-    params: { page: params?.page, page_size: params?.pageSize, module: params?.module, action: params?.action, start_time: params?.startTime, end_time: params?.endTime },
+    params: { page: params?.page, pageSize: params?.pageSize, module: params?.module, action: params?.action, startTime: params?.startTime, endTime: params?.endTime },
   })) as ActionLogListResponse
 }
 

@@ -12,7 +12,7 @@ export async function createPrompt(data: { name: string; content: string; descri
 
 export async function fetchPrompts(params: { page?: number; pageSize?: number; name?: string } = {}): Promise<{ items: Prompt[]; total: number }> {
   const { items, total } = extractPaginated(await apiClient.get('/prompts/', {
-    params: { page: params.page, page_size: params.pageSize, name: params.name },
+    params: { page: params.page, pageSize: params.pageSize, name: params.name },
   }) as any)
   return { items, total }
 }

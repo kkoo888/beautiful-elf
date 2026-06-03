@@ -14,7 +14,7 @@ _service = SoulConfigService()
 @router.get("")
 async def list_soul_configs(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await _service.list(db, page, page_size)

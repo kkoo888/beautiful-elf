@@ -12,7 +12,7 @@ import type {
 
 export async function fetchTools(params?: ToolQueryParams): Promise<PaginatedResult<ToolInfo>> {
   const resp = await apiClient.get('/tools', {
-    params: { page: params?.page ?? 1, page_size: params?.pageSize ?? 20, is_enabled: params?.isEnabled },
+    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, isEnabled: params?.isEnabled },
   })
   const { items, total, page, pageSize } = extractPaginated(resp as any)
   return { data: items, total, page, pageSize }
@@ -43,7 +43,7 @@ export async function fetchToolStats(id: string): Promise<ToolStats> {
 }
 
 export async function recordToolCall(id: string, success: boolean, durationMs: number): Promise<void> {
-  await apiClient.post(`/tools/${id}/stats/record`, null, { params: { success, duration_ms: durationMs } })
+  await apiClient.post(`/tools/${id}/stats/record`, null, { params: { success, durationMs: durationMs } })
 }
 
 export async function fetchToolStatsSummary(): Promise<ToolStatsSummary> {

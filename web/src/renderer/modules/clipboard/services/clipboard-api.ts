@@ -20,7 +20,7 @@ function unmapContentType(ct: ClipboardItem['contentType']): number {
 export async function fetchClipboardList(params: ClipboardListParams = {}): Promise<ClipboardListResponse> {
   const { page = 1, pageSize = 20, keyword } = params
   const items = extractData(await apiClient.get('/clipboard_items', {
-    params: { page, page_size: pageSize },
+    params: { page, pageSize: pageSize },
   })) as any[]
 
   const mapped: ClipboardItem[] = items.map((item) => ({

@@ -17,7 +17,7 @@ export async function fetchAIFeedbacks(params: {
   page?: number; pageSize?: number; feedbackType?: number
 } = {}): Promise<{ items: AIFeedback[]; total: number }> {
   const { items, total } = extractPaginated(await apiClient.get('/ai_feedback/', {
-    params: { page: params.page, page_size: params.pageSize, feedback_type: params.feedbackType },
+    params: { page: params.page, pageSize: params.pageSize, feedbackType: params.feedbackType },
   }) as any)
   return { items, total }
 }

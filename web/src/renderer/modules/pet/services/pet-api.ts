@@ -28,7 +28,7 @@ export async function interact(type: PetInteractionType): Promise<{ attributes: 
 
 export async function fetchInteractions(params: { page?: number; pageSize?: number } = {}): Promise<PetInteraction[]> {
   const items = extractData(await apiClient.get('/pets/interactions', {
-    params: { page: params.page ?? 1, page_size: params.pageSize ?? 20 },
+    params: { page: params.page ?? 1, pageSize: params.pageSize ?? 20 },
   })) as any[]
   return items.map((item) => ({
     id: String(item.id), type: INTERACTION_TYPE_NAME_MAP[item.interactionType] ?? 'feed',

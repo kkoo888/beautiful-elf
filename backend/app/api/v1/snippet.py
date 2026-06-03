@@ -15,7 +15,7 @@ _service = SnippetService()
 @router.get("")
 async def list_snippets(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     language: Optional[str] = Query(default=None),
     tag: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),

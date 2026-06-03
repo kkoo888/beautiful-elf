@@ -14,7 +14,7 @@ _service = ConfigService()
 @router.get("")
 async def list_configs(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=100, ge=1, le=500),
+    page_size: int = Query(default=100, ge=1, le=500, alias="pageSize"),
     db: AsyncSession = Depends(get_db),
 ):
     """配置列表"""

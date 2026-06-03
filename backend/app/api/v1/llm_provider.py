@@ -14,7 +14,7 @@ _service = LLMProviderService()
 @router.get("")
 async def list_providers(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     db: AsyncSession = Depends(get_db),
 ):
     """供应商列表（分页）"""

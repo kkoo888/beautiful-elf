@@ -15,8 +15,8 @@ _service = ClipboardService()
 @router.get("")
 async def list_clipboard_items(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    content_type: Optional[int] = Query(default=None),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    content_type: Optional[int] = Query(default=None),, alias="contentType")
     pinned: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):

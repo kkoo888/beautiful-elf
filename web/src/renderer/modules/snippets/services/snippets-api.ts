@@ -11,7 +11,7 @@ import type { Snippet, SnippetFormData, SnippetQueryParams } from '../types/snip
 export async function fetchSnippets(params?: SnippetQueryParams): Promise<PaginatedResponse<Snippet>> {
   const { items, total, page, pageSize } = extractPaginated(
     await apiClient.get('/snippets', {
-      params: { page: params?.page ?? 1, page_size: params?.pageSize ?? 20, tag: params?.tags?.[0] },
+      params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, tag: params?.tags?.[0] },
     }) as any
   )
 
@@ -57,7 +57,7 @@ export async function recordSnippetUse(id: string): Promise<void> {
 }
 
 export async function fetchAllTags(): Promise<string[]> {
-  const items = extractData(await apiClient.get('/snippets', { params: { page: 1, page_size: 100 } })) as any[]
+  const items = extractData(await apiClient.get('/snippets', { params: { page: 1, pageSize: 100 } })) as any[]
   const tags = new Set<string>()
   items.forEach((s) => (s.tags ?? []).forEach((t: string) => tags.add(t)))
   return Array.from(tags).sort()

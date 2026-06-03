@@ -92,7 +92,7 @@ export async function fetchModels(baseUrl?: string): Promise<OllamaModel[]> {
 // 后端 Query: page, page_size
 
 export async function getProviders(): Promise<LLMProvider[]> {
-  const data = extractData(await apiClient.get('/llm_providers', { params: { page: 1, page_size: 100 } })) as any
+  const data = extractData(await apiClient.get('/llm_providers', { params: { page: 1, pageSize: 100 } })) as any
   return data?.items ?? data ?? []
 }
 

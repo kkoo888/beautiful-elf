@@ -13,7 +13,7 @@ import type {
 /** 获取技能列表（分页） */
 export async function fetchSkills(params?: SkillQueryParams): Promise<PaginatedResult<Skill>> {
   const resp = await apiClient.get('/skills', {
-    params: { page: params?.page ?? 1, page_size: params?.pageSize ?? 20, is_enabled: params?.isEnabled },
+    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, isEnabled: params?.isEnabled },
   })
   const { items, total, page, pageSize } = extractPaginated(resp as any)
   return { data: items, total, page, pageSize }
@@ -44,7 +44,7 @@ export async function fetchSkillStats(id: string): Promise<SkillStats> {
 }
 
 export async function recordSkillCall(id: string, success: boolean, durationMs: number): Promise<void> {
-  await apiClient.post(`/skills/${id}/stats/record`, null, { params: { success, duration_ms: durationMs } })
+  await apiClient.post(`/skills/${id}/stats/record`, null, { params: { success, durationMs: durationMs } })
 }
 
 export async function installSkill(input: InstallSkillInput): Promise<Skill> {

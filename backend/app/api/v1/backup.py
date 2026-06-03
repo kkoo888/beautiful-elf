@@ -25,8 +25,8 @@ async def get_backup(backup_id: int, db: AsyncSession = Depends(get_db)):
 @router.get("")
 async def list_backups(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    backup_type: Optional[int] = Query(default=None),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    backup_type: Optional[int] = Query(default=None),, alias="backupType")
     status: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):

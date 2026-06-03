@@ -14,7 +14,7 @@ export async function fetchExpertTeams(params?: {
   category?: string; enabled?: number; page?: number; pageSize?: number
 }): Promise<{ items: ExpertTeam[]; total: number }> {
   const { items, total } = extractPaginated(await apiClient.get('/expert_teams', {
-    params: { category: params?.category, enabled: params?.enabled, page: params?.page, page_size: params?.pageSize },
+    params: { category: params?.category, enabled: params?.enabled, page: params?.page, pageSize: params?.pageSize },
   }) as any)
   return { items, total }
 }
@@ -55,7 +55,7 @@ export async function fetchExpertTeamRuns(
   teamId: number, params?: { page?: number; pageSize?: number }
 ): Promise<{ items: ExpertTeamRun[]; total: number }> {
   const { items, total } = extractPaginated(await apiClient.get(`/expert_teams/${teamId}/runs`, {
-    params: { page: params?.page, page_size: params?.pageSize },
+    params: { page: params?.page, pageSize: params?.pageSize },
   }) as any)
   return { items, total }
 }
@@ -64,7 +64,7 @@ export async function fetchAllExpertRuns(params?: {
   status?: number; page?: number; pageSize?: number
 }): Promise<{ items: ExpertTeamRun[]; total: number }> {
   const { items, total } = extractPaginated(await apiClient.get('/expert_teams/runs/all', {
-    params: { status: params?.status, page: params?.page, page_size: params?.pageSize },
+    params: { status: params?.status, page: params?.page, pageSize: params?.pageSize },
   }) as any)
   return { items, total }
 }

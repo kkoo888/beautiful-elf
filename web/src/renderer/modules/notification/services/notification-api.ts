@@ -12,7 +12,7 @@ export interface CreateNotificationParams { eventId?: string; type: Notification
 
 export async function fetchNotifications(params?: NotificationListParams): Promise<NotificationListResponse> {
   return extractData(await apiClient.get('/notifications', {
-    params: { page: params?.page, page_size: params?.pageSize, type: params?.type, is_read: params?.isRead },
+    params: { page: params?.page, pageSize: params?.pageSize, type: params?.type, isRead: params?.isRead },
   })) as NotificationListResponse
 }
 

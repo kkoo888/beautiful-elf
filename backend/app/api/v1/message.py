@@ -13,9 +13,9 @@ _service = MessageService()
 
 @router.get("")
 async def list_messages(
-    conversation_id: int = Query(..., description="会话 ID（必填，用于过滤）"),
+    conversation_id: int = Query(..., description="会话 ID（必填，用于过滤）", alias="conversationId"),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
+    page_size: int = Query(default=50, ge=1, le=200, alias="pageSize"),
     db: AsyncSession = Depends(get_db),
 ):
     """消息列表 — 按会话过滤"""

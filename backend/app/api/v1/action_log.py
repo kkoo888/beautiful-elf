@@ -21,11 +21,11 @@ async def create_action_log(data: ActionLogCreate, db: AsyncSession = Depends(ge
 @router.get("")
 async def list_action_logs(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     module: Optional[str] = Query(default=None),
     action: Optional[str] = Query(default=None),
-    start_time: Optional[datetime] = Query(default=None),
-    end_time: Optional[datetime] = Query(default=None),
+    start_time: Optional[datetime] = Query(default=None),, alias="startTime")
+    end_time: Optional[datetime] = Query(default=None),, alias="endTime")
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await _service.list(

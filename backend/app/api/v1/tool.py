@@ -25,7 +25,7 @@ async def get_tool(tool_id: int, db: AsyncSession = Depends(get_db)):
 @router.get("")
 async def list_tools(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     enabled: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -63,7 +63,7 @@ async def get_tool_stats(tool_id: int, db: AsyncSession = Depends(get_db)):
 async def record_tool_call(
     tool_id: int,
     success_flag: bool = Query(..., alias="success"),
-    duration_ms: int = Query(..., ge=0),
+    duration_ms: int = Query(..., ge=0, alias="durationMs"),
     db: AsyncSession = Depends(get_db),
 ):
     return ok(await _service.record_call(db, tool_id, success_flag, duration_ms))

@@ -16,7 +16,7 @@ export async function fetchBackups(params: {
   page?: number; pageSize?: number; backupType?: number; status?: number
 } = {}): Promise<{ items: BackupRecord[]; total: number }> {
   const { items, total } = extractPaginated(await apiClient.get('/backups/', {
-    params: { page: params.page, page_size: params.pageSize, backup_type: params.backupType, status: params.status },
+    params: { page: params.page, pageSize: params.pageSize, backupType: params.backupType, status: params.status },
   }) as any)
   return { items, total }
 }

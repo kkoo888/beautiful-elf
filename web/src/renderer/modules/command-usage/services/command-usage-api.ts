@@ -15,7 +15,7 @@ export async function recordCommandUsage(commandId: number): Promise<CommandUsag
 
 export async function fetchCommandUsages(params?: CommandUsageListParams): Promise<CommandUsageListResponse> {
   return extractData(await apiClient.get('/command_usage', {
-    params: { page: params?.page, page_size: params?.pageSize },
+    params: { page: params?.page, pageSize: params?.pageSize },
   })) as CommandUsageListResponse
 }
 

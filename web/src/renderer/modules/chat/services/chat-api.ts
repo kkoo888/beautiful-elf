@@ -52,7 +52,7 @@ export async function fetchConversations(params?: {
 }): Promise<{ items: Conversation[]; total: number }> {
   const { items, total } = extractPaginated(
     await apiClient.get('/conversations', {
-      params: { page: params?.page ?? 1, page_size: params?.pageSize ?? 50 },
+      params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 50 },
     }) as any
   )
   return { items: items.map(adaptConversation), total }
@@ -94,9 +94,9 @@ export async function fetchMessages(
   const { items, total } = extractPaginated(
     await apiClient.get('/messages', {
       params: {
-        conversation_id: Number(conversationId),
+        conversationId: Number(conversationId),
         page: params?.page ?? 1,
-        page_size: params?.pageSize ?? 50,
+        pageSize: params?.pageSize ?? 50,
       },
     }) as any
   )
@@ -113,7 +113,7 @@ export async function saveMessage(
   content: string, tokenCount?: number
 ): Promise<ChatMessage> {
   const raw = extractData(await apiClient.post('/messages', {
-    conversation_id: Number(conversationId), role, content, token_count: tokenCount ?? 0,
+    conversationId: Number(conversationId), role, content, token_count: tokenCount ?? 0,
   }))
   return adaptMessage(raw)
 }

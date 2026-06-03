@@ -15,7 +15,7 @@ _service = NotificationService()
 @router.get("")
 async def list_notifications(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     type: Optional[str] = Query(default=None),
     read: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),

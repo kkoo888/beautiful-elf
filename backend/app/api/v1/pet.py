@@ -44,7 +44,7 @@ async def switch_model(data: ModelSwitchRequest, db: AsyncSession = Depends(get_
 @router.get("/interactions")
 async def list_interactions(
     page: int = Query(default=1, ge=1, description="页码"),
-    page_size: int = Query(default=20, ge=1, le=100, description="每页数量"),
+    page_size: int = Query(default=20, ge=1, le=100, description="每页数量", alias="pageSize"),
     db: AsyncSession = Depends(get_db),
 ):
     """查询互动记录（分页）"""

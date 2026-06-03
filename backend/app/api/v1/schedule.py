@@ -16,9 +16,9 @@ _service = ScheduleService()
 @router.get("")
 async def list_schedules(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    start_time: Optional[datetime] = Query(default=None),
-    end_time: Optional[datetime] = Query(default=None),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    start_time: Optional[datetime] = Query(default=None),, alias="startTime")
+    end_time: Optional[datetime] = Query(default=None),, alias="endTime")
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await _service.list(db, page, page_size, start_time, end_time)
