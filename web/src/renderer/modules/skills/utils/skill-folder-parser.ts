@@ -155,6 +155,8 @@ const ruleCredentialTheft: ScanRule = {
   category: '凭证窃取',
   level: 'critical',
   description: '检测读取 ~/.ssh、~/.aws、~/.config 等敏感路径',
+  // 只扫脚本/配置文件，排除文档
+  fileFilter: /\.(sh|bash|py|js|ts|rb|pl|go|rs|yaml|yml|toml|json|conf|cfg|ini|env|service|plist)$/i,
   scan: (c, f) => findMatches(c, /~\/\.ssh|~\/\.aws|~\/\.config|~\/\.gnupg|~\/\.docker|\/etc\/shadow|\/etc\/passwd|\.env\b.*(?:read|cat|load)|credentials?\s*file/gi),
 }
 
@@ -189,7 +191,9 @@ const rulePersistence: ScanRule = {
   category: '持久化后门',
   level: 'high',
   description: '检测写入自启动、计划任务、系统服务等持久化行为',
-  scan: (c, f) => findMatches(c, /crontab|systemctl\s+enable|\/etc\/init\.d|\.bashrc|\.zshrc|\.profile|launchd|schtasks|at\s+\d|systemd|rc\.local|boot\s+script/gi),
+  // 只扫脚本/配置文件，排除 .md 等文档文件（避免英文自然语言误报）
+  fileFilter: /\.(sh|bash|py|js|ts|rb|pl|go|rs|yaml|yml|toml|json|conf|cfg|ini|service|timer|plist)$/i,
+  scan: (c, f) => findMatches(c, /crontab\s+(-[el]|--)|systemctl\s+(enable|daemon-reload)|\/etc\/init\.d\/|echo\s+.*>>\s*.*\.bashrc|echo\s+.*>>\s*.*\.zshrc|echo\s+.*>>\s*.*\.profile|launchctl\s+(load|write)|schtasks\s+\/(create|change)|\bat\s+\d{1,2}:\d{2}|systemd\s+daemon|rc\.local|launch\s+daemons?\/|boot\s+script/gi, /\.[\w]+$/i, f),
 }
 
 const rulePrivilegeEscalation: ScanRule = {
@@ -197,7 +201,9 @@ const rulePrivilegeEscalation: ScanRule = {
   category: '权限提升',
   level: 'high',
   description: '检测越权操作、提权行为',
-  scan: (c, f) => findMatches(c, /\bsudo\b|\bchmod\s+[0-7]{3,4}\b|\bchown\b|\bsetuid\b|\bsetgid\b|capabilities|selinux|apparmor|\/proc\/self\/exe/gi),
+  // 只扫脚本/配置文件，排除文档（sudo/chmod 在 .md 教程中经常出现）
+  fileFilter: /\.(sh|bash|py|js|ts|rb|pl|go|rs|yaml|yml|toml|json|conf|cfg|ini|service|plist)$/i,
+  scan: (c, f) => findMatches(c, /\bsudo\s+|\bchmod\s+[0-7]{3,4}\b|\bchown\s+\b|\bsetuid\b|\bsetgid\b|capabilities|selinux|apparmor|\/proc\/self\/exe/gi),
 }
 
 const ruleObfuscation: ScanRule = {
