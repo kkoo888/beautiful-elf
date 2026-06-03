@@ -7,7 +7,7 @@ import styles from './skills-panel.module.css'
 
 interface SkillCardProps {
   skill: Skill
-  onToggle: (id: string, enabled: boolean) => void
+  onToggle: (id: number, enabled: boolean) => void
   onClick: (skill: Skill) => void
   isToggling?: boolean
 }

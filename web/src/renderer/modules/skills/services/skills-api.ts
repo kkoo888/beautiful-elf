@@ -13,7 +13,7 @@ import type {
 /** 获取技能列表（分页） */
 export async function fetchSkills(params?: SkillQueryParams): Promise<PaginatedResult<Skill>> {
   const resp = await apiClient.get('/skills', {
-    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, isEnabled: params?.isEnabled },
+    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, enabled: params?.isEnabled },
   })
   const { items, total, page, pageSize } = extractPaginated(resp as any)
   return { data: items, total, page, pageSize }
@@ -23,27 +23,27 @@ export async function createSkill(input: CreateSkillInput): Promise<Skill> {
   return extractData(await apiClient.post('/skills', input))
 }
 
-export async function updateSkill(id: string, input: UpdateSkillInput): Promise<Skill> {
+export async function updateSkill(id: number, input: UpdateSkillInput): Promise<Skill> {
   return extractData(await apiClient.put(`/skills/${id}`, input))
 }
 
-export async function deleteSkill(id: string): Promise<void> {
+export async function deleteSkill(id: number): Promise<void> {
   await apiClient.delete(`/skills/${id}`)
 }
 
-export async function enableSkill(id: string): Promise<Skill> {
+export async function enableSkill(id: number): Promise<Skill> {
   return extractData(await apiClient.patch(`/skills/${id}/enable`))
 }
 
-export async function disableSkill(id: string): Promise<Skill> {
+export async function disableSkill(id: number): Promise<Skill> {
   return extractData(await apiClient.patch(`/skills/${id}/disable`))
 }
 
-export async function fetchSkillStats(id: string): Promise<SkillStats> {
+export async function fetchSkillStats(id: number): Promise<SkillStats> {
   return extractData(await apiClient.get(`/skills/${id}/stats`))
 }
 
-export async function recordSkillCall(id: string, success: boolean, durationMs: number): Promise<void> {
+export async function recordSkillCall(id: number, success: boolean, durationMs: number): Promise<void> {
   await apiClient.post(`/skills/${id}/stats/record`, null, { params: { success, durationMs: durationMs } })
 }
 
@@ -57,10 +57,10 @@ export async function installSkill(input: InstallSkillInput): Promise<Skill> {
   }))
 }
 
-export async function toggleSkill(id: string, enabled: boolean): Promise<Skill> {
+export async function toggleSkill(id: number, enabled: boolean): Promise<Skill> {
   return extractData(await apiClient.patch(`/skills/${id}/toggle`, { enabled }))
 }
 
-export async function refineSkill(id: string, prompt?: string): Promise<RefineResult> {
+export async function refineSkill(id: number, prompt?: string): Promise<RefineResult> {
   return extractData(await apiClient.post(`/skills/${id}/refine`, { prompt }))
 }

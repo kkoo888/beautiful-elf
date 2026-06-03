@@ -76,7 +76,7 @@ export function SkillChain({ skills, chainNodes, onChange }: SkillChainProps) {
     [chainNodes, onChange]
   )
 
-  const getSkillName = (id: string) => skills.find((s) => s.id === id)?.name ?? id
+  const getSkillName = (id: number) => skills.find((s) => s.id === id)?.name ?? String(id)
 
   // 可添加的技能（未在链中的）
   const availableSkills = skills.filter((s) => !chainNodes.some((n) => n.skillId === s.id))

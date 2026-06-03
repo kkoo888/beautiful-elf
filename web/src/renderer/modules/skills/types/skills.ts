@@ -20,13 +20,13 @@ export interface SkillRuntimeStats {
 
 /** 技能数据 */
 export interface Skill {
-  id: string
+  id: number
   name: string
   displayName: string
   description: string
   version: string
   source: string
-  enabled: boolean
+  isEnabled: number
   triggerWords: string[]
   dependencies: string[]
   config: Record<string, unknown>
@@ -61,7 +61,7 @@ export interface RefineResult {
 
 /** 技能链节点 */
 export interface ChainNode {
-  skillId: string
+  skillId: number
   /** 执行顺序（从 0 开始） */
   order: number
 }
@@ -78,7 +78,7 @@ export interface SkillChain {
 export interface SkillQueryParams {
   page?: number
   pageSize?: number
-  enabled?: number
+  isEnabled?: number
 }
 
 /** 技能创建参数 */

@@ -53,7 +53,7 @@ export default function SkillsPanel() {
   }, [])
 
   const handleToggle = useCallback(
-    async (id: string, enabled: boolean) => {
+    async (id: number, enabled: boolean) => {
       try {
         await toggleSkillMut(id, enabled)
       } catch {
@@ -71,7 +71,7 @@ export default function SkillsPanel() {
   )
 
   const handleRefine = useCallback(
-    async (id: string, prompt?: string): Promise<RefineResult> => {
+    async (id: number, prompt?: string): Promise<RefineResult> => {
       return refineSkillMut(id, prompt)
     },
     [refineSkillMut]

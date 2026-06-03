@@ -24,9 +24,9 @@ export interface UseSkillsReturn {
   /** 安装技能 */
   installSkillMut: (input: InstallSkillInput) => Promise<Skill>
   /** 切换技能启用/禁用 */
-  toggleSkillMut: (id: string, enabled: boolean) => Promise<Skill>
+  toggleSkillMut: (id: number, enabled: boolean) => Promise<Skill>
   /** 炼化技能 */
-  refineSkillMut: (id: string, prompt?: string) => Promise<RefineResult>
+  refineSkillMut: (id: number, prompt?: string) => Promise<RefineResult>
   /** 是否有正在提交的操作 */
   isMutating: boolean
 }
@@ -54,14 +54,14 @@ export function useSkills(): UseSkillsReturn {
   })
 
   const toggleMut = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => toggleSkill(id, enabled),
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => toggleSkill(id, enabled),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
     },
   })
 
   const refineMut = useMutation({
-    mutationFn: ({ id, prompt }: { id: string; prompt?: string }) => refineSkill(id, prompt),
+    mutationFn: ({ id, prompt }: { id: number; prompt?: string }) => refineSkill(id, prompt),
   })
 
   const installSkillMut = useCallback(
@@ -70,12 +70,12 @@ export function useSkills(): UseSkillsReturn {
   )
 
   const toggleSkillMut = useCallback(
-    (id: string, enabled: boolean) => toggleMut.mutateAsync({ id, enabled }),
+    (id: number, enabled: boolean) => toggleMut.mutateAsync({ id, enabled }),
     [toggleMut]
   )
 
   const refineSkillMut = useCallback(
-    (id: string, prompt?: string) => refineMut.mutateAsync({ id, prompt }),
+    (id: number, prompt?: string) => refineMut.mutateAsync({ id, prompt }),
     [refineMut]
   )
 

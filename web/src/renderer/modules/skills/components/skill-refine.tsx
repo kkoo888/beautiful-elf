@@ -13,7 +13,7 @@ interface SkillRefineProps {
   open: boolean
   skill: Skill | null
   onClose: () => void
-  onRefine: (id: string, prompt?: string) => Promise<RefineResult>
+  onRefine: (id: number, prompt?: string) => Promise<RefineResult>
   isRefining?: boolean
 }
 
