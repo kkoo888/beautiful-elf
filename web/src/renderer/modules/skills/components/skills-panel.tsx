@@ -5,7 +5,7 @@ import { Button, Input, Spin, Empty, Drawer, message } from 'antd'
 import { PlusOutlined, SearchOutlined, ApiOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSkills } from '../hooks/use-skills'
-import type { Skill, ChainNode, InstallSkillInput, RefineResult } from '../types/skills'
+import type { Skill, ChainNode, InstallSkillInput, UpdateSkillInput, RefineResult } from '../types/skills'
 import { SkillCard } from './skill-card'
 import { SkillInstall } from './skill-install'
 import { SkillDetail } from './skill-detail'
@@ -27,6 +27,8 @@ export default function SkillsPanel() {
     installSkillMut,
     toggleSkillMut,
     refineSkillMut,
+    updateSkillMut,
+    deleteSkillMut,
     isMutating,
   } = useSkills()
 
@@ -75,6 +77,20 @@ export default function SkillsPanel() {
       return refineSkillMut(id, prompt)
     },
     [refineSkillMut]
+  )
+
+  const handleUpdate = useCallback(
+    async (id: number, input: UpdateSkillInput) => {
+      await updateSkillMut(id, input)
+    },
+    [updateSkillMut]
+  )
+
+  const handleDelete = useCallback(
+    async (id: number) => {
+      await deleteSkillMut(id)
+    },
+    [deleteSkillMut]
   )
 
   const handleOpenRefine = useCallback((skill: Skill) => {
@@ -161,6 +177,8 @@ export default function SkillsPanel() {
         skill={selectedSkill}
         onClose={() => setDetailOpen(false)}
         onRefine={handleOpenRefine}
+        onUpdate={handleUpdate}
+        onDelete={handleDelete}
       />
 
       {/* 炼化面板 */}

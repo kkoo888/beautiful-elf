@@ -2,8 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo, useState } from 'react'
-import type { Skill, InstallSkillInput, RefineResult } from '../types/skills'
-import { fetchSkills, installSkill, toggleSkill, refineSkill } from '../services/skills-api'
+import type { Skill, InstallSkillInput, UpdateSkillInput, RefineResult } from '../types/skills'
+import { fetchSkills, installSkill, updateSkill, deleteSkill, toggleSkill, refineSkill } from '../services/skills-api'
 
 const QUERY_KEY = ['skills']
 
@@ -27,6 +27,10 @@ export interface UseSkillsReturn {
   toggleSkillMut: (id: number, enabled: boolean) => Promise<Skill>
   /** 炼化技能 */
   refineSkillMut: (id: number, prompt?: string) => Promise<RefineResult>
+  /** 更新技能 */
+  updateSkillMut: (id: number, input: UpdateSkillInput) => Promise<Skill>
+  /** 删除技能 */
+  deleteSkillMut: (id: number) => Promise<void>
   /** 是否有正在提交的操作 */
   isMutating: boolean
 }
@@ -64,6 +68,20 @@ export function useSkills(): UseSkillsReturn {
     mutationFn: ({ id, prompt }: { id: number; prompt?: string }) => refineSkill(id, prompt),
   })
 
+  const updateMut = useMutation({
+    mutationFn: ({ id, input }: { id: number; input: UpdateSkillInput }) => updateSkill(id, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+    },
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => deleteSkill(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+    },
+  })
+
   const installSkillMut = useCallback(
     (input: InstallSkillInput) => installMut.mutateAsync(input),
     [installMut]
@@ -79,6 +97,16 @@ export function useSkills(): UseSkillsReturn {
     [refineMut]
   )
 
+  const updateSkillMut = useCallback(
+    (id: number, input: UpdateSkillInput) => updateMut.mutateAsync({ id, input }),
+    [updateMut]
+  )
+
+  const deleteSkillMut = useCallback(
+    (id: number) => deleteMut.mutateAsync(id),
+    [deleteMut]
+  )
+
   const enabledSkills = useMemo(() => skills.filter((s) => s.isEnabled), [skills])
 
   const filteredSkills = useMemo(() => {
@@ -92,7 +120,7 @@ export function useSkills(): UseSkillsReturn {
     )
   }, [skills, keyword])
 
-  const isMutating = installMut.isPending || toggleMut.isPending || refineMut.isPending
+  const isMutating = installMut.isPending || toggleMut.isPending || refineMut.isPending || updateMut.isPending || deleteMut.isPending
 
   return {
     skills,
@@ -105,6 +133,8 @@ export function useSkills(): UseSkillsReturn {
     installSkillMut,
     toggleSkillMut,
     refineSkillMut,
+    updateSkillMut,
+    deleteSkillMut,
     isMutating,
   }
 }
