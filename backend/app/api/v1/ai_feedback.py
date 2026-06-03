@@ -31,7 +31,7 @@ async def get_feedback(feedback_id: int, db: AsyncSession = Depends(get_db)):
 async def list_feedbacks(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
-    feedback_type: Optional[int] = Query(default=None),, alias="feedbackType")
+    feedback_type: Optional[int] = Query(default=None, alias="feedbackType"),
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await _service.list(db, page, page_size, feedback_type)

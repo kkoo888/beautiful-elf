@@ -24,8 +24,8 @@ async def list_action_logs(
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     module: Optional[str] = Query(default=None),
     action: Optional[str] = Query(default=None),
-    start_time: Optional[datetime] = Query(default=None),, alias="startTime")
-    end_time: Optional[datetime] = Query(default=None),, alias="endTime")
+    start_time: Optional[datetime] = Query(default=None, alias="startTime"),
+    end_time: Optional[datetime] = Query(default=None, alias="endTime"),
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await _service.list(
