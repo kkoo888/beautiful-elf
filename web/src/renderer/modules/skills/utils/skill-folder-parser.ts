@@ -539,7 +539,7 @@ const EXECUTABLE_EXTENSIONS = new Set([
 ])
 
 const SUSPICIOUS_FILENAMES = [
-  /^\./,                    // 隐藏文件
+  /^\.(?!clawhub|git|github|vscode|idea|DS_Store)/,  // 隐藏文件（排除已知安全目录）
   /\.(bak|old|tmp|swp)$/,  // 临时/备份文件
   /\.(enc|gpg|pgp)$/,      // 加密文件
   /__MACOSX/,               // macOS 元数据
@@ -669,6 +669,8 @@ function runScan(files: FileWithMeta[]): ScanResult {
 
   for (const file of files) {
     for (const rule of ALL_RULES) {
+      // 检查 fileFilter：如果规则限定了文件类型，跳过不匹配的文件
+      if (rule.fileFilter && !rule.fileFilter.test(file.path)) continue
       const matches = rule.scan(file.decodedContent, file.path)
       if (matches) {
         for (const m of matches) {
