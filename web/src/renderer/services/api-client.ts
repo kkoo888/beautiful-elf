@@ -49,10 +49,10 @@ apiClient.interceptors.response.use(
 )
 
 // ── 响应提取工具 ───────────────────────────────────────────
-// 后端响应格式：
+// 后端响应格式（ApiResult / ApiPageResult 泛型信封）：
 //   成功: { code: "SUCCESS", message: "...", data: T }
-//   分页: { code: "SUCCESS", message: "...", data: T[], meta: { total, page, page_size } }
-//   失败: { code: "ERROR_CODE", message: "...", data: null, request_id: "..." }
+//   分页: { code: "SUCCESS", message: "...", data: T[], total: N, page: N, pageSize: N }
+//   失败: { code: "ERROR_CODE", message: "...", data: null, userTip: "...", requestId: "..." }
 
 /**
  * 从 ApiResponse<T> 中提取 data 字段
@@ -69,20 +69,19 @@ function extractData<T>(resp: AxiosResponse<ApiResponse<T>>): T {
 }
 
 /**
- * 从分页 ApiResponse<T[]> 中提取 items + total
- * 后端 ok_page() 返回 { data, meta: { total, page, page_size } }
+ * 从分页 ApiPageResult<T[]> 中提取 items + total
+ * 后端 ApiPageResult 直接返回 { data, total, page, pageSize }（顶层字段）
  *
  * @example
  * const { items, total } = extractPaginated(await apiClient.get<User[]>('/users'))
  */
 function extractPaginated<T>(resp: AxiosResponse<ApiResponse<T[]>>): PaginatedResponse<T> {
   const body = resp.data as any
-  const meta = body.meta ?? {}
   return {
     items: body.data ?? [],
-    total: meta.total ?? 0,
-    page: meta.page ?? 1,
-    pageSize: meta.pageSize ?? (body.data?.length ?? 0),
+    total: body.total ?? 0,
+    page: body.page ?? 1,
+    pageSize: body.pageSize ?? (body.data?.length ?? 0),
   }
 }
 

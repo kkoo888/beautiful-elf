@@ -1,5 +1,5 @@
 """大模型供应商 Service"""
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repository.llm_provider_repo import LLMProviderRepository
@@ -29,6 +29,11 @@ class LLMProviderService:
         if not provider:
             raise RecordNotFoundError(f"供应商 {provider_id} 不存在")
         return self._to_out(provider)
+
+    async def get_default(self, db: AsyncSession) -> Optional[ProviderOut]:
+        """获取默认供应商（用于前端未指定时兜底）"""
+        provider = await self.repo.find_default(db)
+        return self._to_out(provider) if provider else None
 
     async def create(self, db: AsyncSession, data: ProviderCreate) -> ProviderOut:
         """创建供应商"""

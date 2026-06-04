@@ -62,9 +62,9 @@ export async function fetchConversations(params?: {
  *  后端 ConversationCreate 字段: title, model_name
  *  CamelModel alias_generator=to_camel + populate_by_name=True → 同时接受 modelName
  */
-export async function createConversation(title?: string): Promise<Conversation> {
+export async function createConversation(title?: string, modelName?: string): Promise<Conversation> {
   const raw = extractData(await apiClient.post('/conversations', {
-    title: title ?? '新会话', model_name: '',
+    title: title ?? '新会话', model_name: modelName ?? '',
   }))
   if (!raw) throw new Error('创建会话失败：后端返回数据为空')
   return adaptConversation(raw)

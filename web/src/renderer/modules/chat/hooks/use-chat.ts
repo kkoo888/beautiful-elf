@@ -97,11 +97,12 @@ export function useChat(): UseChatReturn {
   /** 确保有会话 ID（调用后端创建） */
   const ensureConversationId = useCallback(async (): Promise<string> => {
     if (currentConversationId) return currentConversationId
-    const conv = await createConversation('新会话')
+    const store = useChatStore.getState()
+    const conv = await createConversation('新会话', store.selectedModelName)
     console.log('[Chat] createConversation result:', conv)
     if (!conv) throw new Error('createConversation returned undefined')
-    useChatStore.getState().addConversation(conv)
-    useChatStore.getState().setCurrentConversation(conv.id)
+    store.addConversation(conv)
+    store.setCurrentConversation(conv.id)
     return conv.id
   }, [currentConversationId])
 
@@ -323,10 +324,11 @@ export function useChat(): UseChatReturn {
 
   /** 创建新会话（调后端 API） */
   const handleCreateConversation = useCallback(async () => {
-    const conv = await createConversation('新会话')
-    useChatStore.getState().addConversation(conv)
-    useChatStore.getState().setCurrentConversation(conv.id)
-    useChatStore.getState().clearMessages()
+    const store = useChatStore.getState()
+    const conv = await createConversation('新会话', store.selectedModelName)
+    store.addConversation(conv)
+    store.setCurrentConversation(conv.id)
+    store.clearMessages()
   }, [])
 
   /** 切换会话 */

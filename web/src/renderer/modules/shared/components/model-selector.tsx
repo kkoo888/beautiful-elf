@@ -151,11 +151,12 @@ export function FullModelSelect({
       try {
         const list = await getProvidersCached()
         setProviders(list)
-        // 如果没选过供应商，默认选第一个
+        // 如果没选过供应商，默认选第一个（优先选默认供应商）
         if (!providerId && list.length > 0) {
-          setSelectedPid(list[0].id)
-          if (onChange && list[0].models.length > 0) {
-            onChange(list[0].id, list[0].models[0].name)
+          const defaultP = list.find((p) => p.isDefault === 1) ?? list[0]
+          setSelectedPid(defaultP.id)
+          if (onChange && defaultP.models.length > 0) {
+            onChange(defaultP.id, defaultP.models[0].name)
           }
         }
       } finally {
