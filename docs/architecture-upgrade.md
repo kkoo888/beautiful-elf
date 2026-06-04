@@ -166,7 +166,33 @@ import operator
 import time
 
 from app.core.logging import get_logger
+from app.agent.tool_registry import tool_registry, RiskLevel
+from app.agent.memory_manager import MemoryManager
+from app.agent.rag_pipeline import RAGPipeline
+from app.services.llm_chat_service import LLMChatService
+
 logger = get_logger(__name__)
+
+# 全局实例（由 app 启动时初始化）
+memory_manager: MemoryManager = None
+rag_pipeline: RAGPipeline = None
+llm_client: LLMChatService = None
+
+
+def init_agent_services(memory: MemoryManager, rag: RAGPipeline, llm: LLMChatService):
+    """App 启动时调用，注入依赖"""
+    global memory_manager, rag_pipeline, llm_client
+    memory_manager = memory
+    rag_pipeline = rag
+    llm_client = llm
+
+
+def build_system_prompt(context: str) -> str:
+    """将检索到的上下文注入系统提示词"""
+    base = "你是一个智能助手，能够使用工具回答用户问题。请基于提供的上下文信息回答。"
+    if context:
+        return f"{base}\n\n{context}"
+    return base
 
 
 class AgentState(TypedDict):
@@ -340,12 +366,11 @@ async def tool_executor_node(state: AgentState) -> dict:
 
 
 async def memory_saver_node(state: AgentState) -> dict:
-    """记忆保存：提取关键信息 → 存入记忆系统"""
+    """记忆保存：更新会话缓存（定时任务负责存 Qdrant）"""
     if state.get("final_answer"):
-        await memory_manager.extract_and_save(
+        await memory_manager.update_session_cache(
             conversation_id=state["conversation_id"],
-            messages=state["messages"],
-            answer=state["final_answer"],
+            messages=state["messages"] + [{"role": "assistant", "content": state["final_answer"]}],
         )
     return {}
 
@@ -373,13 +398,31 @@ def should_use_tools(state: AgentState) -> str:
 **新增文件：** `backend/app/agent/__init__.py`
 
 ```python
-from .engine import build_agent_graph
+from .engine import build_agent_graph, init_agent_services
 from .context_builder import ContextBuilder
 from .tool_registry import ToolRegistry
 from .memory_manager import MemoryManager
 from .rag_pipeline import RAGPipeline
 
-__all__ = ["build_agent_graph", "ContextBuilder", "ToolRegistry", "MemoryManager", "RAGPipeline"]
+__all__ = ["build_agent_graph", "init_agent_services", "ContextBuilder", "ToolRegistry", "MemoryManager", "RAGPipeline"]
+```
+
+**在 `backend/main.py` 的 lifespan 中初始化：**
+
+```python
+from app.agent import init_agent_services
+from app.agent.memory_manager import MemoryManager
+from app.agent.rag_pipeline import RAGPipeline
+from app.services.llm_chat_service import LLMChatService
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    memory = MemoryManager()
+    rag = RAGPipeline()
+    llm = LLMChatService()
+    init_agent_services(memory, rag, llm)
+    yield
+    await llm.close()
 ```
 
 ---
@@ -797,7 +840,7 @@ class RAGPipeline:
 
 ---
 
-### 4.4 P0-5: Tool Calling 闭环
+### 4.3 P0-5: Tool Calling 闭环
 
 **新增文件：** `backend/app/agent/context_builder.py`
 
@@ -1108,7 +1151,7 @@ tool_registry.register(
 
 ---
 
-### 4.5 P1-1: httpx 连接池复用
+### 4.4 P1-1: httpx 连接池复用
 
 **修改文件：** `backend/app/services/llm_chat_service.py`
 
@@ -1136,7 +1179,7 @@ class LLMChatService:
 
 ---
 
-### 4.6 P1-2 & P1-3: 对话消息自动保存 + 事务安全
+### 4.5 P1-2 & P1-3: 对话消息自动保存 + 事务安全
 
 **修改文件：** `backend/app/api/v1/chat.py`
 
@@ -1156,6 +1199,7 @@ async def chat(conversation_id: int, data: ChatRequest, db: AsyncSession = Depen
     agent_graph = build_agent_graph()
     result = await agent_graph.ainvoke({
         "conversation_id": conversation_id,
+        "user_id": current_user.id,  # 从 JWT 中获取
         "messages": [{"role": m.role, "content": m.content} for m in data.messages],
         "context": "",
         "memory_context": "",
@@ -1163,6 +1207,10 @@ async def chat(conversation_id: int, data: ChatRequest, db: AsyncSession = Depen
         "tools_used": [],
         "final_answer": None,
         "iterations": 0,
+        "token_budget": 32000,
+        "tokens_used": 0,
+        "needs_approval": False,
+        "pending_tool_call": None,
     })
 
     # 3. 保存助手回复（在同一事务中）
@@ -1210,7 +1258,7 @@ class ChatResponse(BaseModel):
     pending_tool: Optional[dict] = None  # 等待审批的工具详情
 ```
 
-### 4.7 P1-4: JWT 密钥强制校验
+### 4.6 P1-4: JWT 密钥强制校验
 
 **修改文件：** `backend/app/core/security.py`
 
@@ -1231,7 +1279,7 @@ if not JWT_SECRET_KEY or JWT_SECRET_KEY == "beautiful-elf-secret-change-me":
 
 ---
 
-### 4.8 P1-5: 对话上下文窗口管理
+### 4.7 P1-5: 对话上下文窗口管理
 
 **新增文件：** `backend/app/agent/context_manager.py`
 
@@ -1308,7 +1356,7 @@ class ContextManager:
 
 ---
 
-### 4.9 P1-6: 记忆系统集成
+### 4.8 P1-6: 记忆系统集成
 
 **新增文件：** `backend/app/agent/memory_manager.py`
 
@@ -1537,7 +1585,7 @@ class MemoryManager:
 
 ---
 
-### 4.10 P2-1: WebSocket 接入 Agent 流
+### 4.9 P2-1: WebSocket 接入 Agent 流
 
 **修改文件：** `backend/app/api/v1/websocket.py`
 
@@ -1568,10 +1616,13 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
             # 使用 astream_events 流式输出中间过程
             async for event in agent_graph.astream_events({
                 "conversation_id": conversation_id,
+                "user_id": 0,  # TODO: 从 WebSocket 认证中获取
                 "messages": [{"role": "user", "content": user_message}],
                 "context": "", "memory_context": "",
                 "tool_calls": [], "tools_used": [],
                 "final_answer": None, "iterations": 0,
+                "token_budget": 32000, "tokens_used": 0,
+                "needs_approval": False, "pending_tool_call": None,
             }):
                 if event["event"] == "on_chat_model_stream":
                     # 流式 token
@@ -1602,7 +1653,7 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
 
 ---
 
-### 4.11 P2-2: Workflow 执行引擎
+### 4.10 P2-2: Workflow 执行引擎
 
 **新增文件：** `backend/app/agent/workflow_engine.py`
 
@@ -1735,7 +1786,7 @@ class WorkflowEngine:
 
 ---
 
-### 4.12 P2-4: API 限流中间件
+### 4.11 P2-4: API 限流中间件
 
 **修改文件：** `backend/main.py`
 
@@ -1763,7 +1814,7 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 ---
 
-### 4.13 降级策略链
+### 4.12 降级策略链
 
 当外部服务不可用时，Agent 应自动降级而非崩溃。
 
@@ -1822,7 +1873,7 @@ async def context_builder_node(state: AgentState) -> dict:
     }
 ```
 
-### 4.14 可观测性：LangSmith / LangFuse 集成
+### 4.13 可观测性：LangSmith / LangFuse 集成
 
 在 Agent 引擎中接入 tracing，追踪完整的决策链路。
 
@@ -1890,7 +1941,7 @@ async def llm_call_node(state: AgentState) -> dict:
         # ... 原有逻辑
 ```
 
-### 4.15 评估流水线（Eval Pipeline）
+### 4.14 评估流水线（Eval Pipeline）
 
 每次改 prompt 或模型后，自动跑评估确认质量不退化。
 
@@ -1935,6 +1986,8 @@ class EvalPipeline:
         for case in cases:
             # 1. 调用 Agent
             agent_result = await self.agent.ainvoke({
+                "conversation_id": 0,  # 评估用虚拟会话
+                "user_id": 0,
                 "messages": [{"role": "user", "content": case.question}],
                 "context": "", "memory_context": "",
                 "tool_calls": [], "tools_used": [],
@@ -2023,12 +2076,12 @@ backend/app/agent/
 ### 修改文件
 
 ```
-backend/app/api/v1/chat.py           # 接入 Agent 引擎 + 自动保存消息
+backend/app/api/v1/chat.py           # 接入 Agent 引擎 + 自动保存消息 + 结构化输出
 backend/app/api/v1/knowledge.py      # 实现 RAG 管道接口
 backend/app/api/v1/websocket.py      # 接入 Agent 流式输出
 backend/app/services/llm_chat_service.py  # httpx 连接池复用
 backend/app/core/security.py         # JWT 密钥强制校验
-backend/main.py                      # 限流中间件
+backend/main.py                      # 限流中间件 + Agent 服务初始化（lifespan）
 backend/requirements.txt             # 新增依赖
 ```
 
