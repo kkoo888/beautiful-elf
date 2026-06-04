@@ -8,7 +8,7 @@ from app.core.dependencies import PaginationParams, get_pagination
 from app.services.expert_team_service import ExpertTeamService
 from app.schemas.expert_team import (
     ExpertTeamCreate, ExpertTeamUpdate, ExpertTeamOut,
-    ExpertMemberCreate, ExpertMemberUpdate,
+    ExpertMemberCreate, ExpertMemberUpdate, ExpertMemberOut,
     ExpertTeamExecuteRequest,
     RoleSkillCreate, RoleSkillUpdate, RoleSkillOut,
     ExpertTeamRunOut, ExpertRoleRunOut,

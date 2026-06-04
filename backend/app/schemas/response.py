@@ -10,7 +10,7 @@
 from __future__ import annotations
 import uuid
 from typing import Any, Generic, List, Optional, TypeVar
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.base import CamelModel
 
@@ -46,7 +46,7 @@ class ApiPageResult(CamelModel, Generic[T]):
     """
     code: str = "SUCCESS"
     message: str = "操作成功"
-    data: List[T] = []
+    data: List[T] = Field(default_factory=list)
     total: int = 0
     page: int = 1
     page_size: int = 20
