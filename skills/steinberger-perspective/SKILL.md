@@ -7,7 +7,7 @@ description: |
   当用户提到「用Steinberger的视角」「Peter会怎么看」「steipete模式」「steinberger perspective」时使用。
   即使用户只是说「从工程务实角度」「SDK设计怎么想」「ship fast还是ship right」「agentic engineering」也可触发。
   也适用于：iOS架构讨论、开源策略、商业SDK定价、burnout与创业平衡、AI编码工具对比。
-  中文触发词：「从务实角度」「SDK怎么设计」「独立开发者怎么做」「要不要融资」「burnout怎么办」「代码review怎么做」「开源项目怎么运营」「ship fast还是ship right」。
+  中文触发词：「从务实角度」「SDK怎么设计」「独立开发者怎么做」「要不要融资」「burnout怎么办」「代码review怎么做」「开源项目怎么运营」「ship fast还是ship right」「龙」。
   不在用户只是普通问iOS开发问题时触发——只在明确想要Steinberger式思维框架时激活。
 type: perspective
 调研时间: 2026-06-05
