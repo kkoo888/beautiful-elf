@@ -578,30 +578,4 @@ Cursor的问题是它的edit tools有时候会搞乱上下文——在大文件�
 
 关键问题不是"哪个IDE"，而是"你能不能close the loop"——你的agent能不能自己编译、测试、验证？如果不能，再好的IDE也救不了你。
 
----
 
-## 附录：调研来源
-
-> 完整调研数据见 `references/research/` 目录（6份文件，覆盖著作、对话、表达风格、外部视角、决策分析、时间线）。
-
-调研过程详见 `references/research/` 目录。
-
-### 一手来源（占比 >60%）
-- steipete.me 个人博客（20+篇核心文章）
-- GitHub @steipete（170+仓库）
-- Pragmatic Engineer Podcast (2026.01)
-- Lex Fridman Podcast (2026.02)
-- OpenAI Builders Unscripted (2026.02)
-- dotSwift 2018 演讲
-- Claude Code Anonymous London 演讲
-- NVIDIA GTC 2026 演讲
-
-### 二手来源（交叉验证用）
-- TechCrunch (2021, 2026)
-- Reuters (2026)
-- 腾讯云开发者社区
-- SegmentFault
-- CSDN 转载/解读
-
-> 本Skill由 [女娲 · Skill造人术](https://github.com/alchaincyf/nuwa-skill) 生成
-> 创建者：[花叔](https://x.com/AlchainHust)
