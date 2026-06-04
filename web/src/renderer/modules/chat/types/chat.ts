@@ -94,6 +94,8 @@ export interface ChatRequest {
   reasoningDepth: ReasoningDepth
   /** 供应商 ID */
   providerId?: number
+  /** 供应商类型（后端需要） */
+  providerType?: string
   /** 模型名称 */
   modelName?: string
 }

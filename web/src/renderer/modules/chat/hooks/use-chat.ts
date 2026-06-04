@@ -6,6 +6,7 @@
 import { useCallback, useRef } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
 import { chat, chatStream, submitFeedback, createConversation } from '../services/chat-api'
+import { getEnabledProviders } from '@/modules/settings/services/settings-api'
 import type {
   ChatMessage,
   Conversation,
@@ -75,6 +76,24 @@ export function useChat(): UseChatReturn {
 
   const abortRef = useRef<{ abort: () => void } | null>(null)
 
+  // 缓存 providerId -> providerType 映射，避免每次请求都拉 Provider 列表
+  const providerTypeCacheRef = useRef<Record<number, string | undefined>>({})
+
+  const getProviderType = useCallback(async (pid?: number): Promise<string | undefined> => {
+    if (!pid) return undefined
+    const cache = providerTypeCacheRef.current
+    if (cache[pid] !== undefined) return cache[pid]
+    try {
+      const list = await getEnabledProviders()
+      for (const p of list) {
+        cache[p.id] = p.providerType
+      }
+      return cache[pid]
+    } catch (err) {
+      return undefined
+    }
+  }, [])
+
   /** 确保有会话 ID（调用后端创建） */
   const ensureConversationId = useCallback(async (): Promise<string> => {
     if (currentConversationId) return currentConversationId
@@ -125,12 +144,15 @@ export function useChat(): UseChatReturn {
       setIsLoading(true)
 
       // 流式接收
+      const providerType = await getProviderType(selectedProviderId)
+
       abortRef.current = chatStream(
         {
           conversationId: convId,
           message: content.trim(),
           reasoningDepth,
           providerId: selectedProviderId,
+          providerType,
           modelName: selectedModelName,
         },
         (token: StreamToken) => {
@@ -204,11 +226,13 @@ export function useChat(): UseChatReturn {
       setIsLoading(true)
 
       try {
+        const providerType = await getProviderType(selectedProviderId)
         const response = await chat({
           conversationId: convId,
           message: content.trim(),
           reasoningDepth,
           providerId: selectedProviderId,
+          providerType,
           modelName: selectedModelName,
         })
 
