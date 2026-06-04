@@ -15,6 +15,7 @@
  */
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
+import { API_PREFIX } from '@shared/constants'
 import type {
   ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse,
   StreamToken, Conversation, ChatMessage,
@@ -156,8 +157,8 @@ export function chatStream(
 
   const doStream = async (): Promise<void> => {
     try {
-      // 使用 apiClient.defaults.baseURL 拼接完整路径
-      const url = `${apiClient.defaults.baseURL}/conversations/${request.conversationId}/chat`
+      // 使用相对路径，走 Vite proxy / Nginx 反向代理，与 axios 保持一致
+      const url = `${API_PREFIX}/conversations/${request.conversationId}/chat`
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Trace-Id': crypto.randomUUID() },
