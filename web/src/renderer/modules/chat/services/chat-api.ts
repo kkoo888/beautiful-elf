@@ -129,7 +129,7 @@ export async function saveMessage(
 export async function chat(request: ChatRequest): Promise<ChatResponse> {
   await saveMessage(request.conversationId, 'user', request.message)
   const data = extractData(await apiClient.post(`/conversations/${request.conversationId}/chat`, {
-    provider_id: request.providerId, providerType: request.providerType ?? undefined, model_name: request.modelName ?? '',
+    provider_id: request.providerId, model_name: request.modelName ?? '',
     messages: [{ role: 'user', content: request.message }],
     temperature: 0.7, max_tokens: 2048, stream: false,
   })) as any
@@ -162,7 +162,7 @@ export function chatStream(
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Trace-Id': crypto.randomUUID() },
         body: JSON.stringify({
-          provider_id: request.providerId, providerType: request.providerType ?? '', model_name: request.modelName ?? '',
+          provider_id: request.providerId, model_name: request.modelName ?? '',
           messages: [{ role: 'user', content: request.message }],
           temperature: 0.7, max_tokens: 2048, stream: true,
         }),
