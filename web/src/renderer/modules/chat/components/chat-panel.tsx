@@ -3,7 +3,7 @@
  * 整合消息列表、输入框、推理深度切换、模型选择等
  */
 
-import React, { useCallback } from 'react'
+import React, { useCallback, useEffect } from 'react'
 import { Button, Tooltip } from 'antd'
 import { ClearOutlined } from '@ant-design/icons'
 import styles from './chat-panel.module.css'
@@ -12,6 +12,8 @@ import { MessageInput } from './message-input'
 import { ReasoningDepthSwitch } from './reasoning-depth'
 import { FullModelSelect } from '@/modules/shared/components/model-selector'
 import { useChat } from '../hooks/use-chat'
+import { useChatStore } from '@/stores/use-chat-store'
+import { getEnabledProviders } from '@/modules/settings/services/settings-api'
 
 export const ChatPanel: React.FC = () => {
   const {
@@ -27,6 +29,18 @@ export const ChatPanel: React.FC = () => {
     clearMessages,
     stopGeneration,
   } = useChat()
+
+  const initDefaultModel = useChatStore((s) => s.initDefaultModel)
+
+  // 首次加载：从接口取默认供应商和模型，写入 store
+  useEffect(() => {
+    void (async () => {
+      try {
+        const providers = await getEnabledProviders()
+        initDefaultModel(providers)
+      } catch { /* 忽略，用户可手动选择 */ }
+    })()
+  }, [initDefaultModel])
 
   const handleSend = useCallback(
     (content: string) => {

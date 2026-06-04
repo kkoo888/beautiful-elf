@@ -26,6 +26,8 @@ interface ChatState {
   addMessage: (message: ChatMessage) => void
   setReasoningDepth: (depth: 'fast' | 'deep' | 'full') => void
   setModelSelection: (providerId: number, modelName: string) => void
+  /** 从已启用供应商列表中提取默认供应商和模型，写入 store */
+  initDefaultModel: (providers: { id: number; isDefault: number; models: { name: string }[] }[]) => void
   setIsLoading: (loading: boolean) => void
   clearMessages: () => void
 
@@ -56,6 +58,12 @@ export const useChatStore = create<ChatState>((set) => ({
     })),
   setReasoningDepth: (reasoningDepth) => set({ reasoningDepth }),
   setModelSelection: (providerId, modelName) => set({ selectedProviderId: providerId, selectedModelName: modelName }),
+  initDefaultModel: (providers) => {
+    const defaultP = providers.find((p) => p.isDefault === 1) ?? providers[0]
+    if (defaultP && defaultP.models.length > 0) {
+      set({ selectedProviderId: defaultP.id, selectedModelName: defaultP.models[0].name })
+    }
+  },
   setIsLoading: (isLoading) => set({ isLoading }),
   clearMessages: () => set({ messages: [] }),
 
