@@ -70,7 +70,7 @@
 | P1-3 | 用户消息未自动保存 | `chat.py` | LLM 看不到历史对话 |
 | P1-4 | JWT 密钥硬编码默认值 | `security.py` | 部署时等于无认证 |
 | P1-5 | 对话上下文无窗口管理 | `chat.py` | 长对话超出 context window |
-| P1-6 | 记忆系统未集成到对话流 | 不存在 | Agent 无长期记忆 |
+| P1-6 | 记忆系统未集成到对话流 | 不存在 | Agent 无长期记忆，用户回来后无法唤醒上下文 |
 
 ### 🟢 P2 — 提升体验
 
@@ -114,26 +114,26 @@
 │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
 │   │ Context      │  │ Tool         │  │ Memory       │            │
 │   │ Builder      │  │ Executor     │  │ Manager      │            │
-│   │ (RAG+记忆)   │  │ (工具注册表)  │  │ (三层记忆)   │            │
+│   │ (RAG+记忆)   │  │ (工具注册表)  │  │ (两层记忆)   │            │
 │   └──────────────┘  └──────────────┘  └──────────────┘            │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
               ┌────────────────┼────────────────┐
               ▼                ▼                ▼
 ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
-│   RAG 管道        │ │   工具注册表      │ │   三层记忆        │
+│   RAG 管道        │ │   工具注册表      │ │   两层记忆        │
 │   (新增)          │ │   (新增)          │ │   (新增)          │
 │                  │ │                  │ │                  │
-│  文档解析         │ │  内置工具:        │ │  短期: Redis     │
-│  分块+Embedding  │ │  - 网页搜索       │ │  中期: MySQL     │
-│  Qdrant 存储     │ │  - 代码执行       │ │  长期: Qdrant    │
-│  混合检索         │ │  - 文件操作       │ │                  │
-│  重排序           │ │  - 数据库查询     │ │  自动提取+检索   │
-│                  │ │  - API调用        │ │  定期摘要压缩    │
-│  已有:            │ │                  │ │                  │
-│  - Ollama.embed  │ │  已有:            │ │  已有:            │
-│  - QdrantMapper  │ │  - Tool 模型      │ │  - MemoryEntry   │
-│  - Knowledge模型 │ │  - ToolStats      │ │  - Redis客户端   │
+│  文档解析         │ │  内置工具:        │ │  会话内: Redis   │
+│  分块+Embedding  │ │  - 网页搜索       │ │  长期: Qdrant    │
+│  Qdrant 存储     │ │  - 代码执行       │ │                  │
+│  混合检索         │ │  - 文件操作       │ │  Qdrant 两个集合：│
+│  重排序           │ │  - 数据库查询     │ │  - detail(每小时) │
+│                  │ │                  │ │  - summary(30min) │
+│  已有:            │ │  已有:            │ │                  │
+│  - Ollama.embed  │ │  - Tool 模型      │ │  已有:            │
+│  - QdrantMapper  │ │  - ToolStats      │ │  - MemoryEntry   │
+│  - Knowledge模型 │ │                  │ │  - Redis客户端   │
 └──────────────────┘ └──────────────────┘ └──────────────────┘
 ```
 
@@ -153,6 +153,10 @@ from typing import TypedDict, Annotated, List, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 import operator
+import time
+
+from app.core.logging import get_logger
+logger = get_logger(__name__)
 
 
 class AgentState(TypedDict):
@@ -199,6 +203,8 @@ def build_agent_graph() -> StateGraph:
 
 async def context_builder_node(state: AgentState) -> dict:
     """上下文构建：检索记忆 + RAG"""
+    t0 = time.time()
+
     # 1. 检索相关记忆
     memory_context = await memory_manager.search(
         query=state["messages"][-1]["content"],
@@ -219,6 +225,9 @@ async def context_builder_node(state: AgentState) -> dict:
     if rag_context:
         context_parts.append(f"【知识库参考】\n{rag_context}")
 
+    elapsed = time.time() - t0
+    logger.info(f"[context_builder] memory={'yes' if memory_context else 'no'} rag={'yes' if rag_context else 'no'} elapsed={elapsed:.2f}s")
+
     return {
         "context": "\n\n".join(context_parts),
         "memory_context": memory_context,
@@ -227,6 +236,7 @@ async def context_builder_node(state: AgentState) -> dict:
 
 async def llm_call_node(state: AgentState) -> dict:
     """LLM 调用：拼装上下文 + 对话历史 → 调用 LLM"""
+    t0 = time.time()
     system_prompt = build_system_prompt(state["context"])
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -237,6 +247,10 @@ async def llm_call_node(state: AgentState) -> dict:
         messages=messages,
         tools=tool_registry.get_tool_schemas(),
     )
+
+    elapsed = time.time() - t0
+    has_tools = bool(response.tool_calls)
+    logger.info(f"[llm_call] tool_calls={has_tools} elapsed={elapsed:.2f}s iterations={state.get('iterations', 0)}")
 
     if response.tool_calls:
         return {
@@ -252,19 +266,31 @@ async def llm_call_node(state: AgentState) -> dict:
 
 
 async def tool_executor_node(state: AgentState) -> dict:
-    """工具执行：解析 tool_call → 执行 → 返回结果"""
+    """工具执行：解析 tool_call → 执行 → 返回结果（含错误恢复）"""
     results = []
+    tools_succeeded = []
     for tc in state["tool_calls"]:
-        result = await tool_registry.execute(tc.name, tc.arguments)
-        results.append({
-            "role": "tool",
-            "tool_call_id": tc.id,
-            "content": str(result),
-        })
+        try:
+            result = await tool_registry.execute(tc.name, tc.arguments)
+            results.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": str(result),
+            })
+            tools_succeeded.append(tc.name)
+        except Exception as e:
+            # 工具执行失败：返回错误信息给 LLM，让它自行决定下一步
+            logger.warning(f"工具 {tc.name} 执行失败: {e}")
+            results.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": json.dumps({"error": str(e), "tool": tc.name, "hint": "工具执行失败，请尝试其他工具或直接回答"}),
+                "is_error": True,
+            })
 
     return {
         "messages": results,
-        "tools_used": state.get("tools_used", []) + [tc.name for tc in state["tool_calls"]],
+        "tools_used": state.get("tools_used", []) + tools_succeeded,
         "tool_calls": [],
         "iterations": state.get("iterations", 0) + 1,
     }
@@ -365,8 +391,8 @@ class RAGPipeline:
             # 2. 解析文档 → 纯文本
             text = self._parse_document(file_path, file_type)
 
-            # 3. 分块
-            chunks = self._split_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
+            # 3. 分块（按文档类型选择策略）
+            chunks = self._split_text(text, file_type)
 
             # 4. 批量 Embedding + 存储
             for i, chunk_text in enumerate(chunks):
@@ -465,31 +491,91 @@ class RAGPipeline:
 
     # ── 文本分块 ──────────────────────────────────────────
 
-    @staticmethod
-    def _split_text(text: str, chunk_size: int = 512, overlap: int = 64) -> List[str]:
+    def _split_text(self, text: str, file_type: str = "txt") -> List[str]:
         """
-        智能分块：优先按段落分割，其次按句子，最后按字符
+        按文档类型选择分块策略：
+        - 代码文件（py/js/ts/go）→ 按函数/类分块
+        - Markdown → 按标题层级分块
+        - 其他 → 按段落+字符数分块
         """
         if not text.strip():
             return []
 
-        chunks = []
+        code_types = {"py", "js", "ts", "go", "java", "cpp", "c", "rs"}
+        if file_type.lower() in code_types:
+            return self._split_code(text, file_type)
+        elif file_type.lower() in {"md", "markdown"}:
+            return self._split_markdown(text)
+        else:
+            return self._split_plain(text)
 
-        # 按段落分割
+    @staticmethod
+    def _split_code(text: str, lang: str) -> List[str]:
+        """代码分块：按函数/类定义切分，保留完整结构"""
+        import re
+        # 按函数/类定义切分（Python/JS/Go 通用模式）
+        patterns = {
+            "py": r'(?=^(?:class |def |async def )\w)',
+            "js": r'(?=^(?:export )?(?:class |function |const \w+ = (?:async )?\())',
+            "ts": r'(?=^(?:export )?(?:class |function |const \w+ = (?:async )?\())',
+            "go": r'(?=^func )',
+        }
+        pattern = patterns.get(lang, patterns["py"])
+        parts = re.split(pattern, text, flags=re.MULTILINE)
+        chunks = []
+        current = ""
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if len(current) + len(part) > 1024:
+                if current:
+                    chunks.append(current.strip())
+                current = part
+            else:
+                current += "\n\n" + part if current else part
+        if current.strip():
+            chunks.append(current.strip())
+        return chunks if chunks else [text]
+
+    @staticmethod
+    def _split_markdown(text: str) -> List[str]:
+        """Markdown 分块：按标题层级切分，保持章节完整性"""
+        import re
+        sections = re.split(r'(?=^#{1,3} )', text, flags=re.MULTILINE)
+        chunks = []
+        current = ""
+        for section in sections:
+            section = section.strip()
+            if not section:
+                continue
+            if len(current) + len(section) > 1024:
+                if current:
+                    chunks.append(current.strip())
+                current = section
+            else:
+                current += "\n\n" + section if current else section
+        if current.strip():
+            chunks.append(current.strip())
+        return chunks if chunks else [text]
+
+    @staticmethod
+    def _split_plain(text: str) -> List[str]:
+        """纯文本分块：按段落分割，保留重叠"""
+        chunk_size = 512
+        overlap = 64
         paragraphs = text.split("\n\n")
+        chunks = []
         current_chunk = ""
 
         for para in paragraphs:
             para = para.strip()
             if not para:
                 continue
-
-            # 单段落超过 chunk_size，按句子细分
             if len(para) > chunk_size:
                 if current_chunk:
                     chunks.append(current_chunk.strip())
                     current_chunk = ""
-
                 sentences = para.replace("。", "。\n").replace(".", ".\n").split("\n")
                 for sent in sentences:
                     sent = sent.strip()
@@ -512,7 +598,6 @@ class RAGPipeline:
         if current_chunk.strip():
             chunks.append(current_chunk.strip())
 
-        # 添加重叠
         if overlap > 0 and len(chunks) > 1:
             overlapped = [chunks[0]]
             for i in range(1, len(chunks)):
@@ -555,21 +640,75 @@ class RAGPipeline:
 
 ---
 
-### 4.3 P0-4: 文档解析器
-
-已集成在 4.2 的 RAGPipeline 中。支持格式：TXT、Markdown、PDF、DOCX、CSV、JSON。
-
-**需要新增的依赖：**
-
-```txt
-# backend/requirements.txt 新增
-pymupdf>=1.24.0        # PDF 解析
-python-docx>=1.1.0     # Word 解析
-```
-
----
-
 ### 4.4 P0-5: Tool Calling 闭环
+
+**新增文件：** `backend/app/agent/context_builder.py`
+
+```python
+"""上下文构建器 — 组装 RAG 检索 + 记忆检索 + 对话历史"""
+from typing import List, Dict, Optional
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class ContextBuilder:
+    """
+    将 RAG 检索结果、记忆检索结果、对话历史组装为 LLM 的完整上下文。
+    被 engine.py 的 context_builder_node 调用。
+    """
+
+    def __init__(self, rag_pipeline, memory_manager):
+        self.rag = rag_pipeline
+        self.memory = memory_manager
+
+    async def build(
+        self,
+        query: str,
+        user_id: int,
+        conversation_id: int,
+        system_prompt: str = "",
+    ) -> dict:
+        """
+        构建完整上下文：
+        1. 检索相关记忆（压缩摘要优先）
+        2. RAG 知识库检索
+        3. 组装为 system prompt
+
+        返回: {"context": str, "memory_context": str, "rag_context": str}
+        """
+        # 并行检索记忆和知识库
+        import asyncio
+        memory_task = self.memory.search(query=query, user_id=user_id, limit=5)
+        rag_task = self.rag.search(query=query, limit=5)
+
+        memory_context, rag_context = await asyncio.gather(
+            memory_task, rag_task, return_exceptions=True
+        )
+
+        # 异常降级
+        if isinstance(memory_context, Exception):
+            logger.warning(f"记忆检索失败: {memory_context}")
+            memory_context = ""
+        if isinstance(rag_context, Exception):
+            logger.warning(f"RAG 检索失败: {rag_context}")
+            rag_context = ""
+
+        # 组装上下文
+        context_parts = []
+        if system_prompt:
+            context_parts.append(system_prompt)
+        if memory_context:
+            context_parts.append(f"【相关记忆】\n{memory_context}")
+        if rag_context:
+            context_parts.append(f"【知识库参考】\n{rag_context}")
+
+        return {
+            "context": "\n\n".join(context_parts),
+            "memory_context": memory_context or "",
+            "rag_context": rag_context or "",
+        }
+```
 
 **新增文件：** `backend/app/agent/tool_registry.py`
 
@@ -649,24 +788,79 @@ class ToolRegistry:
 # ── 内置工具 ──────────────────────────────────────────────
 
 async def web_search(query: str, max_results: int = 5) -> dict:
-    """网页搜索"""
-    # 实现：调用 Brave Search / DuckDuckGo API
-    ...
+    """网页搜索 — 使用 DuckDuckGo（免费，无需 API Key）"""
+    from duckduckgo_search import DDGS
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            return {
+                "results": [
+                    {"title": r["title"], "url": r["href"], "snippet": r["body"]}
+                    for r in results
+                ]
+            }
+    except Exception as e:
+        return {"error": f"搜索失败: {e}", "results": []}
 
 async def execute_code(language: str, code: str) -> dict:
-    """代码执行（沙箱）"""
-    # 实现：在沙箱中执行 Python/JS 代码
-    ...
+    """代码执行 — Docker 沙箱隔离，超时10秒"""
+    import asyncio
+    sandbox_images = {"python": "python:3.12-slim", "javascript": "node:20-slim"}
+    image = sandbox_images.get(language)
+    if not image:
+        return {"error": f"不支持的语言: {language}，仅支持 python/javascript"}
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "run", "--rm", "--network=none", "--memory=128m",
+            "--cpus=0.5", image, "sh", "-c", code,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        return {
+            "stdout": stdout.decode()[:5000],
+            "stderr": stderr.decode()[:2000],
+            "exit_code": proc.returncode,
+        }
+    except asyncio.TimeoutError:
+        return {"error": "执行超时（10秒限制）"}
+    except Exception as e:
+        return {"error": f"沙箱执行失败: {e}"}
 
 async def read_file(path: str) -> dict:
-    """读取文件"""
-    # 实现：读取工作空间文件
-    ...
+    """读取工作空间文件（限制在 /workspace 内，防路径穿越）"""
+    from pathlib import Path
+    workspace = Path("/workspace").resolve()
+    target = (workspace / path).resolve()
+    if not str(target).startswith(str(workspace)):
+        return {"error": "路径穿越攻击已拦截"}
+    if not target.exists():
+        return {"error": f"文件不存在: {path}"}
+    if target.stat().st_size > 1_000_000:
+        return {"error": "文件过大（>1MB），请指定具体范围"}
+    try:
+        content = target.read_text(encoding="utf-8", errors="ignore")
+        return {"content": content[:50000], "path": str(path)}
+    except Exception as e:
+        return {"error": f"读取失败: {e}"}
 
 async def query_database(sql: str) -> dict:
-    """数据库查询（只读）"""
-    # 实现：执行 SELECT 查询
-    ...
+    """数据库查询（只读 SELECT，自动加 LIMIT 防爆）"""
+    sql_stripped = sql.strip().upper()
+    if not sql_stripped.startswith("SELECT"):
+        return {"error": "只允许 SELECT 查询"}
+    if "LIMIT" not in sql_stripped:
+        sql = sql.rstrip(";") + " LIMIT 100"
+    try:
+        from app.core.database import get_db_session
+        async with get_db_session() as session:
+            result = await session.execute(sql)
+            columns = list(result.keys())
+            rows = [dict(zip(columns, row)) for row in result.fetchall()]
+            return {"columns": columns, "rows": rows, "count": len(rows)}
+    except Exception as e:
+        return {"error": f"查询失败: {e}"}
 
 
 # 全局注册表
@@ -759,13 +953,15 @@ class LLMChatService:
 **修改文件：** `backend/app/api/v1/chat.py`
 
 ```python
+from app.core.security import JWT_SECRET_KEY  # 密钥已在 security.py 强制校验
+
 @router.post("/conversations/{conversation_id}/chat")
 async def chat(conversation_id: int, data: ChatRequest, db: AsyncSession = Depends(get_db)):
     # 1. 先保存用户消息
     await _msg_service.create(db, MessageCreate(
         conversation_id=conversation_id,
         role="user",
-        content=data.messages[-1].content,  # 最后一条是用户消息
+        content=data.messages[-1].content,
     ))
 
     # 2. 调用 Agent 引擎
@@ -796,10 +992,15 @@ async def chat(conversation_id: int, data: ChatRequest, db: AsyncSession = Depen
             content=f"[工具调用] {tool_name}",
         ))
 
+    # 5. 更新会话缓存（供记忆系统使用）
+    await memory_manager.update_session_cache(
+        conversation_id=conversation_id,
+        messages=[{"role": m.role, "content": m.content} for m in data.messages]
+        + [{"role": "assistant", "content": result["final_answer"]}],
+    )
+
     return ApiResult(data=ChatResponse(content=result["final_answer"]))
 ```
-
----
 
 ### 4.7 P1-4: JWT 密钥强制校验
 
@@ -810,8 +1011,7 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-# 移除硬编码默认值，强制要求环境变量
-JWT_SECRET_KEY = settings.JWT_SECRET_KEY  # 必须在 .env 中设置
+JWT_SECRET_KEY = settings.JWT_SECRET_KEY
 
 if not JWT_SECRET_KEY or JWT_SECRET_KEY == "beautiful-elf-secret-change-me":
     raise RuntimeError(
@@ -904,126 +1104,227 @@ class ContextManager:
 
 **新增文件：** `backend/app/agent/memory_manager.py`
 
+> 记忆策略：Redis 做会话缓存，Qdrant 做长期记忆（两个集合）。详细版每小时由 Celery 定时任务存一次，压缩版在会话 30 分钟无互动时由 LLM 生成摘要后存入。用户再次调起时，优先检索压缩摘要唤醒上下文，详细版可作为日志追溯。
+
+**新增文件：** `backend/app/tasks/memory_tasks.py`（Celery 定时任务）
+
 ```python
-"""三层记忆管理器 — 短期(Redis) + 中期(MySQL) + 长期(Qdrant)"""
+"""记忆定时任务 — 每小时存详细日志 + 检测30分钟无互动的会话存压缩版"""
+from celery import shared_task
+from datetime import datetime, timedelta
+
+@shared_task
+def hourly_detail_save():
+    """每小时：将活跃会话的对话存为详细日志"""
+    # 查询过去1小时内有新消息的会话
+    # 对每个会话调用 memory_manager.save_detail_log()
+
+@shared_task
+def check_idle_summaries():
+    """每5分钟检查：会话30分钟无互动 → 存压缩摘要"""
+    # 查询 Redis 中 last_active 超过30分钟的会话
+    # 对每个会话调用 memory_manager.save_summary()
+    # 然后清除 Redis 缓存（会话已归档）
+```
+
+```python
+"""两层记忆管理器 — Redis 会话缓存 + Qdrant 长期记忆（详细版+压缩版）"""
 from typing import List, Optional
+from datetime import datetime, timedelta
 import json
+import uuid
 
 from app.services.ollama_service import OllamaClient
 from app.mappers.qdrant_mapper import QdrantMapper
 from app.core.redis_client import get_redis
-from app.repository.memory_repo import MemoryRepository
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-MEMORY_COLLECTION = "memory"
+# 两个 Qdrant 集合：详细日志 + 压缩摘要
+MEMORY_DETAIL_COLLECTION = "memory_detail"    # 每小时存的完整对话日志
+MEMORY_SUMMARY_COLLECTION = "memory_summary"  # 30分钟无互动时存的压缩版
 
 
 class MemoryManager:
-    """三层记忆管理"""
+    """
+    两层记忆：
+    1. Redis — 会话内缓存（当前对话的上下文，TTL 1小时）
+    2. Qdrant memory_detail — 每小时定时存的详细对话日志（可查可追溯）
+    3. Qdrant memory_summary — 30分钟无互动时存的压缩摘要（用户回来时快速唤醒）
+
+    查询优先级：Redis 缓存 → Qdrant 压缩摘要 → Qdrant 详细日志
+    """
 
     def __init__(self):
         self.embedder = OllamaClient()
         self.qdrant = QdrantMapper()
-        self.memory_repo = MemoryRepository()
 
-        # 确保 Qdrant 集合
-        self.qdrant.ensure_collection(MEMORY_COLLECTION, vector_size=1024)
+        self.qdrant.ensure_collection(MEMORY_DETAIL_COLLECTION, vector_size=1024)
+        self.qdrant.ensure_collection(MEMORY_SUMMARY_COLLECTION, vector_size=1024)
 
-    # ── 短期记忆（Redis）────────────────────────────────
+    # ── Redis 会话缓存 ──────────────────────────────────
 
-    async def get_short_term(self, conversation_id: int) -> List[dict]:
-        """获取短期记忆（最近对话）"""
+    async def get_session_cache(self, conversation_id: int) -> dict:
+        """获取会话缓存（最近对话 + 上次活跃时间）"""
         redis = get_redis()
-        key = f"memory:short:{conversation_id}"
+        key = f"memory:session:{conversation_id}"
         data = await redis.get(key)
-        return json.loads(data) if data else []
+        return json.loads(data) if data else {"messages": [], "last_active": None}
 
-    async def save_short_term(self, conversation_id: int, messages: List[dict], ttl: int = 3600):
-        """保存短期记忆到 Redis（1小时过期）"""
+    async def update_session_cache(self, conversation_id: int, messages: list):
+        """更新会话缓存"""
         redis = get_redis()
-        key = f"memory:short:{conversation_id}"
-        await redis.set(key, json.dumps(messages, ensure_ascii=False), ex=ttl)
+        key = f"memory:session:{conversation_id}"
+        await redis.set(key, json.dumps({
+            "messages": messages[-50:],  # 最多保留50条
+            "last_active": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }, ensure_ascii=False), ex=3600)  # 1小时 TTL
 
-    # ── 长期记忆（Qdrant 语义检索）──────────────────────
+    # ── 详细日志（每小时存一次）─────────────────────────
 
-    async def search(self, query: str, conversation_id: int = None, limit: int = 5) -> str:
-        """语义检索相关记忆"""
+    async def save_detail_log(self, conversation_id: int, user_id: int, messages: list):
+        """
+        保存详细对话日志到 Qdrant memory_detail 集合。
+        每小时由定时任务触发，或对话结束时触发。
+        存的是完整对话记录，用于日后查日志、溯源。
+        """
+        if not messages:
+            return
+
+        # 拼装完整对话文本
+        conversation_text = "\n".join(
+            f"[{m.get('role', 'unknown')}] {m.get('content', '')}"
+            for m in messages
+        )
+
+        # 生成 Embedding
+        vector = await self.embedder.embeddings(conversation_text[:2000])  # 截取前2000字符做向量
+
+        # 存入 Qdrant
+        point_id = str(uuid.uuid4())
+        self.qdrant.upsert(
+            collection=MEMORY_DETAIL_COLLECTION,
+            point_id=point_id,
+            vector=vector,
+            payload={
+                "conversation_id": conversation_id,
+                "user_id": user_id,
+                "messages": messages,  # 完整对话记录
+                "message_count": len(messages),
+                "saved_at": datetime.utcnow().isoformat(),
+                "save_reason": "hourly_schedule",
+            },
+        )
+
+        logger.info(f"详细日志已保存: conversation={conversation_id}, messages={len(messages)}")
+        return point_id
+
+    # ── 压缩摘要（30分钟无互动时存）─────────────────────
+
+    async def save_summary(self, conversation_id: int, user_id: int, messages: list):
+        """
+        保存压缩摘要到 Qdrant memory_summary 集合。
+        触发条件：会话30分钟无新消息。
+        用 LLM 将对话压缩为关键信息摘要，供用户下次回来时快速唤醒上下文。
+        """
+        if not messages:
+            return
+
+        # 用 LLM 压缩对话
+        conversation_text = "\n".join(
+            f"{m.get('role', 'unknown')}: {m.get('content', '')}"
+            for m in messages
+        )
+
+        summary_prompt = f"""请将以下对话压缩为结构化摘要，保留以下信息：
+1. 用户的核心需求和偏好
+2. 讨论过的关键话题和结论
+3. 未完成的待办事项
+4. 用户的沟通风格偏好
+
+对话内容：
+{conversation_text[:3000]}
+
+要求：200字以内，用中文，直接输出摘要不要前缀。"""
+
+        try:
+            result = await self.embedder.chat(
+                messages=[{"role": "user", "content": summary_prompt}],
+                max_tokens=300,
+            )
+            summary = result.get("content", "")
+        except Exception as e:
+            logger.warning(f"LLM 摘要生成失败，降级为截取: {e}")
+            summary = conversation_text[:500] + "..."
+
+        # 生成 Embedding
+        vector = await self.embedder.embeddings(summary)
+
+        # 存入 Qdrant
+        point_id = str(uuid.uuid4())
+        self.qdrant.upsert(
+            collection=MEMORY_SUMMARY_COLLECTION,
+            point_id=point_id,
+            vector=vector,
+            payload={
+                "conversation_id": conversation_id,
+                "user_id": user_id,
+                "summary": summary,
+                "message_count": len(messages),
+                "saved_at": datetime.utcnow().isoformat(),
+                "save_reason": "30min_idle",
+            },
+        )
+
+        # 同步更新 Redis 缓存，标记有摘要可用
+        redis = get_redis()
+        await redis.set(
+            f"memory:summary_available:{conversation_id}",
+            point_id,
+            ex=86400,  # 24小时
+        )
+
+        logger.info(f"压缩摘要已保存: conversation={conversation_id}, summary={summary[:50]}...")
+        return point_id
+
+    # ── 语义检索（用户再次调起时用）─────────────────────
+
+    async def search(self, query: str, user_id: int, limit: int = 5) -> str:
+        """
+        语义检索相关记忆。
+        优先搜压缩摘要（更精准），不够再搜详细日志。
+        """
         query_vector = await self.embedder.embeddings(query)
 
-        filter_payload = {}
-        if conversation_id:
-            filter_payload["conversation_id"] = conversation_id
-
-        results = self.qdrant.search(
-            collection=MEMORY_COLLECTION,
+        # 先搜压缩摘要
+        summaries = self.qdrant.search(
+            collection=MEMORY_SUMMARY_COLLECTION,
             query_vector=query_vector,
             limit=limit,
             score_threshold=0.35,
-            filter_payload=filter_payload if filter_payload else None,
+            filter_payload={"user_id": user_id},
         )
 
-        if not results:
-            return ""
-
-        return "\n".join(
-            f"- [{r.payload.get('tags', ['记忆'])[0]}] {r.payload.get('summary', '')}"
-            for r in results
+        # 再搜详细日志
+        details = self.qdrant.search(
+            collection=MEMORY_DETAIL_COLLECTION,
+            query_vector=query_vector,
+            limit=limit,
+            score_threshold=0.4,  # 详细日志阈值更高，避免噪音
+            filter_payload={"user_id": user_id},
         )
 
-    # ── 记忆提取与保存 ──────────────────────────────────
+        # 合并结果，摘要优先
+        parts = []
+        for r in summaries:
+            parts.append(f"[摘要 | {r.payload.get('saved_at', '')}] {r.payload.get('summary', '')}")
+        for r in details:
+            msg_count = r.payload.get("message_count", 0)
+            parts.append(f"[详细日志 | {r.payload.get('saved_at', '')} | {msg_count}条消息] 可查询完整对话记录")
 
-    async def extract_and_save(self, conversation_id: int, messages: List[dict], answer: str):
-        """从对话中提取关键信息，存入长期记忆"""
-        extract_prompt = f"""分析以下对话，提取值得长期记住的关键信息。
-
-用户最后的消息: {messages[-1]['content'] if messages else ''}
-助手回复: {answer}
-
-以 JSON 格式输出：
-{{"should_save": true/false, "summary": "摘要", "tags": ["标签"], "importance": 1-10}}
-
-如果对话不值得记住，返回 {{"should_save": false}}"""
-
-        result = await self.embedder.chat(
-            messages=[{"role": "user", "content": extract_prompt}],
-            max_tokens=200,
-        )
-
-        try:
-            extracted = json.loads(result.get("content", "{}"))
-            if not extracted.get("should_save"):
-                return
-
-            # 生成 Embedding 并存入 Qdrant
-            summary = extracted["summary"]
-            vector = await self.embedder.embeddings(summary)
-
-            self.qdrant.upsert(
-                collection=MEMORY_COLLECTION,
-                point_id=str(uuid.uuid4()),
-                vector=vector,
-                payload={
-                    "conversation_id": conversation_id,
-                    "summary": summary,
-                    "tags": extracted.get("tags", []),
-                    "importance": extracted.get("importance", 5),
-                },
-            )
-
-            # 同步保存到 MySQL
-            await self.memory_repo.create_db_entry({
-                "conversation_id": conversation_id,
-                "summary": summary,
-                "tags": extracted.get("tags", []),
-                "importance": extracted.get("importance", 5),
-            })
-
-            logger.info(f"记忆已保存: {summary[:50]}...")
-
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.warning(f"记忆提取解析失败: {e}")
+        return "\n".join(parts) if parts else ""
 ```
 
 ---
@@ -1263,9 +1564,9 @@ backend/app/agent/
 ├── __init__.py              # 模块导出
 ├── engine.py                # Agent 引擎（LangGraph StateGraph）
 ├── context_builder.py       # 上下文构建（RAG + 记忆注入）
-├── tool_registry.py         # 工具注册表 + 内置工具
-├── memory_manager.py        # 三层记忆管理器
-├── rag_pipeline.py          # RAG 完整管道
+├── tool_registry.py         # 工具注册表 + 内置工具（含沙箱实现）
+├── memory_manager.py        # 两层记忆管理器（Redis + Qdrant detail/summary）
+├── rag_pipeline.py          # RAG 完整管道（按文档类型分块）
 ├── context_manager.py       # 对话上下文窗口管理
 └── workflow_engine.py       # 工作流执行引擎
 ```
@@ -1286,8 +1587,10 @@ backend/requirements.txt             # 新增依赖
 
 ```txt
 # backend/requirements.txt 新增
+langgraph>=0.2.0           # Agent 引擎（状态图驱动）
 pymupdf>=1.24.0            # PDF 解析
 python-docx>=1.1.0         # Word 解析
+duckduckgo-search>=6.0.0   # 网页搜索（免费，无需 API Key）
 slowapi>=0.1.9             # API 限流
 ```
 
@@ -1325,7 +1628,7 @@ Phase 3 — 体验增强（P2，1 周）
 | RAG 管道 | 上传 PDF → 分块 → 向量化 → 搜索返回相关段落 |
 | Agent 引擎 | 发送问题 → 自动检索记忆+知识 → 调用工具 → 返回答案 |
 | Tool Calling | 问"今天天气" → Agent 调用 web_search 工具 → 返回天气信息 |
-| 记忆系统 | 对话后自动提取记忆 → 新对话中能检索到之前的关键信息 |
+| 记忆系统 | 对话1小时后 → Qdrant memory_detail 有详细日志；30分钟无互动 → Qdrant memory_summary 有压缩摘要；用户再次提问 → 能检索到之前的摘要并注入上下文 |
 | 上下文管理 | 发送 50 条消息 → 自动压缩旧消息为摘要 → 不超出 context window |
 | WebSocket | 建立连接 → 发送消息 → 实时收到 token 流 + 工具调用状态 |
 | 限流 | 1 分钟内请求超过 100 次 → 返回 429 |
