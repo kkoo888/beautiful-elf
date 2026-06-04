@@ -14,7 +14,7 @@ class ConfigService:
 
     @staticmethod
     def _serialize(setting) -> dict:
-        return SettingOut.model_validate(setting).model_dump(by_alias=True)
+        return SettingOut.model_validate(setting).model_dump()
 
     async def load_all(self, db: AsyncSession) -> None:
         """启动时加载全部配置到内存"""

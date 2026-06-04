@@ -75,4 +75,4 @@ class PromptService:
 
     @staticmethod
     def _to_dict(item) -> dict:
-        return PromptOut.model_validate(item).model_dump(by_alias=True)
+        return PromptOut.model_validate(item).model_dump()

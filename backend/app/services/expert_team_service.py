@@ -628,10 +628,10 @@ class ExpertTeamService:
         })
 
     def _serialize_skill_bind(self, bind) -> dict:
-        return RoleSkillOut.model_validate(bind).model_dump(by_alias=True)
+        return RoleSkillOut.model_validate(bind).model_dump()
 
     def _serialize_role_run(self, run) -> dict:
-        return ExpertRoleRunOut.model_validate(run).model_dump(by_alias=True)
+        return ExpertRoleRunOut.model_validate(run).model_dump()
 
     # ─── 执行专家团（LangGraph 核心）──────────────────
 
@@ -778,7 +778,7 @@ class ExpertTeamService:
     def _serialize_team(team, members=None) -> dict:
         """序列化专家团"""
         # 先用 schema 序列化基础字段
-        data = ExpertTeamOut.model_validate(team).model_dump(by_alias=True)
+        data = ExpertTeamOut.model_validate(team).model_dump()
         # 补充成员列表（可能不在 ORM 对象上）
         data["members"] = [ExpertTeamService._serialize_member(m) for m in (members or [])]
         return data
@@ -786,9 +786,9 @@ class ExpertTeamService:
     @staticmethod
     def _serialize_member(member) -> dict:
         """用 Pydantic schema 序列化成员"""
-        return ExpertMemberOut.model_validate(member).model_dump(by_alias=True)
+        return ExpertMemberOut.model_validate(member).model_dump()
 
     @staticmethod
     def _serialize_run(run) -> dict:
         """用 Pydantic schema 序列化运行记录"""
-        return ExpertTeamRunOut.model_validate(run).model_dump(by_alias=True)
+        return ExpertTeamRunOut.model_validate(run).model_dump()

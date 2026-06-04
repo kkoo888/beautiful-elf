@@ -13,7 +13,7 @@ class BackupService:
 
     @staticmethod
     def _serialize(item) -> dict:
-        return BackupOut.model_validate(item).model_dump(by_alias=True)
+        return BackupOut.model_validate(item).model_dump()
 
     async def create(self, db: AsyncSession, data: BackupCreate) -> dict:
         item = await self.repo.create(db, data.model_dump())

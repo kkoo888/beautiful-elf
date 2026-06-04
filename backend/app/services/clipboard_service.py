@@ -13,7 +13,7 @@ class ClipboardService:
 
     @staticmethod
     def _serialize(item) -> dict:
-        return ClipboardItemOut.model_validate(item).model_dump(by_alias=True)
+        return ClipboardItemOut.model_validate(item).model_dump()
 
     async def create(self, db: AsyncSession, data: ClipboardItemCreate) -> dict:
         item = await self.repo.create(db, data.model_dump())

@@ -51,4 +51,4 @@ class SoulConfigService:
 
     @staticmethod
     def _to_dict(config) -> dict:
-        return SoulConfigOut.model_validate(config).model_dump(by_alias=True)
+        return SoulConfigOut.model_validate(config).model_dump()

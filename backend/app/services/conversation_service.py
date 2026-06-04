@@ -45,4 +45,4 @@ class ConversationService:
 
     @staticmethod
     def _to_dict(conv) -> dict:
-        return ConversationOut.model_validate(conv).model_dump(by_alias=True)
+        return ConversationOut.model_validate(conv).model_dump()

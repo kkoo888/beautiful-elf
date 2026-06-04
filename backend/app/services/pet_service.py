@@ -209,4 +209,4 @@ class PetService:
 
     @staticmethod
     def _to_dict(pet) -> dict:
-        return PetAttributeOut.model_validate(pet).model_dump(by_alias=True)
+        return PetAttributeOut.model_validate(pet).model_dump()

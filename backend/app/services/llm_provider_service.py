@@ -24,18 +24,11 @@ class LLMProviderService:
         return [self._to_dict(p) for p in items]
 
     async def get(self, db: AsyncSession, provider_id: int) -> dict:
-        """获取单个供应商（camelCase，API 响应用）"""
+        """获取单个供应商"""
         provider = await self.repo.find_by_id(db, provider_id)
         if not provider:
             raise RecordNotFoundError(f"供应商 {provider_id} 不存在")
         return self._to_dict(provider)
-
-    async def get_internal(self, db: AsyncSession, provider_id: int) -> dict:
-        """获取单个供应商（snake_case，内部服务调用用）"""
-        provider = await self.repo.find_by_id(db, provider_id)
-        if not provider:
-            raise RecordNotFoundError(f"供应商 {provider_id} 不存在")
-        return self._to_internal_dict(provider)
 
     async def create(self, db: AsyncSession, data: ProviderCreate) -> dict:
         """创建供应商"""
@@ -78,10 +71,7 @@ class LLMProviderService:
             raise RecordNotFoundError(f"供应商 {provider_id} 不存在")
         return True
 
-    def _to_dict(self, provider) -> dict:
-        """转换为输出字典（camelCase）— 给 API 响应用"""
-        return ProviderOut.model_validate(provider).model_dump(by_alias=True)
-
-    def _to_internal_dict(self, provider) -> dict:
-        """转换为内部字典（snake_case）— 给服务间调用用"""
+    @staticmethod
+    def _to_dict(provider) -> dict:
+        """转换为输出字典（snake_case）— ok/ok_page 自动转 camelCase"""
         return ProviderOut.model_validate(provider).model_dump()

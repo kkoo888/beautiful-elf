@@ -38,4 +38,4 @@ class AIFeedbackService:
 
     @staticmethod
     def _to_dict(item) -> dict:
-        return AIFeedbackOut.model_validate(item).model_dump(by_alias=True)
+        return AIFeedbackOut.model_validate(item).model_dump()

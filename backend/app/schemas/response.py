@@ -1,9 +1,26 @@
-"""统一响应格式 — 符合阿里巴巴 API 规范"""
+"""统一响应格式 — 符合阿里巴巴 API 规范
+
+所有 Service 层用 model_dump()（snake_case），ok/ok_page 自动转 camelCase。
+"""
+import re
 from typing import Any, Optional, List
 from pydantic import BaseModel
 import uuid
 
 from app.schemas.base import CamelModel
+
+
+def _to_camel(s: str) -> str:
+    return re.sub(r'_([a-zA-Z])', lambda m: m.group(1).upper(), s)
+
+
+def _camelize_keys(obj):
+    """递归将 dict 的 key 从 snake_case 转为 camelCase"""
+    if isinstance(obj, dict):
+        return {_to_camel(k): _camelize_keys(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_camelize_keys(item) for item in obj]
+    return obj
 
 
 class ApiResponse(CamelModel):
@@ -26,23 +43,23 @@ class PageResponse(CamelModel):
 
 
 def ok(data: Any = None, message: str = "操作成功") -> dict:
-    """成功响应"""
-    return {"code": "SUCCESS", "message": message, "data": data}
+    """成功响应 — 自动将 data 中的 snake_case key 转为 camelCase"""
+    return {"code": "SUCCESS", "message": message, "data": _camelize_keys(data)}
 
 
 def ok_page(
     data: Any, total: int, page: int = 1, page_size: int = 20
 ) -> dict:
-    """分页成功响应 — meta 字段统一 camelCase"""
+    """分页成功响应 — data 和 meta 自动转 camelCase"""
     return {
         "code": "SUCCESS",
         "message": "操作成功",
-        "data": data,
-        "meta": {
+        "data": _camelize_keys(data),
+        "meta": _camelize_keys({
             "total": total,
             "page": page,
-            "pageSize": page_size,
-        },
+            "page_size": page_size,
+        }),
     }
 
 

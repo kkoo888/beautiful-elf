@@ -15,7 +15,7 @@ class MessageService:
 
     @staticmethod
     def _serialize(msg) -> dict:
-        return MessageOut.model_validate(msg).model_dump(by_alias=True)
+        return MessageOut.model_validate(msg).model_dump()
 
     async def create(self, db: AsyncSession, data: MessageCreate) -> dict:
         # 校验会话存在

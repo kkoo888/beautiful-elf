@@ -14,7 +14,7 @@ class ScheduleService:
 
     @staticmethod
     def _serialize(s) -> dict:
-        return ScheduleOut.model_validate(s).model_dump(by_alias=True)
+        return ScheduleOut.model_validate(s).model_dump()
 
     async def create(self, db: AsyncSession, data: ScheduleCreate) -> dict:
         schedule = await self.repo.create(db, data.model_dump())

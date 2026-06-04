@@ -51,4 +51,4 @@ class NotificationService:
 
     @staticmethod
     def _to_dict(notif) -> dict:
-        return NotificationOut.model_validate(notif).model_dump(by_alias=True)
+        return NotificationOut.model_validate(notif).model_dump()

@@ -13,7 +13,7 @@ class SnippetService:
 
     @staticmethod
     def _serialize(s, tags: list = None) -> dict:
-        d = SnippetOut.model_validate(s).model_dump(by_alias=True)
+        d = SnippetOut.model_validate(s).model_dump()
         if tags is not None:
             d["tags"] = tags
         return d

@@ -13,7 +13,7 @@ class ActionLogService:
 
     @staticmethod
     def _serialize(item) -> dict:
-        return ActionLogOut.model_validate(item).model_dump(by_alias=True)
+        return ActionLogOut.model_validate(item).model_dump()
 
     async def create(self, db: AsyncSession, data: ActionLogCreate) -> dict:
         item = await self.repo.create(db, data.model_dump())

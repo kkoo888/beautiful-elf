@@ -25,11 +25,11 @@ class SkillService:
 
     @staticmethod
     def _serialize(item) -> dict:
-        return SkillOut.model_validate(item).model_dump(by_alias=True)
+        return SkillOut.model_validate(item).model_dump()
 
     @staticmethod
     def _serialize_stats(stats) -> dict:
-        return SkillStatsOut.model_validate(stats).model_dump(by_alias=True)
+        return SkillStatsOut.model_validate(stats).model_dump()
 
     async def create(self, db: AsyncSession, data: SkillCreate) -> dict:
         existing = await self.repo.find_by_name(db, data.name)
@@ -133,7 +133,7 @@ class SkillService:
             ],
             summary=scan_result.summary,
             verdict=scan_result.verdict,
-        ).model_dump(by_alias=True)
+        ).model_dump()
 
     async def install_from_zip(
         self, db: AsyncSession, zip_bytes: bytes,

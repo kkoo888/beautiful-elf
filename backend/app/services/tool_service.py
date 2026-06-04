@@ -79,8 +79,8 @@ class ToolService:
 
     @staticmethod
     def _to_dict(item) -> dict:
-        return ToolOut.model_validate(item).model_dump(by_alias=True)
+        return ToolOut.model_validate(item).model_dump()
 
     @staticmethod
     def _stats_to_dict(stats) -> dict:
-        return ToolStatsOut.model_validate(stats).model_dump(by_alias=True)
+        return ToolStatsOut.model_validate(stats).model_dump()

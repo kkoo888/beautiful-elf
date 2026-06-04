@@ -59,4 +59,4 @@ class CommandService:
 
     @staticmethod
     def _to_dict(cmd) -> dict:
-        return CommandOut.model_validate(cmd).model_dump(by_alias=True)
+        return CommandOut.model_validate(cmd).model_dump()

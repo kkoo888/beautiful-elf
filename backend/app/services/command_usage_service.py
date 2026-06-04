@@ -42,4 +42,4 @@ class CommandUsageService:
 
     @staticmethod
     def _to_dict(item) -> dict:
-        return CommandUsageOut.model_validate(item).model_dump(by_alias=True)
+        return CommandUsageOut.model_validate(item).model_dump()
