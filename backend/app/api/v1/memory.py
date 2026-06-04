@@ -3,45 +3,46 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import PaginationParams, get_pagination
+from app.schemas.response import ApiResult, ApiPageResult
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", response_model=ApiPageResult)
 async def list_memories(
     pagination: PaginationParams = Depends(get_pagination),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiPageResult:
     """获取记忆列表"""
     # TODO: 实现
-    return {"code": 0, "message": "ok", "data": {"items": [], "total": 0}}
+    return ApiPageResult(data=[], total=0)
 
 
-@router.post("")
+@router.post("", response_model=ApiResult)
 async def create_memory(
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResult:
     """创建记忆"""
     # TODO: 实现
-    return {"code": 0, "message": "ok", "data": None}
+    return ApiResult(message="创建成功")
 
 
-@router.delete("/{memory_id}")
+@router.delete("/{memory_id}", response_model=ApiResult)
 async def delete_memory(
     memory_id: int,
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResult:
     """删除记忆"""
     # TODO: 实现
-    return {"code": 0, "message": "ok", "data": None}
+    return ApiResult(message="删除成功")
 
 
-@router.get("/search")
+@router.get("/search", response_model=ApiResult)
 async def search_memories(
     q: str = "",
     limit: int = 10,
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResult:
     """记忆语义搜索"""
     # TODO: 实现 Qdrant 向量搜索
-    return {"code": 0, "message": "ok", "data": {"items": []}}
+    return ApiResult(data={"items": []})

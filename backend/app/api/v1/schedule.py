@@ -6,41 +6,44 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.services.schedule_service import ScheduleService
-from app.schemas.schedule import ScheduleCreate, ScheduleUpdate
-from app.schemas.response import ok, ok_page
+from app.schemas.schedule import ScheduleCreate, ScheduleUpdate, ScheduleOut
+from app.schemas.response import ApiResult, ApiPageResult
 
 router = APIRouter()
 _service = ScheduleService()
 
 
-@router.get("")
+@router.get("", response_model=ApiPageResult[ScheduleOut])
 async def list_schedules(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     start_time: Optional[datetime] = Query(default=None, alias="startTime"),
     end_time: Optional[datetime] = Query(default=None, alias="endTime"),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiPageResult[ScheduleOut]:
     items, total = await _service.list(db, page, page_size, start_time, end_time)
-    return ok_page(items, total, page, page_size)
+    return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/{schedule_id}")
-async def get_schedule(schedule_id: int, db: AsyncSession = Depends(get_db)):
-    return ok(await _service.get_by_id(db, schedule_id))
+@router.get("/{schedule_id}", response_model=ApiResult[ScheduleOut])
+async def get_schedule(schedule_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[ScheduleOut]:
+    item = await _service.get_by_id(db, schedule_id)
+    return ApiResult(data=item)
 
 
-@router.post("")
-async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_db)):
-    return ok(await _service.create(db, data))
+@router.post("", response_model=ApiResult[ScheduleOut])
+async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_db)) -> ApiResult[ScheduleOut]:
+    item = await _service.create(db, data)
+    return ApiResult(data=item)
 
 
-@router.put("/{schedule_id}")
-async def update_schedule(schedule_id: int, data: ScheduleUpdate, db: AsyncSession = Depends(get_db)):
-    return ok(await _service.update(db, schedule_id, data))
+@router.put("/{schedule_id}", response_model=ApiResult[ScheduleOut])
+async def update_schedule(schedule_id: int, data: ScheduleUpdate, db: AsyncSession = Depends(get_db)) -> ApiResult[ScheduleOut]:
+    item = await _service.update(db, schedule_id, data)
+    return ApiResult(data=item)
 
 
-@router.delete("/{schedule_id}")
-async def delete_schedule(schedule_id: int, db: AsyncSession = Depends(get_db)):
+@router.delete("/{schedule_id}", response_model=ApiResult)
+async def delete_schedule(schedule_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
     await _service.delete(db, schedule_id)
-    return ok(message="删除成功")
+    return ApiResult(message="删除成功")

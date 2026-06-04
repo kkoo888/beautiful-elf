@@ -5,47 +5,50 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.services.notification_service import NotificationService
-from app.schemas.notification import NotificationCreate
-from app.schemas.response import ok, ok_page
+from app.schemas.notification import NotificationCreate, NotificationOut
+from app.schemas.response import ApiResult, ApiPageResult
 
 router = APIRouter()
 _service = NotificationService()
 
 
-@router.get("")
+@router.get("", response_model=ApiPageResult[NotificationOut])
 async def list_notifications(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     notif_type: Optional[str] = Query(default=None, alias="type"),
     read_status: Optional[int] = Query(default=None, alias="read"),
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiPageResult[NotificationOut]:
     items, total = await _service.list(db, page, page_size, notif_type, read_status)
-    return ok_page(items, total, page, page_size)
+    return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/{notification_id}")
-async def get_notification(notification_id: int, db: AsyncSession = Depends(get_db)):
-    return ok(await _service.get_by_id(db, notification_id))
+@router.get("/{notification_id}", response_model=ApiResult[NotificationOut])
+async def get_notification(notification_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[NotificationOut]:
+    item = await _service.get_by_id(db, notification_id)
+    return ApiResult(data=item)
 
 
-@router.post("")
-async def create_notification(data: NotificationCreate, db: AsyncSession = Depends(get_db)):
-    return ok(await _service.create(db, data))
+@router.post("", response_model=ApiResult[NotificationOut])
+async def create_notification(data: NotificationCreate, db: AsyncSession = Depends(get_db)) -> ApiResult[NotificationOut]:
+    item = await _service.create(db, data)
+    return ApiResult(data=item)
 
 
-@router.delete("/{notification_id}")
-async def delete_notification(notification_id: int, db: AsyncSession = Depends(get_db)):
+@router.delete("/{notification_id}", response_model=ApiResult)
+async def delete_notification(notification_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
     await _service.delete(db, notification_id)
-    return ok(message="删除成功")
+    return ApiResult(message="删除成功")
 
 
-@router.put("/{notification_id}/read")
-async def mark_read(notification_id: int, db: AsyncSession = Depends(get_db)):
-    return ok(await _service.mark_read(db, notification_id))
+@router.put("/{notification_id}/read", response_model=ApiResult[NotificationOut])
+async def mark_read(notification_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[NotificationOut]:
+    item = await _service.mark_read(db, notification_id)
+    return ApiResult(data=item)
 
 
-@router.put("/read-all")
-async def mark_all_read(db: AsyncSession = Depends(get_db)):
+@router.put("/read-all", response_model=ApiResult)
+async def mark_all_read(db: AsyncSession = Depends(get_db)) -> ApiResult:
     count = await _service.mark_all_read(db)
-    return ok({"marked": count})
+    return ApiResult(data={"marked": count})

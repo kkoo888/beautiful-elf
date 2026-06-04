@@ -418,7 +418,7 @@ class ExpertTeamService:
 
     # ─── 专家团 CRUD ───────────────────────────────────
 
-    async def create_team(self, db: AsyncSession, data: ExpertTeamCreate) -> dict:
+    async def create_team(self, db: AsyncSession, data: ExpertTeamCreate) -> ExpertTeamOut:
         """创建专家团（含成员）"""
         team_data = data.model_dump(exclude={"members"})
         team = await self.repo.create_team(db, team_data)
@@ -431,19 +431,19 @@ class ExpertTeamService:
             member = await self.repo.create_member(db, member_data)
             members.append(member)
 
-        return self._serialize_team(team, members)
+        return self._to_out_team(team, members)
 
-    async def get_team_by_id(self, db: AsyncSession, team_id: int) -> dict:
+    async def get_team_by_id(self, db: AsyncSession, team_id: int) -> ExpertTeamOut:
         team = await self.repo.find_team_by_id(db, team_id)
         if not team:
             raise RecordNotFoundError("专家团不存在")
         members = await self.repo.find_members_by_team(db, team_id)
-        return self._serialize_team(team, members)
+        return self._to_out_team(team, members)
 
     async def list_teams(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         category: Optional[str] = None, enabled: Optional[int] = None,
-    ) -> Tuple[list, int]:
+    ) -> Tuple[List[ExpertTeamOut], int]:
         offset = (page - 1) * page_size
         teams = await self.repo.find_all_teams(db, offset=offset, limit=page_size, category=category, enabled=enabled)
         total = await self.repo.count_teams(db, category=category, enabled=enabled)
@@ -455,10 +455,10 @@ class ExpertTeamService:
         for m in all_members:
             members_by_team.setdefault(m.team_id, []).append(m)
 
-        result = [self._serialize_team(t, members_by_team.get(t.id, [])) for t in teams]
+        result = [self._to_out_team(t, members_by_team.get(t.id, [])) for t in teams]
         return result, total
 
-    async def update_team(self, db: AsyncSession, team_id: int, data: ExpertTeamUpdate) -> dict:
+    async def update_team(self, db: AsyncSession, team_id: int, data: ExpertTeamUpdate) -> ExpertTeamOut:
         team = await self.repo.find_team_by_id(db, team_id)
         if not team:
             raise RecordNotFoundError("专家团不存在")
@@ -487,9 +487,9 @@ class ExpertTeamService:
             # 删除多余成员
             for j in range(len(members_data), len(old_members)):
                 await self.repo.soft_delete_member(db, old_members[j].id)
-            return self._serialize_team(team, new_members)
+            return self._to_out_team(team, new_members)
         members = await self.repo.find_members_by_team(db, team_id)
-        return self._serialize_team(team, members)
+        return self._to_out_team(team, members)
 
     async def delete_team(self, db: AsyncSession, team_id: int) -> bool:
         team = await self.repo.find_team_by_id(db, team_id)
@@ -500,21 +500,21 @@ class ExpertTeamService:
 
     # ─── 专家成员 CRUD ─────────────────────────────────
 
-    async def add_member(self, db: AsyncSession, team_id: int, data: ExpertMemberCreate) -> dict:
+    async def add_member(self, db: AsyncSession, team_id: int, data: ExpertMemberCreate) -> ExpertMemberOut:
         team = await self.repo.find_team_by_id(db, team_id)
         if not team:
             raise RecordNotFoundError("专家团不存在")
         member_data = data.model_dump(by_alias=False)
         member_data["team_id"] = team_id
         member = await self.repo.create_member(db, member_data)
-        return self._serialize_member(member)
+        return self._to_out_member(member)
 
-    async def update_member(self, db: AsyncSession, member_id: int, data: dict) -> dict:
+    async def update_member(self, db: AsyncSession, member_id: int, data: dict) -> ExpertMemberOut:
         member = await self.repo.find_member_by_id(db, member_id)
         if not member:
             raise RecordNotFoundError("专家成员不存在")
         member = await self.repo.update_member(db, member_id, data)
-        return self._serialize_member(member)
+        return self._to_out_member(member)
 
     async def delete_member(self, db: AsyncSession, member_id: int) -> bool:
         member = await self.repo.find_member_by_id(db, member_id)
@@ -545,7 +545,7 @@ class ExpertTeamService:
             })
         return result
 
-    async def bind_skill(self, db: AsyncSession, member_id: int, data: RoleSkillCreate) -> dict:
+    async def bind_skill(self, db: AsyncSession, member_id: int, data: RoleSkillCreate) -> RoleSkillOut:
         """绑定技能到成员"""
         member = await self.repo.find_member_by_id(db, member_id)
         if not member:
@@ -559,9 +559,9 @@ class ExpertTeamService:
             bind = await self.repo.update_skill_bind(db, existing.id, bind_data)
         else:
             bind = await self.repo.create_skill_bind(db, bind_data)
-        return self._serialize_skill_bind(bind)
+        return self._to_out_skill_bind(bind)
 
-    async def update_skill_bind(self, db: AsyncSession, bind_id: int, data: RoleSkillUpdate) -> dict:
+    async def update_skill_bind(self, db: AsyncSession, bind_id: int, data: RoleSkillUpdate) -> RoleSkillOut:
         """更新角色技能绑定"""
         bind = await self.repo.find_skill_bind_by_id(db, bind_id)
         if not bind:
@@ -569,7 +569,7 @@ class ExpertTeamService:
         update_data = data.model_dump(exclude_unset=True, by_alias=False)
         if update_data:
             bind = await self.repo.update_skill_bind(db, bind_id, update_data)
-        return self._serialize_skill_bind(bind)
+        return self._to_out_skill_bind(bind)
 
     async def unbind_skill(self, db: AsyncSession, bind_id: int) -> bool:
         """解绑技能"""
@@ -594,14 +594,14 @@ class ExpertTeamService:
 
     # ─── 角色执行记录 ─────────────────────────────────
 
-    async def list_role_runs(self, db: AsyncSession, run_id: int) -> list:
+    async def list_role_runs(self, db: AsyncSession, run_id: int) -> List[ExpertRoleRunOut]:
         """查询某次运行的所有角色执行记录"""
         # 先校验 run 存在
         run = await self.repo.find_run_by_id(db, run_id)
         if not run:
             raise RecordNotFoundError("运行记录不存在")
         runs = await self.repo.find_role_runs_by_run(db, run_id)
-        return [self._serialize_role_run(r) for r in runs]
+        return [self._to_out_role_run(r) for r in runs]
 
     async def _create_role_run(self, db: AsyncSession, run_id: int, role_id: int, role_name: str, round_num: int) -> object:
         """创建角色执行记录"""
@@ -627,11 +627,11 @@ class ExpertTeamService:
             "token_usage": tokens,
         })
 
-    def _serialize_skill_bind(self, bind) -> dict:
-        return RoleSkillOut.model_validate(bind).model_dump()
+    def _to_out_skill_bind(self, bind) -> RoleSkillOut:
+        return RoleSkillOut.model_validate(bind)
 
-    def _serialize_role_run(self, run) -> dict:
-        return ExpertRoleRunOut.model_validate(run).model_dump()
+    def _to_out_role_run(self, run) -> ExpertRoleRunOut:
+        return ExpertRoleRunOut.model_validate(run)
 
     # ─── 执行专家团（LangGraph 核心）──────────────────
 
@@ -661,8 +661,8 @@ class ExpertTeamService:
         start_time = datetime.now()
 
         try:
-            # 序列化成员信息供 LangGraph 使用
-            members_data = [self._serialize_member(m) for m in enabled_members]
+            # 序列化成员信息供 LangGraph 使用（需要 dict 供 LangGraph state）
+            members_data = [self._to_out_member(m).model_dump() for m in enabled_members]
 
             # 批量加载技能绑定（消除 N+1）
             member_ids = [m["id"] for m in members_data]
@@ -750,45 +750,43 @@ class ExpertTeamService:
 
     # ─── 运行记录查询 ──────────────────────────────────
 
-    async def get_run_by_id(self, db: AsyncSession, run_id: int) -> dict:
+    async def get_run_by_id(self, db: AsyncSession, run_id: int) -> ExpertTeamRunOut:
         run = await self.repo.find_run_by_id(db, run_id)
         if not run:
             raise RecordNotFoundError("运行记录不存在")
-        return self._serialize_run(run)
+        return self._to_out_run(run)
 
     async def list_runs_by_team(
         self, db: AsyncSession, team_id: int, page: int = 1, page_size: int = 20,
-    ) -> Tuple[list, int]:
+    ) -> Tuple[List[ExpertTeamRunOut], int]:
         offset = (page - 1) * page_size
         runs = await self.repo.find_runs_by_team(db, team_id, offset=offset, limit=page_size)
         total = await self.repo.count_runs_by_team(db, team_id)
-        return [self._serialize_run(r) for r in runs], total
+        return [self._to_out_run(r) for r in runs], total
 
     async def list_all_runs(
         self, db: AsyncSession, page: int = 1, page_size: int = 20, status: Optional[int] = None,
-    ) -> Tuple[list, int]:
+    ) -> Tuple[List[ExpertTeamRunOut], int]:
         offset = (page - 1) * page_size
         runs = await self.repo.find_all_runs(db, offset=offset, limit=page_size, status=status)
         total = await self.repo.count_all_runs(db, status=status)
-        return [self._serialize_run(r) for r in runs], total
+        return [self._to_out_run(r) for r in runs], total
 
     # ─── Pydantic 序列化（替代手动 dict）──────────────
 
     @staticmethod
-    def _serialize_team(team, members=None) -> dict:
+    def _to_out_team(team, members=None) -> ExpertTeamOut:
         """序列化专家团"""
-        # 先用 schema 序列化基础字段
-        data = ExpertTeamOut.model_validate(team).model_dump()
-        # 补充成员列表（可能不在 ORM 对象上）
-        data["members"] = [ExpertTeamService._serialize_member(m) for m in (members or [])]
-        return data
+        team_out = ExpertTeamOut.model_validate(team)
+        team_out.members = [ExpertTeamService._to_out_member(m) for m in (members or [])]
+        return team_out
 
     @staticmethod
-    def _serialize_member(member) -> dict:
+    def _to_out_member(member) -> ExpertMemberOut:
         """用 Pydantic schema 序列化成员"""
-        return ExpertMemberOut.model_validate(member).model_dump()
+        return ExpertMemberOut.model_validate(member)
 
     @staticmethod
-    def _serialize_run(run) -> dict:
+    def _to_out_run(run) -> ExpertTeamRunOut:
         """用 Pydantic schema 序列化运行记录"""
-        return ExpertTeamRunOut.model_validate(run).model_dump()
+        return ExpertTeamRunOut.model_validate(run)

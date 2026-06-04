@@ -28,7 +28,7 @@ class PetService:
     def __init__(self):
         self.repo = PetRepository()
 
-    async def get_attributes(self, db: AsyncSession) -> dict:
+    async def get_attributes(self, db: AsyncSession) -> PetAttributeOut:
         """获取宠物属性（自动初始化）"""
         pet = await self.repo.get_singleton(db)
         if not pet:
@@ -56,16 +56,16 @@ class PetService:
                 updates["last_active_at"] = now
                 pet = await self.repo.update(db, updates)
 
-        return self._to_dict(pet)
+        return self._to_out(pet)
 
-    async def update_attributes(self, db: AsyncSession, data: PetAttributeUpdate) -> dict:
+    async def update_attributes(self, db: AsyncSession, data: PetAttributeUpdate) -> PetAttributeOut:
         update_data = data.model_dump(exclude_unset=True)
         if not update_data:
             pet = await self.repo.get_singleton(db)
-            return self._to_dict(pet)
+            return self._to_out(pet)
         update_data["last_active_at"] = datetime.now()
         pet = await self.repo.update(db, update_data)
-        return self._to_dict(pet)
+        return self._to_out(pet)
 
     async def interact(self, db: AsyncSession, data: PetInteractionCreate) -> dict:
         """宠物互动（喂食/清洁/聊天/玩耍）"""
@@ -98,7 +98,7 @@ class PetService:
             "effect_json": effect,
         })
 
-        return {"pet": self._to_dict(pet), "effect": effect}
+        return {"pet": self._to_out(pet), "effect": effect}
 
     async def get_interactions(
         self, db: AsyncSession, page: int = 1, page_size: int = 20
@@ -208,5 +208,6 @@ class PetService:
         return {"model_path": model_path}
 
     @staticmethod
-    def _to_dict(pet) -> dict:
-        return PetAttributeOut.model_validate(pet).model_dump()
+    def _to_out(pet) -> PetAttributeOut:
+        """ORM → Pydantic 模型"""
+        return PetAttributeOut.model_validate(pet)

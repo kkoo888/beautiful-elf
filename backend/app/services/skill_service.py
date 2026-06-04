@@ -24,53 +24,56 @@ class SkillService:
         self.repo = SkillRepository()
 
     @staticmethod
-    def _serialize(item) -> dict:
-        return SkillOut.model_validate(item).model_dump()
+    def _to_out(item) -> SkillOut:
+        """ORM → Pydantic 模型"""
+        return SkillOut.model_validate(item)
 
     @staticmethod
-    def _serialize_stats(stats) -> dict:
-        return SkillStatsOut.model_validate(stats).model_dump()
+    def _stats_to_out(stats) -> SkillStatsOut:
+        """ORM → Pydantic 模型"""
+        return SkillStatsOut.model_validate(stats)
 
-    async def create(self, db: AsyncSession, data: SkillCreate) -> dict:
+    async def create(self, db: AsyncSession, data: SkillCreate) -> SkillOut:
         existing = await self.repo.find_by_name(db, data.name)
         if existing:
             raise DuplicateEntryError(f"技能名称 '{data.name}' 已存在")
         item = await self.repo.create(db, data.model_dump())
-        return self._serialize(item)
+        return self._to_out(item)
 
-    async def get_by_id(self, db: AsyncSession, id: int) -> dict:
+    async def get_by_id(self, db: AsyncSession, id: int) -> SkillOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
-        return self._serialize(item)
+        return self._to_out(item)
 
     async def list(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         enabled: Optional[int] = None,
-    ) -> Tuple[list, int]:
+    ) -> Tuple[List[dict], int]:
         offset = (page - 1) * page_size
         items = await self.repo.find_all(db, offset=offset, limit=page_size, enabled=enabled)
         total = await self.repo.count(db, enabled=enabled)
         result = []
         for i in items:
-            d = self._serialize(i)
+            d = self._to_out(i)
             stats = await self.repo.get_stats(db, i.id)
-            d["stats"] = self._serialize_stats(stats) if stats else {
+            d_dict = d.model_dump()
+            d_dict["stats"] = self._stats_to_out(stats).model_dump() if stats else {
                 "callCount": 0, "successCount": 0, "failCount": 0,
                 "avgDurationMs": 0, "lastCalledAt": None,
             }
-            result.append(d)
+            result.append(d_dict)
         return result, total
 
-    async def update(self, db: AsyncSession, id: int, data: SkillUpdate) -> dict:
+    async def update(self, db: AsyncSession, id: int, data: SkillUpdate) -> SkillOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
         update_data = data.model_dump(exclude_unset=True)
         if not update_data:
-            return self._serialize(item)
+            return self._to_out(item)
         updated = await self.repo.update(db, id, update_data)
-        return self._serialize(updated)
+        return self._to_out(updated)
 
     async def delete(self, db: AsyncSession, id: int) -> bool:
         item = await self.repo.find_by_id(db, id)
@@ -78,33 +81,33 @@ class SkillService:
             raise RecordNotFoundError("技能不存在")
         return await self.repo.soft_delete(db, id)
 
-    async def enable(self, db: AsyncSession, id: int) -> dict:
+    async def enable(self, db: AsyncSession, id: int) -> SkillOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
         await self.repo.set_enabled(db, id, 1)
         updated = await self.repo.find_by_id(db, id)
-        return self._serialize(updated)
+        return self._to_out(updated)
 
-    async def disable(self, db: AsyncSession, id: int) -> dict:
+    async def disable(self, db: AsyncSession, id: int) -> SkillOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
         await self.repo.set_enabled(db, id, 0)
         updated = await self.repo.find_by_id(db, id)
-        return self._serialize(updated)
+        return self._to_out(updated)
 
     async def record_call(
         self, db: AsyncSession, skill_id: int, success: bool, duration_ms: int,
-    ) -> dict:
+    ) -> SkillStatsOut:
         stats = await self.repo.record_call(db, skill_id, success, duration_ms)
-        return self._serialize_stats(stats)
+        return self._stats_to_out(stats)
 
-    async def get_stats(self, db: AsyncSession, skill_id: int) -> dict:
+    async def get_stats(self, db: AsyncSession, skill_id: int) -> SkillStatsOut:
         stats = await self.repo.get_stats(db, skill_id)
         if not stats:
             raise RecordNotFoundError("技能统计数据不存在")
-        return self._serialize_stats(stats)
+        return self._stats_to_out(stats)
 
     # ─── 安装流程 ─────────────────────────────────
 
@@ -121,7 +124,7 @@ class SkillService:
             return len(zf.infolist())
 
     @staticmethod
-    def _serialize_scan_result(scan_result) -> dict:
+    def _scan_result_to_out(scan_result) -> ScanResultOut:
         return ScanResultOut(
             file_count=scan_result.file_count,
             issues=[
@@ -133,7 +136,7 @@ class SkillService:
             ],
             summary=scan_result.summary,
             verdict=scan_result.verdict,
-        ).model_dump()
+        )
 
     async def install_from_zip(
         self, db: AsyncSession, zip_bytes: bytes,
@@ -161,7 +164,7 @@ class SkillService:
 
         # 构造 config（存扫描结果，不存文件内容）
         config = {
-            "scanResult": self._serialize_scan_result(scan_result),
+            "scanResult": self._scan_result_to_out(scan_result),
             "installPath": skill_dir,
         }
 
@@ -188,7 +191,7 @@ class SkillService:
             config=config,
         )
         item = await self.repo.create(db, create_data.model_dump())
-        result = self._serialize(item)
+        result = self._to_out(item)
         result["installed"] = True
         result["scanResult"] = config["scanResult"]
         return result
@@ -217,7 +220,7 @@ class SkillService:
         # 重新扫描（记录用）
         scan_result = scan_skill_dir(skill_dir)
         config = {
-            "scanResult": self._serialize_scan_result(scan_result),
+            "scanResult": self._scan_result_to_out(scan_result),
             "installPath": skill_dir,
             "userConfirmed": True,
         }
@@ -229,7 +232,7 @@ class SkillService:
             config=config,
         )
         item = await self.repo.create(db, create_data.model_dump())
-        result = self._serialize(item)
+        result = self._to_out(item)
         result["installed"] = True
         result["scanResult"] = config["scanResult"]
         return result

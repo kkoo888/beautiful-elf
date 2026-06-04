@@ -11,37 +11,37 @@ class CommandService:
     def __init__(self):
         self.repo = CommandRepository()
 
-    async def create(self, db: AsyncSession, data: CommandCreate) -> dict:
+    async def create(self, db: AsyncSession, data: CommandCreate) -> CommandOut:
         existing = await self.repo.find_by_name(db, data.name)
         if existing:
             raise DuplicateEntryError(f"命令 {data.name} 已存在")
         cmd = await self.repo.create(db, data.model_dump())
-        return self._to_dict(cmd)
+        return self._to_out(cmd)
 
-    async def get_by_id(self, db: AsyncSession, cmd_id: int) -> dict:
+    async def get_by_id(self, db: AsyncSession, cmd_id: int) -> CommandOut:
         cmd = await self.repo.find_by_id(db, cmd_id)
         if not cmd:
             raise RecordNotFoundError("命令不存在")
-        return self._to_dict(cmd)
+        return self._to_out(cmd)
 
     async def list(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         module: Optional[str] = None,
-    ) -> Tuple[list, int]:
+    ) -> Tuple[List[CommandOut], int]:
         offset = (page - 1) * page_size
         items = await self.repo.find_all(db, offset=offset, limit=page_size, module=module)
         total = await self.repo.count(db)
-        return [self._to_dict(c) for c in items], total
+        return [self._to_out(c) for c in items], total
 
-    async def update(self, db: AsyncSession, cmd_id: int, data: CommandUpdate) -> dict:
+    async def update(self, db: AsyncSession, cmd_id: int, data: CommandUpdate) -> CommandOut:
         existing = await self.repo.find_by_id(db, cmd_id)
         if not existing:
             raise RecordNotFoundError("命令不存在")
         update_data = data.model_dump(exclude_unset=True)
         if not update_data:
-            return self._to_dict(existing)
+            return self._to_out(existing)
         cmd = await self.repo.update(db, cmd_id, update_data)
-        return self._to_dict(cmd)
+        return self._to_out(cmd)
 
     async def delete(self, db: AsyncSession, cmd_id: int) -> bool:
         existing = await self.repo.find_by_id(db, cmd_id)
@@ -58,5 +58,6 @@ class CommandService:
         return {"commandId": cmd_id, "recorded": True}
 
     @staticmethod
-    def _to_dict(cmd) -> dict:
-        return CommandOut.model_validate(cmd).model_dump()
+    def _to_out(cmd) -> CommandOut:
+        """ORM → Pydantic 模型"""
+        return CommandOut.model_validate(cmd)

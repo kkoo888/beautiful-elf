@@ -12,12 +12,13 @@ class ActionLogService:
         self.repo = ActionLogRepository()
 
     @staticmethod
-    def _serialize(item) -> dict:
-        return ActionLogOut.model_validate(item).model_dump()
+    def _to_out(item) -> ActionLogOut:
+        """ORM → Pydantic 模型"""
+        return ActionLogOut.model_validate(item)
 
-    async def create(self, db: AsyncSession, data: ActionLogCreate) -> dict:
+    async def create(self, db: AsyncSession, data: ActionLogCreate) -> ActionLogOut:
         item = await self.repo.create(db, data.model_dump())
-        return self._serialize(item)
+        return self._to_out(item)
 
     async def list(
         self,
@@ -28,7 +29,7 @@ class ActionLogService:
         action: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-    ) -> Tuple[list, int]:
+    ) -> Tuple[List[ActionLogOut], int]:
         offset = (page - 1) * page_size
         items = await self.repo.find_all(
             db,
@@ -43,7 +44,7 @@ class ActionLogService:
             db, module=module, action=action,
             start_time=start_time, end_time=end_time,
         )
-        return [self._serialize(i) for i in items], total
+        return [self._to_out(i) for i in items], total
 
     async def cleanup_old(self, db: AsyncSession, days: int = 7) -> int:
         """清理 N 天前的日志"""

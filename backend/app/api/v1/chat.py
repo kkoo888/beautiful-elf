@@ -11,7 +11,7 @@ from app.core.database import get_db, AsyncSessionLocal
 from app.services.llm_chat_service import LLMChatService
 from app.services.message_service import MessageService
 from app.schemas.message import MessageCreate
-from app.schemas.response import ok, fail
+from app.schemas.response import ApiResult, api_error
 
 router = APIRouter()
 _chat_service = LLMChatService()
@@ -38,15 +38,15 @@ class ChatRequest(BaseModel):
     stream: bool = Field(default=True, description="是否流式返回")
 
 
-@router.post("/conversations/{conversation_id}/chat")
+@router.post("/conversations/{conversation_id}/chat", response_model=ApiResult)
 async def chat(
     conversation_id: int = Path(..., description="会话 ID"),
     data: ChatRequest = ...,
     db: AsyncSession = Depends(get_db),
-):
+) -> ApiResult:
     """AI 对话 — stream=true 返回 SSE，stream=false 返回 JSON"""
     if data.provider_id is None:
-        return fail("NO_PROVIDER", "请先选择 AI 供应商", "请在设置中选择供应商和模型")
+        return api_error("NO_PROVIDER", "请先选择 AI 供应商", "请在设置中选择供应商和模型")
 
     messages = [{"role": m.role, "content": m.content} for m in data.messages]
 
@@ -76,9 +76,9 @@ async def chat(
             ))
         except Exception:
             pass
-        return ok(result)
+        return ApiResult(data=result)
     except Exception as e:
-        return fail("AI_TIMEOUT", str(e), "请检查模型配置或稍后重试")
+        return api_error("AI_TIMEOUT", str(e), "请检查模型配置或稍后重试")
 
 
 async def _stream_generator(conversation_id: int, data: ChatRequest, messages: list):

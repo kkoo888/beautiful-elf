@@ -5,20 +5,20 @@ from app.core.database import AsyncSessionLocal
 from app.core.redis_client import get_redis
 from app.core.qdrant_client import get_qdrant
 from app.core.logging import get_logger
-from app.schemas.response import ok
+from app.schemas.response import ApiResult, api_error
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 
-@router.get("/health")
-async def health_check():
+@router.get("/health", response_model=ApiResult)
+async def health_check() -> ApiResult:
     """存活检查"""
-    return ok({"status": "alive"})
+    return ApiResult(data={"status": "alive"})
 
 
-@router.get("/ready")
-async def ready_check():
+@router.get("/ready", response_model=ApiResult)
+async def ready_check() -> ApiResult:
     """就绪检查 - 检测所有依赖"""
     checks = {}
 
@@ -56,11 +56,11 @@ async def ready_check():
         checks["ollama"] = {"status": "error", "detail": str(e)}
 
     all_ok = all(c["status"] == "ok" for c in checks.values())
-    return ok({"status": "ready" if all_ok else "not_ready", "checks": checks})
+    return ApiResult(data={"status": "ready" if all_ok else "not_ready", "checks": checks})
 
 
-@router.get("/deps")
-async def deps_check():
+@router.get("/deps", response_model=ApiResult)
+async def deps_check() -> ApiResult:
     """依赖详情"""
     deps = {}
 
@@ -107,4 +107,4 @@ async def deps_check():
     except Exception as e:
         deps["ollama"] = {"status": "error", "detail": str(e)}
 
-    return ok(deps)
+    return ApiResult(data=deps)
