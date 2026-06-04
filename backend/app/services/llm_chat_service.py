@@ -5,6 +5,7 @@ import logging
 from typing import List, Optional, AsyncIterator
 import httpx
 
+from app.schemas.chat import ChatResponse
 from app.services.llm_provider_service import LLMProviderService
 
 logger = logging.getLogger(__name__)
@@ -27,12 +28,8 @@ class LLMChatService:
         messages: List[dict],
         temperature: float = 0.7,
         max_tokens: int = 2048,
-    ) -> dict:
-        """非流式对话
-
-        Returns:
-            {"content": "...", "model": "...", "provider_type": "...", "token_count": 123}
-        """
+    ) -> ChatResponse:
+        """非流式对话"""
         provider = await self.provider_service.get(db, provider_id)
         provider_type = provider.provider_type
 
@@ -78,7 +75,7 @@ class LLMChatService:
     async def _chat_openai_compat(
         self, provider, model: str, messages: List[dict],
         temperature: float, max_tokens: int,
-    ) -> dict:
+    ) -> ChatResponse:
         base_url = provider.base_url.rstrip("/")
         api_key = getattr(provider, "api_key", "") or ""
 
@@ -107,12 +104,12 @@ class LLMChatService:
             content = choice.get("message", {}).get("content", "")
             usage = data.get("usage", {})
 
-            return {
-                "content": content,
-                "model": data.get("model", model),
-                "provider_type": provider.provider_type,
-                "token_count": usage.get("total_tokens", 0),
-            }
+            return ChatResponse(
+                content=content,
+                model=data.get("model", model),
+                provider_type=provider.provider_type,
+                token_count=usage.get("total_tokens", 0),
+            )
 
     async def _stream_openai_compat(
         self, provider, model: str, messages: List[dict],
@@ -161,7 +158,7 @@ class LLMChatService:
     async def _chat_ollama(
         self, provider, model: str, messages: List[dict],
         temperature: float, max_tokens: int,
-    ) -> dict:
+    ) -> ChatResponse:
         base_url = provider.base_url.rstrip("/")
 
         payload = {
@@ -179,12 +176,12 @@ class LLMChatService:
             resp.raise_for_status()
             data = resp.json()
 
-            return {
-                "content": data.get("message", {}).get("content", ""),
-                "model": data.get("model", model),
-                "provider_type": "ollama",
-                "token_count": data.get("eval_count", 0),
-            }
+            return ChatResponse(
+                content=data.get("message", {}).get("content", ""),
+                model=data.get("model", model),
+                provider_type="ollama",
+                token_count=data.get("eval_count", 0),
+            )
 
     async def _stream_ollama(
         self, provider, model: str, messages: List[dict],
