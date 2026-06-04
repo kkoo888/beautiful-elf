@@ -11,31 +11,31 @@ class ConversationService:
     def __init__(self):
         self.repo = ConversationRepository()
 
-    async def create(self, db: AsyncSession, data: ConversationCreate) -> dict:
+    async def create(self, db: AsyncSession, data: ConversationCreate) -> ConversationOut:
         conv = await self.repo.create(db, data.model_dump())
-        return self._to_dict(conv)
+        return self._to_out(conv)
 
-    async def get_by_id(self, db: AsyncSession, conv_id: int) -> dict:
+    async def get_by_id(self, db: AsyncSession, conv_id: int) -> ConversationOut:
         conv = await self.repo.find_by_id(db, conv_id)
         if not conv:
             raise RecordNotFoundError("会话不存在")
-        return self._to_dict(conv)
+        return self._to_out(conv)
 
-    async def list(self, db: AsyncSession, page: int = 1, page_size: int = 20) -> Tuple[list, int]:
+    async def list(self, db: AsyncSession, page: int = 1, page_size: int = 20) -> Tuple[List[ConversationOut], int]:
         offset = (page - 1) * page_size
         items = await self.repo.find_all(db, offset=offset, limit=page_size)
         total = await self.repo.count(db)
-        return [self._to_dict(c) for c in items], total
+        return [self._to_out(c) for c in items], total
 
-    async def update(self, db: AsyncSession, conv_id: int, data: ConversationUpdate) -> dict:
+    async def update(self, db: AsyncSession, conv_id: int, data: ConversationUpdate) -> ConversationOut:
         existing = await self.repo.find_by_id(db, conv_id)
         if not existing:
             raise RecordNotFoundError("会话不存在")
         update_data = data.model_dump(exclude_unset=True)
         if not update_data:
-            return self._to_dict(existing)
+            return self._to_out(existing)
         conv = await self.repo.update(db, conv_id, update_data)
-        return self._to_dict(conv)
+        return self._to_out(conv)
 
     async def delete(self, db: AsyncSession, conv_id: int) -> bool:
         existing = await self.repo.find_by_id(db, conv_id)
@@ -44,5 +44,6 @@ class ConversationService:
         return await self.repo.soft_delete(db, conv_id)
 
     @staticmethod
-    def _to_dict(conv) -> dict:
-        return ConversationOut.model_validate(conv).model_dump()
+    def _to_out(conv) -> ConversationOut:
+        """ORM → Pydantic 模型"""
+        return ConversationOut.model_validate(conv)

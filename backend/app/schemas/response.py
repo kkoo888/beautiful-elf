@@ -1,84 +1,91 @@
-"""统一响应格式 — 符合阿里巴巴 API 规范
+"""统一响应格式 — ApiResult / ApiPageResult 泛型信封
 
-所有 Service 层用 model_dump()（snake_case），ok/ok_page 自动转 camelCase。
+设计原则：
+  - 所有 endpoint 通过 response_model=ApiResult[XxxOut] 声明类型
+  - FastAPI 自动将 XxxOut 的 snake_case 字段转为 camelCase
+  - Service 层永远用 model_dump()（snake_case），不用关心 camelCase
+  - 前端收到的 JSON 格式不变：{"code": "SUCCESS", "data": ...}
 """
-import re
-from typing import Any, Optional, List
-from pydantic import BaseModel
+
+from __future__ import annotations
 import uuid
+from typing import Any, Generic, List, Optional, TypeVar
+from pydantic import BaseModel
 
 from app.schemas.base import CamelModel
 
-
-def _to_camel(s: str) -> str:
-    return re.sub(r'_([a-zA-Z])', lambda m: m.group(1).upper(), s)
+T = TypeVar("T")
 
 
-def _camelize_keys(obj):
-    """递归将 dict 的 key 从 snake_case 转为 camelCase"""
-    if isinstance(obj, dict):
-        return {_to_camel(k): _camelize_keys(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_camelize_keys(item) for item in obj]
-    return obj
+# ── 泛型信封模型 ────────────────────────────────────────────
 
+class ApiResult(CamelModel, Generic[T]):
+    """统一 API 响应信封
 
-class ApiResponse(CamelModel):
-    """统一 API 响应"""
+    用法：
+        @router.get("/{id}", response_model=ApiResult[ConversationOut])
+        async def get_item(...) -> ApiResult[ConversationOut]:
+            item = await service.get(db, id)
+            return ApiResult(data=item)
+    """
     code: str = "SUCCESS"
     message: str = "操作成功"
-    data: Any = None
+    data: Optional[T] = None
     user_tip: str = ""
     request_id: str = ""
 
 
-class PageResponse(CamelModel):
-    """分页响应（继承 ApiResponse，增加 meta）"""
+class ApiPageResult(CamelModel, Generic[T]):
+    """分页响应信封
+
+    用法：
+        @router.get("", response_model=ApiPageResult[ConversationOut])
+        async def list_items(...) -> ApiPageResult[ConversationOut]:
+            items, total = await service.list(db, page, page_size)
+            return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
+    """
     code: str = "SUCCESS"
     message: str = "操作成功"
-    data: Any = None
-    meta: dict = {}
+    data: List[T] = []
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
     user_tip: str = ""
     request_id: str = ""
 
 
-def ok(data: Any = None, message: str = "操作成功") -> dict:
-    """成功响应 — 自动将 data 中的 snake_case key 转为 camelCase"""
-    return {"code": "SUCCESS", "message": message, "data": _camelize_keys(data)}
+# ── 快捷构造函数 ────────────────────────────────────────────
+
+def api_success(
+    data: Any = None,
+    message: str = "操作成功",
+) -> ApiResult:
+    """成功响应"""
+    return ApiResult(data=data, message=message)
 
 
-def ok_page(
-    data: Any, total: int, page: int = 1, page_size: int = 20
-) -> dict:
-    """分页成功响应 — data 和 meta 自动转 camelCase"""
-    return {
-        "code": "SUCCESS",
-        "message": "操作成功",
-        "data": _camelize_keys(data),
-        "meta": _camelize_keys({
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        }),
-    }
+def api_paginated(
+    data: list,
+    total: int,
+    page: int = 1,
+    page_size: int = 20,
+) -> ApiPageResult:
+    """分页成功响应"""
+    return ApiPageResult(
+        data=data, total=total, page=page, page_size=page_size,
+    )
 
 
-def fail(
+def api_error(
     code: str,
     message: str = "操作失败",
     user_tip: str = "",
     request_id: str = "",
-) -> dict:
+) -> ApiResult:
     """错误响应"""
-    return {
-        "code": code,
-        "message": message,
-        "userTip": user_tip,
-        "data": None,
-        "requestId": request_id or str(uuid.uuid4()),
-    }
-
-
-# 兼容旧代码的别名，后续删除
-success = ok
-page_success = ok_page
+    return ApiResult(
+        code=code,
+        message=message,
+        user_tip=user_tip,
+        request_id=request_id or str(uuid.uuid4()),
+    )
