@@ -71,6 +71,10 @@
 | P1-4 | JWT 密钥硬编码默认值 | `security.py` | 部署时等于无认证 |
 | P1-5 | 对话上下文无窗口管理 | `chat.py` | 长对话超出 context window |
 | P1-6 | 记忆系统未集成到对话流 | 不存在 | Agent 无长期记忆，用户回来后无法唤醒上下文 |
+| P1-7 | 只有向量检索，无混合检索+重排序 | 不存在 | 检索准确率低 |
+| P1-8 | Agent 无 token 预算控制 | `engine.py` | 成本和延迟不可控 |
+| P1-9 | 工具调用无风险分级和审批 | `tool_registry.py` | 高风险操作可能误执行 |
+| P1-10 | 无降级策略 | 全局 | 任一服务不可用则整体崩溃 |
 
 ### 🟢 P2 — 提升体验
 
@@ -114,8 +118,14 @@
 │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
 │   │ Context      │  │ Tool         │  │ Memory       │            │
 │   │ Builder      │  │ Executor     │  │ Manager      │            │
-│   │ (RAG+记忆)   │  │ (工具注册表)  │  │ (两层记忆)   │            │
+│   │ (RAG+记忆    │  │ (工具注册表  │  │ (两层记忆    │            │
+│   │  +降级策略)  │  │  +风险审批)  │  │  +定时任务)  │            │
 │   └──────────────┘  └──────────────┘  └──────────────┘            │
+│                                                                     │
+│   ┌──────────────┐  ┌──────────────┐                              │
+│   │ Tracing      │  │ Eval         │                              │
+│   │ (LangFuse)   │  │ Pipeline     │                              │
+│   └──────────────┘  └──────────────┘                              │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
               ┌────────────────┼────────────────┐
@@ -162,6 +172,7 @@ logger = get_logger(__name__)
 class AgentState(TypedDict):
     """Agent 状态"""
     conversation_id: int
+    user_id: int
     messages: Annotated[list, operator.add]     # 对话历史（追加模式）
     context: str                                 # RAG 检索结果
     memory_context: str                          # 记忆检索结果
@@ -169,6 +180,10 @@ class AgentState(TypedDict):
     tools_used: list                             # 已使用的工具
     final_answer: Optional[str]                  # 最终回复
     iterations: int                              # 循环次数（防死循环）
+    token_budget: int                            # 总 token 预算
+    tokens_used: int                             # 已消耗 token
+    needs_approval: bool                         # 是否有工具等待用户审批
+    pending_tool_call: Optional[dict]            # 等待审批的工具调用
 
 
 def build_agent_graph() -> StateGraph:
@@ -250,26 +265,53 @@ async def llm_call_node(state: AgentState) -> dict:
 
     elapsed = time.time() - t0
     has_tools = bool(response.tool_calls)
-    logger.info(f"[llm_call] tool_calls={has_tools} elapsed={elapsed:.2f}s iterations={state.get('iterations', 0)}")
+    usage = getattr(response, "usage", {})
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+    total_tokens = prompt_tokens + completion_tokens
+    logger.info(f"[llm_call] tool_calls={has_tools} elapsed={elapsed:.2f}s tokens={total_tokens} iterations={state.get('iterations', 0)}")
 
     if response.tool_calls:
         return {
             "messages": [{"role": "assistant", "content": response.content, "tool_calls": response.tool_calls}],
             "tool_calls": response.tool_calls,
+            "tokens_used": state.get("tokens_used", 0) + total_tokens,
         }
     else:
         return {
             "messages": [{"role": "assistant", "content": response.content}],
             "final_answer": response.content,
             "tool_calls": [],
+            "tokens_used": state.get("tokens_used", 0) + total_tokens,
         }
 
 
 async def tool_executor_node(state: AgentState) -> dict:
-    """工具执行：解析 tool_call → 执行 → 返回结果（含错误恢复）"""
+    """工具执行：解析 tool_call → 风险检查 → 执行/请求审批（含错误恢复）"""
     results = []
     tools_succeeded = []
+    needs_approval = False
+    pending_tool = None
+
     for tc in state["tool_calls"]:
+        risk = tool_registry.get_risk_level(tc.name)
+
+        # 高风险工具 → 返回审批请求，不执行
+        if risk == RiskLevel.HIGH:
+            needs_approval = True
+            pending_tool = {"id": tc.id, "name": tc.name, "arguments": tc.arguments}
+            results.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": json.dumps({
+                    "needs_approval": True,
+                    "tool": tc.name,
+                    "arguments": tc.arguments,
+                    "message": f"⚠️ {tc.name} 是高风险操作，需要你确认后才能执行。请回复「确认执行」或「取消」。",
+                }),
+            })
+            continue
+
         try:
             result = await tool_registry.execute(tc.name, tc.arguments)
             results.append({
@@ -279,7 +321,6 @@ async def tool_executor_node(state: AgentState) -> dict:
             })
             tools_succeeded.append(tc.name)
         except Exception as e:
-            # 工具执行失败：返回错误信息给 LLM，让它自行决定下一步
             logger.warning(f"工具 {tc.name} 执行失败: {e}")
             results.append({
                 "role": "tool",
@@ -293,6 +334,8 @@ async def tool_executor_node(state: AgentState) -> dict:
         "tools_used": state.get("tools_used", []) + tools_succeeded,
         "tool_calls": [],
         "iterations": state.get("iterations", 0) + 1,
+        "needs_approval": needs_approval,
+        "pending_tool_call": pending_tool,
     }
 
 
@@ -313,6 +356,14 @@ def should_use_tools(state: AgentState) -> str:
     """判断是否需要调用工具"""
     # 防死循环：最多 5 轮工具调用
     if state.get("iterations", 0) >= 5:
+        logger.warning(f"[agent] 工具调用达到上限(5轮)，强制结束")
+        return "finish"
+    # Token 预算检查
+    if state.get("tokens_used", 0) >= state.get("token_budget", 32000):
+        logger.warning(f"[agent] token 预算耗尽 ({state.get('tokens_used', 0)}/{state.get('token_budget', 32000)})")
+        return "finish"
+    # 有待审批工具 → 先让用户确认
+    if state.get("needs_approval"):
         return "finish"
     if state.get("tool_calls"):
         return "use_tools"
@@ -607,35 +658,141 @@ class RAGPipeline:
 
         return chunks
 
-    # ── 检索 ──────────────────────────────────────────────
+    # ── 检索（混合检索 + 查询改写 + 重排序）──────────────
 
     async def search(self, query: str, limit: int = 5, score_threshold: float = 0.3) -> str:
         """
-        语义检索：query → Embedding → Qdrant 搜索 → 拼装上下文
+        完整检索链路：查询改写 → 混合检索（向量+BM25）→ RRF 合并 → 重排序 → Top K
         """
-        # 1. Query Embedding
-        query_vector = await self.embedder.embeddings(query)
+        # 1. 查询改写：将模糊查询转为具体检索词
+        rewritten = await self._rewrite_query(query)
 
-        # 2. Qdrant 向量搜索
+        # 2. 混合检索：向量 + BM25 并行
+        import asyncio
+        vector_task = self._vector_search(rewritten, limit=limit * 3)
+        bm25_task = self._bm25_search(rewritten, limit=limit * 3)
+        vector_results, bm25_results = await asyncio.gather(vector_task, bm25_task)
+
+        # 3. RRF 合并
+        merged = self._rrf_merge(vector_results, bm25_results, k=60)
+
+        # 4. 重排序（Cross-Encoder）
+        reranked = await self._rerank(query, merged, top_k=limit)
+
+        if not reranked:
+            return ""
+
+        # 5. 拼装上下文
+        context_parts = []
+        for r in reranked:
+            content = r.get("content", "")
+            filename = r.get("filename", "未知")
+            score = r.get("score", 0)
+            context_parts.append(f"[来源: {filename} | 相关度: {score:.2f}]\n{content}")
+
+        return "\n\n---\n\n".join(context_parts)
+
+    async def _rewrite_query(self, query: str) -> str:
+        """查询改写：将模糊/口语化查询转为精确检索词"""
+        if len(query) < 10 or "那个" in query or "之前" in query:
+            # 短查询或含指代词，需要改写
+            try:
+                result = await self.embedder.chat(
+                    messages=[{"role": "user", "content": f"将以下用户问题改写为适合搜索的关键词短语，只输出改写后的查询，不要解释：\n{query}"}],
+                    max_tokens=100,
+                )
+                rewritten = result.get("content", "").strip()
+                return rewritten if rewritten else query
+            except Exception:
+                return query
+        return query
+
+    async def _vector_search(self, query: str, limit: int) -> List[dict]:
+        """向量检索"""
+        query_vector = await self.embedder.embeddings(query)
         results = self.qdrant.search(
             collection=COLLECTION_NAME,
             query_vector=query_vector,
             limit=limit,
-            score_threshold=score_threshold,
+            score_threshold=0.2,
         )
+        return [
+            {"id": r.id, "content": r.payload.get("content", ""), "filename": r.payload.get("filename", ""), "vector_score": r.score}
+            for r in results
+        ]
 
-        if not results:
-            return ""
+    async def _bm25_search(self, query: str, limit: int) -> List[dict]:
+        """BM25 关键词检索（使用 SQLite FTS5，无需外部依赖）"""
+        try:
+            from app.core.database import get_db_session
+            async with get_db_session() as session:
+                # 使用 MySQL 全文索引
+                sql = """
+                    SELECT kc.id, kc.content_preview, kc.document_id, kd.filename,
+                           MATCH(kc.content_preview) AGAINST(:query IN NATURAL LANGUAGE MODE) AS score
+                    FROM knowledge_chunks kc
+                    JOIN knowledge_documents kd ON kc.document_id = kd.id
+                    WHERE MATCH(kc.content_preview) AGAINST(:query IN NATURAL LANGUAGE MODE)
+                    ORDER BY score DESC
+                    LIMIT :limit
+                """
+                result = await session.execute(sql, {"query": query, "limit": limit})
+                return [
+                    {"id": row[0], "content": row[1], "filename": row[3], "bm25_score": float(row[4])}
+                    for row in result.fetchall()
+                ]
+        except Exception as e:
+            logger.warning(f"BM25 检索失败，降级为纯向量: {e}")
+            return []
 
-        # 3. 拼装上下文
-        context_parts = []
-        for i, r in enumerate(results, 1):
-            content = r.payload.get("content", "")
-            filename = r.payload.get("filename", "未知")
-            score = r.score
-            context_parts.append(f"[来源: {filename} | 相关度: {score:.2f}]\n{content}")
+    @staticmethod
+    def _rrf_merge(vector_results: List[dict], bm25_results: List[dict], k: int = 60) -> List[dict]:
+        """Reciprocal Rank Fusion 合并两路检索结果"""
+        scores = {}
+        content_map = {}
 
-        return "\n\n---\n\n".join(context_parts)
+        for rank, r in enumerate(vector_results):
+            doc_id = r["id"]
+            scores[doc_id] = scores.get(doc_id, 0) + 1.0 / (k + rank + 1)
+            content_map[doc_id] = r
+
+        for rank, r in enumerate(bm25_results):
+            doc_id = r["id"]
+            scores[doc_id] = scores.get(doc_id, 0) + 1.0 / (k + rank + 1)
+            if doc_id not in content_map:
+                content_map[doc_id] = r
+
+        sorted_ids = sorted(scores, key=scores.get, reverse=True)
+        merged = []
+        for doc_id in sorted_ids:
+            item = content_map[doc_id].copy()
+            item["rrf_score"] = scores[doc_id]
+            merged.append(item)
+
+        return merged
+
+    async def _rerank(self, query: str, candidates: List[dict], top_k: int = 5) -> List[dict]:
+        """Cross-Encoder 重排序"""
+        if not candidates:
+            return []
+        try:
+            from sentence_transformers import CrossEncoder
+            reranker = CrossEncoder("BAAI/bge-reranker-v2-m3", max_length=512)
+            pairs = [(query, c.get("content", "")[:512]) for c in candidates]
+            scores = reranker.predict(pairs)
+            for i, score in enumerate(scores):
+                candidates[i]["score"] = float(score)
+            candidates.sort(key=lambda x: x["score"], reverse=True)
+            return candidates[:top_k]
+        except ImportError:
+            # 没有 sentence-transformers，降级为 RRF 分数排序
+            logger.warning("Cross-Encoder 不可用，降级为 RRF 排序")
+            for c in candidates:
+                c["score"] = c.get("rrf_score", 0)
+            return candidates[:top_k]
+        except Exception as e:
+            logger.warning(f"重排序失败: {e}")
+            return candidates[:top_k]
 ```
 
 ---
@@ -724,12 +881,20 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+class RiskLevel(str):
+    """工具风险等级"""
+    LOW = "low"          # 只读操作，可直接执行
+    MEDIUM = "medium"    # 有副作用但可逆，记录日志
+    HIGH = "high"        # 不可逆操作（写文件/执行代码/修改数据），需用户确认
+
+
 @dataclass
 class ToolSchema:
     """工具 Schema（OpenAI Function Calling 格式）"""
     name: str
     description: str
     parameters: dict  # JSON Schema
+    risk_level: str = RiskLevel.LOW
 
 
 @dataclass
@@ -741,21 +906,22 @@ class ToolCall:
 
 
 class ToolRegistry:
-    """工具注册表 — 注册、查询、执行工具"""
+    """工具注册表 — 注册、查询、执行工具（含风险审批）"""
 
     def __init__(self):
         self._tools: Dict[str, Callable] = {}
         self._schemas: Dict[str, ToolSchema] = {}
 
-    def register(self, name: str, func: Callable, description: str, parameters: dict):
+    def register(self, name: str, func: Callable, description: str, parameters: dict, risk_level: str = RiskLevel.LOW):
         """注册一个工具"""
         self._tools[name] = func
         self._schemas[name] = ToolSchema(
             name=name,
             description=description,
             parameters=parameters,
+            risk_level=risk_level,
         )
-        logger.info(f"工具已注册: {name}")
+        logger.info(f"工具已注册: {name} (risk={risk_level})")
 
     def get_tool_schemas(self) -> List[dict]:
         """获取所有工具的 Schema（供 LLM 使用）"""
@@ -771,14 +937,32 @@ class ToolRegistry:
             for s in self._schemas.values()
         ]
 
-    async def execute(self, name: str, arguments: dict) -> Any:
-        """执行工具"""
+    def get_risk_level(self, name: str) -> str:
+        """查询工具风险等级"""
+        schema = self._schemas.get(name)
+        return schema.risk_level if schema else RiskLevel.LOW
+
+    async def execute(self, name: str, arguments: dict, approved: bool = False) -> Any:
+        """执行工具（高风险操作需审批）"""
         if name not in self._tools:
             return {"error": f"工具 '{name}' 不存在"}
+
+        risk = self.get_risk_level(name)
+
+        # 高风险操作未审批 → 返回审批请求而非执行
+        if risk == RiskLevel.HIGH and not approved:
+            return {
+                "needs_approval": True,
+                "tool": name,
+                "arguments": arguments,
+                "risk_level": risk,
+                "message": f"⚠️ 工具 {name} 是高风险操作，需要用户确认后执行",
+            }
 
         try:
             func = self._tools[name]
             result = await func(**arguments) if asyncio.iscoroutinefunction(func) else func(**arguments)
+            logger.info(f"工具执行完成: {name} (risk={risk}, approved={approved})")
             return result
         except Exception as e:
             logger.error(f"工具执行失败: {name}, error={e}")
@@ -870,6 +1054,7 @@ tool_registry = ToolRegistry()
 tool_registry.register(
     "web_search", web_search,
     description="搜索互联网获取实时信息",
+    risk_level=RiskLevel.LOW,
     parameters={
         "type": "object",
         "properties": {
@@ -883,6 +1068,7 @@ tool_registry.register(
 tool_registry.register(
     "execute_code", execute_code,
     description="在沙箱中执行代码",
+    risk_level=RiskLevel.HIGH,
     parameters={
         "type": "object",
         "properties": {
@@ -896,6 +1082,7 @@ tool_registry.register(
 tool_registry.register(
     "read_file", read_file,
     description="读取工作空间中的文件内容",
+    risk_level=RiskLevel.LOW,
     parameters={
         "type": "object",
         "properties": {
@@ -908,6 +1095,7 @@ tool_registry.register(
 tool_registry.register(
     "query_database", query_database,
     description="查询数据库（只读 SELECT）",
+    risk_level=RiskLevel.MEDIUM,
     parameters={
         "type": "object",
         "properties": {
@@ -999,7 +1187,27 @@ async def chat(conversation_id: int, data: ChatRequest, db: AsyncSession = Depen
         + [{"role": "assistant", "content": result["final_answer"]}],
     )
 
-    return ApiResult(data=ChatResponse(content=result["final_answer"]))
+    return ApiResult(data=ChatResponse(
+        content=result["final_answer"],
+        tools_used=result.get("tools_used", []),
+        sources=result.get("sources", []),
+        tokens_used=result.get("tokens_used", 0),
+        needs_approval=result.get("needs_approval", False),
+        pending_tool=result.get("pending_tool_call"),
+    ))
+```
+
+**结构化输出模型：**
+
+```python
+class ChatResponse(BaseModel):
+    """Agent 结构化响应"""
+    content: str
+    tools_used: List[str] = []
+    sources: List[str] = []            # 引用了哪些知识库/记忆
+    tokens_used: int = 0               # 本次消耗的 token 数
+    needs_approval: bool = False       # 是否有工具等待审批
+    pending_tool: Optional[dict] = None  # 等待审批的工具详情
 ```
 
 ### 4.7 P1-4: JWT 密钥强制校验
@@ -1555,6 +1763,245 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 ---
 
+### 4.13 降级策略链
+
+当外部服务不可用时，Agent 应自动降级而非崩溃。
+
+```
+完整模式: Agent + RAG + 工具 + 记忆
+  ↓ RAG 不可用（Qdrant 宕机 / Embedding 服务超时）
+降级模式 1: Agent + 工具 + 记忆（无知识库检索）
+  ↓ 工具不可用（Docker 不可用 / 搜索 API 限流）
+降级模式 2: Agent + 记忆（纯对话，无外部能力）
+  ↓ LLM 不可用（Ollama 宕机 / API 超时）
+降级模式 3: 返回缓存的高频回答 + 告知用户服务暂时不可用
+```
+
+**实现位置：** `context_builder.py` 的 `build()` 方法和 `engine.py` 的 `context_builder_node`
+
+```python
+async def context_builder_node(state: AgentState) -> dict:
+    """上下文构建：检索记忆 + RAG（含降级）"""
+    t0 = time.time()
+    context_parts = []
+    degraded = []
+
+    # 尝试记忆检索
+    try:
+        memory_context = await asyncio.wait_for(
+            memory_manager.search(query=state["messages"][-1]["content"], user_id=state["user_id"], limit=5),
+            timeout=5.0,
+        )
+        if memory_context:
+            context_parts.append(f"【相关记忆】\n{memory_context}")
+    except Exception as e:
+        degraded.append(f"记忆检索: {e}")
+        memory_context = ""
+
+    # 尝试 RAG 检索
+    try:
+        rag_context = await asyncio.wait_for(
+            rag_pipeline.search(query=state["messages"][-1]["content"], limit=5),
+            timeout=10.0,
+        )
+        if rag_context:
+            context_parts.append(f"【知识库参考】\n{rag_context}")
+    except Exception as e:
+        degraded.append(f"RAG 检索: {e}")
+        rag_context = ""
+
+    elapsed = time.time() - t0
+    if degraded:
+        logger.warning(f"[context_builder] 降级: {', '.join(degraded)} elapsed={elapsed:.2f}s")
+    else:
+        logger.info(f"[context_builder] memory={'yes' if memory_context else 'no'} rag={'yes' if rag_context else 'no'} elapsed={elapsed:.2f}s")
+
+    return {
+        "context": "\n\n".join(context_parts),
+        "memory_context": memory_context or "",
+    }
+```
+
+### 4.14 可观测性：LangSmith / LangFuse 集成
+
+在 Agent 引擎中接入 tracing，追踪完整的决策链路。
+
+**新增文件：** `backend/app/agent/tracing.py`
+
+```python
+"""Agent 可观测性 — LangFuse 集成（开源，可自部署）"""
+import os
+from contextlib import contextmanager
+
+# 环境变量配置
+LANGFUSE_ENABLED = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
+_tracer = None
+
+def init_tracing():
+    """初始化 LangFuse tracing（仅在配置了密钥时启用）"""
+    global _tracer
+    if not LANGFUSE_ENABLED:
+        logger.info("LangFuse 未配置，tracing 已禁用")
+        return
+    try:
+        from langfuse import Langfuse
+        _tracer = Langfuse()
+        logger.info(f"LangFuse 已启用: {LANGFUSE_HOST}")
+    except ImportError:
+        logger.warning("langfuse 包未安装，tracing 已禁用")
+
+@contextmanager
+def trace_span(name: str, metadata: dict = None):
+    """追踪一个 Agent 节点的执行"""
+    if not _tracer:
+        yield
+        return
+    with _tracer.span(name=name, metadata=metadata or {}) as span:
+        try:
+            yield span
+        except Exception as e:
+            span.set_status_error(str(e))
+            raise
+
+def trace_agent_run(conversation_id: int, query: str, result: dict):
+    """记录一次完整的 Agent 运行"""
+    if not _tracer:
+        return
+    _tracer.generation(
+        name="agent_run",
+        input=query,
+        output=result.get("final_answer", ""),
+        metadata={
+            "conversation_id": conversation_id,
+            "tools_used": result.get("tools_used", []),
+            "tokens_used": result.get("tokens_used", 0),
+            "iterations": result.get("iterations", 0),
+        },
+    )
+```
+
+**在 engine.py 各节点中使用：**
+
+```python
+async def llm_call_node(state: AgentState) -> dict:
+    with trace_span("llm_call", {"iterations": state.get("iterations", 0)}):
+        # ... 原有逻辑
+```
+
+### 4.15 评估流水线（Eval Pipeline）
+
+每次改 prompt 或模型后，自动跑评估确认质量不退化。
+
+**新增文件：** `backend/app/agent/eval_pipeline.py`
+
+```python
+"""评估流水线 — 自动评估 Agent 回答质量"""
+from typing import List, Dict
+from pydantic import BaseModel
+import json
+
+class EvalCase(BaseModel):
+    """评估用例"""
+    id: int
+    question: str
+    expected_keywords: List[str] = []     # 期望包含的关键词
+    expected_answer: str = ""             # 参考答案（可选）
+    forbidden_patterns: List[str] = []    # 不应出现的内容
+
+class EvalResult(BaseModel):
+    """评估结果"""
+    case_id: int
+    question: str
+    actual_answer: str
+    correctness: float      # 0-1，正确性
+    relevance: float        # 0-1，相关性
+    completeness: float     # 0-1，完整性
+    has_forbidden: bool     # 是否包含禁止内容
+    passed: bool
+
+
+class EvalPipeline:
+    """Agent 评估流水线"""
+
+    def __init__(self, agent_graph, llm_client):
+        self.agent = agent_graph
+        self.llm = llm_client
+
+    async def run_eval(self, cases: List[EvalCase]) -> List[EvalResult]:
+        """跑一轮评估"""
+        results = []
+        for case in cases:
+            # 1. 调用 Agent
+            agent_result = await self.agent.ainvoke({
+                "messages": [{"role": "user", "content": case.question}],
+                "context": "", "memory_context": "",
+                "tool_calls": [], "tools_used": [],
+                "final_answer": None, "iterations": 0,
+                "token_budget": 32000, "tokens_used": 0,
+                "needs_approval": False, "pending_tool_call": None,
+            })
+            answer = agent_result.get("final_answer", "")
+
+            # 2. LLM-as-judge 评分
+            score = await self._judge(case, answer)
+
+            # 3. 检查禁止内容
+            has_forbidden = any(p in answer for p in case.forbidden_patterns)
+
+            results.append(EvalResult(
+                case_id=case.id,
+                question=case.question,
+                actual_answer=answer,
+                correctness=score["correctness"],
+                relevance=score["relevance"],
+                completeness=score["completeness"],
+                has_forbidden=has_forbidden,
+                passed=score["correctness"] >= 0.7 and score["relevance"] >= 0.7 and not has_forbidden,
+            ))
+        return results
+
+    async def _judge(self, case: EvalCase, answer: str) -> dict:
+        """LLM-as-judge 评分"""
+        prompt = f"""评估以下回答的质量。
+
+问题: {case.question}
+参考答案: {case.expected_answer or "无"}
+期望关键词: {', '.join(case.expected_keywords) or "无"}
+实际回答: {answer}
+
+以 JSON 格式输出评分（0-1）：
+{{"correctness": 0.0, "relevance": 0.0, "completeness": 0.0}}"""
+
+        try:
+            result = await self.llm.chat(messages=[{"role": "user", "content": prompt}], max_tokens=100)
+            return json.loads(result.get("content", "{}"))
+        except Exception:
+            return {"correctness": 0.5, "relevance": 0.5, "completeness": 0.5}
+```
+
+**评估用例文件：** `backend/app/agent/eval_cases.json`
+
+```json
+[
+  {
+    "id": 1,
+    "question": "怎么配置 JWT 密钥？",
+    "expected_keywords": ["JWT_SECRET_KEY", ".env", "secrets.token_urlsafe"],
+    "forbidden_patterns": ["beautiful-elf-secret-change-me"]
+  },
+  {
+    "id": 2,
+    "question": "帮我查一下数据库里有多少用户",
+    "expected_keywords": ["SELECT", "COUNT", "users"],
+    "forbidden_patterns": ["DELETE", "DROP", "TRUNCATE"]
+  }
+]
+```
+
+---
+
 ## 五、文件清单
 
 ### 新增文件
@@ -1562,13 +2009,15 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 ```
 backend/app/agent/
 ├── __init__.py              # 模块导出
-├── engine.py                # Agent 引擎（LangGraph StateGraph）
-├── context_builder.py       # 上下文构建（RAG + 记忆注入）
-├── tool_registry.py         # 工具注册表 + 内置工具（含沙箱实现）
+├── engine.py                # Agent 引擎（LangGraph StateGraph + token预算 + 审批流）
+├── context_builder.py       # 上下文构建（RAG + 记忆注入 + 降级策略）
+├── tool_registry.py         # 工具注册表 + 内置工具（含沙箱实现 + 风险分级）
 ├── memory_manager.py        # 两层记忆管理器（Redis + Qdrant detail/summary）
-├── rag_pipeline.py          # RAG 完整管道（按文档类型分块）
+├── rag_pipeline.py          # RAG 完整管道（混合检索 + 查询改写 + 重排序）
 ├── context_manager.py       # 对话上下文窗口管理
-└── workflow_engine.py       # 工作流执行引擎
+├── workflow_engine.py       # 工作流执行引擎
+├── tracing.py               # 可观测性（LangFuse 集成）
+└── eval_pipeline.py         # 评估流水线（LLM-as-judge）
 ```
 
 ### 修改文件
@@ -1591,7 +2040,9 @@ langgraph>=0.2.0           # Agent 引擎（状态图驱动）
 pymupdf>=1.24.0            # PDF 解析
 python-docx>=1.1.0         # Word 解析
 duckduckgo-search>=6.0.0   # 网页搜索（免费，无需 API Key）
+sentence-transformers>=3.0.0  # Cross-Encoder 重排序
 slowapi>=0.1.9             # API 限流
+langfuse>=2.0.0            # 可观测性 tracing（可选，可自部署）
 ```
 
 ---
@@ -1600,23 +2051,23 @@ slowapi>=0.1.9             # API 限流
 
 ```
 Phase 1 — 核心链路（P0，1-2 周）
-├── Day 1-2:  RAG 管道（rag_pipeline.py + knowledge.py）
-├── Day 3-4:  工具注册表（tool_registry.py）
-├── Day 5-7:  Agent 引擎（engine.py + context_builder.py）
-├── Day 8:    Tool Calling 闭环调试
+├── Day 1-2:  RAG 管道（rag_pipeline.py + knowledge.py + 混合检索 + 重排序）
+├── Day 3-4:  工具注册表（tool_registry.py + 风险分级 + 沙箱实现）
+├── Day 5-7:  Agent 引擎（engine.py + context_builder.py + token预算 + 降级策略）
+├── Day 8:    Tool Calling 闭环 + 审批流调试
 └── Day 9-10: 集成测试 + 对话流打通
 
 Phase 2 — 质量加固（P1，1 周）
-├── Day 1:    httpx 连接池复用
-├── Day 2:    消息自动保存 + 事务安全
-├── Day 3:    JWT 密钥强制校验
-├── Day 4:    上下文窗口管理
-└── Day 5:    记忆系统集成
+├── Day 1:    httpx 连接池复用 + JWT 密钥强制校验
+├── Day 2:    消息自动保存 + 事务安全 + 结构化输出
+├── Day 3:    上下文窗口管理 + 查询改写
+├── Day 4-5:  记忆系统集成（两层 Qdrant + Celery 定时任务）
 
-Phase 3 — 体验增强（P2，1 周）
-├── Day 1-2:  WebSocket 接入 Agent 流
-├── Day 3-4:  Workflow 执行引擎
-└── Day 5:    API 限流 + 压测
+Phase 3 — 生产化（P2，1 周）
+├── Day 1:    WebSocket 接入 Agent 流
+├── Day 2-3:  Workflow 执行引擎
+├── Day 4:    API 限流 + LangFuse tracing 接入
+└── Day 5:    评估流水线 + 压测
 ```
 
 ---
@@ -1625,13 +2076,16 @@ Phase 3 — 体验增强（P2，1 周）
 
 | 模块 | 验收标准 |
 |------|----------|
-| RAG 管道 | 上传 PDF → 分块 → 向量化 → 搜索返回相关段落 |
-| Agent 引擎 | 发送问题 → 自动检索记忆+知识 → 调用工具 → 返回答案 |
-| Tool Calling | 问"今天天气" → Agent 调用 web_search 工具 → 返回天气信息 |
+| RAG 管道 | 上传 PDF → 分块 → 向量化 → 混合检索(向量+BM25) → 重排序 → 搜索返回相关段落 |
+| Agent 引擎 | 发送问题 → 自动检索记忆+知识 → 调用工具 → 返回答案；token预算耗尽时自动停止 |
+| Tool Calling | 问"今天天气" → Agent 调用 web_search → 返回天气信息；execute_code 需用户确认才执行 |
+| 工具审批 | LLM 请求 execute_code → 前端弹出确认框 → 用户确认后执行 |
 | 记忆系统 | 对话1小时后 → Qdrant memory_detail 有详细日志；30分钟无互动 → Qdrant memory_summary 有压缩摘要；用户再次提问 → 能检索到之前的摘要并注入上下文 |
 | 上下文管理 | 发送 50 条消息 → 自动压缩旧消息为摘要 → 不超出 context window |
 | WebSocket | 建立连接 → 发送消息 → 实时收到 token 流 + 工具调用状态 |
 | 限流 | 1 分钟内请求超过 100 次 → 返回 429 |
+| 降级策略 | Qdrant 不可用 → Agent 仍能对话（无 RAG）；LLM 不可用 → 返回缓存回答 |
+| 评估流水线 | 跑 10 个标准用例 → 正确性 ≥ 0.7、无禁止内容 → 全部通过 |
 
 ---
 
