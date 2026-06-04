@@ -34,7 +34,7 @@ class LLMChatService:
             {"content": "...", "model": "...", "provider_type": "...", "token_count": 123}
         """
         provider = await self.provider_service.get(db, provider_id)
-        provider_type = provider["provider_type"]
+        provider_type = provider.provider_type
 
         if provider_type in OPENAI_COMPAT_TYPES:
             return await self._chat_openai_compat(
@@ -58,7 +58,7 @@ class LLMChatService:
     ) -> AsyncIterator[str]:
         """流式对话，逐 token 返回"""
         provider = await self.provider_service.get(db, provider_id)
-        provider_type = provider["provider_type"]
+        provider_type = provider.provider_type
 
         if provider_type in OPENAI_COMPAT_TYPES:
             async for chunk in self._stream_openai_compat(
@@ -76,11 +76,11 @@ class LLMChatService:
     # ── OpenAI 兼容接口 ──────────────────────────────────────
 
     async def _chat_openai_compat(
-        self, provider: dict, model: str, messages: List[dict],
+        self, provider, model: str, messages: List[dict],
         temperature: float, max_tokens: int,
     ) -> dict:
-        base_url = provider["base_url"].rstrip("/")
-        api_key = provider.get("api_key", "")
+        base_url = provider.base_url.rstrip("/")
+        api_key = getattr(provider, "api_key", "") or ""
 
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -110,16 +110,16 @@ class LLMChatService:
             return {
                 "content": content,
                 "model": data.get("model", model),
-                "provider_type": provider["provider_type"],
+                "provider_type": provider.provider_type,
                 "token_count": usage.get("total_tokens", 0),
             }
 
     async def _stream_openai_compat(
-        self, provider: dict, model: str, messages: List[dict],
+        self, provider, model: str, messages: List[dict],
         temperature: float, max_tokens: int,
     ) -> AsyncIterator[str]:
-        base_url = provider["base_url"].rstrip("/")
-        api_key = provider.get("api_key", "")
+        base_url = provider.base_url.rstrip("/")
+        api_key = getattr(provider, "api_key", "") or ""
 
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -159,10 +159,10 @@ class LLMChatService:
     # ── Ollama 接口 ──────────────────────────────────────────
 
     async def _chat_ollama(
-        self, provider: dict, model: str, messages: List[dict],
+        self, provider, model: str, messages: List[dict],
         temperature: float, max_tokens: int,
     ) -> dict:
-        base_url = provider["base_url"].rstrip("/")
+        base_url = provider.base_url.rstrip("/")
 
         payload = {
             "model": model,
@@ -187,10 +187,10 @@ class LLMChatService:
             }
 
     async def _stream_ollama(
-        self, provider: dict, model: str, messages: List[dict],
+        self, provider, model: str, messages: List[dict],
         temperature: float, max_tokens: int,
     ) -> AsyncIterator[str]:
-        base_url = provider["base_url"].rstrip("/")
+        base_url = provider.base_url.rstrip("/")
 
         payload = {
             "model": model,
