@@ -4,6 +4,31 @@
 
 ---
 
+## 技术参考文档
+
+| 技术 | 用途 | 官方文档 |
+|------|------|----------|
+| **LangGraph** | Agent 引擎（状态图驱动） | https://langchain-ai.github.io/langgraph/ |
+| **FastAPI** | Web 框架 | https://fastapi.tiangolo.com/ |
+| **Qdrant** | 向量数据库 | https://qdrant.tech/documentation/ |
+| **Ollama** | 本地 LLM + Embedding | https://github.com/ollama/ollama |
+| **SQLAlchemy** | ORM | https://docs.sqlalchemy.org/ |
+| **Alembic** | 数据库迁移 | https://alembic.sqlalchemy.org/ |
+| **Celery** | 异步任务队列 | https://docs.celeryq.dev/ |
+| **Redis** | 缓存 + 消息队列 | https://redis.io/docs/ |
+| **httpx** | 异步 HTTP 客户端 | https://www.python-httpx.org/ |
+| **Pydantic** | 数据校验 + 结构化输出 | https://docs.pydantic.dev/ |
+| **sentence-transformers** | Cross-Encoder 重排序 | https://www.sbert.net/ |
+| **bge-reranker-v2-m3** | 重排序模型 | https://huggingface.co/BAAI/bge-reranker-v2-m3 |
+| **duckduckgo-search** | 免费网页搜索 | https://github.com/deedy5/duckduckgo_search |
+| **LangFuse** | Agent 可观测性 tracing | https://langfuse.com/docs |
+| **slowapi** | API 限流中间件 | https://github.com/laurentS/slowapi |
+| **PyMuPDF** | PDF 解析 | https://pymupdf.readthedocs.io/ |
+| **python-docx** | Word 文档解析 | https://python-docx.readthedocs.io/ |
+| **WebSocket** | 实时双向通信 | https://fastapi.tiangolo.com/advanced/websockets/ |
+
+---
+
 ## 一、现状诊断
 
 ### 1.1 系统状态判定
