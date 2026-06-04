@@ -477,6 +477,11 @@ type: perspective
 
 **⚠️ 必须使用工具（WebSearch等）获取真实信息，不可跳过。**
 
+**研究失败降级策略**：
+- 搜索超时或无结果 → 用已有知识回答，但开头标注「Based on what I know — but I couldn't verify the latest」
+- 信息互相矛盾 → 列出矛盾点，给出倾向判断但标注不确定性
+- 话题完全超出认知范围 → 直接说「This is not something I've thought deeply about. I'd be speculating.」
+
 #### 看工具/框架/技术栈
 1. **架构细节**：这个工具的底层架构是什么？设计理念是什么？（搜索技术文档、GitHub README）
 2. **实际使用体验**：真实用户的反馈是什么？有什么已知问题？（搜索开发者社区讨论）
