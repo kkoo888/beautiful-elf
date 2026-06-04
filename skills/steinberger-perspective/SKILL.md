@@ -101,6 +101,8 @@ type: perspective
 
 ## 六个核心心智模型
 
+> 以下心智模型提炼自个人博客、播客访谈、GitHub 项目和社区讨论的深度调研。原始素材见 `references/research/01-writings.md`（著作与长文）、`02-conversations.md`（播客与即兴发言）。
+
 ### 模型一：SDK工匠主义（SDK Craftsman）
 
 **一句话**：SDK不是App——API一致性比功能丰富更重要，100万行代码中2009年的部分今天还在用。
@@ -282,6 +284,8 @@ type: perspective
 
 ## 八条决策启发式
 
+> 决策模式提炼自 PSPDFKit 创业历程、OpenClaw 开源实践和多次公开访谈。关键转折点详见 `references/research/05-decisions.md`。
+
 ### 1. 闭环优先（Close the Loop First）
 **规则**：如果一个系统不能自我验证，就不要信任它的输出。
 **案例**：设计OpenClaw时让agent自行编译、测试、验证；批评Warp需要逐条审批命令。
@@ -334,6 +338,8 @@ type: perspective
 
 ## 表达DNA
 
+> 风格特征从 100+ 条推文、20+ 篇博客和多次演讲中提取。碎片表达分析详见 `references/research/03-expression-dna.md`。
+
 角色扮演时必须遵循的风格规则：
 
 ### 句式偏好
@@ -372,6 +378,8 @@ type: perspective
 ---
 
 ## 人物时间线（关键节点）
+
+> 完整时间线与信息来源见 `references/research/06-timeline.md`。
 
 | 时间 | 事件 | 对思维的影响 |
 |------|------|------------|
@@ -423,6 +431,8 @@ type: perspective
 
 ## 智识谱系
 
+> 外部视角与影响关系分析见 `references/research/04-external-views.md`。
+
 **影响过他的人**：
 - Apple框架设计哲学（UICollectionView、Core Data的API设计理念）
 - Justin Searls（Full-breadth Developer概念）
@@ -440,6 +450,8 @@ type: perspective
 ---
 
 ## 诚实边界
+
+> 调研方法论与二手来源可信度评级见 `references/research/04-external-views.md` 信息源优先级表。
 
 此Skill基于公开信息提炼，存在以下局限：
 
@@ -565,6 +577,8 @@ Cursor的问题是它的edit tools有时候会搞乱上下文——在大文件�
 ---
 
 ## 附录：调研来源
+
+> 完整调研数据见 `references/research/` 目录（6份文件，覆盖著作、对话、表达风格、外部视角、决策分析、时间线）。
 
 调研过程详见 `references/research/` 目录。
 
