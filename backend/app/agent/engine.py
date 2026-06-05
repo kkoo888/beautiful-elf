@@ -89,7 +89,11 @@ def _make_context_builder(memory_manager):
         t0 = time.time()
         context_parts = []
 
-        query = state["messages"][-1].content if state["messages"] else ""
+        last_msg = state["messages"][-1] if state["messages"] else None
+        if last_msg is not None:
+            query = last_msg.get("content", "") if isinstance(last_msg, dict) else getattr(last_msg, "content", "")
+        else:
+            query = ""
 
         # 记忆检索（可选）
         if memory_manager and query:
