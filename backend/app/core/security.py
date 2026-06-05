@@ -12,10 +12,10 @@ settings = get_settings()
 # 密码哈希
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT 配置
-JWT_SECRET_KEY = getattr(settings, "JWT_SECRET_KEY", "")
+# JWT 配置 — 从 Settings 读取，未配置时给出明确警告
+JWT_SECRET_KEY = settings.JWT_SECRET_KEY
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_MINUTES = getattr(settings, "JWT_EXPIRE_MINUTES", 60 * 24)  # 默认 24 小时
+JWT_EXPIRE_MINUTES = settings.JWT_EXPIRE_MINUTES
 
 if not JWT_SECRET_KEY or JWT_SECRET_KEY == "beautiful-elf-secret-change-me":
     import warnings
