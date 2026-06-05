@@ -44,6 +44,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Agent 引擎初始化失败（降级为纯 LLM 模式）: {e}")
 
+    # 初始化 RAG 管道（可选，失败不影响基础功能）
+    try:
+        await _init_rag()
+    except Exception as e:
+        logger.warning(f"RAG 管道初始化失败（知识库功能不可用）: {e}")
+
     yield
 
     # 清理资源
@@ -75,6 +81,40 @@ async def _init_agent():
             logger.info(f"Agent 引擎就绪 (provider={default_provider.name})")
         else:
             logger.warning("Agent 引擎初始化失败，降级为纯 LLM 模式")
+
+
+async def _init_rag():
+    """初始化 RAG 管道（知识库向量检索）"""
+    from app.core.config import get_settings
+    from app.services.knowledge_service import knowledge_service
+
+    settings = get_settings()
+    qdrant_url = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
+
+    try:
+        from app.agent.rag_pipeline import RAGPipeline
+
+        # 获取 Embedding 模型（从 agent 模块复用）
+        try:
+            from llama_index.embeddings.ollama import OllamaEmbedding
+            embedding = OllamaEmbedding(
+                model_name="dengcao/Qwen3-Embedding-0.6B:Q8_0",
+                base_url=settings.OLLAMA_HOST,
+            )
+        except ImportError:
+            logger.warning("缺少 llama-index-embeddings-ollama，RAG 管道跳过初始化")
+            return
+
+        pipeline = RAGPipeline(
+            qdrant_url=qdrant_url,
+            embedding_model=embedding,
+        )
+        await pipeline.initialize()
+        knowledge_service.set_rag_pipeline(pipeline)
+        logger.info("RAG 管道就绪")
+
+    except Exception as e:
+        logger.warning(f"RAG 管道初始化失败: {e}")
 
 
 app = FastAPI(
