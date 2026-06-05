@@ -63,6 +63,28 @@ class ChatService:
 
         return llm_result
 
+    async def save_skill_messages(
+        self,
+        db: AsyncSession,
+        conversation_id: int,
+        user_content: str,
+        assistant_content: str,
+    ) -> None:
+        """保存技能对话的用户消息 + 助手回复"""
+        try:
+            await self._msg.create_message(db, MessageCreate(
+                conversation_id=conversation_id, role="user", content=user_content,
+            ))
+        except Exception as e:
+            logger.warning(f"保存用户消息失败: {e}")
+
+        try:
+            await self._msg.create_message(db, MessageCreate(
+                conversation_id=conversation_id, role="assistant", content=assistant_content,
+            ))
+        except Exception as e:
+            logger.warning(f"保存助手消息失败: {e}")
+
     async def chat_stream(
         self,
         conversation_id: int,

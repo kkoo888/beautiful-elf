@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.services.chat_service import ChatService
 from app.services.llm_provider_service import LLMProviderService
 from app.services.intent_service import intent_service
+from app.agent.skill_executor import skill_executor
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.response import ApiResult, api_error
 from app.core.logging import get_logger
@@ -70,9 +71,24 @@ async def chat(
             token_count=0,
         ))
 
-    # 技能命中（TODO: 路由到技能处理链）
+    # 技能命中 → 路由到技能处理链
     if intent and intent.get("target_module"):
-        logger.info(f"[chat] 意图命中: {intent['intent_name']} → {intent['target_module']}")
+        target = intent["target_module"]
+        logger.info(f"[chat] 意图命中: {intent['intent_name']} → {target}")
+        try:
+            skill_answer = await skill_executor.execute(
+                db, skill_name=target, user_message=user_message,
+                messages=messages, provider_id=provider_id, model_name=model_name,
+            )
+            await _chat_service.save_skill_messages(
+                db, conversation_id=conversation_id,
+                user_content=user_message, assistant_content=skill_answer,
+            )
+            return ApiResult(data=ChatResponse(
+                content=skill_answer, model="skill",
+            ))
+        except Exception as e:
+            logger.error(f"技能 '{target}' 执行失败，降级走 LLM: {e}", exc_info=True)
 
     # ── Step 2: 调用 ChatService ────────────────────────
     if data.stream:
