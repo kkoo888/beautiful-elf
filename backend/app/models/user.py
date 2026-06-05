@@ -11,5 +11,5 @@ class User(BaseModel):
     password_hash = Column(String(128), nullable=False, comment="密码哈希（bcrypt）")
     nickname = Column(String(64), nullable=False, default="", comment="昵称")
     avatar = Column(String(512), nullable=False, default="", comment="头像 URL")
-    role = Column(String(32), nullable=False, default="user", comment="角色: admin / user")
-    status = Column(SmallInteger, nullable=False, default=1, comment="状态: 1=启用 0=禁用")
+    user_role = Column(String(32), nullable=False, default="user", comment="角色: admin / user")
+    is_enabled = Column(SmallInteger, nullable=False, default=1, comment="是否启用: 1=是 0=否")

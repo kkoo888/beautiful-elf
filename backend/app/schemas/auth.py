@@ -26,7 +26,7 @@ class ChangePasswordRequest(CamelModel):
 class UpdateProfileRequest(CamelModel):
     """更新个人信息"""
     nickname: Optional[str] = Field(default=None, max_length=64, description="昵称")
-    avatar: Optional[str] = Field(default=None, max_length=512, description="头像 URL")
+    avatar_url: Optional[str] = Field(default=None, max_length=512, description="头像 URL")
 
 
 class UserInfoOut(CamelModel):
@@ -34,12 +34,13 @@ class UserInfoOut(CamelModel):
     id: int
     username: str
     nickname: str
-    avatar: str
-    role: str
-    status: int
+    avatar_url: str
+    user_role: str
+    is_enabled: bool
 
 
 class LoginResponse(CamelModel):
     """登录响应"""
-    token: str
+    access_token: str
+    token_type: str = "bearer"
     user: UserInfoOut

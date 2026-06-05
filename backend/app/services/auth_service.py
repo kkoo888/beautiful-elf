@@ -17,14 +17,15 @@ class AuthService:
         self.repo = UserRepository()
 
     @staticmethod
-    def _to_user_info(user) -> UserInfoOut:
+    def _to_user_info_out(user) -> UserInfoOut:
+        """ORM → Pydantic 用户信息"""
         return UserInfoOut(
             id=user.id,
             username=user.username,
             nickname=user.nickname,
-            avatar=user.avatar,
-            role=user.role,
-            status=user.status,
+            avatar_url=user.avatar,
+            user_role=user.user_role,
+            is_enabled=bool(user.is_enabled),
         )
 
     async def register(self, db: AsyncSession, data: RegisterRequest) -> UserInfoOut:
@@ -37,13 +38,13 @@ class AuthService:
             "username": data.username,
             "password_hash": hash_password(data.password),
             "nickname": data.nickname or data.username,
-            "role": "user",
-            "status": 1,
+            "user_role": "user",
+            "is_enabled": 1,
         })
-        return self._to_user_info(user)
+        return self._to_user_info_out(user)
 
     async def login(self, db: AsyncSession, data: LoginRequest) -> LoginResponse:
-        """登录，返回 JWT token + 用户信息"""
+        """登录，返回 JWT access_token + 用户信息"""
         user = await self.repo.find_by_username(db, data.username)
         if not user:
             raise SkillError("用户名或密码错误")
@@ -51,18 +52,18 @@ class AuthService:
         if not verify_password(data.password, user.password_hash):
             raise SkillError("用户名或密码错误")
 
-        if user.status != 1:
+        if not user.is_enabled:
             raise SkillError("账号已被禁用")
 
-        token = create_access_token(data={"user_id": user.id, "sub": str(user.id)})
-        return LoginResponse(token=token, user=self._to_user_info(user))
+        access_token = create_access_token(data={"user_id": user.id, "sub": str(user.id)})
+        return LoginResponse(access_token=access_token, user=self._to_user_info_out(user))
 
     async def get_current_user(self, db: AsyncSession, user_id: int) -> UserInfoOut:
         """获取当前登录用户信息"""
         user = await self.repo.find_by_id(db, user_id)
         if not user:
             raise RecordNotFoundError("用户不存在")
-        return self._to_user_info(user)
+        return self._to_user_info_out(user)
 
     async def change_password(
         self, db: AsyncSession, user_id: int, data: ChangePasswordRequest,
@@ -89,11 +90,15 @@ class AuthService:
             raise RecordNotFoundError("用户不存在")
 
         update_data = data.model_dump(exclude_unset=True)
+        # avatar_url → avatar（schema 用 avatar_url 更直观，数据库字段保持 avatar）
+        if "avatar_url" in update_data:
+            update_data["avatar"] = update_data.pop("avatar_url")
+
         if update_data:
             await self.repo.update(db, user_id, update_data)
             user = await self.repo.find_by_id(db, user_id)
 
-        return self._to_user_info(user)
+        return self._to_user_info_out(user)
 
 
 # 单例

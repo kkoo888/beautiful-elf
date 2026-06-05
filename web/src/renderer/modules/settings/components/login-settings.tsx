@@ -21,9 +21,9 @@ interface UserInfo {
   id: number
   username: string
   nickname: string
-  avatar: string
-  role: string
-  status: number
+  avatarUrl: string
+  userRole: string
+  isEnabled: boolean
 }
 
 interface AuthState {
@@ -86,10 +86,10 @@ export function LoginSettings() {
       setLoading(true)
       try {
         const res = await apiClient.post(AUTH_ENDPOINTS.LOGIN, values)
-        const data = res.data as { code: number; data: { token: string; user: UserInfo }; message?: string }
+        const data = res.data as { code: number; data: { accessToken: string; user: UserInfo }; message?: string }
         if (data.code === 0 && data.data) {
-          saveAuth(data.data.token, data.data.user)
-          setAuth({ token: data.data.token, user: data.data.user })
+          saveAuth(data.data.accessToken, data.data.user)
+          setAuth({ token: data.data.accessToken, user: data.data.user })
           message.success('登录成功')
           form.resetFields()
         } else {
@@ -141,8 +141,8 @@ export function LoginSettings() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
             <Avatar
               size={64}
-              src={auth.user.avatar || undefined}
-              icon={!auth.user.avatar ? <UserOutlined /> : undefined}
+              src={auth.user.avatarUrl || undefined}
+              icon={!auth.user.avatarUrl ? <UserOutlined /> : undefined}
             />
             <div>
               <Title level={5} style={{ margin: 0 }}>
@@ -150,8 +150,8 @@ export function LoginSettings() {
               </Title>
               <Text type="secondary">@{auth.user.username}</Text>
               <div style={{ marginTop: 4 }}>
-                <Tag color={auth.user.role === 'admin' ? 'gold' : 'blue'}>
-                  {auth.user.role === 'admin' ? '管理员' : '用户'}
+                <Tag color={auth.user.userRole === 'admin' ? 'gold' : 'blue'}>
+                  {auth.user.userRole === 'admin' ? '管理员' : '用户'}
                 </Tag>
               </div>
             </div>
