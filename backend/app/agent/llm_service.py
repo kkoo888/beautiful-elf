@@ -56,7 +56,7 @@ class LLMService:
         """
         from app.services.llm_provider_service import LLMProviderService
         provider_service = LLMProviderService()
-        provider = await provider_service.get(db, provider_id)
+        provider = await provider_service.get_provider(db, provider_id)
 
         if not provider:
             raise ValueError(f"供应商 ID={provider_id} 不存在")
