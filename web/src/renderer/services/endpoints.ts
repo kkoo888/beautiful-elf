@@ -141,3 +141,12 @@ export const LLM_PROVIDER_ENDPOINTS = {
   DETAIL: (id: string) => `${API_PREFIX}/llm_providers/${id}`,
   TOGGLE: (id: string) => `${API_PREFIX}/llm_providers/${id}/toggle`,
 } as const
+
+// ─── 认证 ───
+export const AUTH_ENDPOINTS = {
+  LOGIN: `${API_PREFIX}/auth/login`,
+  REGISTER: `${API_PREFIX}/auth/register`,
+  ME: `${API_PREFIX}/auth/me`,
+  CHANGE_PASSWORD: `${API_PREFIX}/auth/change-password`,
+  PROFILE: `${API_PREFIX}/auth/profile`,
+} as const

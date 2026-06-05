@@ -12,7 +12,8 @@ import {
   LoginOutlined,
   UserAddOutlined,
 } from '@ant-design/icons'
-import { API_BASE_URL, API_PREFIX } from '@/shared/constants'
+import { apiClient } from '@/services/api-client'
+import { AUTH_ENDPOINTS } from '@/services/endpoints'
 
 const { Text, Title } = Typography
 
@@ -37,10 +38,7 @@ function loadAuth(): AuthState {
   try {
     const token = localStorage.getItem(TOKEN_KEY)
     const userStr = localStorage.getItem(USER_KEY)
-    return {
-      token,
-      user: userStr ? JSON.parse(userStr) : null,
-    }
+    return { token, user: userStr ? JSON.parse(userStr) : null }
   } catch {
     return { token: null, user: null }
   }
@@ -62,26 +60,23 @@ export function LoginSettings() {
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm()
 
-  // 启动时尝试用 token 拉取最新用户信息
+  // 启动时用 token 拉取最新用户信息
   useEffect(() => {
     if (auth.token) {
-      fetch(`${API_BASE_URL}${API_PREFIX}/auth/me`, {
-        headers: { Authorization: `Bearer ${auth.token}` },
-      })
-        .then((r) => r.json())
+      apiClient
+        .get(AUTH_ENDPOINTS.ME)
         .then((res) => {
-          if (res.code === 0 && res.data) {
-            const user = res.data as UserInfo
-            saveAuth(auth.token!, user)
-            setAuth({ token: auth.token, user })
+          const data = res.data as { code: number; data: UserInfo }
+          if (data.code === 0 && data.data) {
+            saveAuth(auth.token!, data.data)
+            setAuth({ token: auth.token, user: data.data })
           } else {
-            // token 过期
             clearAuth()
             setAuth({ token: null, user: null })
           }
         })
         .catch(() => {
-          // 网络错误，保留本地缓存
+          // token 过期或网络错误，保留本地缓存
         })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -90,23 +85,18 @@ export function LoginSettings() {
     async (values: { username: string; password: string }) => {
       setLoading(true)
       try {
-        const res = await fetch(`${API_BASE_URL}${API_PREFIX}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(values),
-        })
-        const data = await res.json()
+        const res = await apiClient.post(AUTH_ENDPOINTS.LOGIN, values)
+        const data = res.data as { code: number; data: { token: string; user: UserInfo }; message?: string }
         if (data.code === 0 && data.data) {
-          const { token, user } = data.data
-          saveAuth(token, user)
-          setAuth({ token, user })
+          saveAuth(data.data.token, data.data.user)
+          setAuth({ token: data.data.token, user: data.data.user })
           message.success('登录成功')
           form.resetFields()
         } else {
           message.error(data.message || '登录失败')
         }
-      } catch {
-        message.error('网络错误，请检查后端服务')
+      } catch (err: unknown) {
+        message.error(err instanceof Error ? err.message : '网络错误')
       } finally {
         setLoading(false)
       }
@@ -118,12 +108,8 @@ export function LoginSettings() {
     async (values: { username: string; password: string; nickname?: string }) => {
       setLoading(true)
       try {
-        const res = await fetch(`${API_BASE_URL}${API_PREFIX}/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(values),
-        })
-        const data = await res.json()
+        const res = await apiClient.post(AUTH_ENDPOINTS.REGISTER, values)
+        const data = res.data as { code: number; message?: string }
         if (data.code === 0) {
           message.success('注册成功，请登录')
           setMode('login')
@@ -131,8 +117,8 @@ export function LoginSettings() {
         } else {
           message.error(data.message || '注册失败')
         }
-      } catch {
-        message.error('网络错误，请检查后端服务')
+      } catch (err: unknown) {
+        message.error(err instanceof Error ? err.message : '网络错误')
       } finally {
         setLoading(false)
       }
@@ -170,15 +156,8 @@ export function LoginSettings() {
               </div>
             </div>
           </div>
-
           <Divider style={{ margin: '16px 0' }} />
-
-          <Button
-            danger
-            icon={<LogoutOutlined />}
-            onClick={handleLogout}
-            block
-          >
+          <Button danger icon={<LogoutOutlined />} onClick={handleLogout} block>
             退出登录
           </Button>
         </Card>
@@ -194,38 +173,21 @@ export function LoginSettings() {
         <Button
           type={mode === 'login' ? 'primary' : 'default'}
           icon={<LoginOutlined />}
-          onClick={() => {
-            setMode('login')
-            form.resetFields()
-          }}
+          onClick={() => { setMode('login'); form.resetFields() }}
         >
           登录
         </Button>
         <Button
           type={mode === 'register' ? 'primary' : 'default'}
           icon={<UserAddOutlined />}
-          onClick={() => {
-            setMode('register')
-            form.resetFields()
-          }}
+          onClick={() => { setMode('register'); form.resetFields() }}
         >
           注册
         </Button>
       </Space>
 
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={mode === 'login' ? handleLogin : handleRegister}
-        autoComplete="off"
-      >
-        <Form.Item
-          name="username"
-          rules={[
-            { required: true, message: '请输入用户名' },
-            { min: 2, message: '用户名至少 2 个字符' },
-          ]}
-        >
+      <Form form={form} layout="vertical" onFinish={mode === 'login' ? handleLogin : handleRegister} autoComplete="off">
+        <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }, { min: 2, message: '用户名至少 2 个字符' }]}>
           <Input prefix={<UserOutlined />} placeholder="用户名" size="large" />
         </Form.Item>
 
@@ -235,25 +197,12 @@ export function LoginSettings() {
           </Form.Item>
         )}
 
-        <Form.Item
-          name="password"
-          rules={[
-            { required: true, message: '请输入密码' },
-            { min: 4, message: '密码至少 4 个字符' },
-          ]}
-        >
+        <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }, { min: 4, message: '密码至少 4 个字符' }]}>
           <Input.Password prefix={<LockOutlined />} placeholder="密码" size="large" />
         </Form.Item>
 
         <Form.Item>
-          <Button
-            type="primary"
-            htmlType="submit"
-            loading={loading}
-            block
-            size="large"
-            icon={mode === 'login' ? <LoginOutlined /> : <UserAddOutlined />}
-          >
+          <Button type="primary" htmlType="submit" loading={loading} block size="large" icon={mode === 'login' ? <LoginOutlined /> : <UserAddOutlined />}>
             {mode === 'login' ? '登录' : '注册'}
           </Button>
         </Form.Item>

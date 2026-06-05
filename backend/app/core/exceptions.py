@@ -116,3 +116,21 @@ class ExpertTeamError(AppError):
     status_code = 500
     message = "专家团系统错误"
     user_tip = "专家团操作失败，请稍后重试"
+
+
+# ============ 认证异常 ============
+
+class AuthUnauthorizedError(AppError):
+    """未登录或 token 无效"""
+    code = "AUTH_UNAUTHORIZED"
+    status_code = 401
+    message = "未登录或 token 无效"
+    user_tip = "请先登录"
+
+
+class AuthForbiddenError(AppError):
+    """无权限"""
+    code = "AUTH_FORBIDDEN"
+    status_code = 403
+    message = "无权限访问"
+    user_tip = "请联系管理员获取权限"

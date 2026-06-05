@@ -32,6 +32,15 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     config.headers['X-Trace-Id'] = crypto.randomUUID()
+    // 注入 JWT token（如果已登录）
+    try {
+      const token = localStorage.getItem('beautiful-elf:auth_token')
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`
+      }
+    } catch {
+      // localStorage 不可用，忽略
+    }
     return config
   },
   (error) => Promise.reject(error)
