@@ -214,13 +214,13 @@ export function ExpertTeamLivePanel({
       const key = `${event.expertName}-${event.expertRole}`
       const existing = next.experts.get(key)
 
-      // 更新专家思考内容
+      // 更新专家思考内容（不改变状态，thinking 事件在专家运行中就会发送）
       const newExperts = new Map(next.experts)
       newExperts.set(key, {
         name: event.expertName,
         role: event.expertRole,
         avatar: event.avatar || existing?.avatar || '🤖',
-        status: 'done',
+        status: existing?.status || 'running', // 保持当前状态，不强制设为 done
         currentRound: event.round,
         thinking: event.content,
         durationMs: event.durationMs || existing?.durationMs || 0,
@@ -268,6 +268,7 @@ export function ExpertTeamLivePanel({
         output: '',
       })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalRunId, maxRounds])
 
   // 计算进度百分比

@@ -134,9 +134,9 @@ class ToolRegistry:
         return tools
 
     def _make_db_tool_wrapper(self, tool_name: str) -> Callable:
-        """为 DB 工具创建通用执行包装器"""
+        """为 DB 工具创建通用执行包装器（不自动批准，高风险工具需审批）"""
         async def db_tool_wrapper(**kwargs) -> str:
-            result = await self.execute(tool_name, kwargs, approved=True)
+            result = await self.execute(tool_name, kwargs, approved=False)
             return str(result)
         return db_tool_wrapper
 
@@ -219,8 +219,13 @@ class ToolRegistry:
         duration_ms = int((time.time() - start_time) * 1000)
 
         # 异步记录统计（不阻塞返回）
+        # 注意：db_session 必须在任务执行时仍有效，否则统计会静默失败
         if db_session and t.id > 0:
-            asyncio.create_task(self._record_stats(db_session, t.id, success, duration_ms))
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._record_stats(db_session, t.id, success, duration_ms))
+            except RuntimeError:
+                logger.debug("无法创建统计任务：无运行中的事件循环")
 
         return result
 
@@ -231,7 +236,7 @@ class ToolRegistry:
             repo = ToolRepository()
             await repo.record_call(db_session, tool_id, success, duration_ms)
         except Exception as e:
-            logger.debug(f"工具统计记录失败（非致命）: {e}")
+            logger.warning(f"工具统计记录失败: {e}")
 
 
 # ─── 内置工具实现 ─────────────────────────────────────────
