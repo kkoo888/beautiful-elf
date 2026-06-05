@@ -295,19 +295,41 @@ async def read_file(path: str) -> dict:
 
 
 async def query_database(sql: str) -> dict:
-    """查询数据库（只读 SELECT）"""
-    sql_upper = sql.strip().upper()
+    """查询数据库（只读 SELECT，参数化查询防注入）"""
+    import re
+    from sqlalchemy import text
+
+    sql_stripped = sql.strip().rstrip(";")
+    sql_upper = sql_stripped.upper()
+
+    # 严格只允许 SELECT
     if not sql_upper.startswith("SELECT"):
         return {"error": "只允许 SELECT 查询"}
-    if "LIMIT" not in sql_upper:
-        sql = sql.rstrip(";") + " LIMIT 100"
 
-    from app.core.database import get_db_session
-    async with get_db_session() as session:
-        result = await session.execute(sql)
-        columns = list(result.keys())
-        rows = [dict(zip(columns, row)) for row in result.fetchall()]
-        return {"columns": columns, "rows": rows, "count": len(rows)}
+    # 禁止危险关键字
+    forbidden = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "CREATE", "TRUNCATE", "EXEC", "EXECUTE", "UNION"]
+    for kw in forbidden:
+        # 用单词边界匹配，避免误匹配列名中的子串
+        if re.search(rf'\b{kw}\b', sql_upper):
+            return {"error": f"禁止使用 {kw} 语句"}
+
+    # 禁止多语句（分号）
+    if ";" in sql_stripped:
+        return {"error": "禁止多语句执行"}
+
+    # 自动添加 LIMIT
+    if "LIMIT" not in sql_upper:
+        sql_stripped += " LIMIT 100"
+
+    from app.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as session:
+        try:
+            result = await session.execute(text(sql_stripped))
+            columns = list(result.keys())
+            rows = [dict(zip(columns, row)) for row in result.fetchall()]
+            return {"columns": columns, "rows": rows, "count": len(rows)}
+        except Exception as e:
+            return {"error": f"查询执行失败: {str(e)}"}
 
 
 # ─── 全局单例 ────────────────────────────────────────────
