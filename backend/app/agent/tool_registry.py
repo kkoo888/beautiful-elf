@@ -125,12 +125,16 @@ class ToolRegistry:
 
     def get_langchain_tools(self) -> list:
         """返回 LangChain Tool 列表（用于 bind_tools）"""
-        from langchain_core.tools import tool as lc_tool
+        from langchain_core.tools import StructuredTool
         tools = []
         for t in self._tools.values():
             # DB 工具没有 func，用通用执行包装器
             func = t.func or self._make_db_tool_wrapper(t.name)
-            tools.append(lc_tool(func, name=t.name, description=t.description))
+            tools.append(StructuredTool.from_function(
+                func=func,
+                name=t.name,
+                description=t.description,
+            ))
         return tools
 
     def _make_db_tool_wrapper(self, tool_name: str) -> Callable:
