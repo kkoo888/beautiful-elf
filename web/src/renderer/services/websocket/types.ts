@@ -13,6 +13,9 @@ export type WSMessageType =
   | 'workflow_progress'
   | 'subagent_status'
   | 'ai_chunk'
+  | 'expert_status'
+  | 'expert_thinking'
+  | 'expert_progress'
   | 'ping'
   | 'pong'
 

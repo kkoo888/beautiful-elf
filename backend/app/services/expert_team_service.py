@@ -12,11 +12,17 @@ LLM 集成:
   - 从 MySQL settings 表读取 ollama.host / ollama.chat_model
   - 通过 OllamaClient 调用本地 Ollama 服务
   - 每个专家可配置独立的 model / temperature / max_tokens
+
+WebSocket 实时推送:
+  - expert_status: 专家状态变更（开始/完成/失败）
+  - expert_thinking: 专家推理过程
+  - expert_progress: 任务进度更新
 """
 import json
 import logging
 import asyncio
 import operator
+import uuid
 from typing import List, Optional, Tuple, Annotated, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +43,22 @@ from app.core.exceptions import RecordNotFoundError
 from app.services.ollama_service import OllamaClient, get_chat_model
 
 logger = logging.getLogger(__name__)
+
+
+# ─── WebSocket 实时推送辅助 ──────────────────────────────
+
+async def _ws_broadcast(team_id: int, event_type: str, payload: dict):
+    """广播专家团执行事件到 WebSocket"""
+    try:
+        from app.core.websocket_manager import ws_manager
+        await ws_manager.broadcast_all({
+            "type": event_type,
+            "payload": {**payload, "teamId": team_id},
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "eventId": str(uuid.uuid4()),
+        })
+    except Exception as e:
+        logger.debug(f"WebSocket 推送失败（非致命）: {e}")
 
 
 # ─── 默认提示词模板 ──────────────────────────────────────
@@ -99,6 +121,7 @@ class OrchestratorState(TypedDict):
     run_id: int  # 专家团运行记录 ID
     _service: Any  # service 实例引用
     _db: Any  # db session 引用
+    _team_id: int  # 专家团 ID（WebSocket 推送用）
 
 
 class ExpertState(TypedDict):
@@ -110,6 +133,7 @@ class ExpertState(TypedDict):
     run_id: int
     _service: Any
     _db: Any
+    _team_id: int  # 专家团 ID（WebSocket 推送用）
 
 
 # ─── LangGraph 节点函数 ──────────────────────────────────
@@ -133,9 +157,19 @@ async def orchestrator_node(state: OrchestratorState) -> dict:
     input_text = state["input_text"]
     orchestrator_prompt = state["orchestrator_prompt"]
     current_round = state.get("current_round", 0)
+    team_id = state.get("_team_id", 0)
 
     # 第一轮：分析任务
     if current_round == 0:
+        # 推送：编排器开始分析
+        await _ws_broadcast(team_id, "expert_status", {
+            "expertName": "编排器",
+            "expertRole": "Orchestrator",
+            "status": "running",
+            "round": 0,
+            "runId": state.get("run_id"),
+        })
+
         prompt = (orchestrator_prompt or DEFAULT_ORCHESTRATOR_PROMPT).format(
             expert_list=expert_list,
             input_text=input_text,
@@ -153,6 +187,23 @@ async def orchestrator_node(state: OrchestratorState) -> dict:
             "timestamp": datetime.now().isoformat(),
         }
         logger.info(f"编排器分析完成: {response['content'][:100]}...")
+
+        # 推送：编排器完成 + 推理内容
+        await _ws_broadcast(team_id, "expert_thinking", {
+            "expertName": "编排器",
+            "expertRole": "Orchestrator",
+            "round": 0,
+            "content": response["content"],
+            "runId": state.get("run_id"),
+        })
+        await _ws_broadcast(team_id, "expert_status", {
+            "expertName": "编排器",
+            "expertRole": "Orchestrator",
+            "status": "done",
+            "round": 0,
+            "runId": state.get("run_id"),
+        })
+
         return {
             "discussion": [msg],
             "total_tokens": tokens,
@@ -193,6 +244,7 @@ def route_after_orchestrator(state: OrchestratorState) -> list[Send]:
             "run_id": state["run_id"],
             "_service": state["_service"],
             "_db": state["_db"],
+            "_team_id": state.get("_team_id", 0),
         }
         sends.append(Send("expert_call", expert_state))
 
@@ -209,6 +261,17 @@ async def expert_call_node(state: ExpertState) -> dict:
     run_id = state["run_id"]
     service = state["_service"]
     db = state["_db"]
+    team_id = state.get("_team_id", 0)
+
+    # 推送：专家开始工作
+    await _ws_broadcast(team_id, "expert_status", {
+        "expertName": member["name"],
+        "expertRole": member["role"],
+        "avatar": member.get("avatar", "🤖"),
+        "status": "running",
+        "round": round_num,
+        "runId": run_id,
+    })
 
     # 创建角色执行记录
     role_run = await service._create_role_run(db, run_id, member["id"], member["name"], round_num)
@@ -275,6 +338,17 @@ async def expert_call_node(state: ExpertState) -> dict:
             error=str(e),
         )
 
+        # 推送：专家失败
+        await _ws_broadcast(team_id, "expert_status", {
+            "expertName": member["name"],
+            "expertRole": member["role"],
+            "avatar": member.get("avatar", "🤖"),
+            "status": "failed",
+            "round": round_num,
+            "runId": run_id,
+            "error": str(e),
+        })
+
     msg = {
         "round": round_num,
         "expertName": member["name"],
@@ -282,6 +356,28 @@ async def expert_call_node(state: ExpertState) -> dict:
         "content": content,
         "timestamp": datetime.now().isoformat(),
     }
+
+    # 推送：专家推理内容
+    await _ws_broadcast(team_id, "expert_thinking", {
+        "expertName": member["name"],
+        "expertRole": member["role"],
+        "avatar": member.get("avatar", "🤖"),
+        "round": round_num,
+        "content": content,
+        "runId": run_id,
+        "durationMs": duration_ms,
+    })
+
+    # 推送：专家完成
+    await _ws_broadcast(team_id, "expert_status", {
+        "expertName": member["name"],
+        "expertRole": member["role"],
+        "avatar": member.get("avatar", "🤖"),
+        "status": "done",
+        "round": round_num,
+        "runId": run_id,
+        "durationMs": duration_ms,
+    })
 
     return {
         "discussion": [msg],
@@ -297,6 +393,16 @@ async def synthesizer_node(state: OrchestratorState) -> dict:
     input_text = state["input_text"]
     discussion = state["discussion"]
     synthesizer_prompt = state["synthesizer_prompt"]
+    team_id = state.get("_team_id", 0)
+
+    # 推送：汇总器开始
+    await _ws_broadcast(team_id, "expert_status", {
+        "expertName": "汇总器",
+        "expertRole": "Synthesizer",
+        "status": "running",
+        "round": -1,
+        "runId": state.get("run_id"),
+    })
 
     # 格式化讨论内容
     lines = []
@@ -315,6 +421,20 @@ async def synthesizer_node(state: OrchestratorState) -> dict:
     )
 
     tokens = response.get("eval_count", 0)
+
+    # 推送：汇总器完成
+    await _ws_broadcast(team_id, "expert_status", {
+        "expertName": "汇总器",
+        "expertRole": "Synthesizer",
+        "status": "done",
+        "round": -1,
+        "runId": state.get("run_id"),
+    })
+    await _ws_broadcast(team_id, "expert_progress", {
+        "status": "completed",
+        "runId": state.get("run_id"),
+        "output": response["content"][:500],
+    })
 
     return {
         "final_output": response["content"],
@@ -355,6 +475,7 @@ def route_after_round(state: OrchestratorState) -> list[Send]:
             "run_id": state["run_id"],
             "_service": state["_service"],
             "_db": state["_db"],
+            "_team_id": state.get("_team_id", 0),
         }
         sends.append(Send("expert_call", expert_state))
 
@@ -701,6 +822,7 @@ class ExpertTeamService:
                 "run_id": run.id,
                 "_service": self,
                 "_db": db,
+                "_team_id": team_id,
             }
 
             # 执行 LangGraph 工作流

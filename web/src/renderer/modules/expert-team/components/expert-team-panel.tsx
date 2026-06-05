@@ -17,6 +17,7 @@ import { ExpertTeamDetail } from './expert-team-detail'
 import { ExpertTeamEditor } from './expert-team-editor'
 import { ExpertTeamMonitor } from './expert-team-monitor'
 import { ExpertTeamExecuteDrawer } from './expert-team-execute-drawer'
+import { ExpertTeamLivePanel } from './expert-team-live-panel'
 import type { ExpertTeam, ExpertTeamFormInput, ExpertTeamExecuteInput } from '../types'
 
 const { Text } = Typography
@@ -50,6 +51,10 @@ export default function ExpertTeamPanel() {
   // 执行抽屉
   const [executeDrawerOpen, setExecuteDrawerOpen] = useState(false)
   const [executeTeam, setExecuteTeam] = useState<ExpertTeam | null>(null)
+
+  // 实时执行状态
+  const [liveRunId, setLiveRunId] = useState<number | undefined>()
+  const [liveMaxRounds, setLiveMaxRounds] = useState(3)
 
   // 导航到列表
   const goList = useCallback(() => {
@@ -122,11 +127,16 @@ export default function ExpertTeamPanel() {
   const handleExecuteSubmit = useCallback(
     async (input: ExpertTeamExecuteInput) => {
       if (!executeTeam) return
-      const result = await executeTeamMut(executeTeam.id, input)
-      message.success(`执行完成！共 ${result.rounds} 轮讨论，耗时 ${(result.durationMs / 1000).toFixed(1)}s`)
-      setExecuteDrawerOpen(false)
+      // 先切换到监控视图，显示实时面板
       setView('monitor')
       setActiveTab('monitor')
+      setLiveRunId(undefined) // 重置
+      setLiveMaxRounds(input.maxRounds || executeTeam.maxRounds)
+      setExecuteDrawerOpen(false)
+
+      const result = await executeTeamMut(executeTeam.id, input)
+      setLiveRunId(result.runId)
+      message.success(`执行完成！共 ${result.rounds} 轮讨论，耗时 ${(result.durationMs / 1000).toFixed(1)}s`)
       refreshRuns()
     },
     [executeTeam, executeTeamMut, setActiveTab, refreshRuns]
@@ -217,11 +227,20 @@ export default function ExpertTeamPanel() {
 
       case 'monitor':
         return (
-          <ExpertTeamMonitor
-            runs={runs}
-            loading={isRunsLoading}
-            onRefresh={refreshRuns}
-          />
+          <div>
+            <ExpertTeamLivePanel
+              teamId={executeTeam?.id}
+              runId={liveRunId}
+              maxRounds={liveMaxRounds}
+            />
+            <div style={{ marginTop: 16 }}>
+              <ExpertTeamMonitor
+                runs={runs}
+                loading={isRunsLoading}
+                onRefresh={refreshRuns}
+              />
+            </div>
+          </div>
         )
 
       default:

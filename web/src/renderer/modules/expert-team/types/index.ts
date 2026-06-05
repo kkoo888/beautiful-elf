@@ -148,6 +148,63 @@ export interface ExpertTeamTemplate {
 
 // ─── 状态映射 ────────────────────────────────────────────
 
+// ─── WebSocket 实时事件类型 ───────────────────────────────
+
+/** 专家状态事件 */
+export interface ExpertStatusEvent {
+  expertName: string
+  expertRole: string
+  avatar?: string
+  status: 'running' | 'done' | 'failed'
+  round: number
+  runId: number
+  teamId?: number
+  durationMs?: number
+  error?: string
+}
+
+/** 专家推理事件 */
+export interface ExpertThinkingEvent {
+  expertName: string
+  expertRole: string
+  avatar?: string
+  round: number
+  content: string
+  runId: number
+  teamId?: number
+  durationMs?: number
+}
+
+/** 专家进度事件 */
+export interface ExpertProgressEvent {
+  status: 'running' | 'completed' | 'failed'
+  runId: number
+  teamId?: number
+  output?: string
+}
+
+/** 实时执行中的专家状态 */
+export interface LiveExpertState {
+  name: string
+  role: string
+  avatar: string
+  status: 'idle' | 'running' | 'done' | 'failed'
+  currentRound: number
+  thinking: string
+  durationMs: number
+}
+
+/** 实时执行状态 */
+export interface LiveExecutionState {
+  runId: number | null
+  status: 'idle' | 'orchestrating' | 'discussing' | 'synthesizing' | 'completed' | 'failed'
+  currentRound: number
+  maxRounds: number
+  experts: Map<string, LiveExpertState>
+  thinkingLog: ExpertThinkingEvent[]
+  output: string
+}
+
 export const EXPERT_RUN_STATUS_MAP: Record<
   ExpertRunStatus,
   { label: string; color: string }
