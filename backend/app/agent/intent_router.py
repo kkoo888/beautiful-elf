@@ -19,6 +19,8 @@ logger = get_logger(__name__)
 
 INTENT_COLLECTION = "intent_vectors"
 INTENT_SCORE_THRESHOLD = 0.75  # 意图相似度阈值（余弦相似度）
+SEMANTIC_CACHE_COLLECTION = "semantic_cache"
+SEMANTIC_CACHE_THRESHOLD = 0.95  # 语义缓存阈值（几乎相同的问题）
 
 
 class IntentRouter:
@@ -33,17 +35,18 @@ class IntentRouter:
         self.qdrant = qdrant_mapper
         self.embedding_func = embedding_func
         self.qdrant.ensure_collection(INTENT_COLLECTION, vector_size=1024)
+        self.qdrant.ensure_collection(SEMANTIC_CACHE_COLLECTION, vector_size=1024)
 
     async def route(self, user_message: str, user_id: int = 0) -> Optional[dict]:
         """
-        意图路由：用户消息 → 向量检索 → 命中/未命中。
+        意图路由：语义缓存 → 意图匹配 → 未命中。
 
         Args:
             user_message: 用户消息
-            user_id: 用户 ID（未使用，预留）
+            user_id: 用户 ID
 
         Returns:
-            命中: {"intent_id": int, "intent_name": str, "score": float, "target_module": str, "trigger_texts": list}
+            命中: {"intent_id": int, "intent_name": str, "score": float, "target_module": str, ...}
             未命中: None
         """
         if not user_message or not user_message.strip():
@@ -55,6 +58,19 @@ class IntentRouter:
             logger.warning(f"意图路由 Embedding 失败（降级跳过）: {e}")
             return None
 
+        # 1. 语义缓存检查（热门问答直接返回）
+        cached = await self._check_semantic_cache(vector)
+        if cached:
+            return {
+                "intent_id": -1,
+                "intent_name": "semantic_cache_hit",
+                "score": cached["score"],
+                "target_module": "cache",
+                "trigger_texts": [],
+                "cached_answer": cached["answer"],
+            }
+
+        # 2. 意图向量检索
         results = self.qdrant.search(
             collection=INTENT_COLLECTION,
             query_vector=vector,
@@ -75,6 +91,38 @@ class IntentRouter:
             "target_module": payload.get("target_module", ""),
             "trigger_texts": payload.get("trigger_texts", []),
         }
+
+    async def _check_semantic_cache(self, vector: list) -> Optional[dict]:
+        """语义缓存：热门问答 embedding 相似度 >= 0.95 → 命中"""
+        try:
+            results = self.qdrant.search(
+                collection=SEMANTIC_CACHE_COLLECTION,
+                query_vector=vector,
+                limit=1,
+                score_threshold=SEMANTIC_CACHE_THRESHOLD,
+            )
+            if results and results[0].score >= SEMANTIC_CACHE_THRESHOLD:
+                return {
+                    "answer": results[0].payload.get("answer", ""),
+                    "score": results[0].score,
+                }
+        except Exception as e:
+            logger.debug(f"语义缓存检查失败（非致命）: {e}")
+        return None
+
+    async def cache_answer(self, question: str, answer: str):
+        """缓存问答对到语义缓存"""
+        try:
+            vector = await self.embedding_func(question)
+            import uuid
+            self.qdrant.upsert(
+                collection=SEMANTIC_CACHE_COLLECTION,
+                point_id=str(uuid.uuid4()),
+                vector=vector,
+                payload={"question": question, "answer": answer},
+            )
+        except Exception as e:
+            logger.warning(f"语义缓存写入失败: {e}")
 
     async def sync_intents(self, db) -> int:
         """

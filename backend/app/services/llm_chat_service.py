@@ -19,6 +19,21 @@ class LLMChatService:
 
     def __init__(self):
         self.provider_service = LLMProviderService()
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """获取 httpx 客户端（连接池复用）"""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(120.0, connect=10.0),
+                limits=httpx.Limits(max_connections=30, max_keepalive_connections=15),
+            )
+        return self._client
+
+    async def close(self):
+        """关闭连接池"""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
 
     async def chat(
         self,
@@ -91,25 +106,25 @@ class LLMChatService:
             "stream": False,
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{base_url}/chat/completions",
-                json=payload,
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = self._get_client()
+        resp = await client.post(
+            f"{base_url}/chat/completions",
+            json=payload,
+            headers=headers,
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-            choice = data.get("choices", [{}])[0]
-            content = choice.get("message", {}).get("content", "")
-            usage = data.get("usage", {})
+        choice = data.get("choices", [{}])[0]
+        content = choice.get("message", {}).get("content", "")
+        usage = data.get("usage", {})
 
-            return ChatResponse(
-                content=content,
-                model=data.get("model", model),
-                provider_type=provider.provider_type,
-                token_count=usage.get("total_tokens", 0),
-            )
+        return ChatResponse(
+            content=content,
+            model=data.get("model", model),
+            provider_type=provider.provider_type,
+            token_count=usage.get("total_tokens", 0),
+        )
 
     async def _stream_openai_compat(
         self, provider, model: str, messages: List[dict],
@@ -130,28 +145,28 @@ class LLMChatService:
             "stream": True,
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream(
-                "POST",
-                f"{base_url}/chat/completions",
-                json=payload,
-                headers=headers,
-            ) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]
-                    if data_str.strip() == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(data_str)
-                        delta = data.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content", "")
-                        if content:
-                            yield content
-                    except json.JSONDecodeError:
-                        continue
+        client = self._get_client()
+        async with client.stream(
+            "POST",
+            f"{base_url}/chat/completions",
+            json=payload,
+            headers=headers,
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                data_str = line[6:]
+                if data_str.strip() == "[DONE]":
+                    break
+                try:
+                    data = json.loads(data_str)
+                    delta = data.get("choices", [{}])[0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        yield content
+                except json.JSONDecodeError:
+                    continue
 
     # ── Ollama 接口 ──────────────────────────────────────────
 
@@ -171,17 +186,17 @@ class LLMChatService:
             },
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(f"{base_url}/api/chat", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        client = self._get_client()
+        resp = await client.post(f"{base_url}/api/chat", json=payload)
+        resp.raise_for_status()
+        data = resp.json()
 
-            return ChatResponse(
-                content=data.get("message", {}).get("content", ""),
-                model=data.get("model", model),
-                provider_type="ollama",
-                token_count=data.get("eval_count", 0),
-            )
+        return ChatResponse(
+            content=data.get("message", {}).get("content", ""),
+            model=data.get("model", model),
+            provider_type="ollama",
+            token_count=data.get("eval_count", 0),
+        )
 
     async def _stream_ollama(
         self, provider, model: str, messages: List[dict],
@@ -199,18 +214,18 @@ class LLMChatService:
             },
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", f"{base_url}/api/chat", json=payload) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        content = data.get("message", {}).get("content", "")
-                        if content:
-                            yield content
-                        if data.get("done"):
-                            break
-                    except json.JSONDecodeError:
-                        continue
+        client = self._get_client()
+        async with client.stream("POST", f"{base_url}/api/chat", json=payload) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    content = data.get("message", {}).get("content", "")
+                    if content:
+                        yield content
+                    if data.get("done"):
+                        break
+                except json.JSONDecodeError:
+                    continue
