@@ -52,7 +52,7 @@ async def websocket_endpoint(
     # JWT 鉴权
     user_id = await _authenticate_ws(websocket, token)
     if user_id is None:
-        await websocket.close(code=4003, reason="认证失败：无效或缺失的 token")
+        await websocket.close(code=4003, reason="AUTH_UNAUTHORIZED: 无效或缺失的 token")
         logger.warning(f"WebSocket 鉴权失败: channel={channel}")
         return
 
@@ -85,65 +85,39 @@ async def websocket_endpoint(
 
 async def _handle_agent_ws(websocket: WebSocket, data: dict, user_id: int):
     """通过 WebSocket 流式处理 Agent 对话"""
-    import json
+    from app.services.agent_service import agent_service
 
     content = data.get("content", "")
     conversation_id = data.get("conversationId", 0)
-    provider_id = data.get("providerId")
-    model_name = data.get("modelName", "")
 
     if not content:
         await websocket.send_json({"type": "error", "message": "消息内容为空"})
         return
 
-    # 获取 Agent 图
-    agent_graph = getattr(websocket.app.state, "agent_graph", None)
-
-    if agent_graph is None:
-        # 降级：纯 LLM
+    if not agent_service.is_ready:
         await websocket.send_json({"type": "error", "message": "Agent 引擎未初始化"})
         return
 
     try:
         await websocket.send_json({"type": "start"})
 
-        initial_state = {
-            "conversation_id": conversation_id,
-            "user_id": user_id,
-            "messages": [{"role": "user", "content": content}],
-            "context": "",
-            "tool_calls": [],
-            "tools_used": [],
-            "final_answer": None,
-            "iterations": 0,
-            "needs_approval": False,
-            "pending_tool_call": None,
-        }
+        async for event in agent_service.chat_stream(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            messages=[{"role": "user", "content": content}],
+        ):
+            event_type = event.get("type", "")
 
-        async for event in agent_graph.astream_events(initial_state, version="v2"):
-            kind = event.get("event", "")
-
-            if kind == "on_chat_model_stream":
-                chunk = event.get("data", {}).get("chunk", None)
-                if chunk and hasattr(chunk, "content") and chunk.content:
-                    await websocket.send_json({
-                        "type": "token",
-                        "content": chunk.content,
-                    })
-
-            elif kind == "on_tool_start":
-                await websocket.send_json({
-                    "type": "tool_start",
-                    "tool": event.get("name", "unknown"),
-                })
-
-            elif kind == "on_tool_end":
-                await websocket.send_json({
-                    "type": "tool_end",
-                    "tool": event.get("name", "unknown"),
-                })
-
-        await websocket.send_json({"type": "done"})
+            if event_type == "token":
+                await websocket.send_json({"type": "token", "content": event["content"]})
+            elif event_type == "tool_start":
+                await websocket.send_json({"type": "tool_start", "tool": event["tool"]})
+            elif event_type == "tool_end":
+                await websocket.send_json({"type": "tool_end", "tool": event["tool"]})
+            elif event_type == "done":
+                await websocket.send_json({"type": "done"})
+            elif event_type == "error":
+                await websocket.send_json({"type": "error", "message": event["message"]})
 
     except Exception as e:
         logger.error(f"WebSocket Agent 对话失败: {e}", exc_info=True)

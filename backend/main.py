@@ -40,10 +40,9 @@ async def lifespan(app: FastAPI):
 
     # 初始化 Agent 引擎（可选，失败不影响基础功能）
     try:
-        await _init_agent(app)
+        await _init_agent()
     except Exception as e:
         logger.warning(f"Agent 引擎初始化失败（降级为纯 LLM 模式）: {e}")
-        app.state.agent_graph = None
 
     yield
 
@@ -55,17 +54,11 @@ async def lifespan(app: FastAPI):
     logger.info("Beautiful-Elf 后端已停止")
 
 
-async def _init_agent(app: FastAPI):
-    """
-    初始化 Agent 引擎。
-
-    从 DB 加载默认供应商 → 创建 LangChain LLM → 构建 Agent 图 → 存入 app.state
-    失败时降级为纯 LLM 模式（app.state.agent_graph = None）
-    """
+async def _init_agent():
+    """初始化 Agent 引擎（通过 agent_service 封装）"""
     from app.core.database import AsyncSessionLocal
     from app.services.llm_provider_service import LLMProviderService
-    from app.agent.llm_service import llm_service
-    from app.agent.tool_registry import tool_registry, register_builtin_tools
+    from app.services.agent_service import agent_service
 
     async with AsyncSessionLocal() as db:
         provider_service = LLMProviderService()
@@ -73,30 +66,15 @@ async def _init_agent(app: FastAPI):
 
         if not default_provider:
             logger.warning("无默认 LLM 供应商，Agent 引擎跳过初始化")
-            app.state.agent_graph = None
             return
 
-        # 注册内置工具
-        register_builtin_tools()
-
-        # 获取 LangChain LLM（绑定工具）
-        try:
-            llm = await llm_service.get_chat_llm(
-                db,
-                provider_id=default_provider.id,
-                bind_tools=tool_registry.get_langchain_tools(),
-            )
-        except ImportError as e:
-            logger.warning(f"缺少 LangChain 依赖: {e}")
-            app.state.agent_graph = None
-            return
-
-        # 构建 Agent 图
-        from app.agent.engine import build_agent_graph
-        agent_graph = build_agent_graph(llm=llm, tool_registry=tool_registry)
-
-        app.state.agent_graph = agent_graph
-        logger.info(f"Agent 引擎初始化完成 (provider={default_provider.name})")
+        success = await agent_service.initialize(
+            db, provider_id=default_provider.id
+        )
+        if success:
+            logger.info(f"Agent 引擎就绪 (provider={default_provider.name})")
+        else:
+            logger.warning("Agent 引擎初始化失败，降级为纯 LLM 模式")
 
 
 app = FastAPI(
