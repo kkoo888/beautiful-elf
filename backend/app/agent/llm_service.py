@@ -64,7 +64,7 @@ class LLMService:
         # 确定模型名
         if not model_name:
             models = provider.models or []
-            model_name = models[0] if models else ""
+            model_name = models[0].name if models else ""
 
         if not model_name:
             raise ValueError(f"供应商 '{provider.name}' 未配置模型")
