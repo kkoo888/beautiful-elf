@@ -87,13 +87,23 @@ class QdrantMapper:
                     ]
                 )
 
-            results = self._client.search(
-                collection_name=collection,
-                query_vector=query_vector,
-                limit=limit,
-                score_threshold=score_threshold,
-                query_filter=query_filter,
-            )
+            # qdrant_client >= 1.7 用 query_points，旧版用 search
+            if hasattr(self._client, "query_points"):
+                results = self._client.query_points(
+                    collection_name=collection,
+                    query=query_vector,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    query_filter=query_filter,
+                ).points
+            else:
+                results = self._client.search(
+                    collection_name=collection,
+                    query_vector=query_vector,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    query_filter=query_filter,
+                )
 
             return [
                 SearchResult(
