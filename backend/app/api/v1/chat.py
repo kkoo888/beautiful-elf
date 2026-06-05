@@ -1,11 +1,10 @@
-"""AI 对话 API — 意图路由 + Agent + 消息持久化
+"""AI 对话 API — 意图路由 + LLM 对话
 
-架构（按 architecture-upgrade.md 5.2 节）：
-  用户消息 → 意图路由（快速，向量相似度，不走 LLM）
+架构（architecture-upgrade.md 5.2 节）：
+  用户消息 → 意图路由（快速，向量相似度）
     ├─ 语义缓存命中 → 直接返回缓存答案
-    ├─ 技能命中 → 路由到对应技能
-    └─ 未命中 → 纯 LLM 对话（不绑工具，快）
-         └─ LLM 想用工具 → 才走 Agent 引擎（绑工具）
+    ├─ 技能命中 → 路由到对应技能（TODO）
+    └─ 未命中 → 纯 LLM 对话（不绑工具，快速）
 """
 import json
 from fastapi import APIRouter, Depends, Path, Request
@@ -16,7 +15,6 @@ from app.core.database import get_db, AsyncSessionLocal
 from app.services.llm_chat_service import LLMChatService
 from app.services.llm_provider_service import LLMProviderService
 from app.services.message_service import MessageService
-from app.services.agent_service import agent_service
 from app.services.intent_service import intent_service
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.message import MessageCreate
@@ -39,33 +37,6 @@ async def _resolve_provider_id(db: AsyncSession, provider_id: int | None) -> int
     return default_provider.id if default_provider else None
 
 
-# ── 意图路由 ─────────────────────────────────────────────
-
-async def _try_intent_route(user_message: str) -> dict | None:
-    """意图路由（快速路径，不走 LLM）"""
-    if not intent_service.intent_router:
-        return None
-    try:
-        result = await intent_service.intent_router.route(user_message)
-        if not result:
-            return None
-        # 语义缓存命中
-        if hasattr(result, "target_type") and result.target_type == "cache":
-            return {"type": "cache", "answer": result.target_config.get("answer", ""), "score": result.score}
-        # 技能命中
-        if hasattr(result, "target_type") and result.target_type == "skill":
-            return {"type": "skill", "intent_name": result.intent_name, "config": result.target_config}
-        # 其他意图命中
-        if hasattr(result, "intent_name"):
-            return {"type": "intent", "intent_name": result.intent_name, "config": result.target_config}
-        return None
-    except Exception as e:
-        logger.debug(f"意图路由失败（降级走 LLM）: {e}")
-        return None
-
-
-# ── 主入口 ───────────────────────────────────────────────
-
 @router.post("/conversations/{conversation_id}/chat", response_model=ApiResult[ChatResponse])
 async def chat(
     request: Request,
@@ -74,13 +45,9 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[ChatResponse]:
     """
-    对话入口 — 意图路由 → 纯 LLM → Agent（按需）
-
-    1. 意图路由（快速，向量相似度）
-       - 语义缓存命中 → 直接返回
-       - 技能命中 → 路由到技能
+    对话入口：
+    1. 意图路由（快速，不走 LLM）
     2. 纯 LLM 对话（不绑工具，快速响应）
-    3. 如果 LLM 想用工具 → 走 Agent 引擎（绑工具）
     """
     provider_id = await _resolve_provider_id(db, data.provider_id)
     if provider_id is None:
@@ -90,40 +57,44 @@ async def chat(
     model_name = data.model_name or ""
     user_message = messages[-1]["content"] if messages else ""
 
-    # ── Step 1: 意图路由（快速路径）──────────────────────
-    intent = await _try_intent_route(user_message)
+    # ── Step 1: 意图路由 ─────────────────────────────────
+    intent = None
+    if intent_service.intent_router:
+        try:
+            intent = await intent_service.intent_router.route(user_message)
+        except Exception as e:
+            logger.debug(f"意图路由失败（降级走 LLM）: {e}")
 
-    if intent and intent["type"] == "cache":
-        # 语义缓存命中，直接返回
+    # 语义缓存命中，直接返回
+    if intent and intent.get("cached_answer"):
         logger.info(f"[chat] 语义缓存命中 score={intent.get('score', 0):.2f}")
         return ApiResult(data=ChatResponse(
-            content=intent["answer"],
+            content=intent["cached_answer"],
             model="cache",
             provider_type="cache",
             token_count=0,
         ))
 
-    if intent and intent["type"] == "skill":
-        # 技能命中，路由到技能处理（TODO: 实现技能处理链）
-        logger.info(f"[chat] 技能命中: {intent['intent_name']}")
-        # 暂时降级到普通对话
+    # 技能命中（TODO: 路由到技能处理链）
+    if intent and intent.get("target_module"):
+        logger.info(f"[chat] 意图命中: {intent['intent_name']} → {intent['target_module']}")
 
-    # ── Step 2: 纯 LLM 对话（不绑工具，快速）────────────
+    # ── Step 2: 纯 LLM 对话（不绑工具）──────────────────
     if data.stream:
         return StreamingResponse(
-            _stream_with_intent(conversation_id, messages, provider_id, model_name, intent),
+            _llm_stream(conversation_id, messages, provider_id, model_name),
             media_type="text/event-stream",
         )
-    return await _chat_with_intent(conversation_id, messages, provider_id, model_name, intent, db)
+    return await _llm_chat(conversation_id, messages, provider_id, model_name, db)
 
 
-# ── 非流式对话 ──────────────────────────────────────────
+# ── 非流式 LLM 对话 ────────────────────────────────────
 
-async def _chat_with_intent(
+async def _llm_chat(
     conversation_id: int, messages: list, provider_id: int,
-    model_name: str, intent: dict | None, db: AsyncSession,
+    model_name: str, db: AsyncSession,
 ) -> ApiResult:
-    """非流式对话：纯 LLM 优先，工具调用时走 Agent"""
+    """纯 LLM 非流式对话（不绑工具，快速响应）"""
 
     # 保存用户消息
     user_content = messages[-1]["content"] if messages else ""
@@ -134,7 +105,6 @@ async def _chat_with_intent(
     except Exception as e:
         logger.warning(f"保存用户消息失败: {e}")
 
-    # 纯 LLM 对话（不绑工具）
     try:
         llm_result = await _llm_chat_service.chat(
             db, provider_id=provider_id, model_name=model_name,
@@ -157,13 +127,13 @@ async def _chat_with_intent(
         return api_error("AI_TIMEOUT", str(e), "请检查模型配置或稍后重试")
 
 
-# ── 流式对话 ────────────────────────────────────────────
+# ── 流式 LLM 对话 ──────────────────────────────────────
 
-async def _stream_with_intent(
+async def _llm_stream(
     conversation_id: int, messages: list,
-    provider_id: int, model_name: str, intent: dict | None,
+    provider_id: int, model_name: str,
 ):
-    """流式对话：纯 LLM 优先，工具调用时走 Agent"""
+    """纯 LLM 流式对话（不绑工具，快速响应）"""
     full_content = ""
 
     # 保存用户消息
@@ -177,7 +147,6 @@ async def _stream_with_intent(
     except Exception as e:
         logger.warning(f"保存用户消息失败: {e}")
 
-    # 纯 LLM 流式对话（不绑工具）
     try:
         async with AsyncSessionLocal() as stream_db:
             async for chunk in _llm_chat_service.chat_stream(
