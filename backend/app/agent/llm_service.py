@@ -55,8 +55,10 @@ class LLMService:
             LangChain BaseChatModel 实例
         """
         from app.services.llm_provider_service import LLMProviderService
-        provider_service = LLMProviderService()
-        provider = await provider_service.get_provider(db, provider_id)
+        from app.repository.llm_provider_repo import LLMProviderRepository
+        provider_repo = LLMProviderRepository()
+        # 直接读 ORM 模型，避免 ProviderOut 脱敏 api_key
+        provider = await provider_repo.find_by_id(db, provider_id)
 
         if not provider:
             raise ValueError(f"供应商 ID={provider_id} 不存在")
@@ -134,12 +136,14 @@ class LLMService:
         """创建 OpenAI 兼容 ChatModel（DeepSeek/Kimi/硅基流动等）"""
         try:
             from langchain_openai import ChatOpenAI
-            # 智谱等 API 路径已含版本号（/v4），不能重复拼 /v1；
-            # ChatOpenAI 会自动拼 /chat/completions，只需确保 base_url 以版本号结尾即可。
+            # ChatOpenAI 内部会把 base_url 传给 openai SDK，
+            # SDK 默认 base_url=https://api.openai.com/v1，拼 /chat/completions。
+            # 所以 base_url 必须去掉末尾的版本路径（如 /v1、/v4），
+            # 让 ChatOpenAI 自己加 /v1。
             clean_url = base_url.rstrip("/")
-            if not (clean_url.endswith("/v1") or clean_url.endswith("/v2") or "/v" in clean_url.split("/")[-1]):
-                # 没有版本号后缀的（如 https://api.openai.com），自动加 /v1
-                clean_url += "/v1"
+            # 去掉末尾的 /vN 版本号路径
+            import re
+            clean_url = re.sub(r'/v\d+$', '', clean_url)
             return ChatOpenAI(
                 model=model,
                 base_url=clean_url,
