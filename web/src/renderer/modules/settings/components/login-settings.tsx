@@ -22,7 +22,7 @@ interface UserInfo {
   username: string
   nickname: string
   avatarUrl: string
-  userRole: string
+  userRole: number
   isEnabled: boolean
 }
 
@@ -150,8 +150,8 @@ export function LoginSettings() {
               </Title>
               <Text type="secondary">@{auth.user.username}</Text>
               <div style={{ marginTop: 4 }}>
-                <Tag color={auth.user.userRole === 'admin' ? 'gold' : 'blue'}>
-                  {auth.user.userRole === 'admin' ? '管理员' : '用户'}
+                <Tag color={auth.user.userRole === 1 ? 'gold' : 'blue'}>
+                  {auth.user.userRole === 1 ? '管理员' : '用户'}
                 </Tag>
               </div>
             </div>

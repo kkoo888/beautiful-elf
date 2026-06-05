@@ -35,7 +35,7 @@ class UserInfoOut(CamelModel):
     username: str
     nickname: str
     avatar_url: str
-    user_role: str
+    user_role: int
     is_enabled: bool
 
 

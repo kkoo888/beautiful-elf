@@ -23,7 +23,7 @@ class AuthService:
             id=user.id,
             username=user.username,
             nickname=user.nickname,
-            avatar_url=user.avatar,
+            avatar_url=user.avatar_url,
             user_role=user.user_role,
             is_enabled=bool(user.is_enabled),
         )
@@ -38,7 +38,7 @@ class AuthService:
             "username": data.username,
             "password_hash": hash_password(data.password),
             "nickname": data.nickname or data.username,
-            "user_role": "user",
+            "user_role": 0,
             "is_enabled": 1,
         })
         return self._to_user_info_out(user)
@@ -90,9 +90,6 @@ class AuthService:
             raise RecordNotFoundError("用户不存在")
 
         update_data = data.model_dump(exclude_unset=True)
-        # avatar_url → avatar（schema 用 avatar_url 更直观，数据库字段保持 avatar）
-        if "avatar_url" in update_data:
-            update_data["avatar"] = update_data.pop("avatar_url")
 
         if update_data:
             await self.repo.update(db, user_id, update_data)
