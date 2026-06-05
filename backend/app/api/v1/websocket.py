@@ -12,11 +12,16 @@ async def _authenticate_ws(websocket: WebSocket, token: str | None) -> int | Non
     """
     WebSocket JWT 鉴权。
 
+    有 token → 验证并返回 user_id
+    无 token → 返回 0（guest 模式，本地开发用）
+
     Returns:
         user_id: 认证成功返回用户 ID，失败返回 None
     """
     if not token:
-        return None
+        # 无 token，允许 guest 连接（本地开发模式）
+        logger.info("WebSocket 无 token，以 guest 模式连接")
+        return 0
 
     payload = decode_access_token(token)
     if not payload:
@@ -49,11 +54,12 @@ async def websocket_endpoint(
     /ws          → 默认 channel (default)
     /ws/{channel} → 指定 channel: chat, pet, notification, system 等
     """
-    # JWT 鉴权
+    # JWT 鉴权（无 token 时允许 guest 连接）
     user_id = await _authenticate_ws(websocket, token)
     if user_id is None:
-        await websocket.close(code=4003, reason="AUTH_UNAUTHORIZED: 无效或缺失的 token")
-        logger.warning(f"WebSocket 鉴权失败: channel={channel}")
+        # token 存在但验证失败 → 拒绝
+        await websocket.close(code=4003, reason="AUTH_UNAUTHORIZED: 无效的 token")
+        logger.warning(f"WebSocket 鉴权失败（token 无效）: channel={channel}")
         return
 
     # 鉴权通过，存储 user_id
