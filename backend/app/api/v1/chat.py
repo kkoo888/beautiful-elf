@@ -84,8 +84,8 @@ async def _agent_chat(conversation_id: int, messages: list, db: AsyncSession) ->
                 role="assistant",
                 content=result["content"],
             ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"保存消息失败（非致命）: {e}")
 
         return ApiResult(data=ChatResponse(
             content=result["content"],
@@ -171,8 +171,8 @@ async def _llm_chat(
                 content=result.content,
                 token_count=result.token_count,
             ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"保存消息失败（非致命）: {e}")
         return ApiResult(data=result)
     except Exception as e:
         return api_error("AI_TIMEOUT", str(e), "请检查模型配置或稍后重试")
@@ -206,7 +206,7 @@ async def _llm_stream(
                     token_count=0,
                 ))
                 await stream_db.commit()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"保存流式消息失败（非致命）: {e}")
     except Exception as e:
         yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"

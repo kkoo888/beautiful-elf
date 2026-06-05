@@ -137,7 +137,7 @@ class LLMService:
             return ChatOpenAI(
                 model=model,
                 base_url=base_url.rstrip("/") + "/v1" if not base_url.rstrip("/").endswith("/v1") else base_url,
-                api_key=api_key or "sk-placeholder",
+                api_key=api_key,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )

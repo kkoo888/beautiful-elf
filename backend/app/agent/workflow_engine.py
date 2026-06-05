@@ -197,14 +197,33 @@ async def tool_handler(node_def: dict, context: dict) -> dict:
 
 
 async def condition_handler(node_def: dict, context: dict) -> dict:
-    """条件节点处理器"""
+    """条件节点处理器（安全的表达式评估）"""
     condition = node_def.get("condition", "")
-    # 简单条件评估
+    field = node_def.get("field", "")
+    operator = node_def.get("operator", "==")
+    expected = node_def.get("value", "")
+
+    # 安全的条件评估：只支持字段比较，禁止 eval
+    actual = context.get(field)
     try:
-        result = eval(condition, {"context": context, "__builtins__": {}})
-        return {"condition": condition, "result": bool(result)}
+        if operator == "==":
+            result = actual == expected
+        elif operator == "!=":
+            result = actual != expected
+        elif operator == "contains":
+            result = expected in str(actual) if actual else False
+        elif operator == "not_contains":
+            result = expected not in str(actual) if actual else True
+        elif operator == "exists":
+            result = actual is not None
+        elif operator == "not_exists":
+            result = actual is None
+        else:
+            result = False
     except Exception as e:
-        return {"condition": condition, "result": False, "error": str(e)}
+        result = False
+
+    return {"condition": condition, "field": field, "operator": operator, "result": bool(result)}
 
 
 def create_default_engine() -> WorkflowEngine:
