@@ -62,6 +62,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"意图路由初始化失败（意图匹配不可用）: {e}")
 
+    # 初始化可观测性（可选）
+    try:
+        from app.agent.tracing import init_tracing
+        init_tracing()
+    except Exception as e:
+        logger.warning(f"可观测性初始化失败: {e}")
+
     yield
 
     # 清理资源
