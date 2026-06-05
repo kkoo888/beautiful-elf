@@ -16,6 +16,7 @@ import {
   FileTextOutlined,
   DatabaseOutlined,
   ApiOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSettings } from '../hooks/use-settings'
@@ -29,9 +30,15 @@ import { AboutSettings } from './about-settings'
 import { SoulSettings } from './soul-settings'
 import { PromptManager } from './prompt-manager'
 import { DataManagement } from './data-management'
+import { LoginSettings } from './login-settings'
 import styles from './settings-panel.module.css'
 
 const TAB_ITEMS = [
+  {
+    key: 'account',
+    label: '账号',
+    icon: <UserOutlined />,
+  },
   {
     key: 'llm_provider',
     label: '模型供应商',
@@ -102,6 +109,8 @@ export default function SettingsPanel() {
   const renderTabContent = useCallback(
     (key: string) => {
       switch (key) {
+        case 'account':
+          return <LoginSettings />
         case 'llm_provider':
           return <LlmProviderSettings />
         case 'ollama':

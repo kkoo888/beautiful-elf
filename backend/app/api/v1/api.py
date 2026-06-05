@@ -29,12 +29,16 @@ from app.api.v1 import (
     ollama,
     llm_provider,
     intent,
+    auth,
 )
 
 api_router = APIRouter()
 
 # 健康检查（路由已包含完整路径，不加 prefix）
 api_router.include_router(health.router, tags=["health"])
+
+# 认证（公开接口，不需要 token）
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 
 # 核心业务
 api_router.include_router(conversation.router, prefix="/conversations", tags=["conversation"])

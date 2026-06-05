@@ -69,7 +69,19 @@ export class WebSocketClient {
     this.setConnectionState('connecting')
 
     try {
-      this.ws = new WebSocket(this.config.url)
+      // 自动携带 JWT token（如果已登录）
+      let url = this.config.url
+      try {
+        const token = localStorage.getItem('beautiful-elf:auth_token')
+        if (token) {
+          const separator = url.includes('?') ? '&' : '?'
+          url = `${url}${separator}token=${encodeURIComponent(token)}`
+        }
+      } catch {
+        // localStorage 不可用（SSR 等），忽略
+      }
+
+      this.ws = new WebSocket(url)
       this.ws.onopen = this.handleOpen.bind(this)
       this.ws.onmessage = this.handleMessage.bind(this)
       this.ws.onclose = this.handleClose.bind(this)
