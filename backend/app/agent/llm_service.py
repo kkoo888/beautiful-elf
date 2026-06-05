@@ -136,14 +136,12 @@ class LLMService:
         """创建 OpenAI 兼容 ChatModel（DeepSeek/Kimi/硅基流动等）"""
         try:
             from langchain_openai import ChatOpenAI
-            # ChatOpenAI 内部会把 base_url 传给 openai SDK，
-            # SDK 默认 base_url=https://api.openai.com/v1，拼 /chat/completions。
-            # 所以 base_url 必须去掉末尾的版本路径（如 /v1、/v4），
-            # 让 ChatOpenAI 自己加 /v1。
+            # DB 里 base_url 可能存了 /v4/v1，需要只保留版本号路径（/v4），
+            # openai SDK 会直接在 base_url 后面拼 /chat/completions。
             clean_url = base_url.rstrip("/")
-            # 去掉末尾的 /vN 版本号路径
-            import re
-            clean_url = re.sub(r'/v\d+$', '', clean_url)
+            # 去掉末尾多余的 /v1（智谱等 API 路径已含 /v4，不需要 /v1）
+            if clean_url.endswith("/v1"):
+                clean_url = clean_url[:-3]
             return ChatOpenAI(
                 model=model,
                 base_url=clean_url,
