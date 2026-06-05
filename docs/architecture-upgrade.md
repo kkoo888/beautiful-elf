@@ -1407,78 +1407,45 @@ class WorkflowEngine:
 
 ### 5.1 应用初始化（main.py lifespan）
 
+**设计决策**：Agent 引擎采用**懒加载**，不在启动时初始化。
+
+原因：
+- 模型由用户在前端选择（provider_id + model_name），启动时无法确定
+- 启动时不依赖 LLM 服务可用性，加快启动速度
+- 用户切换模型时，下次对话自动用新模型重建 Agent
+
+启动时只初始化**非 LLM 服务**（RAG、记忆、意图路由等），Agent 引擎在首次对话时按用户选择的模型懒加载。
+
 ```python
-"""应用启动时初始化所有 Agent 服务（单例，不每次请求重建）"""
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-
-from app.agent.rag_pipeline import RAGPipeline
-from app.agent.memory_manager import MemoryManager
-from app.agent.tool_registry import tool_registry
-from app.agent.engine import build_agent_graph
-from app.agent.context_manager import ContextManager
-from app.agent.intent_router import IntentRouter
-from app.agent.llm_service import get_llm, get_llama_index_llm, get_embedding
-from app.mappers.qdrant_mapper import QdrantMapper
-
-# 全局单例
-agent_graph = None
-intent_router = None
-
-
+# ── main.py lifespan：只初始化非 LLM 服务 ──
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global agent_graph, intent_router
-
-    # 1. 获取模型实例
-    embedding = get_embedding()
-    llm = get_llm()                      # LangChain LLM（Agent 用）
-    llama_llm = get_llama_index_llm()    # LlamaIndex LLM（RAG 改写/摘要用）
-
-    # 2. 初始化 RAG
-    rag = RAGPipeline(
-        qdrant_url="http://localhost:6333",
-        embedding_model=embedding,
-        llm_model=llama_llm,
-    )
-    rag.init_reranker()
-
-    # 3. 初始化记忆
-    qdrant_mapper = QdrantMapper()
-    memory = MemoryManager(
-        qdrant_mapper=qdrant_mapper,
-        embedding_func=lambda q: embedding.aget_text_embedding(q),
-        llm_client=llama_llm,
-    )
-
-    # 4. 初始化上下文管理器
-    context_manager = ContextManager(llm_client=llama_llm)
-
-    # 5. 构建 Agent 图（编译一次）
-    agent_graph = build_agent_graph(
-        rag_pipeline=rag,
-        memory_manager=memory,
-        tool_registry=tool_registry,
-        llm=llm,
-        context_manager=context_manager,
-    )
-
-    # 6. 初始化意图路由
-    intent_router = IntentRouter(
-        qdrant_mapper=qdrant_mapper,
-        embedding_func=lambda q: embedding.aget_text_embedding(q),
-    )
-
-    # 存到 app.state 供路由使用
-    app.state.agent_graph = agent_graph
-    app.state.intent_router = intent_router
-    app.state.memory_manager = memory
-
+    # 启动时：初始化 RAG、记忆、意图路由等（不含 LLM）
+    # Agent 引擎懒加载，不在这里初始化
     yield
+    # 清理资源
 
-    # 清理
-    from app.services.llm_chat_service import LLMChatService
-    # await llm_service.close()  # 如果有需要
+# ── agent_service.py：懒加载 ──
+class AgentService:
+    async def chat(self, ..., provider_id: int, model_name: str):
+        if not self.is_ready:
+            # 首次对话：用前端传来的 provider_id + model_name 初始化
+            # 后端从 DB 查供应商配置，创建 LLM 实例，构建 Agent 图
+            await self._lazy_init(provider_id, model_name)
+        ...
+
+    def reset(self):
+        """用户切换模型时重置，下次对话自动用新模型重建"""
+        self._graph = None
+
+# ── chat.py：前端透传 ──
+@router.post("/conversations/{conversation_id}/chat")
+async def chat(data: ChatRequest, ...):
+    # 前端传 provider_id + model_name，透传给 agent_service
+    result = await agent_service.chat(
+        provider_id=data.provider_id,
+        model_name=data.model_name,
+    )
 ```
 
 ### 5.2 对话 API（意图路由 + Agent + 消息持久化）
