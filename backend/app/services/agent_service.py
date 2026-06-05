@@ -103,6 +103,17 @@ class AgentService:
         if not self.is_ready:
             raise RuntimeError("Agent 引擎未初始化")
 
+        # 意图路由（快速路径）
+        user_message = messages[-1].get("content", "") if messages else ""
+        intent_match = await self._try_intent_route(user_message)
+        if intent_match:
+            return {
+                "content": f"[意图匹配: {intent_match['intent_name']} → {intent_match['target_module']}]",
+                "tools_used": [],
+                "iterations": 0,
+                "intent_hit": intent_match,
+            }
+
         result = await self._graph.ainvoke({
             "conversation_id": conversation_id,
             "user_id": user_id,
@@ -182,6 +193,18 @@ class AgentService:
         except Exception as e:
             logger.error(f"Agent 流式对话失败: {e}", exc_info=True)
             yield {"type": "error", "message": str(e)}
+
+
+    async def _try_intent_route(self, user_message: str) -> Optional[Dict[str, Any]]:
+        """尝试意图路由（快速路径）"""
+        from app.services.intent_service import intent_service
+        if not intent_service.intent_router:
+            return None
+        try:
+            return await intent_service.intent_router.route(user_message)
+        except Exception as e:
+            logger.debug(f"意图路由失败（降级进 Agent）: {e}")
+            return None
 
 
 # ── 全局单例 ──────────────────────────────────────────────

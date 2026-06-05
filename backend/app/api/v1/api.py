@@ -28,6 +28,7 @@ from app.api.v1 import (
     expert_team,
     ollama,
     llm_provider,
+    intent,
 )
 
 api_router = APIRouter()
@@ -59,6 +60,7 @@ api_router.include_router(workflow.router, prefix="/workflows", tags=["workflow"
 api_router.include_router(expert_team.router, prefix="/expert_teams", tags=["expert_team"])
 api_router.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
 api_router.include_router(llm_provider.router, prefix="/llm_providers", tags=["llm_provider"])
+api_router.include_router(intent.router, prefix="/intents", tags=["intent"])
 
 # 系统
 api_router.include_router(notification.router, prefix="/notifications", tags=["notification"])

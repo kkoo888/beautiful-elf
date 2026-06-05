@@ -56,6 +56,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"记忆管理器初始化失败（记忆功能不可用）: {e}")
 
+    # 初始化意图路由（可选，失败不影响基础功能）
+    try:
+        await _init_intent()
+    except Exception as e:
+        logger.warning(f"意图路由初始化失败（意图匹配不可用）: {e}")
+
     yield
 
     # 清理资源
@@ -158,6 +164,42 @@ async def _init_memory():
 
     except Exception as e:
         logger.warning(f"记忆管理器初始化失败: {e}")
+
+
+async def _init_intent():
+    """初始化意图路由（向量相似度匹配）"""
+    from app.core.config import get_settings
+    from app.mappers.qdrant_mapper import QdrantMapper
+    from app.services.intent_service import intent_service
+
+    settings = get_settings()
+
+    try:
+        from app.agent.intent_router import IntentRouter
+
+        try:
+            from llama_index.embeddings.ollama import OllamaEmbedding
+            embedding_model = OllamaEmbedding(
+                model_name="dengcao/Qwen3-Embedding-0.6B:Q8_0",
+                base_url=settings.OLLAMA_HOST,
+            )
+            async def embedding_func(text: str):
+                return await embedding_model.aget_text_embedding(text)
+        except ImportError:
+            logger.warning("缺少 llama-index-embeddings-ollama，意图路由跳过初始化")
+            return
+
+        qdrant_mapper = QdrantMapper()
+        router = IntentRouter(
+            qdrant_mapper=qdrant_mapper,
+            embedding_func=embedding_func,
+        )
+
+        intent_service.set_intent_router(router)
+        logger.info("意图路由就绪")
+
+    except Exception as e:
+        logger.warning(f"意图路由初始化失败: {e}")
 
 
 app = FastAPI(
