@@ -11,17 +11,17 @@ class NotificationService:
     def __init__(self):
         self.repo = NotificationRepository()
 
-    async def create(self, db: AsyncSession, data: NotificationCreate) -> NotificationOut:
+    async def create_notification(self, db: AsyncSession, data: NotificationCreate) -> NotificationOut:
         notif = await self.repo.create(db, data.model_dump())
         return self._to_out(notif)
 
-    async def get_by_id(self, db: AsyncSession, notif_id: int) -> NotificationOut:
+    async def get_notification_by_id(self, db: AsyncSession, notif_id: int) -> NotificationOut:
         notif = await self.repo.find_by_id(db, notif_id)
         if not notif:
             raise RecordNotFoundError("通知不存在")
         return self._to_out(notif)
 
-    async def list(
+    async def list_notifications(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         notif_type: Optional[str] = None, read_status: Optional[int] = None,
     ) -> Tuple[List[NotificationOut], int]:
@@ -32,13 +32,13 @@ class NotificationService:
         total = await self.repo.count(db, read=read_status)
         return [self._to_out(n) for n in items], total
 
-    async def delete(self, db: AsyncSession, notif_id: int) -> bool:
+    async def delete_notification(self, db: AsyncSession, notif_id: int) -> bool:
         notif = await self.repo.find_by_id(db, notif_id)
         if not notif:
             raise RecordNotFoundError("通知不存在")
         return await self.repo.soft_delete(db, notif_id)
 
-    async def mark_read(self, db: AsyncSession, notif_id: int) -> NotificationOut:
+    async def mark_notification_read(self, db: AsyncSession, notif_id: int) -> NotificationOut:
         notif = await self.repo.find_by_id(db, notif_id)
         if not notif:
             raise RecordNotFoundError("通知不存在")
@@ -46,7 +46,7 @@ class NotificationService:
         updated = await self.repo.find_by_id(db, notif_id)
         return self._to_out(updated)
 
-    async def mark_all_read(self, db: AsyncSession) -> int:
+    async def mark_all_notifications_read(self, db: AsyncSession) -> int:
         return await self.repo.mark_all_read(db)
 
     @staticmethod

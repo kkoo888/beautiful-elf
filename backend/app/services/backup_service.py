@@ -16,17 +16,17 @@ class BackupService:
         """ORM → Pydantic 模型"""
         return BackupOut.model_validate(item)
 
-    async def create(self, db: AsyncSession, data: BackupCreate) -> BackupOut:
+    async def create_backup(self, db: AsyncSession, data: BackupCreate) -> BackupOut:
         item = await self.repo.create(db, data.model_dump())
         return self._to_out(item)
 
-    async def get_by_id(self, db: AsyncSession, id: int) -> BackupOut:
+    async def get_backup_by_id(self, db: AsyncSession, id: int) -> BackupOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("备份记录不存在")
         return self._to_out(item)
 
-    async def list(
+    async def list_backups(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         backup_type: Optional[int] = None, status: Optional[int] = None,
     ) -> Tuple[List[BackupOut], int]:
@@ -38,7 +38,7 @@ class BackupService:
         total = await self.repo.count(db, backup_type=backup_type, status=status)
         return [self._to_out(i) for i in items], total
 
-    async def update_status(self, db: AsyncSession, id: int, data: BackupStatusUpdate) -> BackupOut:
+    async def update_backup_status(self, db: AsyncSession, id: int, data: BackupStatusUpdate) -> BackupOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("备份记录不存在")

@@ -17,7 +17,7 @@ async def create_feedback(
     data: AIFeedbackCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[AIFeedbackOut]:
-    item = await _service.create(db, data)
+    item = await _service.create_feedback(db, data)
     return ApiResult(data=item)
 
 
@@ -25,7 +25,7 @@ async def create_feedback(
 async def get_feedback_stats(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult:
-    return ApiResult(data=await _service.get_stats(db))
+    return ApiResult(data=await _service.get_feedback_stats(db))
 
 
 @router.get("/{feedback_id}", response_model=ApiResult[AIFeedbackOut])
@@ -33,7 +33,7 @@ async def get_feedback(
     feedback_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[AIFeedbackOut]:
-    item = await _service.get_by_id(db, feedback_id)
+    item = await _service.get_feedback_by_id(db, feedback_id)
     return ApiResult(data=item)
 
 
@@ -44,5 +44,5 @@ async def list_feedbacks(
     feedback_type: Optional[int] = Query(default=None, alias="feedbackType"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[AIFeedbackOut]:
-    items, total = await _service.list(db, page, page_size, feedback_type)
+    items, total = await _service.list_feedbacks(db, page, page_size, feedback_type)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)

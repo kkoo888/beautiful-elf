@@ -18,7 +18,7 @@ async def list_configs(
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[SettingOut]:
     """配置列表"""
-    items, total = await _service.list(db, page=page, page_size=page_size)
+    items, total = await _service.list_settings(db, page=page, page_size=page_size)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 
@@ -28,7 +28,7 @@ async def get_config(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[SettingOut]:
     """获取单个配置"""
-    item = await _service.get_by_key(db, key)
+    item = await _service.get_setting_by_key(db, key)
     return ApiResult(data=item)
 
 
@@ -38,7 +38,7 @@ async def create_config(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[SettingOut]:
     """创建配置"""
-    item = await _service.create(db, data)
+    item = await _service.create_setting(db, data)
     return ApiResult(data=item)
 
 
@@ -49,7 +49,7 @@ async def update_config(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[SettingOut]:
     """更新配置"""
-    item = await _service.update(db, key, data)
+    item = await _service.update_setting(db, key, data)
     return ApiResult(data=item)
 
 
@@ -59,5 +59,5 @@ async def delete_config(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult:
     """删除配置"""
-    await _service.delete(db, key)
+    await _service.delete_setting(db, key)
     return ApiResult(message="删除成功")

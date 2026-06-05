@@ -11,31 +11,31 @@ class LLMProviderService:
     def __init__(self):
         self.repo = LLMProviderRepository()
 
-    async def list(self, db: AsyncSession, page: int = 1, page_size: int = 20) -> Tuple[List[ProviderOut], int]:
+    async def list_providers(self, db: AsyncSession, page: int = 1, page_size: int = 20) -> Tuple[List[ProviderOut], int]:
         """供应商列表（分页）"""
         offset = (page - 1) * page_size
         items = await self.repo.find_all(db, offset=offset, limit=page_size)
         total = await self.repo.count(db)
         return [self._to_out(p) for p in items], total
 
-    async def list_enabled(self, db: AsyncSession) -> List[ProviderOut]:
+    async def list_enabled_providers(self, db: AsyncSession) -> List[ProviderOut]:
         """获取所有启用的供应商（用于前端模型选择）"""
         items = await self.repo.find_enabled(db)
         return [self._to_out(p) for p in items]
 
-    async def get(self, db: AsyncSession, provider_id: int) -> ProviderOut:
+    async def get_provider(self, db: AsyncSession, provider_id: int) -> ProviderOut:
         """获取单个供应商"""
         provider = await self.repo.find_by_id(db, provider_id)
         if not provider:
             raise RecordNotFoundError(f"供应商 {provider_id} 不存在")
         return self._to_out(provider)
 
-    async def get_default(self, db: AsyncSession) -> Optional[ProviderOut]:
+    async def get_default_provider(self, db: AsyncSession) -> Optional[ProviderOut]:
         """获取默认供应商（用于前端未指定时兜底）"""
         provider = await self.repo.find_default(db)
         return self._to_out(provider) if provider else None
 
-    async def create(self, db: AsyncSession, data: ProviderCreate) -> ProviderOut:
+    async def create_provider(self, db: AsyncSession, data: ProviderCreate) -> ProviderOut:
         """创建供应商"""
         # 如果设为默认，先清除其他默认
         if data.is_default == 1:
@@ -44,7 +44,7 @@ class LLMProviderService:
         provider = await self.repo.create(db, data.model_dump())
         return self._to_out(provider)
 
-    async def update(self, db: AsyncSession, provider_id: int, data: ProviderUpdate) -> ProviderOut:
+    async def update_provider(self, db: AsyncSession, provider_id: int, data: ProviderUpdate) -> ProviderOut:
         """更新供应商"""
         existing = await self.repo.find_by_id(db, provider_id)
         if not existing:
@@ -59,7 +59,7 @@ class LLMProviderService:
         provider = await self.repo.update(db, provider_id, update_data)
         return self._to_out(provider)
 
-    async def toggle_enabled(self, db: AsyncSession, provider_id: int) -> ProviderOut:
+    async def toggle_provider_enabled(self, db: AsyncSession, provider_id: int) -> ProviderOut:
         """切换启用/禁用状态"""
         existing = await self.repo.find_by_id(db, provider_id)
         if not existing:
@@ -69,7 +69,7 @@ class LLMProviderService:
         provider = await self.repo.update(db, provider_id, {"is_enabled": new_enabled})
         return self._to_out(provider)
 
-    async def delete(self, db: AsyncSession, provider_id: int) -> bool:
+    async def delete_provider(self, db: AsyncSession, provider_id: int) -> bool:
         """删除供应商"""
         result = await self.repo.soft_delete(db, provider_id)
         if not result:

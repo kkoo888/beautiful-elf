@@ -26,19 +26,19 @@ async def list_messages(
 @router.get("/{message_id}", response_model=ApiResult[MessageOut])
 async def get_message(message_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[MessageOut]:
     """获取单条消息"""
-    item = await _service.get_by_id(db, message_id)
+    item = await _service.get_message_by_id(db, message_id)
     return ApiResult(data=item)
 
 
 @router.post("", response_model=ApiResult[MessageOut])
 async def create_message(data: MessageCreate, db: AsyncSession = Depends(get_db)) -> ApiResult[MessageOut]:
     """创建消息 — conversation_id 在 body 中必填"""
-    item = await _service.create(db, data)
+    item = await _service.create_message(db, data)
     return ApiResult(data=item)
 
 
 @router.delete("/{message_id}", response_model=ApiResult)
 async def delete_message(message_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
     """删除消息"""
-    await _service.delete(db, message_id)
+    await _service.delete_message(db, message_id)
     return ApiResult(message="删除成功")

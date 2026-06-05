@@ -87,7 +87,7 @@ async def _init_agent():
 
     async with AsyncSessionLocal() as db:
         provider_service = LLMProviderService()
-        default_provider = await provider_service.get_default(db)
+        default_provider = await provider_service.get_default_provider(db)
 
         if not default_provider:
             logger.warning("无默认 LLM 供应商，Agent 引擎跳过初始化")

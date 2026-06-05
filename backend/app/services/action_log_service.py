@@ -16,11 +16,11 @@ class ActionLogService:
         """ORM → Pydantic 模型"""
         return ActionLogOut.model_validate(item)
 
-    async def create(self, db: AsyncSession, data: ActionLogCreate) -> ActionLogOut:
+    async def create_action_log(self, db: AsyncSession, data: ActionLogCreate) -> ActionLogOut:
         item = await self.repo.create(db, data.model_dump())
         return self._to_out(item)
 
-    async def list(
+    async def list_action_logs(
         self,
         db: AsyncSession,
         page: int = 1,
@@ -46,6 +46,6 @@ class ActionLogService:
         )
         return [self._to_out(i) for i in items], total
 
-    async def cleanup_old(self, db: AsyncSession, days: int = 7) -> int:
+    async def cleanup_old_action_logs(self, db: AsyncSession, days: int = 7) -> int:
         """清理 N 天前的日志"""
         return await self.repo.cleanup_old(db, days)

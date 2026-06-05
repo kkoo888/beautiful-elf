@@ -17,7 +17,7 @@ async def record_use(
     command_id: int = Query(..., description="命令 ID", alias="commandId"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[CommandUsageOut]:
-    item = await _service.record_use(db, command_id)
+    item = await _service.record_command_use(db, command_id)
     return ApiResult(data=item)
 
 
@@ -26,7 +26,7 @@ async def top_commands(
     limit: int = Query(default=10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[List[CommandUsageOut]]:
-    items = await _service.top_commands(db, limit)
+    items = await _service.get_top_commands(db, limit)
     return ApiResult(data=items)
 
 
@@ -36,5 +36,5 @@ async def list_command_usage(
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[CommandUsageOut]:
-    items, total = await _service.list(db, page, page_size)
+    items, total = await _service.list_command_usages(db, page, page_size)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)

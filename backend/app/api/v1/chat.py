@@ -30,7 +30,7 @@ async def _resolve_provider_id(db: AsyncSession, provider_id: int | None) -> int
     """解析供应商 ID：前端未传时自动使用默认供应商"""
     if provider_id is not None:
         return provider_id
-    default_provider = await _provider_service.get_default(db)
+    default_provider = await _provider_service.get_default_provider(db)
     return default_provider.id if default_provider else None
 
 
@@ -79,7 +79,7 @@ async def _agent_chat(conversation_id: int, messages: list, db: AsyncSession) ->
 
         # 保存消息
         try:
-            await _msg_service.create(db, MessageCreate(
+            await _msg_service.create_message(db, MessageCreate(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=result["content"],
@@ -135,7 +135,7 @@ async def _agent_stream(conversation_id: int, messages: list):
         if full_content:
             try:
                 async with AsyncSessionLocal() as save_db:
-                    await _msg_service.create(save_db, MessageCreate(
+                    await _msg_service.create_message(save_db, MessageCreate(
                         conversation_id=conversation_id,
                         role="assistant",
                         content=full_content,
@@ -165,7 +165,7 @@ async def _llm_chat(
             max_tokens=data.max_tokens,
         )
         try:
-            await _msg_service.create(db, MessageCreate(
+            await _msg_service.create_message(db, MessageCreate(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=result.content,
@@ -199,7 +199,7 @@ async def _llm_stream(
             yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
 
             try:
-                await _msg_service.create(stream_db, MessageCreate(
+                await _msg_service.create_message(stream_db, MessageCreate(
                     conversation_id=conversation_id,
                     role="assistant",
                     content=full_content,

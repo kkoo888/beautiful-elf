@@ -18,7 +18,7 @@ async def create_action_log(
     data: ActionLogCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[ActionLogOut]:
-    item = await _service.create(db, data)
+    item = await _service.create_action_log(db, data)
     return ApiResult(data=item)
 
 
@@ -32,7 +32,7 @@ async def list_action_logs(
     end_time: Optional[datetime] = Query(default=None, alias="endTime"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[ActionLogOut]:
-    items, total = await _service.list(
+    items, total = await _service.list_action_logs(
         db, page, page_size,
         module=module, action=action,
         start_time=start_time, end_time=end_time,
@@ -45,5 +45,5 @@ async def cleanup_old_logs(
     days: int = Query(default=7, ge=1),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult:
-    count = await _service.cleanup_old(db, days)
+    count = await _service.cleanup_old_action_logs(db, days)
     return ApiResult(data={"deleted": count})

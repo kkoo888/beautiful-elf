@@ -19,7 +19,7 @@ async def list_commands(
     module: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[CommandOut]:
-    items, total = await _service.list(db, page, page_size, module)
+    items, total = await _service.list_commands(db, page, page_size, module)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 
@@ -28,7 +28,7 @@ async def get_command(
     command_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[CommandOut]:
-    item = await _service.get_by_id(db, command_id)
+    item = await _service.get_command_by_id(db, command_id)
     return ApiResult(data=item)
 
 
@@ -37,7 +37,7 @@ async def create_command(
     data: CommandCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[CommandOut]:
-    item = await _service.create(db, data)
+    item = await _service.create_command(db, data)
     return ApiResult(data=item)
 
 
@@ -47,7 +47,7 @@ async def update_command(
     data: CommandUpdate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[CommandOut]:
-    item = await _service.update(db, command_id, data)
+    item = await _service.update_command(db, command_id, data)
     return ApiResult(data=item)
 
 
@@ -56,7 +56,7 @@ async def delete_command(
     command_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult:
-    await _service.delete(db, command_id)
+    await _service.delete_command(db, command_id)
     return ApiResult(message="删除成功")
 
 
@@ -65,4 +65,4 @@ async def record_use(
     command_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult:
-    return ApiResult(data=await _service.record_usage(db, command_id))
+    return ApiResult(data=await _service.record_command_usage(db, command_id))

@@ -16,17 +16,17 @@ class ClipboardService:
         """ORM → Pydantic 模型"""
         return ClipboardItemOut.model_validate(item)
 
-    async def create(self, db: AsyncSession, data: ClipboardItemCreate) -> ClipboardItemOut:
+    async def create_clipboard_item(self, db: AsyncSession, data: ClipboardItemCreate) -> ClipboardItemOut:
         item = await self.repo.create(db, data.model_dump())
         return self._to_out(item)
 
-    async def get_by_id(self, db: AsyncSession, item_id: int) -> ClipboardItemOut:
+    async def get_clipboard_item_by_id(self, db: AsyncSession, item_id: int) -> ClipboardItemOut:
         item = await self.repo.find_by_id(db, item_id)
         if not item:
             raise RecordNotFoundError("剪贴板项不存在")
         return self._to_out(item)
 
-    async def list(
+    async def list_clipboard_items(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         content_type: Optional[int] = None, pinned: Optional[int] = None,
     ) -> Tuple[List[ClipboardItemOut], int]:
@@ -35,7 +35,7 @@ class ClipboardService:
         total = await self.repo.count(db, content_type=content_type)
         return [self._to_out(i) for i in items], total
 
-    async def update(self, db: AsyncSession, item_id: int, data: ClipboardItemUpdate) -> ClipboardItemOut:
+    async def update_clipboard_item(self, db: AsyncSession, item_id: int, data: ClipboardItemUpdate) -> ClipboardItemOut:
         existing = await self.repo.find_by_id(db, item_id)
         if not existing:
             raise RecordNotFoundError("剪贴板项不存在")
@@ -45,13 +45,13 @@ class ClipboardService:
         item = await self.repo.update(db, item_id, update_data)
         return self._to_out(item)
 
-    async def delete(self, db: AsyncSession, item_id: int) -> bool:
+    async def delete_clipboard_item(self, db: AsyncSession, item_id: int) -> bool:
         existing = await self.repo.find_by_id(db, item_id)
         if not existing:
             raise RecordNotFoundError("剪贴板项不存在")
         return await self.repo.soft_delete(db, item_id)
 
-    async def toggle_pin(self, db: AsyncSession, item_id: int) -> ClipboardItemOut:
+    async def toggle_clipboard_pin(self, db: AsyncSession, item_id: int) -> ClipboardItemOut:
         item = await self.repo.toggle_pin(db, item_id)
         if not item:
             raise RecordNotFoundError("剪贴板项不存在")

@@ -11,7 +11,7 @@ class CommandUsageService:
     def __init__(self):
         self.repo = CommandUsageRepository()
 
-    async def record_use(self, db: AsyncSession, command_id: int) -> CommandUsageOut:
+    async def record_command_use(self, db: AsyncSession, command_id: int) -> CommandUsageOut:
         """记录一次命令使用，自动 +1"""
         item = await self.repo.find_by_command_id(db, command_id)
         if item:
@@ -28,7 +28,7 @@ class CommandUsageService:
             })
             return self._to_out(created)
 
-    async def list(
+    async def list_command_usages(
         self, db: AsyncSession, page: int = 1, page_size: int = 20
     ) -> Tuple[List[CommandUsageOut], int]:
         offset = (page - 1) * page_size
@@ -36,7 +36,7 @@ class CommandUsageService:
         total = await self.repo.count(db)
         return [self._to_out(i) for i in items], total
 
-    async def top_commands(self, db: AsyncSession, limit: int = 10) -> List[CommandUsageOut]:
+    async def get_top_commands(self, db: AsyncSession, limit: int = 10) -> List[CommandUsageOut]:
         items = await self.repo.top_commands(db, limit)
         return [self._to_out(i) for i in items]
 

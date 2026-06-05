@@ -18,7 +18,7 @@ class MessageService:
         """ORM → Pydantic 模型"""
         return MessageOut.model_validate(msg)
 
-    async def create(self, db: AsyncSession, data: MessageCreate) -> MessageOut:
+    async def create_message(self, db: AsyncSession, data: MessageCreate) -> MessageOut:
         # 校验会话存在
         conv = await self.conv_repo.find_by_id(db, data.conversation_id)
         if not conv:
@@ -28,7 +28,7 @@ class MessageService:
         await self.conv_repo.increment_message_count(db, data.conversation_id)
         return self._to_out(msg)
 
-    async def get_by_id(self, db: AsyncSession, msg_id: int) -> MessageOut:
+    async def get_message_by_id(self, db: AsyncSession, msg_id: int) -> MessageOut:
         msg = await self.repo.find_by_id(db, msg_id)
         if not msg:
             raise RecordNotFoundError("消息不存在")
@@ -42,7 +42,7 @@ class MessageService:
         total = await self.repo.count_by_conversation(db, conversation_id)
         return [self._to_out(m) for m in items], total
 
-    async def delete(self, db: AsyncSession, msg_id: int) -> bool:
+    async def delete_message(self, db: AsyncSession, msg_id: int) -> bool:
         msg = await self.repo.find_by_id(db, msg_id)
         if not msg:
             raise RecordNotFoundError("消息不存在")

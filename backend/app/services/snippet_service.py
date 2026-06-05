@@ -19,19 +19,19 @@ class SnippetService:
             out = out.model_copy(update={"tags": tags})
         return out
 
-    async def create(self, db: AsyncSession, data: SnippetCreate) -> SnippetOut:
+    async def create_snippet(self, db: AsyncSession, data: SnippetCreate) -> SnippetOut:
         snippet_data = data.model_dump(exclude={"tags"})
         snippet = await self.repo.create(db, snippet_data, tags=data.tags)
         return self._to_out(snippet, tags=data.tags or [])
 
-    async def get_by_id(self, db: AsyncSession, snippet_id: int) -> SnippetOut:
+    async def get_snippet_by_id(self, db: AsyncSession, snippet_id: int) -> SnippetOut:
         snippet = await self.repo.find_by_id(db, snippet_id)
         if not snippet:
             raise RecordNotFoundError("代码片段不存在")
         tags = await self.repo.get_tags(db, snippet_id)
         return self._to_out(snippet, tags=tags)
 
-    async def list(
+    async def list_snippets(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         language: Optional[str] = None, tag: Optional[str] = None,
     ) -> Tuple[List[SnippetOut], int]:
@@ -44,7 +44,7 @@ class SnippetService:
             result.append(self._to_out(s, tags=tags))
         return result, total
 
-    async def update(self, db: AsyncSession, snippet_id: int, data: SnippetUpdate) -> SnippetOut:
+    async def update_snippet(self, db: AsyncSession, snippet_id: int, data: SnippetUpdate) -> SnippetOut:
         existing = await self.repo.find_by_id(db, snippet_id)
         if not existing:
             raise RecordNotFoundError("代码片段不存在")
@@ -54,13 +54,13 @@ class SnippetService:
         result_tags = await self.repo.get_tags(db, snippet_id)
         return self._to_out(snippet, tags=result_tags)
 
-    async def delete(self, db: AsyncSession, snippet_id: int) -> bool:
+    async def delete_snippet(self, db: AsyncSession, snippet_id: int) -> bool:
         existing = await self.repo.find_by_id(db, snippet_id)
         if not existing:
             raise RecordNotFoundError("代码片段不存在")
         return await self.repo.soft_delete(db, snippet_id)
 
-    async def increment_use(self, db: AsyncSession, snippet_id: int) -> SnippetOut:
+    async def increment_snippet_use(self, db: AsyncSession, snippet_id: int) -> SnippetOut:
         snippet = await self.repo.find_by_id(db, snippet_id)
         if not snippet:
             raise RecordNotFoundError("代码片段不存在")

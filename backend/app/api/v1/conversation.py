@@ -18,7 +18,7 @@ async def list_conversations(
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[ConversationOut]:
-    items, total = await _service.list(db, page, page_size)
+    items, total = await _service.list_conversations(db, page, page_size)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 
@@ -27,7 +27,7 @@ async def get_conversation(
     conversation_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[ConversationOut]:
-    item = await _service.get_by_id(db, conversation_id)
+    item = await _service.get_conversation_by_id(db, conversation_id)
     return ApiResult(data=item)
 
 
@@ -36,7 +36,7 @@ async def create_conversation(
     data: ConversationCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[ConversationOut]:
-    item = await _service.create(db, data)
+    item = await _service.create_conversation(db, data)
     return ApiResult(data=item)
 
 
@@ -46,7 +46,7 @@ async def update_conversation(
     data: ConversationUpdate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[ConversationOut]:
-    item = await _service.update(db, conversation_id, data)
+    item = await _service.update_conversation(db, conversation_id, data)
     return ApiResult(data=item)
 
 
@@ -55,5 +55,5 @@ async def delete_conversation(
     conversation_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult:
-    await _service.delete(db, conversation_id)
+    await _service.delete_conversation(db, conversation_id)
     return ApiResult(message="删除成功")

@@ -21,29 +21,29 @@ async def list_schedules(
     end_time: Optional[datetime] = Query(default=None, alias="endTime"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[ScheduleOut]:
-    items, total = await _service.list(db, page, page_size, start_time, end_time)
+    items, total = await _service.list_schedules(db, page, page_size, start_time, end_time)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{schedule_id}", response_model=ApiResult[ScheduleOut])
 async def get_schedule(schedule_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[ScheduleOut]:
-    item = await _service.get_by_id(db, schedule_id)
+    item = await _service.get_schedule_by_id(db, schedule_id)
     return ApiResult(data=item)
 
 
 @router.post("", response_model=ApiResult[ScheduleOut])
 async def create_schedule(data: ScheduleCreate, db: AsyncSession = Depends(get_db)) -> ApiResult[ScheduleOut]:
-    item = await _service.create(db, data)
+    item = await _service.create_schedule(db, data)
     return ApiResult(data=item)
 
 
 @router.put("/{schedule_id}", response_model=ApiResult[ScheduleOut])
 async def update_schedule(schedule_id: int, data: ScheduleUpdate, db: AsyncSession = Depends(get_db)) -> ApiResult[ScheduleOut]:
-    item = await _service.update(db, schedule_id, data)
+    item = await _service.update_schedule(db, schedule_id, data)
     return ApiResult(data=item)
 
 
 @router.delete("/{schedule_id}", response_model=ApiResult)
 async def delete_schedule(schedule_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
-    await _service.delete(db, schedule_id)
+    await _service.delete_schedule(db, schedule_id)
     return ApiResult(message="删除成功")

@@ -17,17 +17,17 @@ class ScheduleService:
         """ORM → Pydantic 模型"""
         return ScheduleOut.model_validate(s)
 
-    async def create(self, db: AsyncSession, data: ScheduleCreate) -> ScheduleOut:
+    async def create_schedule(self, db: AsyncSession, data: ScheduleCreate) -> ScheduleOut:
         schedule = await self.repo.create(db, data.model_dump())
         return self._to_out(schedule)
 
-    async def get_by_id(self, db: AsyncSession, schedule_id: int) -> ScheduleOut:
+    async def get_schedule_by_id(self, db: AsyncSession, schedule_id: int) -> ScheduleOut:
         schedule = await self.repo.find_by_id(db, schedule_id)
         if not schedule:
             raise RecordNotFoundError("日程不存在")
         return self._to_out(schedule)
 
-    async def list(
+    async def list_schedules(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         start_time: Optional[datetime] = None, end_time: Optional[datetime] = None,
     ) -> Tuple[List[ScheduleOut], int]:
@@ -36,7 +36,7 @@ class ScheduleService:
         total = await self.repo.count(db, start_time=start_time, end_time=end_time)
         return [self._to_out(s) for s in items], total
 
-    async def update(self, db: AsyncSession, schedule_id: int, data: ScheduleUpdate) -> ScheduleOut:
+    async def update_schedule(self, db: AsyncSession, schedule_id: int, data: ScheduleUpdate) -> ScheduleOut:
         existing = await self.repo.find_by_id(db, schedule_id)
         if not existing:
             raise RecordNotFoundError("日程不存在")
@@ -46,7 +46,7 @@ class ScheduleService:
         schedule = await self.repo.update(db, schedule_id, update_data)
         return self._to_out(schedule)
 
-    async def delete(self, db: AsyncSession, schedule_id: int) -> bool:
+    async def delete_schedule(self, db: AsyncSession, schedule_id: int) -> bool:
         existing = await self.repo.find_by_id(db, schedule_id)
         if not existing:
             raise RecordNotFoundError("日程不存在")

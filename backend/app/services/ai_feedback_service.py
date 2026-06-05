@@ -11,17 +11,17 @@ class AIFeedbackService:
     def __init__(self):
         self.repo = AIFeedbackRepository()
 
-    async def create(self, db: AsyncSession, data: AIFeedbackCreate) -> AIFeedbackOut:
+    async def create_feedback(self, db: AsyncSession, data: AIFeedbackCreate) -> AIFeedbackOut:
         item = await self.repo.create(db, data.model_dump())
         return self._to_out(item)
 
-    async def get_by_id(self, db: AsyncSession, id: int) -> AIFeedbackOut:
+    async def get_feedback_by_id(self, db: AsyncSession, id: int) -> AIFeedbackOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("反馈记录不存在")
         return self._to_out(item)
 
-    async def list(
+    async def list_feedbacks(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         feedback_type: Optional[int] = None,
     ) -> Tuple[List[AIFeedbackOut], int]:
@@ -32,7 +32,7 @@ class AIFeedbackService:
         total = await self.repo.count(db, feedback_type=feedback_type)
         return [self._to_out(i) for i in items], total
 
-    async def get_stats(self, db: AsyncSession) -> dict:
+    async def get_feedback_stats(self, db: AsyncSession) -> dict:
         """统计反馈数据"""
         return await self.repo.get_stats(db)
 

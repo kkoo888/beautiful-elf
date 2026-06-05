@@ -17,7 +17,7 @@ async def create_backup(
     data: BackupCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[BackupOut]:
-    item = await _service.create(db, data)
+    item = await _service.create_backup(db, data)
     return ApiResult(data=item)
 
 
@@ -26,7 +26,7 @@ async def get_backup(
     backup_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[BackupOut]:
-    item = await _service.get_by_id(db, backup_id)
+    item = await _service.get_backup_by_id(db, backup_id)
     return ApiResult(data=item)
 
 
@@ -38,7 +38,7 @@ async def list_backups(
     status: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[BackupOut]:
-    items, total = await _service.list(db, page, page_size, backup_type, status)
+    items, total = await _service.list_backups(db, page, page_size, backup_type, status)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 
@@ -48,5 +48,5 @@ async def update_backup_status(
     data: BackupStatusUpdate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[BackupOut]:
-    item = await _service.update_status(db, backup_id, data)
+    item = await _service.update_backup_status(db, backup_id, data)
     return ApiResult(data=item)

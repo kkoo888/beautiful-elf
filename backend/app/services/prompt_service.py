@@ -11,7 +11,7 @@ class PromptService:
     def __init__(self):
         self.repo = PromptRepository()
 
-    async def create(self, db: AsyncSession, data: PromptCreate) -> PromptOut:
+    async def create_prompt(self, db: AsyncSession, data: PromptCreate) -> PromptOut:
         max_ver = await self.repo.get_max_version(db, data.name)
         new_data = data.model_dump()
         new_data["version"] = max_ver + 1
@@ -19,13 +19,13 @@ class PromptService:
         item = await self.repo.create(db, new_data)
         return self._to_out(item)
 
-    async def get_by_id(self, db: AsyncSession, id: int) -> PromptOut:
+    async def get_prompt_by_id(self, db: AsyncSession, id: int) -> PromptOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("Prompt 不存在")
         return self._to_out(item)
 
-    async def list(
+    async def list_prompts(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         name: Optional[str] = None,
     ) -> Tuple[List[PromptOut], int]:
@@ -34,7 +34,7 @@ class PromptService:
         total = await self.repo.count(db, name=name)
         return [self._to_out(i) for i in items], total
 
-    async def update(self, db: AsyncSession, id: int, data: PromptUpdate) -> PromptOut:
+    async def update_prompt(self, db: AsyncSession, id: int, data: PromptUpdate) -> PromptOut:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("Prompt 不存在")
@@ -43,13 +43,13 @@ class PromptService:
         updated = await self.repo.find_by_id(db, id)
         return self._to_out(updated)
 
-    async def delete(self, db: AsyncSession, id: int) -> bool:
+    async def delete_prompt(self, db: AsyncSession, id: int) -> bool:
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("Prompt 不存在")
         return await self.repo.soft_delete(db, id)
 
-    async def activate(self, db: AsyncSession, id: int) -> PromptOut:
+    async def activate_prompt(self, db: AsyncSession, id: int) -> PromptOut:
         """激活某个版本，同时把同名其他版本 is_active 设为 0"""
         item = await self.repo.find_by_id(db, id)
         if not item:
@@ -61,14 +61,14 @@ class PromptService:
         updated = await self.repo.find_by_id(db, id)
         return self._to_out(updated)
 
-    async def get_active(self, db: AsyncSession, name: str) -> Optional[PromptOut]:
+    async def get_active_prompt(self, db: AsyncSession, name: str) -> Optional[PromptOut]:
         """获取某个 name 当前激活的版本"""
         item = await self.repo.find_active_by_name(db, name)
         if not item:
             return None
         return self._to_out(item)
 
-    async def get_versions(self, db: AsyncSession, name: str) -> List[PromptOut]:
+    async def get_prompt_versions(self, db: AsyncSession, name: str) -> List[PromptOut]:
         """获取某个 name 的所有版本列表"""
         items = await self.repo.find_versions_by_name(db, name)
         return [self._to_out(i) for i in items]

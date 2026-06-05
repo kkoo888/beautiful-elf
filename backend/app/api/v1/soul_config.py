@@ -18,35 +18,35 @@ async def list_soul_configs(
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[SoulConfigOut]:
-    items, total = await _service.list(db, page, page_size)
+    items, total = await _service.list_soul_configs(db, page, page_size)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/active", response_model=ApiResult[SoulConfigOut])
 async def get_active_config(db: AsyncSession = Depends(get_db)) -> ApiResult[SoulConfigOut]:
-    item = await _service.get_active(db)
+    item = await _service.get_active_soul_config(db)
     return ApiResult(data=item)
 
 
 @router.get("/{config_id}", response_model=ApiResult[SoulConfigOut])
 async def get_soul_config(config_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SoulConfigOut]:
-    item = await _service.get_by_id(db, config_id)
+    item = await _service.get_soul_config_by_id(db, config_id)
     return ApiResult(data=item)
 
 
 @router.post("", response_model=ApiResult[SoulConfigOut])
 async def create_soul_config(data: SoulConfigCreate, db: AsyncSession = Depends(get_db)) -> ApiResult[SoulConfigOut]:
-    item = await _service.create(db, data)
+    item = await _service.create_soul_config(db, data)
     return ApiResult(data=item)
 
 
 @router.put("/{config_id}", response_model=ApiResult[SoulConfigOut])
 async def update_soul_config(config_id: int, data: SoulConfigUpdate, db: AsyncSession = Depends(get_db)) -> ApiResult[SoulConfigOut]:
-    item = await _service.update(db, config_id, data)
+    item = await _service.update_soul_config(db, config_id, data)
     return ApiResult(data=item)
 
 
 @router.delete("/{config_id}", response_model=ApiResult)
 async def delete_soul_config(config_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
-    await _service.delete(db, config_id)
+    await _service.delete_soul_config(db, config_id)
     return ApiResult(message="删除成功")

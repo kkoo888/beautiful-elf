@@ -22,7 +22,7 @@ class ConfigService:
         settings = await self.repo.find_all_active(db)
         self._cache = {s.settings_key: s.key_value for s in settings}
 
-    async def get_by_key(self, db: AsyncSession, key: str) -> SettingOut:
+    async def get_setting_by_key(self, db: AsyncSession, key: str) -> SettingOut:
         setting = await self.repo.find_by_key(db, key)
         if not setting:
             raise RecordNotFoundError(f"配置 {key} 不存在")
@@ -32,13 +32,13 @@ class ConfigService:
         """从内存缓存获取值（零延迟）"""
         return self._cache.get(key)
 
-    async def list(self, db: AsyncSession, page: int = 1, page_size: int = 100) -> Tuple[List[SettingOut], int]:
+    async def list_settings(self, db: AsyncSession, page: int = 1, page_size: int = 100) -> Tuple[List[SettingOut], int]:
         offset = (page - 1) * page_size
         items = await self.repo.find_all(db, offset=offset, limit=page_size)
         total = await self.repo.count(db)
         return [self._to_out(s) for s in items], total
 
-    async def create(self, db: AsyncSession, data: SettingCreate) -> SettingOut:
+    async def create_setting(self, db: AsyncSession, data: SettingCreate) -> SettingOut:
         existing = await self.repo.find_by_key(db, data.settings_key)
         if existing:
             raise DuplicateEntryError(f"配置 {data.settings_key} 已存在")
@@ -46,7 +46,7 @@ class ConfigService:
         self._cache[setting.settings_key] = setting.key_value
         return self._to_out(setting)
 
-    async def update(self, db: AsyncSession, key: str, data: SettingUpdate) -> SettingOut:
+    async def update_setting(self, db: AsyncSession, key: str, data: SettingUpdate) -> SettingOut:
         update_data = data.model_dump(exclude_unset=True)
         setting = await self.repo.update_by_key(db, key, update_data)
         if not setting:
@@ -54,7 +54,7 @@ class ConfigService:
         self._cache[setting.settings_key] = setting.key_value
         return self._to_out(setting)
 
-    async def delete(self, db: AsyncSession, key: str) -> bool:
+    async def delete_setting(self, db: AsyncSession, key: str) -> bool:
         result = await self.repo.delete_by_key(db, key)
         if not result:
             raise RecordNotFoundError(f"配置 {key} 不存在")
