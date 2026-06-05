@@ -1,5 +1,4 @@
 """应用配置 - 通过环境变量读取数据库连接信息"""
-from typing import Dict
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -33,7 +32,7 @@ class Settings(BaseSettings):
     OLLAMA_HOST: str = "http://localhost:11434"
 
     # CORS
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "file://",
     ]

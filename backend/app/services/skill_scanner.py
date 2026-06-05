@@ -36,7 +36,7 @@ class ScanResult:
 
 def _find_matches(content: str, pattern: re.Pattern,
                   file_filter: Optional[re.Pattern] = None,
-                  file_path: str = "") -> List[dict]:
+                  file_path: str = "") -> list[dict]:
     """按行查找正则匹配"""
     if file_filter and not file_filter.search(file_path):
         return []
@@ -47,7 +47,7 @@ def _find_matches(content: str, pattern: re.Pattern,
     return results
 
 
-def _find_global(content: str, pattern: re.Pattern) -> List[dict]:
+def _find_global(content: str, pattern: re.Pattern) -> list[dict]:
     """全文匹配（不分行）"""
     m = pattern.search(content)
     if not m:
@@ -293,7 +293,7 @@ _RULES_LOW = [
 #  扫描引擎
 # ═══════════════════════════════════════════════════
 
-def _scan_rule(content: str, file_path: str, rule: dict) -> List[ScanIssue]:
+def _scan_rule(content: str, file_path: str, rule: dict) -> list[ScanIssue]:
     """对单个文件执行单条规则"""
     issues = []
     f_filter = rule.get("filter") or rule.get("file_filter")

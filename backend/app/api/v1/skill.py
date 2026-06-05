@@ -95,7 +95,7 @@ async def list_skills(
     enabled: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[SkillOut]:
-    items, total = await _service.list(db, page, page_size, enabled=enabled)
+    items, total = await _service.list_skills(db, page, page_size, enabled=enabled)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
 
 

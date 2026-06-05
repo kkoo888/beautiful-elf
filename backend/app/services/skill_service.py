@@ -46,7 +46,7 @@ class SkillService:
             raise RecordNotFoundError("技能不存在")
         return self._to_out(item)
 
-    async def list(
+    async def list_skills(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         enabled: Optional[int] = None,
     ) -> Tuple[List[dict], int]:
@@ -142,7 +142,7 @@ class SkillService:
         self, db: AsyncSession, zip_bytes: bytes,
         name: str, display_name: str, description: str,
         version: str, source: str,
-        trigger_words: List[str], dependencies: List[str],
+        trigger_words: list[str], dependencies: list[str],
     ) -> dict:
         """安装技能：解压 → 扫描 → 通过则存 DB，否则返回扫描报告"""
         # 检查名称是否已存在
@@ -200,7 +200,7 @@ class SkillService:
         self, db: AsyncSession, name: str,
         display_name: str, description: str,
         version: str, source: str,
-        trigger_words: List[str], dependencies: List[str],
+        trigger_words: list[str], dependencies: list[str],
         zip_bytes: bytes,
     ) -> dict:
         """用户确认忽略风险后强制安装"""
