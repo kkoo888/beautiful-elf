@@ -47,34 +47,28 @@ async def chat(
         return api_error("CONVERSATION_VALIDATION", "请先选择 AI 供应商", "请在设置中选择供应商和模型")
 
     messages = [{"role": m.role, "content": m.content} for m in data.messages]
+    model_name = data.model_name or ""
 
-    # Agent 模式
-    if agent_service.is_ready:
-        if data.stream:
-            return StreamingResponse(
-                _agent_stream(conversation_id, messages),
-                media_type="text/event-stream",
-            )
-        return await _agent_chat(conversation_id, messages, db)
-
-    # 降级：纯 LLM 模式
+    # Agent 模式（懒加载：首次对话时自动初始化）
     if data.stream:
         return StreamingResponse(
-            _llm_stream(conversation_id, provider_id, data, messages, db),
+            _agent_stream(conversation_id, messages, provider_id, model_name),
             media_type="text/event-stream",
         )
-    return await _llm_chat(conversation_id, provider_id, data, messages, db)
+    return await _agent_chat(conversation_id, messages, provider_id, model_name)
 
 
 # ── Agent 对话 ────────────────────────────────────────────
 
-async def _agent_chat(conversation_id: int, messages: list, db: AsyncSession) -> ApiResult:
+async def _agent_chat(conversation_id: int, messages: list, provider_id: int, model_name: str) -> ApiResult:
     """Agent 非流式对话"""
     try:
         result = await agent_service.chat(
             conversation_id=conversation_id,
             user_id=0,
             messages=messages,
+            provider_id=provider_id,
+            model_name=model_name,
         )
 
         # 保存消息
@@ -99,7 +93,7 @@ async def _agent_chat(conversation_id: int, messages: list, db: AsyncSession) ->
         return api_error("AI_INTERNAL_ERROR", str(e), "AI 对话失败，请稍后重试")
 
 
-async def _agent_stream(conversation_id: int, messages: list):
+async def _agent_stream(conversation_id: int, messages: list, provider_id: int, model_name: str):
     """Agent SSE 流式输出"""
     full_content = ""
     tools_used = []
@@ -109,6 +103,8 @@ async def _agent_stream(conversation_id: int, messages: list):
             conversation_id=conversation_id,
             user_id=0,
             messages=messages,
+            provider_id=provider_id,
+            model_name=model_name,
         ):
             event_type = event.get("type", "")
 

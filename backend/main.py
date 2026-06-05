@@ -38,11 +38,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Ollama 配置加载失败（首次启动可能无数据）: {e}")
 
-    # 初始化 Agent 引擎（可选，失败不影响基础功能）
-    try:
-        await _init_agent()
-    except Exception as e:
-        logger.warning(f"Agent 引擎初始化失败（降级为纯 LLM 模式）: {e}")
+    # Agent 引擎改为懒加载（用户首次对话时自动初始化），启动时不再预加载
 
     # 初始化 RAG 管道（可选，失败不影响基础功能）
     try:
@@ -77,29 +73,6 @@ async def lifespan(app: FastAPI):
     await close_db()
     await close_redis()
     logger.info("Beautiful-Elf 后端已停止")
-
-
-async def _init_agent():
-    """初始化 Agent 引擎（通过 agent_service 封装）"""
-    from app.core.database import AsyncSessionLocal
-    from app.services.llm_provider_service import LLMProviderService
-    from app.services.agent_service import agent_service
-
-    async with AsyncSessionLocal() as db:
-        provider_service = LLMProviderService()
-        default_provider = await provider_service.get_default_provider(db)
-
-        if not default_provider:
-            logger.warning("无默认 LLM 供应商，Agent 引擎跳过初始化")
-            return
-
-        success = await agent_service.initialize(
-            db, provider_id=default_provider.id
-        )
-        if success:
-            logger.info(f"Agent 引擎就绪 (provider={default_provider.name})")
-        else:
-            logger.warning("Agent 引擎初始化失败，降级为纯 LLM 模式")
 
 
 async def _init_rag():

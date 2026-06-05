@@ -88,20 +88,26 @@ class AgentService:
         conversation_id: int,
         user_id: int,
         messages: list,
+        provider_id: int = 0,
+        model_name: str = "",
     ) -> Dict[str, Any]:
         """
-        Agent 非流式对话。
+        Agent 非流式对话。首次调用时自动初始化。
 
         Args:
             conversation_id: 会话 ID
             user_id: 用户 ID
             messages: 消息列表 [{"role": "user", "content": "..."}]
+            provider_id: LLM 供应商 ID（首次初始化用）
+            model_name: 模型名称（首次初始化用）
 
         Returns:
             {"content": str, "tools_used": list, "iterations": int}
         """
         if not self.is_ready:
-            raise RuntimeError("Agent 引擎未初始化")
+            success = await self._lazy_init(provider_id, model_name)
+            if not success:
+                raise RuntimeError("Agent 引擎初始化失败")
 
         # 意图路由（快速路径）
         user_message = messages[-1].get("content", "") if messages else ""
@@ -148,9 +154,11 @@ class AgentService:
         conversation_id: int,
         user_id: int,
         messages: list,
+        provider_id: int = 0,
+        model_name: str = "",
     ) -> AsyncIterator[Dict[str, Any]]:
         """
-        Agent 流式对话，逐事件 yield。
+        Agent 流式对话，首次调用时自动初始化。
 
         Yields:
             {"type": "token", "content": "..."}
@@ -160,8 +168,10 @@ class AgentService:
             {"type": "error", "message": "..."}
         """
         if not self.is_ready:
-            yield {"type": "error", "message": "Agent 引擎未初始化"}
-            return
+            success = await self._lazy_init(provider_id, model_name)
+            if not success:
+                yield {"type": "error", "message": "Agent 引擎初始化失败"}
+                return
 
         tools_used = []
 
@@ -202,6 +212,19 @@ class AgentService:
             logger.error(f"Agent 流式对话失败: {e}", exc_info=True)
             yield {"type": "error", "message": str(e)}
 
+
+    async def _lazy_init(self, provider_id: int, model_name: str) -> bool:
+        """懒加载：首次对话时自动初始化 Agent 引擎"""
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            return await self.initialize(db, provider_id=provider_id, model_name=model_name)
+
+    def reset(self):
+        """重置 Agent 引擎（切换模型时调用）"""
+        self._graph = None
+        self._provider_id = None
+        self._model_name = ""
+        logger.info("Agent 引擎已重置，下次对话时重新初始化")
 
     async def _try_intent_route(self, user_message: str) -> Optional[Dict[str, Any]]:
         """尝试意图路由（语义缓存 + 快速路径）"""
