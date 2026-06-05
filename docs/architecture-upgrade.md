@@ -1,7 +1,13 @@
 # Beautiful-Elf 架构升级方案
 
 > 以 LlamaIndex + LangChain + LangGraph 生态为核心，构建完整的 Agent 系统。
-> 本文档是 `backend-architecture.md` 的升级执行方案，后者作为前期框架设计保留参考价值。
+> 本文档是 Agent 层的详细开发标准，代码实现以本文档为准。
+>
+> **文档关系**：
+> - `architecture-upgrade.md`（本文档）— Agent 层详细功能执行方案，**开发标准**
+> - `backend-architecture.md` — 项目初期后端分层架构设计，功能实现后需按实际回改
+> - `dev-doc-no-code.md` — 项目初期功能概览，功能实现后需按实际回改
+> - `database-architecture.md` — 数据库设计，功能实现后需按实际回改
 
 ---
 
@@ -55,6 +61,9 @@ python-docx>=1.1.0
 # 可观测 + 限流
 langfuse>=2.0.0
 slowapi>=0.1.9
+
+# 工具参数校验
+jsonschema>=4.23.0
 ```
 
 ---
@@ -243,7 +252,10 @@ class LLMConfig(BaseModel):
 
 
 class EmbeddingConfig(BaseModel):
-    """Embedding 配置"""
+    """Embedding 配置
+    dengcao/Qwen3-Embedding-0.6B:Q8_0 输出维度 1024（支持自定义，此处用默认最大值）
+    上下文长度 32k，支持 100+ 语言
+    """
     provider: LLMProvider = LLMProvider.OLLAMA
     model: str = "dengcao/Qwen3-Embedding-0.6B:Q8_0"
     base_url: str = "http://localhost:11434"
@@ -331,13 +343,13 @@ _default_embedding_config = EmbeddingConfig()
 def get_llm_config() -> LLMConfig:
     """获取当前 LLM 配置（优先读 MySQL settings，fallback 默认值）"""
     # TODO: 从 MySQL settings 表读取，支持运行时热更新
-    return _default_llm_config
+    return _default_llm_config.model_copy()
 
 
 def get_embedding_config() -> EmbeddingConfig:
     """获取当前 Embedding 配置"""
     # TODO: 从 MySQL settings 表读取
-    return _default_embedding_config
+    return _default_embedding_config.model_copy()
 
 
 def get_llm():
@@ -370,7 +382,9 @@ from app.mappers.qdrant_mapper import QdrantMapper
 logger = get_logger(__name__)
 
 INTENT_COLLECTION = "intent_vectors"
-INTENT_SCORE_THRESHOLD = 0.75  # 相似度阈值，高于此值认为命中意图
+INTENT_SCORE_THRESHOLD = 0.75  # 意图相似度阈值（余弦相似度），高于此值认为命中意图
+# 注意：语义缓存阈值见 _check_semantic_cache 中的 score_threshold=0.95
+# 两者含义不同：意图匹配 0.75 是"大致相关"，语义缓存 0.95 是"几乎相同的问题"
 
 
 class IntentMatch(BaseModel):
@@ -457,7 +471,7 @@ class IntentRouter:
                 collection="semantic_cache",
                 query_vector=vector,
                 limit=1,
-                score_threshold=0.95,  # 非常高的阈值，几乎相同的问题才命中
+                score_threshold=0.95,  # 余弦相似度 >= 0.95 才命中（等价于距离 < 0.05）
             )
 
             if results and results[0].score >= 0.95:
@@ -838,8 +852,8 @@ def _make_tool_executor(tool_registry):
             for attempt in range(2):
                 try:
                     result = await tool_registry.execute(tool_name, tool_args)
-                    # 检查是否执行失败（execute 返回 {"error": ...} 表示失败）
-                    if isinstance(result, dict) and "error" in result:
+                    # 检查是否执行失败（execute 返回 {"error": "xxx"} 表示失败）
+                    if isinstance(result, dict) and result.get("error") is not None:
                         if attempt == 0:
                             logger.warning(f"工具 {tool_name} 第1次失败，重试: {result['error']}")
                             import asyncio
@@ -868,7 +882,7 @@ def _make_tool_executor(tool_registry):
             "tool_calls": [],
             "iterations": state.get("iterations", 0) + 1,
             "needs_approval": needs_approval,
-            "pending_tool_call": pending_tool,
+            "pending_tool_call": pending_tool,  # 高风险工具待审批，调用方需持久化并通知用户
         }
 
     return tool_executor_node
@@ -895,6 +909,11 @@ def _should_use_tools(state: AgentState) -> str:
         logger.warning("[agent] 工具调用达到上限(5轮)，强制结束")
         return "finish"
     if state.get("needs_approval"):
+        # 高风险工具需要审批：pending_tool_call 已保存在 state 中
+        # 调用方（对话 API）需将 pending_tool_call 持久化到 MySQL
+        # 并通过 WebSocket 通知前端弹出审批对话框
+        # 用户批准后，重新调用 Agent 并传入 approved_tool_call
+        logger.info(f"[agent] 高风险工具待审批: {state.get('pending_tool_call')}")
         return "finish"
     if state.get("tool_calls"):
         return "use_tools"
@@ -958,6 +977,15 @@ class ToolRegistry:
         if not t:
             raise ValueError(f"工具 '{name}' 不存在")
 
+        # 参数校验（JSON Schema）
+        try:
+            import jsonschema
+            jsonschema.validate(arguments, t.parameters)
+        except ImportError:
+            pass  # jsonschema 未安装时跳过校验
+        except jsonschema.ValidationError as e:
+            return {"error": f"参数校验失败: {e.message}"}
+
         if t.risk_level == RiskLevel.HIGH and not approved:
             return {
                 "needs_approval": True, "tool": name,
@@ -989,8 +1017,15 @@ async def execute_code(language: str, code: str) -> dict:
         return {"error": f"不支持的语言: {language}"}
 
     proc = await asyncio.create_subprocess_exec(
-        "docker", "run", "--rm", "--network=none", "--memory=128m",
-        "--cpus=0.5", image, "sh", "-c", code,
+        "docker", "run", "--rm",
+        "--network=none",           # 禁止网络访问
+        "--memory=128m",            # 内存限制
+        "--cpus=0.5",               # CPU 限制
+        "--read-only",              # 只读文件系统
+        "--tmpfs", "/tmp:size=10m", # 临时文件限制
+        "--pids-limit", "50",       # 防止 fork 炸弹
+        "--security-opt", "no-new-privileges",  # 禁止提权
+        image, "sh", "-c", code,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -1055,7 +1090,7 @@ tool_registry.register("read_file", read_file,
     risk_level=RiskLevel.LOW,
     parameters={"type": "object", "properties": {
         "path": {"type": "string"},
-    }, "required": "path"],
+    }, "required": ["path"]},
 )
 
 tool_registry.register("query_database", query_database,
@@ -1254,7 +1289,10 @@ class ContextManager:
                 return str(result).strip()
             except Exception:
                 pass
-        return f"（共 {len(messages)} 条历史消息已省略）"
+        # 降级：截取最近几条消息而非完全丢弃
+        recent = messages[-5:]
+        fallback = "\n".join(f"{m.get('role', 'user')}: {m.get('content', '')[:200]}" for m in recent)
+        return f"（共 {len(messages)} 条历史消息，以下为最近摘要）\n{fallback}"
 ```
 
 ### 4.8 工作流执行引擎
@@ -1596,6 +1634,9 @@ async def chat_stream(
 # backend/app/api/v1/websocket.py
 @router.websocket("/ws/chat/{conversation_id}")
 async def chat_websocket(websocket: WebSocket, conversation_id: int):
+    # TODO: WebSocket 鉴权 — 从 query 参数 ?token=<jwt> 提取 user_id
+    # 验证失败返回 403 关闭连接，token 过期需客户端重新获取
+    # 验证成功后需校验 conversation_id 是否属于该 user_id（防越权）
     await websocket.accept()
     try:
         while True:
@@ -1720,11 +1761,15 @@ def trace_span(name: str, metadata: dict = None):
 # backend/app/tasks/memory_tasks.py
 from celery import shared_task
 from datetime import datetime, timedelta
+import asyncio
+
+# Celery 任务使用 asyncio.run() 创建独立事件循环。
+# 仅在 prefork 模式下安全；如果 worker 使用 gevent/eventlet，
+# 需要用 gevent.monkey.patch_all() 或 asgiref.sync.async_to_sync() 替代。
 
 @shared_task
 def hourly_detail_save():
     """每小时：活跃会话存详细日志"""
-    import asyncio
     from app.core.database import get_db_session
     from app.core.redis_client import get_redis
     from app.agent.memory_manager import MemoryManager
@@ -1784,7 +1829,6 @@ def hourly_detail_save():
 @shared_task
 def check_idle_summaries():
     """每 5 分钟：会话 30 分钟无互动 → 存压缩摘要"""
-    import asyncio
     from app.core.redis_client import get_redis
     from app.agent.memory_manager import MemoryManager
     from app.mappers.qdrant_mapper import QdrantMapper
