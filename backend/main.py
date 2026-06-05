@@ -50,6 +50,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"RAG 管道初始化失败（知识库功能不可用）: {e}")
 
+    # 初始化记忆管理器（可选，失败不影响基础功能）
+    try:
+        await _init_memory()
+    except Exception as e:
+        logger.warning(f"记忆管理器初始化失败（记忆功能不可用）: {e}")
+
     yield
 
     # 清理资源
@@ -115,6 +121,43 @@ async def _init_rag():
 
     except Exception as e:
         logger.warning(f"RAG 管道初始化失败: {e}")
+
+
+async def _init_memory():
+    """初始化记忆管理器（Redis 会话缓存 + Qdrant 长期记忆）"""
+    from app.core.config import get_settings
+    from app.mappers.qdrant_mapper import QdrantMapper
+    from app.services.memory_service import memory_service
+
+    settings = get_settings()
+
+    try:
+        from app.agent.memory_manager import MemoryManager
+
+        # 获取 Embedding 函数
+        try:
+            from llama_index.embeddings.ollama import OllamaEmbedding
+            embedding_model = OllamaEmbedding(
+                model_name="dengcao/Qwen3-Embedding-0.6B:Q8_0",
+                base_url=settings.OLLAMA_HOST,
+            )
+            async def embedding_func(text: str):
+                return await embedding_model.aget_text_embedding(text)
+        except ImportError:
+            logger.warning("缺少 llama-index-embeddings-ollama，记忆管理器跳过初始化")
+            return
+
+        qdrant_mapper = QdrantMapper()
+        manager = MemoryManager(
+            qdrant_mapper=qdrant_mapper,
+            embedding_func=embedding_func,
+        )
+
+        memory_service.set_memory_manager(manager)
+        logger.info("记忆管理器就绪")
+
+    except Exception as e:
+        logger.warning(f"记忆管理器初始化失败: {e}")
 
 
 app = FastAPI(

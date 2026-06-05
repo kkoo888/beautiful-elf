@@ -45,6 +45,7 @@ class AgentService:
         from app.agent.llm_service import llm_service
         from app.agent.tool_registry import tool_registry, register_builtin_tools
         from app.agent.engine import build_agent_graph
+        from app.services.memory_service import memory_service
 
         try:
             # 注册内置工具
@@ -58,8 +59,15 @@ class AgentService:
                 bind_tools=tool_registry.get_langchain_tools(),
             )
 
+            # 获取记忆管理器（可选）
+            memory_manager = memory_service.memory_manager
+
             # 构建 Agent 图
-            self._graph = build_agent_graph(llm=llm, tool_registry=tool_registry)
+            self._graph = build_agent_graph(
+                llm=llm,
+                tool_registry=tool_registry,
+                memory_manager=memory_manager,
+            )
             self._provider_id = provider_id
             self._model_name = model_name
 
