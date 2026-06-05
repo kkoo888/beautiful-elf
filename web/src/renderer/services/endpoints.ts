@@ -15,18 +15,17 @@ export const CHAT_ENDPOINTS = {
 
 // ─── 知识库 ───
 export const KNOWLEDGE_ENDPOINTS = {
-  LIST: `${API_PREFIX}/knowledge`,
-  CREATE: `${API_PREFIX}/knowledge`,
-  DETAIL: (id: string) => `${API_PREFIX}/knowledge/${id}`,
+  DOCUMENTS: `${API_PREFIX}/knowledge/documents`,
+  DOCUMENT: (id: string) => `${API_PREFIX}/knowledge/documents/${id}`,
   SEARCH: `${API_PREFIX}/knowledge/search`,
 } as const
 
 // ─── 记忆 ───
 export const MEMORY_ENDPOINTS = {
-  LIST: `${API_PREFIX}/memory`,
-  CREATE: `${API_PREFIX}/memory`,
-  DETAIL: (id: string) => `${API_PREFIX}/memory/${id}`,
-  SEARCH: `${API_PREFIX}/memory/search`,
+  LIST: `${API_PREFIX}/memories`,
+  CREATE: `${API_PREFIX}/memories`,
+  DETAIL: (id: string) => `${API_PREFIX}/memories/${id}`,
+  SEARCH: `${API_PREFIX}/memories/search`,
 } as const
 
 // ─── 日程 ───
@@ -76,12 +75,30 @@ export const OCR_ENDPOINTS = {
   RECOGNIZE: `${API_PREFIX}/ocr/recognize`,
 } as const
 
+// ─── 意图 ───
+export const INTENT_ENDPOINTS = {
+  LIST: `${API_PREFIX}/intents`,
+  CREATE: `${API_PREFIX}/intents`,
+  DETAIL: (id: string) => `${API_PREFIX}/intents/${id}`,
+  UPDATE: (id: string) => `${API_PREFIX}/intents/${id}`,
+  DELETE: (id: string) => `${API_PREFIX}/intents/${id}`,
+  ENABLE: (id: string) => `${API_PREFIX}/intents/${id}/enable`,
+  DISABLE: (id: string) => `${API_PREFIX}/intents/${id}/disable`,
+  SYNC: `${API_PREFIX}/intents/sync`,
+  MATCH_TEST: `${API_PREFIX}/intents/match/test`,
+} as const
+
 // ─── 工作流 ───
 export const WORKFLOW_ENDPOINTS = {
   LIST: `${API_PREFIX}/workflows`,
   CREATE: `${API_PREFIX}/workflows`,
   DETAIL: (id: string) => `${API_PREFIX}/workflows/${id}`,
+  UPDATE: (id: string) => `${API_PREFIX}/workflows/${id}`,
+  DELETE: (id: string) => `${API_PREFIX}/workflows/${id}`,
+  ENABLE: (id: string) => `${API_PREFIX}/workflows/${id}/enable`,
+  DISABLE: (id: string) => `${API_PREFIX}/workflows/${id}/disable`,
   EXECUTE: (id: string) => `${API_PREFIX}/workflows/${id}/execute`,
+  RUNS: (id: string) => `${API_PREFIX}/workflows/${id}/runs`,
 } as const
 
 // ─── 专家团 ───

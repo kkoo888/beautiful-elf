@@ -46,7 +46,7 @@ api_router.include_router(snippet.router, prefix="/snippets", tags=["snippet"])
 
 # 知识 & 记忆
 api_router.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
-api_router.include_router(memory.router, prefix="/memory", tags=["memory"])
+api_router.include_router(memory.router, prefix="/memories", tags=["memory"])
 
 # AI 相关
 api_router.include_router(pet.router, prefix="/pets", tags=["pet"])

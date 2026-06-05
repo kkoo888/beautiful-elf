@@ -128,7 +128,7 @@ async def execute_workflow(
         return ApiResult(data=result)
     except Exception as e:
         logger.error(f"执行工作流失败: {e}", exc_info=True)
-        return api_error("WORKFLOW_ERROR", str(e), "工作流执行失败，请检查配置")
+        return api_error("WORKFLOW_INTERNAL_ERROR", str(e), "工作流执行失败，请检查配置")
 
 
 @router.get("/{workflow_id}/runs", response_model=ApiPageResult)

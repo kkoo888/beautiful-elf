@@ -44,7 +44,7 @@ async def chat(
     """Agent 对话 — 自动选择 Agent 模式或纯 LLM 模式"""
     provider_id = await _resolve_provider_id(db, data.provider_id)
     if provider_id is None:
-        return api_error("CONVERSATION_NO_PROVIDER", "请先选择 AI 供应商", "请在设置中选择供应商和模型")
+        return api_error("CONVERSATION_VALIDATION", "请先选择 AI 供应商", "请在设置中选择供应商和模型")
 
     messages = [{"role": m.role, "content": m.content} for m in data.messages]
 
