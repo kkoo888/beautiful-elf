@@ -66,8 +66,8 @@ export function LoginSettings() {
       apiClient
         .get(AUTH_ENDPOINTS.ME)
         .then((res) => {
-          const data = res.data as { code: number; data: UserInfo }
-          if (data.code === 0 && data.data) {
+          const data = res.data as { code: string; data: UserInfo }
+          if (data.code === 'SUCCESS' && data.data) {
             saveAuth(auth.token!, data.data)
             setAuth({ token: auth.token, user: data.data })
           } else {
@@ -86,8 +86,8 @@ export function LoginSettings() {
       setLoading(true)
       try {
         const res = await apiClient.post(AUTH_ENDPOINTS.LOGIN, values)
-        const data = res.data as { code: number; data: { accessToken: string; user: UserInfo }; message?: string }
-        if (data.code === 0 && data.data) {
+        const data = res.data as { code: string; data: { accessToken: string; user: UserInfo }; message?: string }
+        if (data.code === 'SUCCESS' && data.data) {
           saveAuth(data.data.accessToken, data.data.user)
           setAuth({ token: data.data.accessToken, user: data.data.user })
           message.success('登录成功')
@@ -109,8 +109,8 @@ export function LoginSettings() {
       setLoading(true)
       try {
         const res = await apiClient.post(AUTH_ENDPOINTS.REGISTER, values)
-        const data = res.data as { code: number; message?: string }
-        if (data.code === 0) {
+        const data = res.data as { code: string; message?: string }
+        if (data.code === 'SUCCESS') {
           message.success('注册成功，请登录')
           setMode('login')
           form.resetFields()
