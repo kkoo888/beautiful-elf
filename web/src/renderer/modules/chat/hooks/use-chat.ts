@@ -287,15 +287,32 @@ export function useChat(): UseChatReturn {
   const handleFeedback = useCallback(
     async (data: FeedbackData): Promise<void> => {
       try {
+        // 从消息链回溯 question（用户消息）和 answer（AI 回复）
+        const currentMessages = useChatStore.getState().messages
+        const answerIdx = currentMessages.findIndex((m) => m.id === data.messageId)
+        const answer = answerIdx >= 0 ? currentMessages[answerIdx].content : ''
+        let question = ''
+        if (answerIdx > 0) {
+          // 向前找最近一条 user 消息
+          for (let i = answerIdx - 1; i >= 0; i--) {
+            if (currentMessages[i].role === 'user') {
+              question = currentMessages[i].content
+              break
+            }
+          }
+        }
+
         await submitFeedback({
           messageId: data.messageId,
           type: data.type,
           reasons: data.reasons,
           comment: data.comment,
+          question,
+          answer,
+          conversationId: currentConversationId ?? undefined,
         })
 
         // 更新本地消息的反馈状态
-        const currentMessages = useChatStore.getState().messages
         const updatedMessages = currentMessages.map((msg) =>
           msg.id === data.messageId ? { ...msg, feedback: data } : msg
         )
@@ -304,7 +321,7 @@ export function useChat(): UseChatReturn {
         console.error('[Chat] Feedback error:', error)
       }
     },
-    [setMessages]
+    [setMessages, currentConversationId]
   )
 
   /** 清空消息 */

@@ -30,11 +30,22 @@ interface DialogApi {
   selectDirectory: () => Promise<string | null>
 }
 
+interface DesktopCapturerSource {
+  id: string
+  name: string
+  thumbnail: string // data URL
+}
+
+interface DesktopCapturerApi {
+  getSources: (options: { types: Array<'screen' | 'window'> }) => Promise<DesktopCapturerSource[]>
+}
+
 interface ElectronAPI {
   window: WindowApi
   app: AppApi
   pet: PetApi
   dialog: DialogApi
+  desktopCapturer: DesktopCapturerApi
 }
 
 declare global {

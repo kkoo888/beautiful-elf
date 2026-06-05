@@ -134,6 +134,12 @@ export interface FeedbackRequest {
   reasons?: FeedbackReason[]
   /** 补充说明 */
   comment?: string
+  /** 用户问题（后端必填，由调用方从消息链回溯） */
+  question?: string
+  /** AI 回答（后端必填，由调用方从消息链回溯） */
+  answer?: string
+  /** 会话 ID */
+  conversationId?: string
 }
 
 /** 反馈提交响应 */

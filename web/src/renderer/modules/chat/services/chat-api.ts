@@ -211,9 +211,16 @@ export function chatStream(
   return { abort: () => controller.abort() }
 }
 
-/** 提交反馈 */
+/** 提交反馈 — 调用后端 POST /ai_feedback */
 export async function submitFeedback(request: FeedbackRequest): Promise<FeedbackResponse> {
-  // TODO: 对接后端反馈接口
-  console.log('[Feedback]', request)
+  extractData(await apiClient.post('/ai_feedback', {
+    conversationId: request.conversationId ? Number(request.conversationId) : undefined,
+    question: request.question ?? '',
+    answer: request.answer ?? '',
+    feedbackType: request.type === 'positive' ? 0 : 1,
+    reasonTags: request.reasons,
+    reasonText: request.comment ?? '',
+    traceId: crypto.randomUUID(),
+  }))
   return { success: true }
 }

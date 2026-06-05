@@ -9,10 +9,27 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * 用 Canvas 生成占位截图（base64）
- * 真实环境替换为 Electron desktopCapturer
+ * 截图：Electron 环境走 desktopCapturer，Web 环境用 canvas mock
  */
 export async function captureScreen(mode: CaptureMode): Promise<CaptureResult> {
+  // Electron 环境：调用 desktopCapturer
+  if (typeof window !== 'undefined' && window.electronAPI?.desktopCapturer) {
+    const sources = await window.electronAPI.desktopCapturer.getSources({
+      types: [mode === 'fullscreen' ? 'screen' : 'window'],
+    })
+    if (sources.length > 0) {
+      // 取第一个源的缩略图作为截图
+      const source = sources[0]
+      return {
+        id: generateId(),
+        imageData: source.thumbnail,
+        timestamp: Date.now(),
+        mode,
+      }
+    }
+  }
+
+  // Web 环境：canvas 生成占位截图
   await delay(1500)
 
   const width = mode === 'fullscreen' ? 1280 : 640

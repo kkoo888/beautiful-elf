@@ -1,32 +1,27 @@
-"""AI 对话 API — 意图路由 + LLM 对话
+"""AI 对话 API — 参数校验 + 调用 ChatService
 
-架构（architecture-upgrade.md 5.2 节）：
-  用户消息 → 意图路由（快速，向量相似度）
-    ├─ 语义缓存命中 → 直接返回缓存答案
-    ├─ 技能命中 → 路由到对应技能（TODO）
-    └─ 未命中 → 纯 LLM 对话（不绑工具，快速）
+架构（符合 Beautiful-Elf 分层规范）：
+  API 层 → 只做参数校验 + 调用 service + 返回响应
+  Service 层 → 业务编排（消息保存 + LLM 调用）
 """
 import json
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db, AsyncSessionLocal
-from app.services.llm_chat_service import LLMChatService
+from app.core.database import get_db
+from app.services.chat_service import ChatService
 from app.services.llm_provider_service import LLMProviderService
-from app.services.message_service import MessageService
 from app.services.intent_service import intent_service
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.schemas.message import MessageCreate
 from app.schemas.response import ApiResult, api_error
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter()
-_llm_chat_service = LLMChatService()
+_chat_service = ChatService()
 _provider_service = LLMProviderService()
-_msg_service = MessageService()
 
 
 async def _resolve_provider_id(db: AsyncSession, provider_id: int | None) -> int | None:
@@ -79,97 +74,37 @@ async def chat(
     if intent and intent.get("target_module"):
         logger.info(f"[chat] 意图命中: {intent['intent_name']} → {intent['target_module']}")
 
-    # ── Step 2: 纯 LLM 对话（不绑工具）──────────────────
+    # ── Step 2: 调用 ChatService ────────────────────────
     if data.stream:
         return StreamingResponse(
-            _llm_stream(conversation_id, messages, provider_id, model_name),
+            _stream_response(conversation_id, messages, provider_id, model_name),
             media_type="text/event-stream",
         )
-    return await _llm_chat(conversation_id, messages, provider_id, model_name, db)
-
-
-# ── 非流式 LLM 对话 ────────────────────────────────────
-
-async def _llm_chat(
-    conversation_id: int, messages: list, provider_id: int,
-    model_name: str, db: AsyncSession,
-) -> ApiResult:
-    """纯 LLM 非流式对话（不绑工具，快速响应）"""
-
-    # 保存用户消息
-    user_content = messages[-1]["content"] if messages else ""
-    try:
-        await _msg_service.create_message(db, MessageCreate(
-            conversation_id=conversation_id, role="user", content=user_content,
-        ))
-    except Exception as e:
-        logger.warning(f"保存用户消息失败: {e}")
 
     try:
-        llm_result = await _llm_chat_service.chat(
-            db, provider_id=provider_id, model_name=model_name,
-            messages=messages, temperature=0.7, max_tokens=2048,
+        result = await _chat_service.chat(
+            db, conversation_id=conversation_id, messages=messages,
+            provider_id=provider_id, model_name=model_name,
         )
-
-        # 保存助手回复
-        try:
-            await _msg_service.create_message(db, MessageCreate(
-                conversation_id=conversation_id, role="assistant",
-                content=llm_result.content, token_count=llm_result.token_count,
-            ))
-        except Exception as e:
-            logger.warning(f"保存助手消息失败: {e}")
-
-        return ApiResult(data=llm_result)
-
+        return ApiResult(data=result)
     except Exception as e:
         logger.error(f"LLM 对话失败: {e}", exc_info=True)
         return api_error("AI_TIMEOUT", str(e), "请检查模型配置或稍后重试")
 
 
-# ── 流式 LLM 对话 ──────────────────────────────────────
-
-async def _llm_stream(
+async def _stream_response(
     conversation_id: int, messages: list,
     provider_id: int, model_name: str,
 ):
-    """纯 LLM 流式对话（不绑工具，快速响应）"""
-    full_content = ""
-
-    # 保存用户消息
-    user_content = messages[-1]["content"] if messages else ""
+    """SSE 流式响应封装"""
     try:
-        async with AsyncSessionLocal() as save_db:
-            await _msg_service.create_message(save_db, MessageCreate(
-                conversation_id=conversation_id, role="user", content=user_content,
-            ))
-            await save_db.commit()
-    except Exception as e:
-        logger.warning(f"保存用户消息失败: {e}")
-
-    try:
-        async with AsyncSessionLocal() as stream_db:
-            async for chunk in _llm_chat_service.chat_stream(
-                stream_db, provider_id=provider_id, model_name=model_name,
-                messages=messages, temperature=0.7, max_tokens=2048,
-            ):
-                full_content += chunk
-                yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
-
-            yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
-
-            # 保存助手回复
-            if full_content:
-                try:
-                    async with AsyncSessionLocal() as save_db:
-                        await _msg_service.create_message(save_db, MessageCreate(
-                            conversation_id=conversation_id, role="assistant",
-                            content=full_content, token_count=0,
-                        ))
-                        await save_db.commit()
-                except Exception as e:
-                    logger.warning(f"保存助手消息失败: {e}")
-
+        async for chunk in _chat_service.chat_stream(
+            conversation_id=conversation_id, messages=messages,
+            provider_id=provider_id, model_name=model_name,
+        ):
+            yield f"data: {json.dumps({'content': chunk, 'done': False})}\n\n"
+        # generator 正常结束，发 done 信号
+        yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
     except Exception as e:
         logger.error(f"LLM 流式对话失败: {e}", exc_info=True)
         yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"

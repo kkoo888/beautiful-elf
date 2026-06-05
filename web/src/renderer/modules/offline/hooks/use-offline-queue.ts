@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { generateId } from '@/utils'
+import { apiClient } from '@/services/api-client'
 import type { OfflineMessage, OfflineStorageStats } from '../types/offline'
 import {
   saveMessage,
@@ -73,10 +74,13 @@ export function useOfflineQueue(): UseOfflineQueueReturn {
           // 标记为发送中
           await markMessageStatus(msg.id, 'sending')
 
-          // TODO: 接入真实 API 发送
-          // await apiClient.post('/messages', { conversationId: msg.conversationId, content: msg.content })
+          // 调用后端消息接口发送
+          await apiClient.post('/messages', {
+            conversationId: Number(msg.conversationId),
+            role: 'user',
+            content: msg.content,
+          })
 
-          // 模拟发送成功
           await removeMessage(msg.id)
           sentCount++
         } catch {

@@ -9,9 +9,7 @@ export function useCapture() {
   const capture = useCallback(async (mode: CaptureMode) => {
     setLoading(true)
     try {
-      // TODO: Electron 环境下替换为 desktopCapturer
-      // const sources = await window.electron.desktopCapturer.getSources({ types: ['screen'] })
-      // const stream = await navigator.mediaDevices.getUserMedia({ ... })
+      // Electron 环境由 captureScreen 内部自动走 desktopCapturer
       const data = await captureScreen(mode)
       setResult(data)
       return data
