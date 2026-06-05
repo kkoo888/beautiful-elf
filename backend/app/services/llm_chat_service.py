@@ -45,7 +45,7 @@ class LLMChatService:
         max_tokens: int = 2048,
     ) -> ChatResponse:
         """非流式对话"""
-        provider = await self.provider_service.get(db, provider_id)
+        provider = await self.provider_service.get_provider(db, provider_id)
         provider_type = provider.provider_type
 
         if provider_type in OPENAI_COMPAT_TYPES:
@@ -69,7 +69,7 @@ class LLMChatService:
         max_tokens: int = 2048,
     ) -> AsyncIterator[str]:
         """流式对话，逐 token 返回"""
-        provider = await self.provider_service.get(db, provider_id)
+        provider = await self.provider_service.get_provider(db, provider_id)
         provider_type = provider.provider_type
 
         if provider_type in OPENAI_COMPAT_TYPES:
