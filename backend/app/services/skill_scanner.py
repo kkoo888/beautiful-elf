@@ -7,7 +7,7 @@ import re
 import os
 import json
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import List, Optional
 
 
 # ─── 数据结构 ─────────────────────────────────────
@@ -25,7 +25,7 @@ class ScanIssue:
 @dataclass
 class ScanResult:
     file_count: int
-    issues: list[ScanIssue] = field(default_factory=list)
+    issues: List[ScanIssue] = field(default_factory=list)
     summary: dict = field(default_factory=lambda: {
         "critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0,
     })
@@ -36,7 +36,7 @@ class ScanResult:
 
 def _find_matches(content: str, pattern: re.Pattern,
                   file_filter: Optional[re.Pattern] = None,
-                  file_path: str = "") -> list[dict]:
+                  file_path: str = "") -> List[dict]:
     """按行查找正则匹配"""
     if file_filter and not file_filter.search(file_path):
         return []
@@ -47,7 +47,7 @@ def _find_matches(content: str, pattern: re.Pattern,
     return results
 
 
-def _find_global(content: str, pattern: re.Pattern) -> list[dict]:
+def _find_global(content: str, pattern: re.Pattern) -> List[dict]:
     """全文匹配（不分行）"""
     m = pattern.search(content)
     if not m:
@@ -293,7 +293,7 @@ _RULES_LOW = [
 #  扫描引擎
 # ═══════════════════════════════════════════════════
 
-def _scan_rule(content: str, file_path: str, rule: dict) -> list[ScanIssue]:
+def _scan_rule(content: str, file_path: str, rule: dict) -> List[ScanIssue]:
     """对单个文件执行单条规则"""
     issues = []
     f_filter = rule.get("filter") or rule.get("file_filter")
@@ -330,9 +330,9 @@ def _get_ext(path: str) -> str:
 
 def scan_skill_dir(skill_dir: str) -> ScanResult:
     """扫描技能目录，返回安全报告"""
-    issues: list[ScanIssue] = []
+    issues: List[ScanIssue] = []
     file_count = 0
-    files: list[tuple[str, str]] = []  # (relative_path, content)
+    files: List[tuple[str, str]] = []  # (relative_path, content)
 
     # 遍历目录读取文件
     for root, _, filenames in os.walk(skill_dir):

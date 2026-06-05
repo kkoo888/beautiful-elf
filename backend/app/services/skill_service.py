@@ -142,7 +142,7 @@ class SkillService:
         self, db: AsyncSession, zip_bytes: bytes,
         name: str, display_name: str, description: str,
         version: str, source: str,
-        trigger_words: list[str], dependencies: list[str],
+        trigger_words: List[str], dependencies: List[str],
     ) -> dict:
         """安装技能：解压 → 扫描 → 通过则存 DB，否则返回扫描报告"""
         # 检查名称是否已存在
@@ -200,7 +200,7 @@ class SkillService:
         self, db: AsyncSession, name: str,
         display_name: str, description: str,
         version: str, source: str,
-        trigger_words: list[str], dependencies: list[str],
+        trigger_words: List[str], dependencies: List[str],
         zip_bytes: bytes,
     ) -> dict:
         """用户确认忽略风险后强制安装"""

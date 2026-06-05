@@ -23,7 +23,7 @@ import logging
 import asyncio
 import operator
 import uuid
-from typing import List, Optional, Tuple, Annotated, Any
+from typing import List, Dict, Optional, Tuple, Annotated, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -128,7 +128,7 @@ class ExpertState(TypedDict):
     """单个专家的工作状态"""
     member: dict
     input_text: str
-    discussion: list[dict]
+    discussion: List[dict]
     round_num: int
     run_id: int
     _service: Any
@@ -214,7 +214,7 @@ async def orchestrator_node(state: OrchestratorState) -> dict:
     return {"current_round": current_round + 1}
 
 
-def route_after_orchestrator(state: OrchestratorState) -> list[Send]:
+def route_after_orchestrator(state: OrchestratorState) -> List[Send]:
     """编排器之后: 判断是继续讨论还是汇总
 
     LangGraph Send 并行分发: 为每位专家创建独立分支
@@ -463,7 +463,7 @@ async def round_router_node(state: OrchestratorState) -> dict:
     return {"current_round": state["current_round"] + 1}
 
 
-def route_after_round(state: OrchestratorState) -> list[Send]:
+def route_after_round(state: OrchestratorState) -> List[Send]:
     """专家讨论结束后: 判断是继续下一轮还是汇总"""
     current_round = state["current_round"]
     max_rounds = state["max_rounds"]
@@ -588,7 +588,7 @@ class ExpertTeamService:
         # 批量查询成员（消除 N+1）
         team_ids = [t.id for t in teams]
         all_members = await self.repo.find_members_by_teams(db, team_ids)
-        members_by_team: dict[int, list] = {}
+        members_by_team: Dict[int, list] = {}
         for m in all_members:
             members_by_team.setdefault(m.team_id, []).append(m)
 
@@ -804,7 +804,7 @@ class ExpertTeamService:
             # 批量加载技能绑定（消除 N+1）
             member_ids = [m["id"] for m in members_data]
             all_skills = await self.repo.find_skills_by_roles(db, member_ids)
-            skills_by_role: dict[int, list] = {}
+            skills_by_role: Dict[int, list] = {}
             for s in all_skills:
                 skills_by_role.setdefault(s.role_id, []).append(s)
 
