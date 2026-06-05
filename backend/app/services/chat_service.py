@@ -8,7 +8,8 @@
 API 层只做参数校验 + 调用本 service。
 """
 from typing import List, AsyncIterator
-from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionLocal
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import AsyncSessionLocal
 
 from app.services.llm_chat_service import LLMChatService
 from app.services.message_service import MessageService
