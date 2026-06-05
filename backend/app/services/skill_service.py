@@ -33,14 +33,16 @@ class SkillService:
         """ORM → Pydantic 模型"""
         return SkillStatsOut.model_validate(stats)
 
-    async def create(self, db: AsyncSession, data: SkillCreate) -> SkillOut:
+    async def create_skill(self, db: AsyncSession, data: SkillCreate) -> SkillOut:
+        """创建技能记录"""
         existing = await self.repo.find_by_name(db, data.name)
         if existing:
             raise DuplicateEntryError(f"技能名称 '{data.name}' 已存在")
         item = await self.repo.create(db, data.model_dump())
         return self._to_out(item)
 
-    async def get_by_id(self, db: AsyncSession, id: int) -> SkillOut:
+    async def get_skill_by_id(self, db: AsyncSession, id: int) -> SkillOut:
+        """按 ID 查询单个技能"""
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
@@ -50,6 +52,7 @@ class SkillService:
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
         enabled: Optional[int] = None,
     ) -> Tuple[List[dict], int]:
+        """分页查询技能列表（含统计信息）"""
         offset = (page - 1) * page_size
         items = await self.repo.find_all(db, offset=offset, limit=page_size, enabled=enabled)
         total = await self.repo.count(db, enabled=enabled)
@@ -65,7 +68,8 @@ class SkillService:
             result.append(d_dict)
         return result, total
 
-    async def update(self, db: AsyncSession, id: int, data: SkillUpdate) -> SkillOut:
+    async def update_skill(self, db: AsyncSession, id: int, data: SkillUpdate) -> SkillOut:
+        """更新技能信息"""
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
@@ -75,13 +79,15 @@ class SkillService:
         updated = await self.repo.update(db, id, update_data)
         return self._to_out(updated)
 
-    async def delete(self, db: AsyncSession, id: int) -> bool:
+    async def delete_skill(self, db: AsyncSession, id: int) -> bool:
+        """软删除技能"""
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
         return await self.repo.soft_delete(db, id)
 
-    async def enable(self, db: AsyncSession, id: int) -> SkillOut:
+    async def enable_skill(self, db: AsyncSession, id: int) -> SkillOut:
+        """启用技能"""
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
@@ -89,7 +95,8 @@ class SkillService:
         updated = await self.repo.find_by_id(db, id)
         return self._to_out(updated)
 
-    async def disable(self, db: AsyncSession, id: int) -> SkillOut:
+    async def disable_skill(self, db: AsyncSession, id: int) -> SkillOut:
+        """禁用技能"""
         item = await self.repo.find_by_id(db, id)
         if not item:
             raise RecordNotFoundError("技能不存在")
@@ -97,13 +104,15 @@ class SkillService:
         updated = await self.repo.find_by_id(db, id)
         return self._to_out(updated)
 
-    async def record_call(
+    async def record_skill_call(
         self, db: AsyncSession, skill_id: int, success: bool, duration_ms: int,
     ) -> SkillStatsOut:
+        """记录一次技能调用（成功/失败 + 耗时）"""
         stats = await self.repo.record_call(db, skill_id, success, duration_ms)
         return self._stats_to_out(stats)
 
-    async def get_stats(self, db: AsyncSession, skill_id: int) -> SkillStatsOut:
+    async def get_skill_stats(self, db: AsyncSession, skill_id: int) -> SkillStatsOut:
+        """获取技能调用统计"""
         stats = await self.repo.get_stats(db, skill_id)
         if not stats:
             raise RecordNotFoundError("技能统计数据不存在")
@@ -138,13 +147,13 @@ class SkillService:
             verdict=scan_result.verdict,
         )
 
-    async def install_from_zip(
+    async def install_skill_from_zip(
         self, db: AsyncSession, zip_bytes: bytes,
         name: str, display_name: str, description: str,
         version: str, source: str,
         trigger_words: list[str], dependencies: list[str],
     ) -> dict:
-        """安装技能：解压 → 扫描 → 通过则存 DB，否则返回扫描报告"""
+        """从 zip 安装技能：解压 → 安全扫描 → 通过则入库，否则返回扫描报告"""
         # 检查名称是否已存在
         existing = await self.repo.find_by_name(db, name)
         if existing:
@@ -196,14 +205,14 @@ class SkillService:
         result["scanResult"] = config["scanResult"]
         return result
 
-    async def confirm_install(
+    async def force_install_skill(
         self, db: AsyncSession, name: str,
         display_name: str, description: str,
         version: str, source: str,
         trigger_words: list[str], dependencies: list[str],
         zip_bytes: bytes,
     ) -> dict:
-        """用户确认忽略风险后强制安装"""
+        """用户确认忽略扫描风险后强制安装技能"""
         existing = await self.repo.find_by_name(db, name)
         if existing:
             raise DuplicateEntryError(f"技能名称 '{name}' 已存在")
@@ -238,7 +247,7 @@ class SkillService:
         return result
 
     @staticmethod
-    def cleanup_skill_dir(name: str) -> bool:
+    def cleanup_skill_files(name: str) -> bool:
         """清理已解压的技能目录（取消安装时调用）"""
         skill_dir = os.path.join(SKILLS_DIR, name)
         if os.path.exists(skill_dir):

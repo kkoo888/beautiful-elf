@@ -14,7 +14,7 @@ _service = SkillService()
 
 @router.post("", response_model=ApiResult[SkillOut])
 async def create_skill(data: SkillCreate, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
-    item = await _service.create(db, data)
+    item = await _service.create_skill(db, data)
     return ApiResult(data=item)
 
 
@@ -35,7 +35,7 @@ async def install_skill(
     tw = [w.strip() for w in trigger_words.split(",") if w.strip()] if trigger_words else []
     dep = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
 
-    result = await _service.install_from_zip(
+    result = await _service.install_skill_from_zip(
         db, zip_bytes, name, display_name or name, description,
         version, source, tw, dep,
     )
@@ -68,7 +68,7 @@ async def confirm_install(
     tw = [w.strip() for w in trigger_words.split(",") if w.strip()] if trigger_words else []
     dep = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
 
-    result = await _service.confirm_install(
+    result = await _service.force_install_skill(
         db, name, display_name or name, description,
         version, source, tw, dep, zip_bytes,
     )
@@ -78,13 +78,13 @@ async def confirm_install(
 @router.post("/cleanup")
 async def cleanup_skill(name: str = Query(...)):
     """取消安装时清理已解压的文件"""
-    _service.cleanup_skill_dir(name)
+    _service.cleanup_skill_files(name)
     return ApiResult(message="已清理")
 
 
 @router.get("/{skill_id}", response_model=ApiResult[SkillOut])
 async def get_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
-    item = await _service.get_by_id(db, skill_id)
+    item = await _service.get_skill_by_id(db, skill_id)
     return ApiResult(data=item)
 
 
@@ -101,31 +101,31 @@ async def list_skills(
 
 @router.put("/{skill_id}", response_model=ApiResult[SkillOut])
 async def update_skill(skill_id: int, data: SkillUpdate, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
-    item = await _service.update(db, skill_id, data)
+    item = await _service.update_skill(db, skill_id, data)
     return ApiResult(data=item)
 
 
 @router.delete("/{skill_id}", response_model=ApiResult)
 async def delete_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
-    await _service.delete(db, skill_id)
+    await _service.delete_skill(db, skill_id)
     return ApiResult(message="删除成功")
 
 
 @router.patch("/{skill_id}/enable", response_model=ApiResult[SkillOut])
 async def enable_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
-    item = await _service.enable(db, skill_id)
+    item = await _service.enable_skill(db, skill_id)
     return ApiResult(data=item)
 
 
 @router.patch("/{skill_id}/disable", response_model=ApiResult[SkillOut])
 async def disable_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
-    item = await _service.disable(db, skill_id)
+    item = await _service.disable_skill(db, skill_id)
     return ApiResult(data=item)
 
 
 @router.get("/{skill_id}/stats", response_model=ApiResult[SkillStatsOut])
 async def get_skill_stats(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillStatsOut]:
-    item = await _service.get_stats(db, skill_id)
+    item = await _service.get_skill_stats(db, skill_id)
     return ApiResult(data=item)
 
 
@@ -136,5 +136,5 @@ async def record_skill_call(
     duration_ms: int = Query(..., ge=0, alias="durationMs"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[SkillStatsOut]:
-    item = await _service.record_call(db, skill_id, success_flag, duration_ms)
+    item = await _service.record_skill_call(db, skill_id, success_flag, duration_ms)
     return ApiResult(data=item)
