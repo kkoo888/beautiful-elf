@@ -297,15 +297,31 @@ async def expert_call_node(state: ExpertState) -> dict:
         skill_names = ", ".join([s.get("display_name", s.get("name", "")) for s in skills])
         skill_context = f"\n\n你可以使用以下技能来辅助分析: {skill_names}"
 
+    # 构建工具上下文
+    tools = member.get("tools_json", [])
+    tool_context = ""
+    tools_available = []
+    if tools:
+        from app.agent.tool_registry import tool_registry
+        for tool_ref in tools:
+            tool_name = tool_ref.get("name", "") if isinstance(tool_ref, dict) else str(tool_ref)
+            tool_def = tool_registry.get(tool_name)
+            if tool_def and tool_def.risk_level.value != "high":
+                tools_available.append(tool_def)
+        if tools_available:
+            tool_descs = [f"- {t.name}: {t.description}" for t in tools_available]
+            tool_context = f"\n\n你可以使用以下工具（在分析中提及即可）:\n" + "\n".join(tool_descs)
+
     prompt = f"""{base_prompt}
 
 当前是第{round_num}轮讨论。
-{context}{skill_context}
+{context}{skill_context}{tool_context}
 
 请从你的专业角度，给出深入、具体的分析。要求:
 1. 观点明确，论据充分
 2. 如有不同意见，直接提出
-3. 控制在 300-500 字以内"""
+3. 如需使用工具，在分析中说明使用意图
+4. 控制在 300-500 字以内"""
 
     model = member.get("model_name") or None
     temperature = (member.get("temperature") or 70) / 100
@@ -802,6 +818,11 @@ class ExpertTeamService:
                         skill_info["priority"] = b.priority
                         skill_info["config_override"] = b.config_override
                         m["skills"].append(skill_info)
+
+            # 确保工具注册表已加载（从 DB 同步工具定义）
+            from app.agent.tool_registry import tool_registry
+            if not tool_registry._db_loaded:
+                await tool_registry.load_from_db(db)
 
             expert_list = ", ".join([f"{m['name']}({m['role']})" for m in members_data])
 

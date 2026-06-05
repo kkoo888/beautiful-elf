@@ -11,6 +11,7 @@ class ToolCreate(CamelModel):
     description: str = Field(..., max_length=1024, description="工具描述")
     module: str = Field(..., max_length=128, description="所属模块")
     json_schema: Any = Field(..., description="参数 JSON Schema")
+    risk_level: str = Field(default="low", description="风险等级: low/medium/high")
 
 
 class ToolUpdate(CamelModel):
@@ -18,6 +19,7 @@ class ToolUpdate(CamelModel):
     description: Optional[str] = Field(default=None, max_length=1024, description="工具描述")
     module: Optional[str] = Field(default=None, max_length=128, description="所属模块")
     json_schema: Optional[Any] = Field(default=None, description="参数 JSON Schema")
+    risk_level: Optional[str] = Field(default=None, description="风险等级: low/medium/high")
 
 
 class ToolOut(CamelModel):
@@ -27,6 +29,7 @@ class ToolOut(CamelModel):
     description: str
     module: str
     json_schema: Any
+    risk_level: str
     is_enabled: int
     created_at: datetime
     updated_at: datetime

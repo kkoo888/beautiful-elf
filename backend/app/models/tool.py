@@ -11,6 +11,7 @@ class Tool(BaseModel):
     description = Column(String(1024), nullable=False, comment="工具描述")
     module = Column(String(128), nullable=False, comment="所属模块")
     json_schema = Column(JSON, nullable=False, comment="参数 JSON Schema")
+    risk_level = Column(String(16), nullable=False, default="low", comment="风险等级: low/medium/high")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
 
     __table_args__ = (
