@@ -12,6 +12,7 @@
 """
 from typing import Optional, Dict, Any, List
 import logging
+import time
 
 from app.core.logging import get_logger
 
@@ -28,8 +29,12 @@ class LLMService:
         response = await llm.ainvoke([HumanMessage(content="你好")])
     """
 
+    # [P2] 缓存 TTL（秒）— 供应商配置变更后最多 5 分钟自动失效
+    _CACHE_TTL = 300
+
     def __init__(self):
-        self._cache: Dict[str, Any] = {}  # provider_id:model_name → llm instance
+        self._cache: Dict[str, Any] = {}        # cache_key → llm instance
+        self._cache_ts: Dict[str, float] = {}   # cache_key → 创建时间戳
 
     async def get_chat_llm(
         self,
@@ -72,8 +77,16 @@ class LLMService:
             raise ValueError(f"供应商 '{provider.name}' 未配置模型")
 
         cache_key = f"{provider_id}:{model_name}:{temperature}"
-        if cache_key in self._cache:
-            llm = self._cache[cache_key]
+        llm = self._cache.get(cache_key)
+        cached_ts = self._cache_ts.get(cache_key, 0)
+
+        # [P2] TTL 检查：缓存超过 _CACHE_TTL 秒自动失效
+        if llm is not None and (time.time() - cached_ts) > self._CACHE_TTL:
+            logger.info(f"[llm_service] 缓存过期({cache_key})，重新创建")
+            llm = None
+
+        if llm is not None:
+            pass  # 命中缓存
         else:
             llm = self._create_langchain_llm(
                 provider_type=provider.provider_type,
@@ -84,6 +97,7 @@ class LLMService:
                 max_tokens=max_tokens,
             )
             self._cache[cache_key] = llm
+            self._cache_ts[cache_key] = time.time()
 
         # 绑定工具
         if bind_tools:
@@ -151,6 +165,7 @@ class LLMService:
     def clear_cache(self):
         """清空 LLM 缓存（供应商配置变更时调用）"""
         self._cache.clear()
+        self._cache_ts.clear()
         logger.info("LLM 缓存已清空")
 
 

@@ -168,6 +168,9 @@ async def _stream_response(
                 yield f"data: {json.dumps({'intent_hit': event['intent'], 'intent_score': event.get('score', 0), 'done': False})}\n\n"
             elif event_type == "cost_update":
                 yield f"data: {json.dumps({'cost': {'prompt_tokens': event['prompt_tokens'], 'completion_tokens': event['completion_tokens']}, 'done': False})}\n\n"
+            elif event_type == "approval_required":
+                # [P0] 审批事件 — 前端弹出确认对话框
+                yield f"data: {json.dumps({'approval_required': {'tool': event.get('tool', ''), 'args': event.get('args', {}), 'message': event.get('message', '')}, 'done': False})}\n\n"
             elif event_type == "done":
                 yield f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': event.get('prompt_tokens', 0), 'completion_tokens': event.get('completion_tokens', 0)})}\n\n"
             elif event_type == "error":

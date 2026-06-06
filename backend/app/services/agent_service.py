@@ -1,12 +1,11 @@
-"""Agent 业务服务 — v3.0 完整版
+"""Agent 业务服务 — v4.2 完整版
 
-全部优化:
-  1. thread_id 管理（checkpointer 状态追踪）
-  2. RAG pipeline 注入
-  3. interrupt/resume 支持（resume 方法）
-  4. 评估集成
-  5. 工具使用统计追踪
+v4.2 变更:
+  1. [P0] 流式对话升级 stream_events v3，支持 interrupt/resume 审批事件
+  2. [P1] 初始化加 asyncio.Lock 防竞态
+  3. [P2] LLM 缓存加 TTL 过期机制
 """
+import asyncio
 import time
 import uuid
 from typing import Optional, AsyncIterator, Dict, Any
@@ -17,7 +16,7 @@ logger = get_logger(__name__)
 
 
 class AgentService:
-    """Agent 业务服务（v3.0）"""
+    """Agent 业务服务（v4.2）"""
 
     def __init__(self):
         self._graph = None
@@ -26,6 +25,7 @@ class AgentService:
         self._initialized = False
         self._enable_interrupt = False
         self._tool_stats: Dict[str, Dict] = {}  # 工具使用统计
+        self._init_lock = asyncio.Lock()  # [P1] 防止并发初始化竞态
 
     @property
     def is_ready(self) -> bool:
@@ -280,7 +280,10 @@ class AgentService:
 
             config = self._get_config(conversation_id)
 
-            async for event in self._graph.astream_events(initial_state, config=config, version="v2"):
+            # [P0] 升级到 v3 以支持 interrupt/resume 事件
+            stream = self._graph.astream_events(initial_state, config=config, version="v3")
+
+            async for event in stream:
                 kind = event.get("event", "")
 
                 if kind == "on_chat_model_stream":
@@ -311,6 +314,29 @@ class AgentService:
                     tool_output = event.get("data", {}).get("output", "")
                     output_preview = str(tool_output)[:200] if tool_output else ""
                     yield {"type": "tool_end", "tool": tool_name, "output_preview": output_preview}
+
+            # [P0] v3 流结束后检查 interrupt（审批暂停）
+            if hasattr(stream, 'interrupted') and stream.interrupted:
+                interrupts = getattr(stream, 'interrupts', ()) or ()
+                for intr in interrupts:
+                    value = getattr(intr, 'value', intr) if not isinstance(intr, dict) else intr
+                    if isinstance(value, dict) and value.get("type") == "approval_required":
+                        yield {
+                            "type": "approval_required",
+                            "tool": value.get("tool", ""),
+                            "args": value.get("args", {}),
+                            "message": value.get("message", "需要用户确认"),
+                        }
+                    else:
+                        # 通用 interrupt 格式
+                        yield {
+                            "type": "approval_required",
+                            "tool": value.get("tool", "") if isinstance(value, dict) else str(value),
+                            "args": value.get("args", {}) if isinstance(value, dict) else {},
+                            "message": value.get("message", "需要用户确认") if isinstance(value, dict) else "需要用户确认",
+                        }
+                # 审批模式下不发 done，等 resume API 后续处理
+                return
 
             # 发送上下文引用（从 context_engine 获取）
             try:
@@ -353,9 +379,15 @@ class AgentService:
         return dict(self._tool_stats)
 
     async def _lazy_init(self, provider_id: int, model_name: str) -> bool:
-        from app.core.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as db:
-            return await self.initialize(db, provider_id=provider_id, model_name=model_name)
+        # [P1] 双重检查锁：外层无锁快速检查，内层加锁防止并发初始化
+        if self._initialized and self._graph is not None:
+            return True
+        async with self._init_lock:
+            if self._initialized and self._graph is not None:
+                return True
+            from app.core.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                return await self.initialize(db, provider_id=provider_id, model_name=model_name)
 
     def reset(self):
         self._graph = None

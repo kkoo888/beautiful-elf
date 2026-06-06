@@ -724,9 +724,10 @@ def _after_eval(state: AgentState) -> str:
     # score >= 6 或 passed=True → 通过
     if passed and score >= 6:
         return "pass"
-    # 评估未通过但已有回答且迭代 >= 2 → 仍然返回（避免死循环）
-    if state.get("final_answer") and state.get("iterations", 0) >= 2:
-        logger.warning(f"[evaluator] 评估未通过(score={score})但已达迭代上限，强制返回")
+    # [P2] 评估未通过但已有回答 → 强制返回（避免浪费 token 做无意义 replan）
+    # 之前的逻辑是 iterations >= 2 才强制返回，现在有 final_answer 就直接返回
+    if state.get("final_answer"):
+        logger.warning(f"[evaluator] 评估未通过(score={score})但已有回答，直接返回")
         return "pass"
     return "replan"
 

@@ -22,7 +22,8 @@ logger = get_logger(__name__)
 INTENT_COLLECTION = "intent_vectors"
 INTENT_SCORE_THRESHOLD = 0.75  # 默认意图相似度阈值
 SEMANTIC_CACHE_COLLECTION = "semantic_cache"
-SEMANTIC_CACHE_THRESHOLD = 0.95  # 语义缓存阈值
+SEMANTIC_CACHE_THRESHOLD = 0.92      # [P2] 语义缓存阈值：从 0.95 调整到 0.92（同义改写区间）
+SEMANTIC_CACHE_HIGH_CONFIDENCE = 0.95  # 高置信度：直接返回缓存答案
 
 # 按意图类型可配置的阈值映射（覆盖默认值）
 INTENT_THRESHOLD_MAP = {
@@ -195,7 +196,10 @@ class IntentRouter:
         }
 
     async def _check_semantic_cache(self, vector: list) -> Optional[dict]:
-        """语义缓存：热门问答 embedding 相似度 >= 0.95 → 命中"""
+        """[P2] 分层语义缓存：
+          - >= 0.95 高置信度：直接返回缓存答案
+          - >= 0.92 中置信度：返回缓存答案（附标记，前端可展示"可能相关"）
+        """
         try:
             results = self.qdrant.search(
                 collection=SEMANTIC_CACHE_COLLECTION,
@@ -203,10 +207,17 @@ class IntentRouter:
                 limit=1,
                 score_threshold=SEMANTIC_CACHE_THRESHOLD,
             )
-            if results and results[0].score >= SEMANTIC_CACHE_THRESHOLD:
+            if not results:
+                return None
+
+            score = results[0].score
+            if score >= SEMANTIC_CACHE_THRESHOLD:
+                confidence = "high" if score >= SEMANTIC_CACHE_HIGH_CONFIDENCE else "medium"
+                logger.info(f"[semantic_cache] 命中: score={score:.3f} confidence={confidence}")
                 return {
                     "answer": results[0].payload.get("answer", ""),
-                    "score": results[0].score,
+                    "score": score,
+                    "confidence": confidence,
                 }
         except Exception as e:
             logger.debug(f"语义缓存检查失败（非致命）: {e}")

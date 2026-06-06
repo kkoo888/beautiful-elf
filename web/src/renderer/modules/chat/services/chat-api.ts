@@ -209,7 +209,7 @@ export function chatStream(
               callbacks?.onToolEnd?.(data.tool_end, data.output_preview ?? '')
               continue
             }
-            // 审批事件
+            // 审批事件（v4.2 新增 — interrupt/resume 支持）
             if (data.approval_required) {
               callbacks?.onApproval?.({
                 tool: data.approval_required.tool ?? '',
