@@ -1,5 +1,5 @@
 """大模型模型配置 — 从 llm_provider.models JSON 拆出独立表（方案 A）"""
-from sqlalchemy import Column, String, Integer, JSON, BigInteger, SmallInteger, Index
+from sqlalchemy import Column, String, Integer, JSON, BigInteger, SmallInteger, Index, text
 from app.models.base import BaseModel
 
 
@@ -16,7 +16,7 @@ class LLMModel(BaseModel):
     capabilities = Column(JSON, nullable=False, default=dict, comment="能力标签: {vision, tools, streaming}")
     is_enabled = Column(SmallInteger, nullable=False, default=1, comment="是否启用: 1=启用 0=禁用")
     sort_order = Column(Integer, nullable=False, default=0, comment="排序权重，越小越靠前")
-    remark = Column(String(256), default="", comment="备注")
+    remark = Column(String(256), nullable=False, server_default=text("''"), comment="备注")
 
     __table_args__ = (
         Index("idx_llm_model_provider_id", "provider_id"),
