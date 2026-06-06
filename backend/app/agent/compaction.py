@@ -52,7 +52,9 @@ class AutoCompactor:
         return total_chars // 2
 
     def should_compact(self, messages: List[dict]) -> bool:
-        """是否需要压缩"""
+        """是否需要压缩（短对话直接跳过）"""
+        if len(messages) <= self.keep_recent + 5:
+            return False
         estimated = self.estimate_tokens(messages)
         threshold = self.max_tokens - self.reserve_tokens
         return estimated > threshold

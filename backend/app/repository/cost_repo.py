@@ -108,3 +108,35 @@ class CostRepository:
             }
             for row in result.all()
         ]
+
+    async def daily_trend(
+        self, db: AsyncSession, user_id: int, days: int = 30,
+    ) -> List[dict]:
+        """每日成本趋势（用于画图）"""
+        from sqlalchemy import cast, Date
+        since = datetime.utcnow() - timedelta(days=days)
+        stmt = (
+            select(
+                cast(CostRecord.created_at, Date).label("date"),
+                func.sum(CostRecord.total_tokens).label("total_tokens"),
+                func.sum(CostRecord.cost_cny).label("total_cny"),
+                func.count(CostRecord.id).label("call_count"),
+            )
+            .where(
+                CostRecord.user_id == user_id,
+                CostRecord.is_deleted == 0,
+                CostRecord.created_at >= since,
+            )
+            .group_by(cast(CostRecord.created_at, Date))
+            .order_by(cast(CostRecord.created_at, Date))
+        )
+        result = await db.execute(stmt)
+        return [
+            {
+                "date": str(row.date),
+                "total_tokens": int(row.total_tokens or 0),
+                "total_cny": float(row.total_cny or 0),
+                "call_count": int(row.call_count or 0),
+            }
+            for row in result.all()
+        ]

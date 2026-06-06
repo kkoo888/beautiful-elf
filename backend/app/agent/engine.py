@@ -496,8 +496,14 @@ def _make_tool_executor(tool_registry):
                 if isinstance(r, Exception):
                     logger.error(f"[tool_executor] 并行执行异常: {r}")
                     continue
-                if r["error"] is None:
-                    tools_succeeded.append(r["tool_name"])
+                # 记录所有工具调用（成功+失败）
+                tools_succeeded.append(r["tool_name"])
+                # 集成 tracing 告警
+                try:
+                    from app.agent.tracing import check_tool_alert
+                    check_tool_alert(r["tool_name"], r["error"] is None)
+                except Exception:
+                    pass
                 content = _format_tool_result_json(r["result"], r["tool_name"], r["error"])
                 results.append({"role": "tool", "tool_call_id": r["tool_id"], "content": content})
 
