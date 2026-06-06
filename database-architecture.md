@@ -340,6 +340,7 @@ CREATE TABLE tool (
     description     VARCHAR(1024)   NOT NULL COMMENT '工具描述',
     module          VARCHAR(128)    NOT NULL COMMENT '所属模块',
     json_schema     JSON            NOT NULL COMMENT '参数 JSON Schema (Schema 整体使用，不拆分)',
+    risk_level      VARCHAR(16)     NOT NULL DEFAULT 'low' COMMENT '风险等级: low/medium/high',
     is_enabled      TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否启用: 1=是 0=否',
     is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
