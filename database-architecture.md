@@ -1052,7 +1052,6 @@ CREATE TABLE llm_provider (
     provider_type   VARCHAR(64)     NOT NULL COMMENT '供应商类型: openai/claude/deepseek/ollama/qwen/custom',
     base_url        VARCHAR(512)    NOT NULL COMMENT 'API 基础地址',
     api_key         TEXT                                 COMMENT 'API Key (加密存储)',
-    models          JSON            NOT NULL DEFAULT (JSON_ARRAY()) COMMENT '可用模型列表 JSON',
     is_enabled      TINYINT UNSIGNED NOT NULL DEFAULT 1  COMMENT '是否启用: 1=启用 0=禁用',
     is_default      TINYINT UNSIGNED NOT NULL DEFAULT 0  COMMENT '是否默认供应商: 1=是 0=否',
     description     VARCHAR(512)    DEFAULT '' COMMENT '备注说明',
@@ -1065,24 +1064,52 @@ CREATE TABLE llm_provider (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='大模型供应商配置表';
 ```
 
-**models JSON 字段结构**:
-```json
-[
-  {
-    "id": "gpt-4o",
-    "name": "GPT-4o",
-    "context_length": 128000,
-    "supports_vision": true,
-    "supports_tools": true
-  }
-]
-```
-
 **设计说明**:
-- `models` 用 JSON 存储供应商下的模型列表，低频更新、整体读写，不需单独索引模型
 - `api_key` 用 TEXT 类型存储加密后的密钥，前端显示时脱敏处理
 - `is_enabled` 控制供应商是否可用，关闭后前端不展示、后端不调用
 - `is_default` 标记默认供应商，同一时间只有一个默认
+- 供应商仅负责 API 地址和密钥，模型信息独立存储在 `llm_model` 表
+
+### 41. llm_model — 大模型配置（方案 A: 从 llm_provider.models JSON 拆分）
+
+```sql
+CREATE TABLE llm_model (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    provider_id     BIGINT UNSIGNED NOT NULL COMMENT '供应商 ID → llm_provider.id',
+    model_name      VARCHAR(128)    NOT NULL COMMENT '实际调用名，如 gpt-4o、qwen3.5:7b',
+    display_name    VARCHAR(128)    NOT NULL DEFAULT '' COMMENT '前端显示名，如 GPT-4o',
+    context_length  INT UNSIGNED    NOT NULL DEFAULT 4096 COMMENT '上下文窗口长度',
+    max_tokens      INT UNSIGNED    NOT NULL DEFAULT 4096 COMMENT '默认最大输出 token',
+    temperature     INT UNSIGNED    NOT NULL DEFAULT 70  COMMENT '默认温度 x100（70=0.7）',
+    capabilities    JSON            NOT NULL DEFAULT (JSON_OBJECT()) COMMENT '能力标签: {vision, tools, streaming}',
+    is_enabled      TINYINT UNSIGNED NOT NULL DEFAULT 1  COMMENT '是否启用: 1=启用 0=禁用',
+    sort_order      INT UNSIGNED    NOT NULL DEFAULT 0   COMMENT '排序权重，越小越靠前',
+    remark          VARCHAR(256)    DEFAULT '' COMMENT '备注',
+    is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0  COMMENT '是否删除: 1=是 0=否',
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+    INDEX idx_llm_model_provider_id (provider_id),
+    INDEX idx_llm_model_model_name (model_name),
+    INDEX idx_llm_model_is_enabled (is_enabled),
+    INDEX idx_llm_model_is_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='大模型配置表';
+```
+
+**capabilities JSON 字段结构**:
+```json
+{
+  "vision": true,
+  "tools": true,
+  "streaming": true
+}
+```
+
+**设计说明**:
+- 模型独立管理，可单独启停、排序、配置参数（温度/最大 token/上下文长度）
+- `model_name` 为实际调用名（传给 LLM API 的 model 参数），`display_name` 为前端显示名
+- `temperature` 用整数存储（x100），避免浮点精度问题，读取时 /100
+- 供应商删除时联动软删除其下所有模型
+- 与 `llm_provider` 通过 `provider_id` 关联，不冗余供应商信息
 
 ---
 
@@ -1127,6 +1154,10 @@ CREATE TABLE llm_provider (
 | llm_provider | (is_enabled) | 单列 | 筛选启用的供应商 |
 | llm_provider | (provider_type) | 单列 | 按类型查供应商 |
 | llm_provider | (is_deleted) | 单列 | 软删除过滤 |
+| llm_model | (provider_id) | 单列 | 按供应商查模型 |
+| llm_model | (model_name) | 单列 | 按模型名查配置 |
+| llm_model | (is_enabled) | 单列 | 筛选启用的模型 |
+| llm_model | (is_deleted) | 单列 | 软删除过滤 |
 
 ---
 
