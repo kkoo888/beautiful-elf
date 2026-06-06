@@ -27,6 +27,8 @@ from app.models.expert_team import (
 )
 from app.models.llm_provider import LLMProvider
 from app.models.user import User
+from app.models.markdown_memory import MarkdownMemory
+from app.models.cost_tracking import CostRecord
 
 __all__ = [
     "Conversation", "Message",
@@ -51,4 +53,6 @@ __all__ = [
     "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
     "LLMProvider",
     "User",
+    "MarkdownMemory",
+    "CostRecord",
 ]
