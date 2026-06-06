@@ -4,8 +4,12 @@
   - 生产环境必须知道每次调用花了多少钱
   - 支持按用户/会话/模型/日期维度统计
   - 为后续预算控制和告警提供数据基础
+
+P3C 规约:
+  - 金额字段用 Decimal（不用 Float/Double，精度损失）
+  - 非负数字段加 unsigned
 """
-from sqlalchemy import Column, BigInteger, Integer, String, Float, Index
+from sqlalchemy import Column, BigInteger, Integer, String, Numeric, Index
 from app.models.base import BaseModel
 
 
@@ -19,8 +23,8 @@ class CostRecord(BaseModel):
     prompt_tokens = Column(Integer, nullable=False, default=0, comment="输入 token 数")
     completion_tokens = Column(Integer, nullable=False, default=0, comment="输出 token 数")
     total_tokens = Column(Integer, nullable=False, default=0, comment="总 token 数")
-    cost_usd = Column(Float, nullable=False, default=0.0, comment="费用（美元）")
-    cost_cny = Column(Float, nullable=False, default=0.0, comment="费用（人民币）")
+    cost_usd = Column(Numeric(12, 6), nullable=False, default=0, comment="费用（美元）")
+    cost_cny = Column(Numeric(12, 6), nullable=False, default=0, comment="费用（人民币）")
     call_type = Column(String(32), nullable=False, default="chat",
                        comment="调用类型: chat/evaluator/compression/rewrite/summary")
     duration_ms = Column(Integer, nullable=False, default=0, comment="耗时（毫秒）")

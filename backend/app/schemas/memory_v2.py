@@ -8,7 +8,7 @@ class MarkdownMemoryCreate(CamelModel):
     """创建/更新 Markdown 记忆"""
     title: str = Field(..., min_length=1, max_length=256, description="文件标题")
     content: str = Field(..., min_length=1, description="Markdown 内容")
-    memory_type: str = Field(default="daily", description="类型: daily/longterm/curated")
+    memory_type: str = Field(default="daily", alias="memoryType", description="类型: daily/longterm/curated")
 
 
 class MarkdownMemoryOut(CamelModel):
