@@ -319,8 +319,8 @@ class AgentService:
 
             # [P0] v3 流结束后检查 interrupt（审批暂停）
             if hasattr(stream, 'interrupted') and stream.interrupted:
-                interrupts_attr = getattr(stream, 'interrupts', ()) or ()
-                interrupts = interrupts_attr() if callable(interrupts_attr) else interrupts_attr
+                interrupts_attr = getattr(stream, 'interrupts', None)
+                interrupts = await interrupts_attr() if callable(interrupts_attr) else (interrupts_attr or ())
                 for intr in interrupts:
                     value = getattr(intr, 'value', intr) if not isinstance(intr, dict) else intr
                     if isinstance(value, dict) and value.get("type") == "approval_required":
