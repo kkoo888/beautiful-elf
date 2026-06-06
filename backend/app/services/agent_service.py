@@ -63,8 +63,9 @@ class AgentService:
             rag_pipeline = None
             try:
                 from app.agent.rag_pipeline import RAGPipeline
-                from app.core.config import settings
-                qdrant_url = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
+                from app.core.config import get_settings
+                _settings = get_settings()
+                qdrant_url = f"http://{_settings.QDRANT_HOST}:{_settings.QDRANT_PORT}"
                 rag_pipeline = RAGPipeline(
                     qdrant_url=qdrant_url,
                     embedding_model=None,  # 由 RAGPipeline 内部初始化

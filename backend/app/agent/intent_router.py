@@ -50,10 +50,9 @@ _THANKS_PATTERNS = [
     r"^(谢谢|感谢|多谢|thanks|thank\s*you|thx|3q|谢了|太感谢了|辛苦了)[\s!！。.~～]*$",
 ]
 
-# 无意义输入（过短或纯符号）
+# 无意义输入（纯符号，不含汉字/字母/数字）
 _TRIVIAL_PATTERNS = [
-    r"^[\s.。!！?？~～…,，]*$",  # 纯标点/空白
-    r"^.{0,2}$",                  # 2字符以内
+    r"^[\s.。!！?？~～…,，\-=_+@#$%^&*()（）【】\[\]{}|\\/:;；：""''<>,.?/~`]*$",  # 纯标点/空白
 ]
 
 # 闲聊回复模板
@@ -77,6 +76,9 @@ def _detect_chitchat(message: str) -> Optional[dict]:
     """
     快速闲聊检测（纯规则，不走 Embedding/LLM）。
 
+    检查顺序：问候/告别/感谢 → 无意义输入
+    把有意义的匹配放前面，避免"你好"等被 trivial 误拦。
+
     Returns:
         命中: {"intent_name": "chitchat", "subtype": "greeting|farewell|thanks", "reply": str}
         未命中: None
@@ -85,12 +87,7 @@ def _detect_chitchat(message: str) -> Optional[dict]:
     if not text:
         return None
 
-    # 过短/无意义输入
-    for p in _TRIVIAL_PATTERNS:
-        if re.match(p, text):
-            return {"intent_name": "chitchat", "subtype": "trivial", "reply": "你好！请问有什么可以帮到你的？"}
-
-    # 问候
+    # 问候（优先匹配）
     for p in _GREETING_PATTERNS:
         if re.match(p, text):
             import random
@@ -107,6 +104,11 @@ def _detect_chitchat(message: str) -> Optional[dict]:
         if re.match(p, text):
             import random
             return {"intent_name": "chitchat", "subtype": "thanks", "reply": random.choice(_THANKS_REPLIES)}
+
+    # 无意义输入（纯标点/空白）— 放最后，避免误拦有意义的短输入
+    for p in _TRIVIAL_PATTERNS:
+        if re.match(p, text):
+            return {"intent_name": "chitchat", "subtype": "trivial", "reply": "你好！请问有什么可以帮到你的？"}
 
     return None
 
