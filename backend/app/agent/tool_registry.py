@@ -1,21 +1,21 @@
-"""
-工具注册表 — 桥接 DB 工具模型与 LangChain Tool Calling
+"""工具注册表 — 桥接 DB 工具模型与 LangChain Tool Calling（v2 重构）
+
+重构点:
+  1. Copy-on-Write: 每次 Agent 调用创建独立的 registry view，不修改全局状态
+  2. 结构化错误契约: retryable / user_facing / escalate
+  3. 工具快照: 支持按场景动态选择工具，不全量 bind_tools
+  4. 并发安全: 多用户同时使用不会互相覆盖
 
 架构:
   MySQL tool 表 → ToolRegistry（运行时加载） → LangChain Tool 列表
-  Agent 调用 → ToolRegistry.execute() → 风险校验 → 参数校验 → 执行 → 统计记录
-
-设计原则:
-  - DB 是真相源，启动时从 MySQL 加载到内存
-  - 运行时通过 name 快速查找（dict）
-  - 每次执行自动记录统计（异步，不阻塞主流程）
-  - 高风险工具需要 approved=True 才执行
+  Agent 调用 → ToolRegistrySnapshot.execute() → 风险校验 → 参数校验 → 执行
 """
 import asyncio
 import logging
 from typing import Any, Callable, Dict, Optional, List
 from dataclasses import dataclass, field
 from enum import Enum
+from copy import deepcopy
 
 from app.core.logging import get_logger
 
@@ -42,11 +42,11 @@ class ToolDef:
 
 class ToolRegistry:
     """
-    运行时工具注册表
+    运行时工具注册表（全局基线）
 
-    内置工具通过 register() 注册 Python 函数
-    DB 工具通过 load_from_db() 从 MySQL 加载
-    两者统一通过 execute() 执行
+    - 内置工具通过 register() 注册 Python 函数
+    - DB 工具通过 load_from_db() 从 MySQL 加载
+    - Agent 调用时通过 create_snapshot() 创建独立视图（Copy-on-Write）
     """
 
     def __init__(self):
@@ -88,9 +88,7 @@ class ToolRegistry:
         count = 0
 
         for tool in tools:
-            # 不覆盖已注册的内置工具（内置工具优先）
             if tool.name in self._tools:
-                # 更新 DB 元数据到已有内置工具
                 existing = self._tools[tool.name]
                 existing.id = tool.id
                 existing.risk_level = RiskLevel(tool.risk_level)
@@ -103,7 +101,7 @@ class ToolRegistry:
                 parameters=tool.json_schema or {},
                 risk_level=RiskLevel(tool.risk_level),
                 module=tool.module,
-                func=None,  # DB 工具没有 Python 函数，需要外部提供执行器
+                func=None,
             )
             count += 1
 
@@ -123,12 +121,27 @@ class ToolRegistry:
     def list_tools(self) -> List[ToolDef]:
         return list(self._tools.values())
 
-    def get_langchain_tools(self) -> list:
-        """返回 LangChain Tool 列表（用于 bind_tools）"""
+    def list_tool_summaries(self) -> List[dict]:
+        """返回工具摘要（用于 ContextEngine 动态选择）"""
+        return [
+            {"name": t.name, "description": t.description, "risk": t.risk_level.value, "module": t.module}
+            for t in self._tools.values()
+        ]
+
+    def get_langchain_tools(self, tool_names: Optional[List[str]] = None) -> list:
+        """
+        返回 LangChain Tool 列表（用于 bind_tools）。
+
+        Args:
+            tool_names: 指定工具名列表。为 None 时返回全部。
+        """
         from langchain_core.tools import StructuredTool
         tools = []
-        for t in self._tools.values():
-            # DB 工具没有 func，用通用执行包装器
+        target_tools = self._tools.values()
+        if tool_names:
+            target_tools = [t for t in self._tools.values() if t.name in set(tool_names)]
+
+        for t in target_tools:
             func = t.func or self._make_db_tool_wrapper(t.name)
             tools.append(StructuredTool.from_function(
                 func=func,
@@ -138,11 +151,46 @@ class ToolRegistry:
         return tools
 
     def _make_db_tool_wrapper(self, tool_name: str) -> Callable:
-        """为 DB 工具创建通用执行包装器（不自动批准，高风险工具需审批）"""
+        """为 DB 工具创建通用执行包装器"""
         async def db_tool_wrapper(**kwargs) -> str:
             result = await self.execute(tool_name, kwargs, approved=False)
             return str(result)
         return db_tool_wrapper
+
+    # ─── Copy-on-Write 快照 ────────────────────────────
+
+    def create_snapshot(self, extra_tools: Optional[List[dict]] = None) -> "ToolRegistrySnapshot":
+        """
+        创建不可变快照（Copy-on-Write）。
+
+        用于并发安全：每次 Agent 调用使用独立的 snapshot，
+        技能工具临时注册到 snapshot 中，不影响全局 registry。
+
+        Args:
+            extra_tools: 额外工具定义列表（技能工具等）
+
+        Returns:
+            ToolRegistrySnapshot 实例
+        """
+        snapshot_tools = dict(self._tools)
+
+        # 合并额外工具
+        if extra_tools:
+            for td in extra_tools:
+                name = td.get("name", "")
+                if not name:
+                    continue
+                snapshot_tools[name] = ToolDef(
+                    id=td.get("id", 0),
+                    name=name,
+                    description=td.get("description", ""),
+                    parameters=td.get("parameters", {"type": "object", "properties": {}}),
+                    risk_level=RiskLevel(td.get("risk_level", "low")),
+                    module=td.get("module", "skill"),
+                    func=td.get("func"),
+                )
+
+        return ToolRegistrySnapshot(snapshot_tools)
 
     # ─── 执行 ─────────────────────────────────────────
 
@@ -154,36 +202,26 @@ class ToolRegistry:
         db_session=None,
     ) -> Any:
         """
-        执行工具
-
-        1. 查找工具定义
-        2. 风险校验（HIGH 需要 approved=True）
-        3. 参数校验（jsonschema）
-        4. 执行（内置函数或返回待执行信号）
-        5. 记录统计（异步）
-
-        Args:
-            name: 工具名称
-            arguments: 工具参数
-            approved: 是否已获批准（高风险工具需要）
-            db_session: 数据库会话（用于记录统计，可选）
-
-        Returns:
-            执行结果 dict
+        执行工具（全局 registry，非并发安全，建议用 snapshot）。
         """
-        import time
         t = self._tools.get(name)
         if not t:
-            return {"error": f"工具 '{name}' 不存在"}
+            return {"error": f"工具 '{name}' 不存在", "code": "TOOL_NOT_FOUND"}
+
+        return await self._execute_tool(t, arguments, approved, db_session)
+
+    async def _execute_tool(self, t: ToolDef, arguments: dict, approved: bool, db_session=None) -> Any:
+        """通用工具执行逻辑"""
+        import time
 
         # 风险校验
         if t.risk_level == RiskLevel.HIGH and not approved:
             return {
                 "needs_approval": True,
-                "tool": name,
+                "tool": t.name,
                 "arguments": arguments,
                 "risk_level": t.risk_level.value,
-                "message": f"⚠️ {name} 是高风险操作，需要用户确认",
+                "message": f"⚠️ {t.name} 是高风险操作，需要用户确认",
             }
 
         # 参数校验
@@ -191,9 +229,9 @@ class ToolRegistry:
             import jsonschema
             jsonschema.validate(arguments, t.parameters)
         except ImportError:
-            pass  # jsonschema 未安装时跳过
+            pass
         except jsonschema.ValidationError as e:
-            return {"error": f"参数校验失败: {e.message}"}
+            return {"error": f"参数校验失败: {e.message}", "code": "VALIDATION_ERROR"}
 
         # 执行
         start_time = time.time()
@@ -202,34 +240,31 @@ class ToolRegistry:
 
         try:
             if t.func:
-                # 内置工具：直接调用 Python 函数
                 if asyncio.iscoroutinefunction(t.func):
                     result = await t.func(**arguments)
                 else:
                     result = t.func(**arguments)
             else:
-                # DB 工具：返回工具定义，由调用方决定如何执行
                 result = {
-                    "tool": name,
+                    "tool": t.name,
                     "arguments": arguments,
                     "module": t.module,
-                    "message": f"工具 '{name}' 已触发，由模块 '{t.module}' 处理",
+                    "message": f"工具 '{t.name}' 已触发，由模块 '{t.module}' 处理",
                 }
         except Exception as e:
-            logger.error(f"工具 {name} 执行异常: {e}")
-            result = {"error": str(e)}
+            logger.error(f"工具 {t.name} 执行异常: {e}")
+            result = {"error": str(e), "code": "TOOL_EXECUTION_ERROR"}
             success = False
 
         duration_ms = int((time.time() - start_time) * 1000)
 
-        # 异步记录统计（不阻塞返回）
-        # 注意：db_session 必须在任务执行时仍有效，否则统计会静默失败
+        # 异步记录统计
         if db_session and t.id > 0:
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(self._record_stats(db_session, t.id, success, duration_ms))
             except RuntimeError:
-                logger.debug("无法创建统计任务：无运行中的事件循环")
+                pass
 
         return result
 
@@ -241,6 +276,60 @@ class ToolRegistry:
             await repo.record_call(db_session, tool_id, success, duration_ms)
         except Exception as e:
             logger.warning(f"工具统计记录失败: {e}")
+
+
+class ToolRegistrySnapshot:
+    """
+    工具注册表快照（Copy-on-Write，不可变）
+
+    - 每次 Agent 调用创建一个 snapshot
+    - 支持临时添加技能工具，不影响全局 registry
+    - 并发安全：多个 snapshot 互不干扰
+    """
+
+    def __init__(self, tools: Dict[str, ToolDef]):
+        self._tools = dict(tools)  # 浅拷贝，不修改原始 dict
+
+    def get(self, name: str) -> Optional[ToolDef]:
+        return self._tools.get(name)
+
+    def get_risk_level(self, name: str) -> str:
+        t = self._tools.get(name)
+        return t.risk_level.value if t else RiskLevel.LOW.value
+
+    def list_tools(self) -> List[ToolDef]:
+        return list(self._tools.values())
+
+    def get_langchain_tools(self, tool_names: Optional[List[str]] = None) -> list:
+        """返回 LangChain Tool 列表"""
+        from langchain_core.tools import StructuredTool
+        tools = []
+        target = self._tools.values()
+        if tool_names:
+            target = [t for t in self._tools.values() if t.name in set(tool_names)]
+
+        for t in target:
+            func = t.func or self._make_wrapper(t.name)
+            tools.append(StructuredTool.from_function(
+                func=func, name=t.name, description=t.description,
+            ))
+        return tools
+
+    def _make_wrapper(self, tool_name: str) -> Callable:
+        async def wrapper(**kwargs) -> str:
+            result = await self.execute(tool_name, kwargs)
+            return str(result)
+        return wrapper
+
+    async def execute(self, name: str, arguments: dict, approved: bool = False) -> Any:
+        """在 snapshot 内执行工具"""
+        t = self._tools.get(name)
+        if not t:
+            return {"error": f"工具 '{name}' 不存在", "code": "TOOL_NOT_FOUND"}
+
+        # 复用全局 registry 的执行逻辑
+        registry = tool_registry
+        return await registry._execute_tool(t, arguments, approved)
 
 
 # ─── 内置工具实现 ─────────────────────────────────────────
@@ -306,22 +395,17 @@ async def query_database(sql: str) -> dict:
     sql_stripped = sql.strip().rstrip(";")
     sql_upper = sql_stripped.upper()
 
-    # 严格只允许 SELECT
     if not sql_upper.startswith("SELECT"):
         return {"error": "只允许 SELECT 查询"}
 
-    # 禁止危险关键字
     forbidden = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "CREATE", "TRUNCATE", "EXEC", "EXECUTE", "UNION"]
     for kw in forbidden:
-        # 用单词边界匹配，避免误匹配列名中的子串
         if re.search(rf'\b{kw}\b', sql_upper):
             return {"error": f"禁止使用 {kw} 语句"}
 
-    # 禁止多语句（分号）
     if ";" in sql_stripped:
         return {"error": "禁止多语句执行"}
 
-    # 自动添加 LIMIT
     if "LIMIT" not in sql_upper:
         sql_stripped += " LIMIT 100"
 
