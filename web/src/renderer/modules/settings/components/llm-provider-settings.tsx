@@ -317,21 +317,26 @@ export function LlmProviderSettings() {
         return
       }
       const existingNames = new Set(provider.models.map((m) => m.modelName))
-      let added = 0
-      for (const m of ollamaModels) {
-        if (existingNames.has(m.name)) continue
-        await createModel(provider.id, {
+      const toAdd = ollamaModels.filter((m) => !existingNames.has(m.name))
+      if (toAdd.length === 0) {
+        message.info(`发现 ${ollamaModels.length} 个模型，均已存在`)
+        return
+      }
+      // 并行创建所有新模型
+      const results = await Promise.allSettled(
+        toAdd.map((m) => createModel(provider.id, {
           modelName: m.name,
           displayName: m.name,
           contextLength: 4096,
-        })
-        added++
-      }
-      if (added > 0) {
-        message.success(`发现 ${ollamaModels.length} 个模型，新增 ${added} 个`)
+        }))
+      )
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length
+      const failed = results.filter((r) => r.status === 'rejected').length
+      if (succeeded > 0) {
+        message.success(`发现 ${ollamaModels.length} 个模型，新增 ${succeeded} 个${failed > 0 ? `，${failed} 个失败` : ''}`)
         await loadProviders()
       } else {
-        message.info(`发现 ${ollamaModels.length} 个模型，均已存在`)
+        message.error('模型添加全部失败，请检查网络或 Ollama 服务')
       }
     } catch (e: any) {
       message.error('模型发现失败：' + (e.message || '未知错误'))
