@@ -70,8 +70,11 @@ const PROVIDER_TYPE_OPTIONS = [
   { label: 'Claude (Anthropic)', value: 'claude' },
   { label: 'DeepSeek', value: 'deepseek' },
   { label: '通义千问', value: 'qwen' },
+  { label: '小米 MiMo', value: 'xiaomi' },
+  { label: '智谱 GLM', value: 'zhipu' },
+  { label: '月之暗面', value: 'moonshot' },
   { label: 'Ollama (本地)', value: 'ollama' },
-  { label: '智谱 GLM', value: 'custom' },
+  { label: '自定义', value: 'custom' },
 ]
 
 const TYPE_COLORS: Record<string, string> = {
@@ -80,6 +83,9 @@ const TYPE_COLORS: Record<string, string> = {
   deepseek: '#3b82f6',
   ollama: '#8b5cf6',
   qwen: '#f43f5e',
+  xiaomi: '#ff6900',
+  zhipu: '#2d5dea',
+  moonshot: '#7c3aed',
   custom: '#6b7280',
 }
 
@@ -105,6 +111,17 @@ const MODEL_PRESETS: Record<string, { modelName: string; displayName: string; co
   qwen: [
     { modelName: 'qwen-plus', displayName: '通义千问 Plus', contextLength: 131072 },
     { modelName: 'qwen-turbo', displayName: '通义千问 Turbo', contextLength: 131072 },
+  ],
+  xiaomi: [
+    { modelName: 'MiMo-7B', displayName: 'MiMo 7B', contextLength: 131072 },
+  ],
+  zhipu: [
+    { modelName: 'glm-4-plus', displayName: 'GLM-4 Plus', contextLength: 128000 },
+    { modelName: 'glm-4-flash', displayName: 'GLM-4 Flash', contextLength: 128000 },
+  ],
+  moonshot: [
+    { modelName: 'moonshot-v1-128k', displayName: 'Moonshot V1 128K', contextLength: 128000 },
+    { modelName: 'moonshot-v1-32k', displayName: 'Moonshot V1 32K', contextLength: 32000 },
   ],
 }
 
