@@ -53,7 +53,7 @@ class ContextEngine:
         tools: Optional[List[dict]] = None,
         skill_context: Optional[str] = None,
     ) -> ContextResult:
-        """组装完整的 Context"""
+        """组装完整的 Context（Write/Select/Compress/Isolate 四策略）"""
         parts: Dict[str, str] = {}
         budget_remaining = MAX_CONTEXT_CHARS
 
@@ -67,21 +67,28 @@ class ContextEngine:
             parts["skill"] = skill_context
             budget_remaining -= len(skill_context)
 
-        # 3. 长期记忆
+        # 3. 用户偏好（从记忆中提取）
+        if self.memory_manager and user_id and budget_remaining > 300:
+            prefs = await self._retrieve_user_prefs(user_id, budget=500)
+            if prefs:
+                parts["preferences"] = prefs
+                budget_remaining -= len(prefs)
+
+        # 4. 长期记忆
         if self.memory_manager and user_message and budget_remaining > 500:
             memory_ctx = await self._retrieve_memory(user_id, user_message, budget=1500)
             if memory_ctx:
                 parts["memory"] = memory_ctx
                 budget_remaining -= len(memory_ctx)
 
-        # 4. RAG 知识库
+        # 5. RAG 知识库
         if self.rag_pipeline and getattr(self.rag_pipeline, 'is_ready', False) and user_message and budget_remaining > 500:
             rag_ctx = await self._retrieve_knowledge(user_message, budget=2000)
             if rag_ctx:
                 parts["knowledge"] = rag_ctx
                 budget_remaining -= len(rag_ctx)
 
-        # 5. 工具定义摘要
+        # 6. 工具定义摘要
         tool_list = tools or self.get_tool_summaries()
         if tool_list and budget_remaining > 300:
             tools_ctx = self._format_tool_defs(tool_list, budget=1000)
@@ -89,7 +96,7 @@ class ContextEngine:
                 parts["tools"] = tools_ctx
                 budget_remaining -= len(tools_ctx)
 
-        # 6. 意图信息
+        # 7. 意图信息
         if intent and budget_remaining > 200:
             intent_ctx = self._format_intent(intent)
             if intent_ctx:
@@ -103,6 +110,32 @@ class ContextEngine:
             sources_used=list(parts.keys()),
             total_chars=len(system_prompt),
         )
+
+    async def _retrieve_user_prefs(self, user_id: int, budget: int = 500) -> str:
+        """检索用户偏好（从长期记忆中提取偏好类记忆）"""
+        try:
+            if not self.memory_manager:
+                return ""
+            results = await self.memory_manager.search_with_scores(
+                query="用户偏好 设置 风格 语言",
+                user_id=user_id,
+                limit=3,
+            )
+            if not results:
+                return ""
+            prefs = []
+            for r in results:
+                if r.get("type") == "user_memory" and r.get("summary"):
+                    prefs.append(r["summary"])
+            if not prefs:
+                return ""
+            text = "、".join(prefs[:3])
+            if len(text) > budget:
+                text = text[:budget] + "..."
+            return f"【用户偏好】{text}"
+        except Exception as e:
+            logger.debug(f"[context_engine] 用户偏好检索失败（降级跳过）: {e}")
+            return ""
 
     def _build_soul_prompt(self, intent: Optional[dict] = None) -> str:
         base = (
@@ -162,7 +195,7 @@ class ContextEngine:
         return f"【意图匹配】{name} (置信度: {score:.2f})"
 
     def _compose_system_prompt(self, parts: Dict[str, str]) -> str:
-        ordered_keys = ["soul", "skill", "intent", "memory", "knowledge", "tools"]
+        ordered_keys = ["soul", "skill", "intent", "preferences", "memory", "knowledge", "tools"]
         sections = [parts[k] for k in ordered_keys if k in parts and parts[k]]
         return "\n\n".join(sections)
 

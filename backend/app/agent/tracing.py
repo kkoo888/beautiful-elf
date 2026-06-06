@@ -24,6 +24,10 @@ logger = get_logger(__name__)
 LANGFUSE_ENABLED = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
 _tracer = None
 
+# 告警配置
+ALERT_ERROR_RATE_THRESHOLD = 0.3  # 工具失败率 > 30% 触发告警
+_alert_state: Dict[str, Dict] = {}  # 工具调用统计（用于告警判断）
+
 
 def init_tracing():
     """初始化 LangFuse（应用启动时调用）"""
@@ -210,9 +214,7 @@ def trace_agent_call(
     iterations: int,
     duration_ms: int,
 ):
-    """
-    简化版 Agent 调用追踪（兼容旧接口）。
-    """
+    """简化版 Agent 调用追踪（兼容旧接口）"""
     trace_agent_run(AgentTrace(
         conversation_id=conversation_id,
         user_message=user_message[:200],
@@ -221,3 +223,30 @@ def trace_agent_call(
         iterations=iterations,
         total_duration_ms=duration_ms,
     ))
+
+
+def check_tool_alert(tool_name: str, success: bool):
+    """
+    工具告警检查：失败率 > 30% 时触发告警。
+
+    每次工具调用后调用此函数。
+    """
+    if tool_name not in _alert_state:
+        _alert_state[tool_name] = {"calls": 0, "failures": 0}
+
+    state = _alert_state[tool_name]
+    state["calls"] += 1
+    if not success:
+        state["failures"] += 1
+
+    # 每 10 次调用检查一次
+    if state["calls"] >= 10:
+        error_rate = state["failures"] / state["calls"]
+        if error_rate > ALERT_ERROR_RATE_THRESHOLD:
+            logger.warning(
+                f"[ALERT] 工具 {tool_name} 失败率 {error_rate:.1%} "
+                f"超过阈值 {ALERT_ERROR_RATE_THRESHOLD:.0%} "
+                f"({state['failures']}/{state['calls']})"
+            )
+        # 重置计数
+        _alert_state[tool_name] = {"calls": 0, "failures": 0}

@@ -18,22 +18,31 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 INTENT_COLLECTION = "intent_vectors"
-INTENT_SCORE_THRESHOLD = 0.75  # 意图相似度阈值（余弦相似度）
+INTENT_SCORE_THRESHOLD = 0.75  # 默认意图相似度阈值
 SEMANTIC_CACHE_COLLECTION = "semantic_cache"
-SEMANTIC_CACHE_THRESHOLD = 0.95  # 语义缓存阈值（几乎相同的问题）
+SEMANTIC_CACHE_THRESHOLD = 0.95  # 语义缓存阈值
+
+# 按意图类型可配置的阈值映射（覆盖默认值）
+INTENT_THRESHOLD_MAP = {
+    "exact_match": 0.90,    # 精确匹配场景（如命令触发）
+    "fuzzy_match": 0.70,    # 模糊匹配场景（如自然语言）
+    "default": INTENT_SCORE_THRESHOLD,
+}
 
 
 class IntentRouter:
     """意图路由"""
 
-    def __init__(self, qdrant_mapper, embedding_func):
+    def __init__(self, qdrant_mapper, embedding_func, score_threshold: Optional[float] = None):
         """
         Args:
             qdrant_mapper: QdrantMapper 实例
             embedding_func: async embedding 函数 (text -> vector)
+            score_threshold: 自定义阈值（覆盖默认值）
         """
         self.qdrant = qdrant_mapper
         self.embedding_func = embedding_func
+        self._threshold = score_threshold or INTENT_SCORE_THRESHOLD
         self.qdrant.ensure_collection(INTENT_COLLECTION, vector_size=1024)
         self.qdrant.ensure_collection(SEMANTIC_CACHE_COLLECTION, vector_size=1024)
 
@@ -70,12 +79,12 @@ class IntentRouter:
                 "cached_answer": cached["answer"],
             }
 
-        # 2. 意图向量检索
+        # 2. 意图向量检索（使用可配置阈值）
         results = self.qdrant.search(
             collection=INTENT_COLLECTION,
             query_vector=vector,
             limit=1,
-            score_threshold=INTENT_SCORE_THRESHOLD,
+            score_threshold=self._threshold,
         )
 
         if not results:
