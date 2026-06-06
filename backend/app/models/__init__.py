@@ -67,6 +67,12 @@ from app.models.expert_team import (
 # 大模型供应商
 from app.models.llm_provider import LLMProvider
 
+# Markdown 记忆文件
+from app.models.markdown_memory import MarkdownMemory
+
+# 成本追踪
+from app.models.cost_tracking import CostRecord
+
 __all__ = [
     "BaseModel",
     "Conversation", "Message",
@@ -91,4 +97,6 @@ __all__ = [
     "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
     "ExpertRoleSkill", "ExpertRoleRun",
     "LLMProvider",
+    "MarkdownMemory",
+    "CostRecord",
 ]
