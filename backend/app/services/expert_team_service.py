@@ -141,6 +141,21 @@ class ExpertState(TypedDict):
 CONSENSUS_KEYWORDS = ["同意", "赞同", "一致", "共识", "没有异议", "完全同意"]
 
 
+async def _get_model_temperature(db, provider_id: int | None, model_name: str | None) -> float:
+    """从 llm_model 表读取模型默认温度，读不到返回 0.7"""
+    if not provider_id or not model_name:
+        return 0.7
+    try:
+        from app.repository.llm_model_repo import LLMModelRepository
+        repo = LLMModelRepository()
+        model = await repo.find_by_provider_and_name(db, provider_id, model_name)
+        if model and model.temperature is not None:
+            return float(model.temperature)
+    except Exception:
+        pass
+    return 0.7
+
+
 def _check_consensus(round_discussion: list) -> bool:
     """检查是否达成共识"""
     positive_count = sum(
@@ -324,7 +339,13 @@ async def expert_call_node(state: ExpertState) -> dict:
 4. 控制在 300-500 字以内"""
 
     model = member.get("model_name") or None
-    temperature = (member.get("temperature") or 70) / 100
+    # 温度优先级：成员覆盖 > llm_model 默认 > 全局默认 0.7
+    member_temp = member.get("temperature")
+    if member_temp is not None:
+        temperature = float(member_temp)
+    else:
+        # 从 llm_model 表读取模型默认温度
+        temperature = await _get_model_temperature(db, member.get("provider_id"), model)
 
     start_time = datetime.now()
     try:

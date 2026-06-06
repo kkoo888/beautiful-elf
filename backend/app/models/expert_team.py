@@ -1,5 +1,5 @@
 """专家团工作流模型"""
-from sqlalchemy import Column, BigInteger, Integer, String, DateTime, JSON, Text, Index
+from sqlalchemy import Column, BigInteger, Integer, Float, String, DateTime, JSON, Text, Index
 from app.models.base import BaseModel
 
 
@@ -34,7 +34,8 @@ class ExpertTeamMember(BaseModel):
     avatar = Column(String(64), default="🤖", comment="头像 emoji")
     system_prompt = Column(Text, nullable=False, comment="专家系统提示词")
     model_name = Column(String(128), default="", comment="使用的模型名称")
-    temperature = Column(Integer, default=70, comment="温度参数 (x100 存储)")
+    provider_id = Column(BigInteger, default=None, nullable=True, comment="供应商 ID (关联 llm_model)")
+    temperature = Column(Float, nullable=True, default=None, comment="温度覆盖 (为空则用模型默认温度)")
     max_tokens = Column(Integer, default=2048, comment="最大生成 token 数")
     tools_json = Column(JSON, default=None, comment="可用工具列表")
     sort_order = Column(Integer, default=0, comment="排序顺序")

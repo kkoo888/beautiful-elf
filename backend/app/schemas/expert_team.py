@@ -14,7 +14,8 @@ class ExpertMemberCreate(CamelModel):
     avatar: str = Field(default="🤖", max_length=64, description="头像 emoji")
     system_prompt: str = Field(..., min_length=1, description="专家系统提示词")
     model_name: str = Field(default="", max_length=128, description="模型名称")
-    temperature: int = Field(default=70, ge=0, le=200, description="温度 (x100)")
+    provider_id: Optional[int] = Field(default=None, description="供应商 ID (用于读取模型默认温度)")
+    temperature: Optional[float] = Field(default=None, ge=0, le=2, description="温度覆盖 0-2 (为空则用模型默认)")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数")
     tools_json: Optional[List[dict]] = Field(default=None, description="可用工具列表")
     sort_order: int = Field(default=0, description="排序顺序")
@@ -28,7 +29,8 @@ class ExpertMemberUpdate(CamelModel):
     avatar: Optional[str] = Field(default=None, max_length=64)
     system_prompt: Optional[str] = Field(default=None)
     model_name: Optional[str] = Field(default=None, max_length=128)
-    temperature: Optional[int] = Field(default=None, ge=0, le=200)
+    provider_id: Optional[int] = Field(default=None)
+    temperature: Optional[float] = Field(default=None, ge=0, le=2)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=8192)
     tools_json: Optional[List[dict]] = Field(default=None)
     sort_order: Optional[int] = Field(default=None)
@@ -44,7 +46,8 @@ class ExpertMemberOut(CamelModel):
     avatar: str
     system_prompt: str
     model_name: str
-    temperature: int
+    provider_id: Optional[int] = None
+    temperature: Optional[float] = None
     max_tokens: int
     tools_json: Optional[List[dict]] = None
     sort_order: int
