@@ -94,7 +94,7 @@ async def migrate():
                     INSERT INTO llm_model
                     (provider_id, model_name, display_name, context_length, max_tokens, temperature,
                      capabilities, is_enabled, sort_order, is_deleted, created_at, updated_at)
-                    VALUES (:pid, :mname, :dname, :clen, 4096, 70, :caps, 1, :sort, 0, NOW(), NOW())
+                    VALUES (:pid, :mname, :dname, :clen, 4096, 0.7, :caps, 1, :sort, 0, NOW(), NOW())
                 """), {
                     "pid": provider_id,
                     "mname": model_name,

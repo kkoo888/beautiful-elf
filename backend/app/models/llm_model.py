@@ -1,5 +1,5 @@
 """大模型模型配置 — 从 llm_provider.models JSON 拆出独立表（方案 A）"""
-from sqlalchemy import Column, String, Integer, JSON, BigInteger, SmallInteger, Index, text
+from sqlalchemy import Column, String, Integer, Float, JSON, BigInteger, SmallInteger, Index, text
 from app.models.base import BaseModel
 
 
@@ -12,7 +12,7 @@ class LLMModel(BaseModel):
     display_name = Column(String(128), nullable=False, default="", comment="前端显示名，如 GPT-4o")
     context_length = Column(Integer, nullable=False, default=4096, comment="上下文窗口长度")
     max_tokens = Column(Integer, nullable=False, default=4096, comment="默认最大输出 token")
-    temperature = Column(Integer, nullable=False, default=70, comment="默认温度 x100（70=0.7）")
+    temperature = Column(Float, nullable=False, default=0.7, comment="默认温度 0-2")
     capabilities = Column(JSON, nullable=False, default=dict, comment="能力标签: {vision, tools, streaming}")
     is_enabled = Column(SmallInteger, nullable=False, default=1, comment="是否启用: 1=启用 0=禁用")
     sort_order = Column(Integer, nullable=False, default=0, comment="排序权重，越小越靠前")
