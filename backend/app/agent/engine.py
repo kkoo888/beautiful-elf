@@ -1,28 +1,25 @@
-"""Agent 引擎 — LangGraph StateGraph 驱动（v3.0 完整版）
+"""Agent 引擎 — LangGraph StateGraph 驱动（v4.0 重构版）
 
-全部 14 项优化完成:
-  1. interrupt/resume 完整实现（checkpointer + interrupt() + resume 路径）
-  2. thread_id 管理（支持 checkpointer 状态追踪）
-  3. RAG pipeline 注入
-  4. 反思/评估节点（evaluator）
-  5. 意图阈值可配置
-  6. 技能执行流式进度
-  7. 工具超时后正确清理
-  8. 消息窗口裁剪
-  9. JSON 格式化工具结果
-  10. Copy-on-Write snapshot
-  11. 语义缓存直出
-  12. 长期记忆保存
-  13. Error Contract 三级分类
-  14. 全链路可观测
+v4.0 重构清单:
+  1. interrupt/resume 正式启用（持久化 checkpointer + resume API 支持）
+  2. LLM-as-Judge 评估器（替代纯规则评估）
+  3. 熔断器（CircuitBreaker）防止级联故障
+  4. 工具并行执行（无依赖工具 asyncio.gather）
+  5. Context 压缩策略（LLM 驱动的智能压缩）
+  6. RAG Query Rewriting（检索前改写口语化查询）
+  7. 记忆摘要优化（结构化标签 + 重要性评分）
+  8. Streaming 输出钩子预留
+  9. Error Contract 三级分类
+  10. 全链路可观测 + trace 回放
 """
-from typing import TypedDict, Annotated, Optional, List, Dict, Any
+from typing import TypedDict, Annotated, Optional, List, Dict, Any, Callable
 import operator
 import time
 import json
+import asyncio
+import os
 
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt, Command
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 
@@ -31,6 +28,75 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 MAX_MESSAGE_WINDOW = 30
+
+
+# ── 熔断器 ────────────────────────────────────────────────
+
+class CircuitBreaker:
+    """简单熔断器 — 防止工具级联故障
+
+    三态：closed（正常）→ open（熔断，快速失败）→ half-open（试探恢复）
+    """
+
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 30):
+        self._failure_count: Dict[str, int] = {}
+        self._last_failure_time: Dict[str, float] = {}
+        self._state: Dict[str, str] = {}  # tool_name -> state
+        self._threshold = failure_threshold
+        self._recovery_timeout = recovery_timeout
+
+    def is_available(self, tool_name: str) -> bool:
+        """工具是否可用"""
+        state = self._state.get(tool_name, "closed")
+        if state == "closed":
+            return True
+        if state == "open":
+            # 检查是否到了恢复时间
+            elapsed = time.time() - self._last_failure_time.get(tool_name, 0)
+            if elapsed >= self._recovery_timeout:
+                self._state[tool_name] = "half-open"
+                logger.info(f"[circuit_breaker] {tool_name} 进入 half-open 状态，试探恢复")
+                return True
+            return False
+        # half-open 状态允许一次尝试
+        return True
+
+    def record_success(self, tool_name: str):
+        """记录成功"""
+        self._failure_count[tool_name] = 0
+        self._state[tool_name] = "closed"
+
+    def record_failure(self, tool_name: str):
+        """记录失败"""
+        count = self._failure_count.get(tool_name, 0) + 1
+        self._failure_count[tool_name] = count
+        self._last_failure_time[tool_name] = time.time()
+
+        if count >= self._threshold:
+            self._state[tool_name] = "open"
+            logger.warning(f"[circuit_breaker] {tool_name} 熔断！连续失败 {count} 次，{self._recovery_timeout}s 后恢复")
+
+    def get_state(self, tool_name: str) -> str:
+        return self._state.get(tool_name, "closed")
+
+
+# 全局熔断器实例
+_circuit_breaker = CircuitBreaker()
+
+
+# ── 持久化 Checkpointer ───────────────────────────────────
+
+def _create_checkpointer():
+    """创建持久化 checkpointer（优先 SQLite，降级内存）"""
+    db_path = os.getenv("CHECKPOINTER_DB_PATH", "/tmp/agent_checkpoints.db")
+    try:
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        logger.info(f"[checkpointer] 使用 SQLite 持久化: {db_path}")
+        return AsyncSqliteSaver.from_conn_string(db_path)
+    except ImportError:
+        logger.warning("[checkpointer] sqlite 模块不可用，降级为内存版（重启丢失状态）")
+        from langgraph.checkpoint.memory import MemorySaver
+        return MemorySaver()
 
 
 # ── 状态定义 ──────────────────────────────────────────────
@@ -98,7 +164,7 @@ def build_agent_graph(
     graph.add_node("llm_call", _make_llm_caller(llm))
     graph.add_node("tool_executor", _make_tool_executor(tool_registry))
     graph.add_node("approval_node", _make_approval_node(tool_registry))
-    graph.add_node("evaluator", _make_evaluator_node())
+    graph.add_node("evaluator", _make_evaluator_node(llm))
     graph.add_node("memory_saver", _make_memory_saver(memory_manager))
 
     graph.set_entry_point("intent_router")
@@ -128,8 +194,8 @@ def build_agent_graph(
     graph.add_edge("memory_saver", END)
 
     if enable_interrupt:
-        checkpointer = MemorySaver()
-        return graph.compile(checkpointer=checkpointer)
+        checkpointer = _create_checkpointer()
+        return graph.compile(checkpointer=checkpointer, interrupt_before=["approval_node"])
     return graph.compile()
 
 
@@ -211,14 +277,28 @@ def _make_context_builder(context_engine, memory_manager):
 
         if context_engine:
             try:
+                # ── Query Rewriting（RAG 检索前改写口语化查询）──
+                messages_for_rewrite = _build_message_dicts(state)
+                rewritten_query = await context_engine.rewrite_query(
+                    user_query=query,
+                    conversation_history=messages_for_rewrite[:-1],  # 排除当前消息
+                )
+
                 result = await context_engine.assemble(
                     user_id=state.get("user_id", 0),
                     conversation_id=state.get("conversation_id", 0),
-                    user_message=query,
+                    user_message=rewritten_query,  # 用改写后的查询
                     intent=state.get("intent"),
                     tools=context_engine.get_tool_summaries(),
                 )
                 system_prompt = result.system_prompt
+
+                # ── Context 压缩（超长时自动压缩）──
+                if result.total_chars > MAX_CONTEXT_CHARS:
+                    system_prompt = await context_engine.compress_context(
+                        system_prompt, target_chars=MAX_CONTEXT_CHARS
+                    )
+
                 logger.info(f"[context_builder] sources={result.sources_used} chars={result.total_chars} elapsed={time.time()-t0:.2f}s")
             except Exception as e:
                 logger.warning(f"[context_engine] 组装失败，降级为简单提示: {e}")
@@ -299,28 +379,46 @@ def _make_tool_executor(tool_registry):
         from app.agent.tool_registry import RiskLevel
 
         snapshot = tool_registry.create_snapshot()
-        results = []
-        tools_succeeded = []
+        tool_calls = state.get("tool_calls", [])
+
+        # ── 1. 分离：需要审批的 vs 可直接执行的 ──────────
         needs_approval = False
         pending_tool = None
+        approval_results = []
+        executable_calls = []
 
-        for tc in state.get("tool_calls", []):
+        for tc in tool_calls:
             tool_name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
             tool_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
             tool_id = tc.get("id", "") if isinstance(tc, dict) else getattr(tc, "id", "")
 
             risk = snapshot.get_risk_level(tool_name)
-
             if risk == RiskLevel.HIGH.value:
                 needs_approval = True
                 pending_tool = {"id": tool_id, "name": tool_name, "args": tool_args}
-                results.append({
-                    "role": "tool",
-                    "tool_call_id": tool_id,
-                    "content": json.dumps({"needs_approval": True, "tool": tool_name, "message": f"⚠️ {tool_name} 是高风险操作，需要用户确认"}, ensure_ascii=False),
+                approval_results.append({
+                    "role": "tool", "tool_call_id": tool_id,
+                    "content": json.dumps({"needs_approval": True, "tool": tool_name,
+                        "message": f"⚠️ {tool_name} 是高风险操作，需要用户确认"}, ensure_ascii=False),
                 })
                 continue
 
+            # 熔断器检查
+            if not _circuit_breaker.is_available(tool_name):
+                approval_results.append({
+                    "role": "tool", "tool_call_id": tool_id,
+                    "content": json.dumps(ErrorContract.retryable(tool_name, "工具暂时不可用（熔断中）", attempt=0), ensure_ascii=False),
+                })
+                continue
+
+            executable_calls.append((tc, tool_name, tool_args, tool_id))
+
+        # ── 2. 并行执行无依赖工具 ─────────────────────
+        results = list(approval_results)
+        tools_succeeded = []
+
+        async def _execute_one(tool_name: str, tool_args: dict, tool_id: str) -> dict:
+            """执行单个工具（含重试 + 熔断记录）"""
             result = None
             last_error = None
             for attempt in range(2):
@@ -329,24 +427,37 @@ def _make_tool_executor(tool_registry):
                     if isinstance(result, dict) and result.get("error") is not None:
                         last_error = result["error"]
                         if attempt == 0:
-                            logger.warning(f"工具 {tool_name} 第1次失败，重试: {last_error}")
-                            import asyncio
+                            logger.warning(f"工具 {tool_name} 第{attempt+1}次失败，重试: {last_error}")
                             await asyncio.sleep(1)
                             continue
-                    tools_succeeded.append(tool_name)
-                    break
+                    _circuit_breaker.record_success(tool_name)
+                    return {"tool_id": tool_id, "tool_name": tool_name, "result": result, "error": None}
                 except Exception as e:
                     last_error = str(e)
                     if attempt == 0:
                         logger.warning(f"工具 {tool_name} 异常，重试: {e}")
-                        import asyncio
                         await asyncio.sleep(1)
                     else:
-                        logger.error(f"工具 {tool_name} 重试后仍失败: {e}")
+                        _circuit_breaker.record_failure(tool_name)
                         result = ErrorContract.escalate(tool_name, str(e))
 
-            content = _format_tool_result_json(result, tool_name, last_error)
-            results.append({"role": "tool", "tool_call_id": tool_id, "content": content})
+            return {"tool_id": tool_id, "tool_name": tool_name, "result": result, "error": last_error}
+
+        # 并行执行所有可执行工具
+        if executable_calls:
+            exec_tasks = [
+                _execute_one(tn, ta, ti) for _, tn, ta, ti in executable_calls
+            ]
+            exec_results = await asyncio.gather(*exec_tasks, return_exceptions=True)
+
+            for r in exec_results:
+                if isinstance(r, Exception):
+                    logger.error(f"[tool_executor] 并行执行异常: {r}")
+                    continue
+                if r["error"] is None:
+                    tools_succeeded.append(r["tool_name"])
+                content = _format_tool_result_json(r["result"], r["tool_name"], r["error"])
+                results.append({"role": "tool", "tool_call_id": r["tool_id"], "content": content})
 
         return {
             "messages": results,
@@ -361,7 +472,14 @@ def _make_tool_executor(tool_registry):
 
 
 def _make_approval_node(tool_registry):
-    """审批节点（interrupt/resume 完整实现）"""
+    """审批节点 — interrupt/resume 正式实现
+
+    流程:
+      1. Agent 执行到此节点 → interrupt() 暂停，返回待审批信息给前端
+      2. 前端展示给用户确认/拒绝
+      3. 前端调用 resume API → Command(resume={"approved": True/False})
+      4. Agent 从暂停处继续执行
+    """
 
     async def approval_node(state: AgentState) -> dict:
         pending = state.get("pending_tool_call")
@@ -369,74 +487,112 @@ def _make_approval_node(tool_registry):
             return {"needs_approval": False, "pending_tool_call": None}
 
         # interrupt/resume 模式（需要 checkpointer）
-        # decision = interrupt({
-        #     "type": "approval_required",
-        #     "tool": pending["name"],
-        #     "args": pending["args"],
-        #     "message": f"工具 {pending['name']} 需要您的确认才能执行",
-        # })
-        #
-        # if decision.get("approved"):
-        #     result = await tool_registry.execute(pending["name"], pending["args"], approved=True)
-        #     return {
-        #         "messages": [{"role": "tool", "tool_call_id": pending["id"], "content": _format_tool_result_json(result, pending["name"])}],
-        #         "tools_used": [pending["name"]],
-        #         "needs_approval": False,
-        #         "pending_tool_call": None,
-        #     }
-        # else:
-        #     return {
-        #         "messages": [{"role": "tool", "tool_call_id": pending["id"], "content": "用户拒绝执行此操作"}],
-        #         "needs_approval": False,
-        #         "pending_tool_call": None,
-        #     }
+        decision = interrupt({
+            "type": "approval_required",
+            "tool": pending["name"],
+            "args": pending["args"],
+            "message": f"工具 {pending['name']} 需要您的确认才能执行",
+        })
 
-        # 当前降级: 返回待审批状态，前端通过 resume API 确认
-        return {
-            "needs_approval": True,
-            "pending_tool_call": pending,
-            "messages": [{"role": "tool", "tool_call_id": pending.get("id", ""), "content": json.dumps({"pending_approval": True, "tool": pending["name"], "args": pending["args"]}, ensure_ascii=False)}],
-        }
+        if isinstance(decision, dict) and decision.get("approved"):
+            result = await tool_registry.execute(pending["name"], pending["args"], approved=True)
+            return {
+                "messages": [{"role": "tool", "tool_call_id": pending["id"],
+                    "content": _format_tool_result_json(result, pending["name"])}],
+                "tools_used": [pending["name"]],
+                "needs_approval": False,
+                "pending_tool_call": None,
+            }
+        else:
+            return {
+                "messages": [{"role": "tool", "tool_call_id": pending["id"],
+                    "content": "用户拒绝执行此操作"}],
+                "needs_approval": False,
+                "pending_tool_call": None,
+            }
 
     return approval_node
 
 
-def _make_evaluator_node():
-    """评估节点（检查回答质量，决定是否需要重新规划）"""
+def _make_evaluator_node(llm=None):
+    """评估节点 — LLM-as-Judge（替代纯规则评估）
+
+    评估维度:
+      1. 准确性 — 回答是否正确
+      2. 完整性 — 是否回答了用户的问题
+      3. 幻觉检测 — 是否包含捏造信息
+      4. 工具使用 — 工具调用结果是否被正确引用
+
+    当 llm 不可用时降级为规则评估。
+    """
+
+    # 规则评估降级版（仅在无 LLM 时使用）
+    def _rule_based_eval(state: AgentState) -> dict:
+        final_answer = state.get("final_answer", "")
+        if not final_answer:
+            return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
+        if len(final_answer.strip()) < 10:
+            return {"evaluation": {"passed": False, "reason": "回答过短", "score": 2}}
+        if "抱歉" in final_answer and "不可用" in final_answer:
+            return {"evaluation": {"passed": False, "reason": "包含错误信息", "score": 2}}
+        return {"evaluation": {"passed": True, "reason": "", "score": 7}}
 
     async def evaluator_node(state: AgentState) -> dict:
         final_answer = state.get("final_answer", "")
         if not final_answer:
-            return {"evaluation": {"passed": False, "reason": "无回答"}}
+            return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
 
-        # 简单规则评估（后续可接入 LLM Judge）
-        passed = True
-        reason = ""
+        # 无 LLM 时降级为规则评估
+        if not llm:
+            return _rule_based_eval(state)
 
-        # 检查回答长度
-        if len(final_answer.strip()) < 10:
-            passed = False
-            reason = "回答过短"
-
-        # 检查是否包含错误信息
-        if "抱歉" in final_answer and "不可用" in final_answer:
-            passed = False
-            reason = "包含错误信息"
-
-        # 检查工具调用是否有结果但无回答
+        # LLM-as-Judge
+        user_query = _extract_last_message(state)
         tools_used = state.get("tools_used", [])
-        if tools_used and not final_answer:
-            passed = False
-            reason = "使用了工具但未生成回答"
 
-        # 超过 3 轮工具调用且有回答 → 通过
-        if state.get("iterations", 0) >= 3 and final_answer:
-            passed = True
+        eval_prompt = f"""你是一个严格的质量评估专家。请评估以下 AI 回答的质量。
 
-        evaluation = {"passed": passed, "reason": reason, "iterations": state.get("iterations", 0)}
-        logger.info(f"[evaluator] passed={passed} reason={reason}")
+【用户问题】
+{user_query}
 
-        return {"evaluation": evaluation}
+【AI 回答】
+{final_answer[:2000]}
+
+【使用的工具】
+{', '.join(tools_used) if tools_used else '无'}
+
+请从以下维度评估（1-10分）:
+1. 准确性 — 回答是否正确、是否有事实错误
+2. 完整性 — 是否完整回答了用户的问题
+3. 幻觉检测 — 是否包含捏造的信息或数据
+4. 工具使用 — 如果使用了工具，结果是否被正确引用
+
+严格按以下 JSON 格式返回（不要输出其他内容）:
+{{"score": 8, "passed": true, "reason": "简短说明", "dimensions": {{"accuracy": 8, "completeness": 7, "hallucination": 9, "tool_usage": 8}}}}
+
+注意:
+- score >= 6 为通过
+- 如果回答包含明显的错误信息或"服务不可用"等，score <= 3
+- 如果使用了工具但回答中没有引用工具结果，tool_usage <= 4"""
+
+        try:
+            response = await llm.ainvoke([HumanMessage(content=eval_prompt)])
+            eval_text = response.content.strip()
+
+            # 解析 JSON（容错处理）
+            if eval_text.startswith("```"):
+                eval_text = eval_text.split("```")[1]
+                if eval_text.startswith("json"):
+                    eval_text = eval_text[4:]
+
+            evaluation = json.loads(eval_text)
+            evaluation.setdefault("passed", evaluation.get("score", 0) >= 6)
+            logger.info(f"[evaluator] LLM-as-Judge: score={evaluation.get('score')} passed={evaluation.get('passed')} reason={evaluation.get('reason', '')[:50]}")
+            return {"evaluation": evaluation}
+
+        except Exception as e:
+            logger.warning(f"[evaluator] LLM 评估失败，降级为规则评估: {e}")
+            return _rule_based_eval(state)
 
     return evaluator_node
 
@@ -458,8 +614,10 @@ def _make_memory_saver(memory_manager):
             except Exception as e:
                 logger.warning(f"[memory_saver] Redis 保存失败: {e}")
 
-            # 长期记忆: Qdrant（对话 >= 10 条时触发）
-            if len(messages) >= 10:
+            # 长期记忆: Qdrant（用重要性评分替代简单阈值）
+            # 有工具调用 或 对话 >= 8 条 时触发评估
+            tools_used = state.get("tools_used", [])
+            if tools_used or len(messages) >= 8:
                 try:
                     await memory_manager.save_summary(
                         conversation_id=state["conversation_id"],
@@ -512,10 +670,15 @@ def _after_approval(state: AgentState) -> str:
 
 def _after_eval(state: AgentState) -> str:
     evaluation = state.get("evaluation", {})
-    if evaluation.get("passed", True):
+    passed = evaluation.get("passed", True)
+    score = evaluation.get("score", 7)
+
+    # score >= 6 或 passed=True → 通过
+    if passed and score >= 6:
         return "pass"
-    # 评估未通过但已有回答 → 仍然返回（避免死循环）
-    if state.get("final_answer"):
+    # 评估未通过但已有回答且迭代 >= 2 → 仍然返回（避免死循环）
+    if state.get("final_answer") and state.get("iterations", 0) >= 2:
+        logger.warning(f"[evaluator] 评估未通过(score={score})但已达迭代上限，强制返回")
         return "pass"
     return "replan"
 

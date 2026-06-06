@@ -1,9 +1,11 @@
-"""Context Engine — 动态 Context 组装管道（v2.1 修复）
+"""Context Engine — 动态 Context 组装管道（v2.2 新增压缩 + Query Rewriting）
 
-修复:
-  - 新增 get_tool_summaries() 方法（engine.py 调用）
+功能:
+  - get_tool_summaries() 方法（engine.py 调用）
   - RAG pipeline 注入支持
   - 工具结果 JSON 格式化
+  - Context 压缩策略（LLM 驱动的智能压缩）
+  - Query Rewriting（口语化查询改写为精确检索查询）
 """
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
@@ -26,17 +28,22 @@ class ContextResult:
 
 
 class ContextEngine:
-    """动态 Context 组装引擎"""
+    """动态 Context 组装引擎（v2.2 — 新增压缩策略 + Query Rewriting）
+
+    策略: Write → Select → Compress → Isolate
+    """
 
     def __init__(
         self,
         memory_manager=None,
         rag_pipeline=None,
         tool_registry=None,
+        llm_client=None,
     ):
         self.memory_manager = memory_manager
         self.rag_pipeline = rag_pipeline
         self.tool_registry = tool_registry
+        self.llm_client = llm_client  # 用于压缩和 query rewriting
 
     def get_tool_summaries(self) -> List[dict]:
         """返回工具摘要列表（供 engine.py 使用）"""
@@ -209,3 +216,91 @@ class ContextEngine:
         if isinstance(result, (list, tuple)):
             return json.dumps(result, ensure_ascii=False, default=str)
         return str(result)
+
+    # ── Context 压缩（LLM 驱动）─────────────────────────
+
+    async def compress_context(self, text: str, target_chars: int = 2000) -> str:
+        """用 LLM 将长文本压缩到目标长度，保留核心信息
+
+        压缩策略:
+          - 保留关键事实、数字、结论
+          - 丢弃冗余描述、重复信息
+          - 结构化输出（要点列表）
+        """
+        if len(text) <= target_chars:
+            return text
+
+        if not self.llm_client:
+            # 无 LLM 时降级为截取（保留开头和结尾）
+            half = target_chars // 2
+            return text[:half] + "\n...(已压缩)...\n" + text[-half:]
+
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            response = await self.llm_client.ainvoke([
+                SystemMessage(content=(
+                    "你是一个信息压缩专家。将以下内容压缩到目标长度内，要求：\n"
+                    "1. 保留所有关键事实、数字、结论\n"
+                    "2. 丢弃冗余描述和重复信息\n"
+                    "3. 用要点列表格式输出\n"
+                    f"4. 目标长度：{target_chars} 字符以内"
+                )),
+                HumanMessage(content=text),
+            ])
+            compressed = response.content.strip()
+            logger.info(f"[context_engine] 压缩: {len(text)} → {len(compressed)} 字符")
+            return compressed
+
+        except Exception as e:
+            logger.warning(f"[context_engine] LLM 压缩失败，降级为截取: {e}")
+            half = target_chars // 2
+            return text[:half] + "\n...(已压缩)...\n" + text[-half:]
+
+    # ── Query Rewriting（RAG 检索前改写）────────────────
+
+    async def rewrite_query(self, user_query: str, conversation_history: List[dict] = None) -> str:
+        """将口语化/模糊的用户查询改写为适合向量检索的精确查询
+
+        场景:
+          - "那个上次说的东西怎么弄" → 基于上下文补全具体指代
+          - "帮我看看这个" → 结合上下文明确"这个"是什么
+          - 口语化表达 → 转为更精确的技术描述
+        """
+        if not self.llm_client:
+            return user_query
+
+        # 构建上下文（最近 3 条对话）
+        history_text = ""
+        if conversation_history:
+            recent = conversation_history[-3:]
+            history_text = "\n".join(f"[{m.get('role', 'user')}] {m.get('content', '')}" for m in recent)
+
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            prompt = f"""将以下用户查询改写为适合向量检索的精确查询。
+
+要求:
+- 如果用户用了"这个""那个""它"等指代词，结合对话历史补全
+- 如果是口语化表达，转为更精确的技术描述
+- 如果查询已经足够精确，直接返回原文
+- 只返回改写后的查询，不要解释
+
+{f"【最近对话】{history_text}" if history_text else ""}
+
+【用户查询】{user_query}"""
+
+            response = await self.llm_client.ainvoke([
+                SystemMessage(content="你是一个查询改写专家，只输出改写后的查询文本。"),
+                HumanMessage(content=prompt),
+            ])
+            rewritten = response.content.strip()
+
+            if rewritten and rewritten != user_query:
+                logger.info(f"[context_engine] query rewriting: '{user_query[:30]}...' → '{rewritten[:30]}...'")
+            return rewritten or user_query
+
+        except Exception as e:
+            logger.warning(f"[context_engine] query rewriting 失败，使用原始查询: {e}")
+            return user_query

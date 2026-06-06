@@ -87,25 +87,72 @@ class MemoryManager:
         )
 
     async def save_summary(self, conversation_id: int, user_id: int, messages: list):
-        """保存压缩摘要（30 分钟无互动时触发）"""
+        """保存压缩摘要（结构化标签 + 重要性评分）
+
+        优化:
+          - 重要性评分决定是否值得长期保存
+          - 结构化标签（topics / decisions / todos）便于后续检索
+          - LLM 驱动的智能摘要（非简单截取）
+        """
         if not messages:
+            return
+
+        # ── 1. 重要性评分 ──────────────────────────────
+        importance = self._score_conversation_importance(messages)
+        if importance < 3:
+            logger.debug(f"[memory_saver] 对话重要性过低({importance})，跳过保存")
             return
 
         text = "\n".join(f"{m.get('role')}: {m.get('content', '')}" for m in messages)
 
-        # LLM 压缩
+        # ── 2. LLM 结构化摘要 ─────────────────────────
         summary = text[:500]  # fallback
-        if self.llm:
-            try:
+        tags = []
+        try:
+            if self.llm:
                 import asyncio
                 response = await asyncio.to_thread(
                     self.llm.complete,
-                    f"将以下对话压缩为结构化摘要（200字内），保留：用户核心需求、关键话题、待办事项。\n\n{text[:3000]}"
-                )
-                summary = str(response).strip() or summary
-            except Exception as e:
-                logger.warning(f"LLM 摘要生成失败，降级为截取: {e}")
+                    f"""将以下对话压缩为结构化摘要（200字内），并提取标签。
 
+输出格式:
+摘要: <压缩后的摘要>
+话题: <topic1>, <topic2>, <topic3>
+决策: <用户做出的决定，没有则留空>
+待办: <需要后续跟进的事项，没有则留空>
+
+对话内容:
+{text[:3000]}"""
+                )
+                result_text = str(response).strip()
+
+                # 解析结构化输出
+                lines = result_text.split("\n")
+                summary_parts = []
+                for line in lines:
+                    if line.startswith("摘要:") or line.startswith("摘要："):
+                        summary_parts.append(line.split(":", 1)[-1].split("：", 1)[-1].strip())
+                    elif line.startswith("话题:") or line.startswith("话题："):
+                        topics = line.split(":", 1)[-1].split("：", 1)[-1].strip()
+                        tags.extend([t.strip() for t in topics.split(",") if t.strip()])
+                    elif line.startswith("决策:") or line.startswith("决策："):
+                        decision = line.split(":", 1)[-1].split("：", 1)[-1].strip()
+                        if decision:
+                            tags.append(f"决策:{decision}")
+                    elif line.startswith("待办:") or line.startswith("待办："):
+                        todo = line.split(":", 1)[-1].split("：", 1)[-1].strip()
+                        if todo:
+                            tags.append(f"待办:{todo}")
+
+                if summary_parts:
+                    summary = " ".join(summary_parts)
+                elif result_text:
+                    summary = result_text[:500]
+
+        except Exception as e:
+            logger.warning(f"LLM 摘要生成失败，降级为截取: {e}")
+
+        # ── 3. 存入 Qdrant ─────────────────────────────
         vector = await self.embedding_func(summary)
         point_id = str(uuid.uuid4())
 
@@ -118,9 +165,49 @@ class MemoryManager:
                 "conversation_id": conversation_id,
                 "user_id": user_id,
                 "summary": summary,
+                "tags": tags,
+                "importance": importance,
+                "message_count": len(messages),
                 "saved_at": datetime.utcnow().isoformat(),
             },
         )
+        logger.info(f"[memory_saver] 长期记忆已保存: importance={importance} tags={tags[:3]}")
+
+    @staticmethod
+    def _score_conversation_importance(messages: list) -> int:
+        """对话重要性评分（1-10）
+
+        高分场景:
+          - 包含工具调用（用户在执行实际任务）
+          - 用户明确表达需求/偏好/决定
+          - 对话轮次多（深度交互）
+          - 包含关键词（决定、重要、记住、以后）
+        """
+        score = 5  # 基础分
+
+        text = " ".join(m.get("content", "") for m in messages)
+
+        # 工具调用加分
+        tool_indicators = ["tool_calls", "function_call", "执行", "查询", "搜索"]
+        if any(ind in text for ind in tool_indicators):
+            score += 2
+
+        # 用户明确表达需求/决定
+        decision_keywords = ["决定", "选择", "确认", "记住", "以后", "重要", "必须", "偏好"]
+        if any(kw in text for kw in decision_keywords):
+            score += 2
+
+        # 对话轮次
+        if len(messages) >= 15:
+            score += 1
+        elif len(messages) <= 3:
+            score -= 1
+
+        # 包含错误/失败（值得记录以避免重复）
+        if any(kw in text for kw in ["错误", "失败", "bug", "问题"]):
+            score += 1
+
+        return max(1, min(10, score))
 
     async def save_memory(self, user_id: int, summary: str, tags: list = None, importance: int = 5) -> str:
         """
