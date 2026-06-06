@@ -282,7 +282,8 @@ class AgentService:
             config = self._get_config(conversation_id)
 
             # [P0] 升级到 v3 以支持 interrupt/resume 事件
-            stream = self._graph.astream_events(initial_state, config=config, version="v3")
+            # v3 返回协程，需 await 获取流对象
+            stream = await self._graph.astream_events(initial_state, config=config, version="v3")
 
             async for event in stream:
                 kind = event.get("event", "")
