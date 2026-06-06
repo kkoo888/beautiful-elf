@@ -42,14 +42,19 @@ class ResumeRequest(BaseModel):
     user_response: str = ""
 
 
+class ChatRequestExtended(ChatRequest):
+    """扩展聊天请求 — 新增 reasoning_depth"""
+    reasoning_depth: Optional[str] = "balanced"
+
+
 @router.post("/conversations/{conversation_id}/chat", response_model=ApiResult[ChatResponse])
 async def chat(
     request: Request,
     conversation_id: int = Path(..., description="会话 ID"),
-    data: ChatRequest = ...,
+    data: ChatRequestExtended = ...,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[ChatResponse]:
-    """对话入口（v3.0）"""
+    """对话入口（v4.1 — 新增 reasoning_depth + 审批/进度/引用事件）"""
     provider_id = await _resolve_provider_id(db, data.provider_id)
     if provider_id is None:
         return api_error("CONVERSATION_VALIDATION", "请先选择 AI 供应商", "请在设置中选择供应商和模型")
@@ -57,10 +62,11 @@ async def chat(
     messages = [{"role": m.role, "content": m.content} for m in data.messages]
     model_name = data.model_name or ""
     user_id = getattr(data, "user_id", 0) or 0
+    reasoning_depth = getattr(data, "reasoning_depth", "balanced") or "balanced"
 
     if data.stream:
         return StreamingResponse(
-            _stream_response(conversation_id, user_id, messages, provider_id, model_name),
+            _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth),
             media_type="text/event-stream",
         )
 
@@ -140,7 +146,7 @@ async def tool_stats() -> ApiResult[dict]:
 
 async def _stream_response(
     conversation_id: int, user_id: int, messages: list,
-    provider_id: int, model_name: str,
+    provider_id: int, model_name: str, reasoning_depth: str = "balanced",
 ):
     try:
         async for event in agent_service.chat_stream(
@@ -149,16 +155,21 @@ async def _stream_response(
             messages=messages,
             provider_id=provider_id,
             model_name=model_name,
+            reasoning_depth=reasoning_depth,
         ):
             event_type = event.get("type", "")
             if event_type == "token":
                 yield f"data: {json.dumps({'content': event['content'], 'done': False})}\n\n"
             elif event_type == "tool_start":
-                yield f"data: {json.dumps({'tool_start': event['tool'], 'done': False})}\n\n"
+                yield f"data: {json.dumps({'tool_start': event['tool'], 'tool_args': event.get('args', {}), 'done': False})}\n\n"
             elif event_type == "tool_end":
-                yield f"data: {json.dumps({'tool_end': event['tool'], 'done': False})}\n\n"
+                yield f"data: {json.dumps({'tool_end': event['tool'], 'output_preview': event.get('output_preview', ''), 'done': False})}\n\n"
+            elif event_type == "intent_hit":
+                yield f"data: {json.dumps({'intent_hit': event['intent'], 'intent_score': event.get('score', 0), 'done': False})}\n\n"
+            elif event_type == "cost_update":
+                yield f"data: {json.dumps({'cost': {'prompt_tokens': event['prompt_tokens'], 'completion_tokens': event['completion_tokens']}, 'done': False})}\n\n"
             elif event_type == "done":
-                yield f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', [])})}\n\n"
+                yield f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': event.get('prompt_tokens', 0), 'completion_tokens': event.get('completion_tokens', 0)})}\n\n"
             elif event_type == "error":
                 yield f"data: {json.dumps({'error': event['message'], 'done': True})}\n\n"
     except Exception as e:

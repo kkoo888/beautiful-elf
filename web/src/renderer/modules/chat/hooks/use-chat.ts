@@ -3,7 +3,7 @@
  * 基于 useChatStore，提供聊天操作方法
  */
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
 import { chat, chatStream, submitFeedback, createConversation } from '../services/chat-api'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
@@ -13,6 +13,9 @@ import type {
   FeedbackData,
   ReasoningDepth,
   StreamToken,
+  ToolProgress,
+  ApprovalRequest,
+  ContextSource,
 } from '../types/chat'
 
 /** 生成唯一 ID */
@@ -35,6 +38,14 @@ interface UseChatReturn {
   selectedProviderId: number | undefined
   /** 选中的模型名称 */
   selectedModelName: string | undefined
+  /** 工具执行进度列表 */
+  toolProgress: ToolProgress[]
+  /** 审批请求 */
+  approvalRequest: ApprovalRequest | null
+  /** 上下文引用来源 */
+  contextSources: ContextSource[]
+  /** token 统计 */
+  tokenStats: { promptTokens: number; completionTokens: number } | null
   /** 发送消息（流式） */
   sendMessage: (content: string) => void
   /** 发送消息（非流式） */
@@ -55,6 +66,8 @@ interface UseChatReturn {
   switchConversation: (id: string) => void
   /** 删除会话 */
   deleteConversation: (id: string) => void
+  /** 响应审批 */
+  respondApproval: (approved: boolean) => void
 }
 
 export function useChat(): UseChatReturn {
@@ -75,6 +88,12 @@ export function useChat(): UseChatReturn {
   } = useChatStore()
 
   const abortRef = useRef<{ abort: () => void } | null>(null)
+
+  // 新增状态：工具进度、审批、上下文引用、token 统计
+  const [toolProgress, setToolProgress] = useState<ToolProgress[]>([])
+  const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null)
+  const [contextSources, setContextSources] = useState<ContextSource[]>([])
+  const [tokenStats, setTokenStats] = useState<{ promptTokens: number; completionTokens: number } | null>(null)
 
   // 缓存 providerId -> providerType 映射，避免每次请求都拉 Provider 列表
   const providerTypeCacheRef = useRef<Record<number, string | undefined>>({})
@@ -147,6 +166,11 @@ export function useChat(): UseChatReturn {
       // 流式接收
       const providerType = await getProviderType(selectedProviderId)
 
+      // 重置本轮状态
+      setToolProgress([])
+      setContextSources([])
+      setTokenStats(null)
+
       abortRef.current = chatStream(
         {
           conversationId: convId,
@@ -192,6 +216,26 @@ export function useChat(): UseChatReturn {
           setMessages(updatedMessages)
           setIsLoading(false)
           abortRef.current = null
+        },
+        {
+          onToolStart: (tool, args) => {
+            setToolProgress((prev) => [...prev, { tool, status: 'running', args, startTime: Date.now() }])
+          },
+          onToolEnd: (tool, outputPreview) => {
+            setToolProgress((prev) =>
+              prev.map((t) => t.tool === tool && t.status === 'running' ? { ...t, status: 'done', outputPreview } : t)
+            )
+          },
+          onApproval: (req) => {
+            setApprovalRequest(req)
+            setIsLoading(false)
+          },
+          onCostUpdate: (promptTokens, completionTokens) => {
+            setTokenStats({ promptTokens, completionTokens })
+          },
+          onIntentHit: (name, score) => {
+            setContextSources((prev) => [...prev, { type: 'intent', name, score }])
+          },
         }
       )
     },
@@ -358,6 +402,16 @@ export function useChat(): UseChatReturn {
     useChatStore.getState().removeConversation(id)
   }, [])
 
+  /** 响应审批（approved/rejected） */
+  const respondApproval = useCallback((approved: boolean) => {
+    if (!approvalRequest) return
+    // TODO: 调用后端 /chat/resume 端点
+    setApprovalRequest(null)
+    if (approved) {
+      setIsLoading(true)
+    }
+  }, [approvalRequest, setIsLoading])
+
   return {
     messages,
     conversationId: currentConversationId,
@@ -367,6 +421,10 @@ export function useChat(): UseChatReturn {
     currentConversationId,
     selectedProviderId,
     selectedModelName,
+    toolProgress,
+    approvalRequest,
+    contextSources,
+    tokenStats,
     sendMessage,
     sendMessageSync,
     setReasoningDepth,
@@ -377,5 +435,6 @@ export function useChat(): UseChatReturn {
     createConversation: handleCreateConversation,
     switchConversation,
     deleteConversation,
+    respondApproval,
   }
 }

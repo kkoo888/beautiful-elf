@@ -241,8 +241,9 @@ class AgentService:
         messages: list,
         provider_id: int = 0,
         model_name: str = "",
+        reasoning_depth: str = "balanced",
     ) -> AsyncIterator[Dict[str, Any]]:
-        """Agent 流式对话"""
+        """Agent 流式对话（v4.1 — 新增审批/工具进度/上下文引用/成本事件）"""
         if not self.is_ready:
             success = await self._lazy_init(provider_id, model_name)
             if not success:
@@ -251,6 +252,8 @@ class AgentService:
 
         t0 = time.time()
         tools_used = []
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
 
         try:
             initial_state = {
@@ -272,6 +275,7 @@ class AgentService:
                 "provider_id": provider_id,
                 "model_name": model_name,
                 "evaluation": None,
+                "reasoning_depth": reasoning_depth,
             }
 
             config = self._get_config(conversation_id)
@@ -284,17 +288,49 @@ class AgentService:
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         yield {"type": "token", "content": chunk.content}
 
+                elif kind == "on_chat_model_end":
+                    # 提取 token 使用量
+                    output = event.get("data", {}).get("output", None)
+                    if output:
+                        usage = getattr(output, "usage_metadata", None) or getattr(output, "usage", None)
+                        if usage:
+                            pt = getattr(usage, "input_tokens", 0) or (usage.get("input_tokens", 0) if isinstance(usage, dict) else 0)
+                            ct = getattr(usage, "output_tokens", 0) or (usage.get("output_tokens", 0) if isinstance(usage, dict) else 0)
+                            total_prompt_tokens += pt
+                            total_completion_tokens += ct
+                            yield {"type": "cost_update", "prompt_tokens": total_prompt_tokens, "completion_tokens": total_completion_tokens}
+
                 elif kind == "on_tool_start":
                     tool_name = event.get("name", "unknown")
+                    tool_input = event.get("data", {}).get("input", {})
                     tools_used.append(tool_name)
-                    yield {"type": "tool_start", "tool": tool_name}
+                    yield {"type": "tool_start", "tool": tool_name, "args": tool_input if isinstance(tool_input, dict) else {}}
 
                 elif kind == "on_tool_end":
                     tool_name = event.get("name", "unknown")
-                    yield {"type": "tool_end", "tool": tool_name}
+                    tool_output = event.get("data", {}).get("output", "")
+                    output_preview = str(tool_output)[:200] if tool_output else ""
+                    yield {"type": "tool_end", "tool": tool_name, "output_preview": output_preview}
+
+            # 发送上下文引用（从 context_engine 获取）
+            try:
+                if self._graph and hasattr(self._graph, 'get_state'):
+                    state = self._graph.get_state(config)
+                    if state and state.values:
+                        intent = state.values.get("intent")
+                        if intent:
+                            yield {"type": "intent_hit", "intent": intent.get("intent_name", ""), "score": intent.get("score", 0)}
+            except Exception:
+                pass
 
             elapsed = int((time.time() - t0) * 1000)
-            yield {"type": "done", "tools_used": tools_used, "duration_ms": elapsed}
+            yield {
+                "type": "done",
+                "tools_used": tools_used,
+                "duration_ms": elapsed,
+                "prompt_tokens": total_prompt_tokens,
+                "completion_tokens": total_completion_tokens,
+            }
 
         except Exception as e:
             logger.error(f"Agent 流式对话失败: {e}", exc_info=True)

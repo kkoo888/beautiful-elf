@@ -18,7 +18,7 @@ import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 import type {
   ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse,
-  StreamToken, Conversation, ChatMessage,
+  StreamToken, Conversation, ChatMessage, ToolProgress, ApprovalRequest, ContextSource,
 } from '../types/chat'
 
 // ── 业务适配（id 类型转换）──────────────────────────────────
@@ -141,14 +141,20 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
 }
 
 /**
- * 创建流式聊天连接（SSE）
+ * 创建流式聊天连接（SSE）— v4.1 支持审批/工具进度/上下文引用/成本事件
  * 后端路径: POST /conversations/{conversation_id}/chat
- * 使用 apiClient baseURL 确保路径一致，通过 fetch 实现流式读取。
  */
 export function chatStream(
   request: ChatRequest,
   onToken: (token: StreamToken) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  callbacks?: {
+    onToolStart?: (tool: string, args: Record<string, unknown>) => void
+    onToolEnd?: (tool: string, outputPreview: string) => void
+    onApproval?: (req: ApprovalRequest) => void
+    onCostUpdate?: (promptTokens: number, completionTokens: number) => void
+    onIntentHit?: (name: string, score: number) => void
+  }
 ): { abort: () => void } {
   const controller = new AbortController()
   const messageId = crypto.randomUUID()
@@ -157,7 +163,6 @@ export function chatStream(
 
   const doStream = async (): Promise<void> => {
     try {
-      // 必须用完整 URL，否则 fetch 会请求到 Vite 开发服务器（localhost:5173）而非后端
       const url = `${API_BASE_URL}${API_PREFIX}/conversations/${request.conversationId}/chat`
       const resp = await fetch(url, {
         method: 'POST',
@@ -166,6 +171,7 @@ export function chatStream(
           provider_id: request.providerId, model_name: request.modelName ?? '',
           messages: [{ role: 'user', content: request.message }],
           temperature: 0.7, max_tokens: 2048, stream: true,
+          reasoning_depth: request.reasoningDepth ?? 'balanced',
         }),
         signal: controller.signal,
       })
@@ -192,6 +198,37 @@ export function chatStream(
           try {
             const data = JSON.parse(line.slice(6))
             if (data.error) { onError?.(new Error(data.error)); return }
+
+            // 工具开始事件
+            if (data.tool_start) {
+              callbacks?.onToolStart?.(data.tool_start, data.tool_args ?? {})
+              continue
+            }
+            // 工具结束事件
+            if (data.tool_end) {
+              callbacks?.onToolEnd?.(data.tool_end, data.output_preview ?? '')
+              continue
+            }
+            // 审批事件
+            if (data.approval_required) {
+              callbacks?.onApproval?.({
+                tool: data.approval_required.tool ?? '',
+                args: data.approval_required.args ?? {},
+                message: data.approval_required.message ?? '',
+              })
+              continue
+            }
+            // 成本更新事件
+            if (data.cost) {
+              callbacks?.onCostUpdate?.(data.cost.prompt_tokens ?? 0, data.cost.completion_tokens ?? 0)
+              continue
+            }
+            // 意图命中事件
+            if (data.intent_hit) {
+              callbacks?.onIntentHit?.(data.intent_hit, data.intent_score ?? 0)
+              continue
+            }
+            // token 事件
             if (data.content || data.done) {
               onToken({ content: data.content ?? '', done: data.done, messageId: firstToken ? messageId : undefined })
               firstToken = false

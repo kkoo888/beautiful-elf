@@ -1,5 +1,5 @@
 /**
- * 聊天主面板组件
+ * 聊天主面板组件（v4.1 — 新增审批/工具进度/上下文引用/token 统计）
  * 整合消息列表、输入框、推理深度切换、模型选择等
  */
 
@@ -11,6 +11,10 @@ import { SimpleMessageList } from './message-list'
 import { MessageInput } from './message-input'
 import { ReasoningDepthSwitch } from './reasoning-depth'
 import { FullModelSelect } from '@/modules/shared/components/model-selector'
+import { ApprovalDialog } from './approval-dialog'
+import { ToolProgressIndicator } from './tool-progress'
+import { TokenStatsBar } from './token-stats-bar'
+import { ContextSourcesDisplay } from './context-sources'
 import { useChat } from '../hooks/use-chat'
 import { useChatStore } from '@/stores/use-chat-store'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
@@ -22,12 +26,17 @@ export const ChatPanel: React.FC = () => {
     isLoading,
     selectedProviderId,
     selectedModelName,
+    toolProgress,
+    approvalRequest,
+    contextSources,
+    tokenStats,
     sendMessage,
     setReasoningDepth,
     setModelSelection,
     submitFeedback,
     clearMessages,
     stopGeneration,
+    respondApproval,
   } = useChat()
 
   const initDefaultModel = useChatStore((s) => s.initDefaultModel)
@@ -77,8 +86,26 @@ export const ChatPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* 工具执行进度 */}
+      {toolProgress.length > 0 && (
+        <ToolProgressIndicator tools={toolProgress} />
+      )}
+
       {/* 消息列表 */}
       <SimpleMessageList messages={messages} isLoading={isLoading} onFeedback={submitFeedback} />
+
+      {/* 上下文引用来源 */}
+      {contextSources.length > 0 && (
+        <ContextSourcesDisplay sources={contextSources} />
+      )}
+
+      {/* Token 统计 */}
+      {tokenStats && (
+        <TokenStatsBar
+          promptTokens={tokenStats.promptTokens}
+          completionTokens={tokenStats.completionTokens}
+        />
+      )}
 
       {/* 输入框 */}
       <MessageInput
@@ -86,6 +113,14 @@ export const ChatPanel: React.FC = () => {
         disabled={isLoading}
         onStop={stopGeneration}
         isLoading={isLoading}
+      />
+
+      {/* 审批对话框 */}
+      <ApprovalDialog
+        request={approvalRequest}
+        visible={!!approvalRequest}
+        onApprove={() => respondApproval(true)}
+        onReject={() => respondApproval(false)}
       />
     </div>
   )

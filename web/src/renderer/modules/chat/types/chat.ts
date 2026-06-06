@@ -36,6 +36,54 @@ export interface MessageMetadata {
   model?: string
   /** token 消耗 */
   tokenCount?: number
+  /** 工具调用列表 */
+  toolsUsed?: string[]
+  /** 执行耗时 ms */
+  durationMs?: number
+  /** prompt token 数 */
+  promptTokens?: number
+  /** completion token 数 */
+  completionTokens?: number
+  /** 上下文引用来源 */
+  contextSources?: ContextSource[]
+  /** 意图命中信息 */
+  intentHit?: { name: string; score: number }
+}
+
+/** 上下文引用来源 */
+export interface ContextSource {
+  /** 来源类型：memory / knowledge / tool */
+  type: 'memory' | 'knowledge' | 'tool' | 'intent'
+  /** 来源名称/标题 */
+  name: string
+  /** 相关度分数 */
+  score?: number
+  /** 内容预览 */
+  preview?: string
+}
+
+/** 工具执行进度 */
+export interface ToolProgress {
+  /** 工具名称 */
+  tool: string
+  /** 状态：running / done */
+  status: 'running' | 'done'
+  /** 工具参数 */
+  args?: Record<string, unknown>
+  /** 输出预览 */
+  outputPreview?: string
+  /** 开始时间 */
+  startTime?: number
+}
+
+/** 审批请求 */
+export interface ApprovalRequest {
+  /** 工具名称 */
+  tool: string
+  /** 工具参数 */
+  args: Record<string, unknown>
+  /** 提示消息 */
+  message: string
 }
 
 /** 反馈数据 */
