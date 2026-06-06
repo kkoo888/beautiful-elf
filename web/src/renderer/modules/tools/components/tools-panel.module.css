@@ -1,0 +1,71 @@
+/* 工具管理面板样式 */
+
+.panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow: auto;
+}
+
+/* 统计卡片 */
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.statCard {
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+}
+
+.statLabel {
+  font-size: 13px;
+  color: var(--ant-color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.statValue {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ant-color-text);
+}
+
+.statUnit {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ant-color-text-secondary);
+  margin-left: 4px;
+}
+
+/* 进度条 */
+.successRateBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rateBar {
+  flex: 1;
+  height: 6px;
+  background: var(--ant-color-fill-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rateBarFill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.rateText {
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 48px;
+  text-align: right;
+}

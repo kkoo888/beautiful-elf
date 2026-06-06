@@ -1,0 +1,140 @@
+"""技能管理 API — RESTful 规范"""
+from typing import Optional
+from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.services.skill_service import SkillService
+from app.schemas.skill import SkillCreate, SkillUpdate, SkillOut, SkillStatsOut
+from app.schemas.response import ApiResult, ApiPageResult, api_error
+
+router = APIRouter()
+_service = SkillService()
+
+
+@router.post("", response_model=ApiResult[SkillOut])
+async def create_skill(data: SkillCreate, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
+    item = await _service.create_skill(db, data)
+    return ApiResult(data=item)
+
+
+@router.post("/install")
+async def install_skill(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    display_name: str = Form(default=""),
+    description: str = Form(default=""),
+    version: str = Form(default="1.0.0"),
+    source: str = Form(default="github"),
+    trigger_words: str = Form(default=""),
+    dependencies: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+):
+    """安装技能：接收 zip → 解压 → 扫描 → 通过则安装，否则返回扫描报告"""
+    zip_bytes = await file.read()
+    tw = [w.strip() for w in trigger_words.split(",") if w.strip()] if trigger_words else []
+    dep = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
+
+    result = await _service.install_skill_from_zip(
+        db, zip_bytes, name, display_name or name, description,
+        version, source, tw, dep,
+    )
+
+    if not result.get("installed"):
+        return ApiResult(
+            code="SKILL_SCAN_WARNING",
+            message="技能安全扫描发现问题，请确认后继续",
+            user_tip="请检查扫描报告，确认是否忽略风险继续安装",
+            data=result,
+        )
+
+    return ApiResult(data=result, message="技能安装成功")
+
+
+@router.post("/confirm")
+async def confirm_install(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    display_name: str = Form(default=""),
+    description: str = Form(default=""),
+    version: str = Form(default="1.0.0"),
+    source: str = Form(default="github"),
+    trigger_words: str = Form(default=""),
+    dependencies: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+):
+    """用户确认忽略风险后强制安装"""
+    zip_bytes = await file.read()
+    tw = [w.strip() for w in trigger_words.split(",") if w.strip()] if trigger_words else []
+    dep = [d.strip() for d in dependencies.split(",") if d.strip()] if dependencies else []
+
+    result = await _service.force_install_skill(
+        db, name, display_name or name, description,
+        version, source, tw, dep, zip_bytes,
+    )
+    return ApiResult(data=result, message="技能安装成功（已忽略风险）")
+
+
+@router.post("/cleanup")
+async def cleanup_skill(name: str = Query(...)):
+    """取消安装时清理已解压的文件"""
+    _service.cleanup_skill_files(name)
+    return ApiResult(message="已清理")
+
+
+@router.get("/{skill_id}", response_model=ApiResult[SkillOut])
+async def get_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
+    item = await _service.get_skill_by_id(db, skill_id)
+    return ApiResult(data=item)
+
+
+@router.get("", response_model=ApiPageResult[SkillOut])
+async def list_skills(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    enabled: Optional[int] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> ApiPageResult[SkillOut]:
+    items, total = await _service.list_skills(db, page, page_size, enabled=enabled)
+    return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
+
+
+@router.put("/{skill_id}", response_model=ApiResult[SkillOut])
+async def update_skill(skill_id: int, data: SkillUpdate, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
+    item = await _service.update_skill(db, skill_id, data)
+    return ApiResult(data=item)
+
+
+@router.delete("/{skill_id}", response_model=ApiResult)
+async def delete_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
+    await _service.delete_skill(db, skill_id)
+    return ApiResult(message="删除成功")
+
+
+@router.patch("/{skill_id}/enable", response_model=ApiResult[SkillOut])
+async def enable_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
+    item = await _service.enable_skill(db, skill_id)
+    return ApiResult(data=item)
+
+
+@router.patch("/{skill_id}/disable", response_model=ApiResult[SkillOut])
+async def disable_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
+    item = await _service.disable_skill(db, skill_id)
+    return ApiResult(data=item)
+
+
+@router.get("/{skill_id}/stats", response_model=ApiResult[SkillStatsOut])
+async def get_skill_stats(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillStatsOut]:
+    item = await _service.get_skill_stats(db, skill_id)
+    return ApiResult(data=item)
+
+
+@router.post("/{skill_id}/stats/record", response_model=ApiResult[SkillStatsOut])
+async def record_skill_call(
+    skill_id: int,
+    success_flag: bool = Query(..., alias="success"),
+    duration_ms: int = Query(..., ge=0, alias="durationMs"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[SkillStatsOut]:
+    item = await _service.record_skill_call(db, skill_id, success_flag, duration_ms)
+    return ApiResult(data=item)

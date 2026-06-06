@@ -1,0 +1,46 @@
+"""命令使用统计 Service"""
+from typing import List, Tuple
+from datetime import datetime
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.repository.command_usage_repo import CommandUsageRepository
+from app.schemas.command_usage import CommandUsageOut
+
+
+class CommandUsageService:
+    def __init__(self):
+        self.repo = CommandUsageRepository()
+
+    async def record_command_use(self, db: AsyncSession, command_id: int) -> CommandUsageOut:
+        """记录一次命令使用，自动 +1"""
+        item = await self.repo.find_by_command_id(db, command_id)
+        if item:
+            updated = await self.repo.update(
+                db, item.id,
+                {"use_count": item.use_count + 1, "last_used_at": datetime.now()},
+            )
+            return self._to_out(updated)
+        else:
+            created = await self.repo.create(db, {
+                "command_id": command_id,
+                "use_count": 1,
+                "last_used_at": datetime.now(),
+            })
+            return self._to_out(created)
+
+    async def list_command_usages(
+        self, db: AsyncSession, page: int = 1, page_size: int = 20
+    ) -> Tuple[List[CommandUsageOut], int]:
+        offset = (page - 1) * page_size
+        items = await self.repo.find_all(db, offset=offset, limit=page_size)
+        total = await self.repo.count(db)
+        return [self._to_out(i) for i in items], total
+
+    async def get_top_commands(self, db: AsyncSession, limit: int = 10) -> List[CommandUsageOut]:
+        items = await self.repo.top_commands(db, limit)
+        return [self._to_out(i) for i in items]
+
+    @staticmethod
+    def _to_out(item) -> CommandUsageOut:
+        """ORM → Pydantic 模型"""
+        return CommandUsageOut.model_validate(item)

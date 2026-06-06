@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment（仅忽略本地覆盖）
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Alembic
+alembic/versions/*.py
+!alembic/versions/.gitkeep
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/

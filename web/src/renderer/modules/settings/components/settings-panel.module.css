@@ -1,0 +1,263 @@
+/* 设置面板样式 */
+
+.settingsPanel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settingsContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 4px 24px 0;
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+:global(.dark) .sectionTitle {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.formItem {
+  margin-bottom: 20px;
+}
+
+.formLabel {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.65);
+  margin-bottom: 6px;
+}
+
+:global(.dark) .formLabel {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Ollama */
+.connectionStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.connectionDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.connectionDot.success {
+  background: #52c41a;
+}
+
+.connectionDot.error {
+  background: #ff4d4f;
+}
+
+.modelSelect {
+  min-width: 240px;
+}
+
+/* AI 设置 */
+.sliderRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sliderValue {
+  min-width: 48px;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.systemPrompt {
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 13px;
+}
+
+/* 快捷键 */
+.shortcutKey {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #f5f5f5;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+  line-height: 20px;
+}
+
+:global(.dark) .kbd {
+  background: #303030;
+  border-color: #434343;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.conflictHint {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* 关于 */
+.aboutCard {
+  text-align: center;
+  padding: 24px;
+}
+
+.appIcon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.version {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-bottom: 16px;
+}
+
+:global(.dark) .version {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* 灵魂配置 */
+.soulSection {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.avatarUpload {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.avatarPreview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  border: 2px dashed #d9d9d9;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.avatarPreview:hover {
+  border-color: #ff85c0;
+}
+
+.avatarPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.personalityTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.personalityTag {
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-size: 13px;
+}
+
+.personalityTag:hover {
+  transform: scale(1.05);
+}
+
+.emotionSlider {
+  max-width: 400px;
+}
+
+.emotionLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: -4px;
+}
+
+.soulPreview {
+  background: linear-gradient(135deg, #fff0f6 0%, #f0f5ff 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 8px;
+}
+
+:global(.dark) .soulPreview {
+  background: linear-gradient(135deg, #2a1a2e 0%, #1a1f30 100%);
+}
+
+.soulPreviewTitle {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.soulPreviewDesc {
+  font-size: 14px;
+  line-height: 1.8;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+:global(.dark) .soulPreviewDesc {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* 灵魂引导 */
+.onboardContainer {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.onboardStep {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 200px;
+}
+
+.onboardNav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 24px;
+}
+
+/* 重启提示 */
+.restartAlert {
+  margin-bottom: 16px;
+}
+
+/* Tabs 自定义 */
+:global(.ant-tabs-nav) {
+  margin-bottom: 0 !important;
+}

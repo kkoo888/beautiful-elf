@@ -1,0 +1,49 @@
+"""行为日志 API — RESTful 规范"""
+from typing import Optional
+from datetime import datetime
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.services.action_log_service import ActionLogService
+from app.schemas.action_log import ActionLogCreate, ActionLogOut
+from app.schemas.response import ApiResult, ApiPageResult
+
+router = APIRouter()
+_service = ActionLogService()
+
+
+@router.post("", response_model=ApiResult[ActionLogOut])
+async def create_action_log(
+    data: ActionLogCreate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[ActionLogOut]:
+    item = await _service.create_action_log(db, data)
+    return ApiResult(data=item)
+
+
+@router.get("", response_model=ApiPageResult[ActionLogOut])
+async def list_action_logs(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    module: Optional[str] = Query(default=None),
+    action: Optional[str] = Query(default=None),
+    start_time: Optional[datetime] = Query(default=None, alias="startTime"),
+    end_time: Optional[datetime] = Query(default=None, alias="endTime"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiPageResult[ActionLogOut]:
+    items, total = await _service.list_action_logs(
+        db, page, page_size,
+        module=module, action=action,
+        start_time=start_time, end_time=end_time,
+    )
+    return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
+
+
+@router.delete("/cleanup", response_model=ApiResult)
+async def cleanup_old_logs(
+    days: int = Query(default=7, ge=1),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    count = await _service.cleanup_old_action_logs(db, days)
+    return ApiResult(data={"deleted": count})

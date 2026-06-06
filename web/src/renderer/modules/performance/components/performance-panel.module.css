@@ -1,0 +1,136 @@
+/* 性能监控面板样式 */
+
+.panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow: auto;
+}
+
+/* 指标卡片行 */
+.metricRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+/* 指标卡片 */
+.metricCard {
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.metricCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* 图表区域 */
+.chartCard {
+  border-radius: 12px;
+}
+
+.chartSection {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.chartContainer {
+  position: relative;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--ant-color-bg-container);
+  min-height: 200px;
+}
+
+.chartTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  margin-bottom: 12px;
+}
+
+.chartBody {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 140px;
+  padding-bottom: 24px;
+  position: relative;
+}
+
+.chartBarWrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.chartBarTrack {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.chartBar {
+  width: 80%;
+  min-width: 4px;
+  max-width: 16px;
+  border-radius: 2px 2px 0 0;
+  background: var(--ant-color-primary);
+  transition: height 0.3s ease;
+  opacity: 0.8;
+}
+
+.chartBarDanger {
+  background: var(--ant-color-error);
+  opacity: 1;
+}
+
+.chartLabel {
+  font-size: 10px;
+  color: var(--ant-color-text-quaternary);
+  white-space: nowrap;
+  margin-top: 4px;
+}
+
+.chartThresholdLine {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  border-top: 1px dashed var(--ant-color-error);
+  pointer-events: none;
+}
+
+.chartThresholdLabel {
+  position: absolute;
+  right: 0;
+  top: -16px;
+  font-size: 10px;
+  color: var(--ant-color-error);
+  white-space: nowrap;
+}
+
+/* 告警区域 */
+.alertsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 动画 */
+@keyframes pulseWarning {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px var(--ant-color-error-border);
+  }
+  50% {
+    box-shadow: 0 0 8px 2px rgba(255, 77, 79, 0.2);
+  }
+}

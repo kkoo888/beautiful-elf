@@ -1,0 +1,55 @@
+"""人格配置 Service"""
+from typing import List, Tuple, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.repository.soul_config_repo import SoulConfigRepository
+from app.schemas.soul_config import SoulConfigCreate, SoulConfigUpdate, SoulConfigOut
+from app.core.exceptions import RecordNotFoundError
+
+
+class SoulConfigService:
+    def __init__(self):
+        self.repo = SoulConfigRepository()
+
+    async def create_soul_config(self, db: AsyncSession, data: SoulConfigCreate) -> SoulConfigOut:
+        config = await self.repo.create(db, data.model_dump())
+        return self._to_out(config)
+
+    async def get_soul_config_by_id(self, db: AsyncSession, config_id: int) -> SoulConfigOut:
+        config = await self.repo.find_by_id(db, config_id)
+        if not config:
+            raise RecordNotFoundError("人格配置不存在")
+        return self._to_out(config)
+
+    async def list_soul_configs(self, db: AsyncSession, page: int = 1, page_size: int = 20) -> Tuple[List[SoulConfigOut], int]:
+        offset = (page - 1) * page_size
+        items = await self.repo.find_all(db, offset=offset, limit=page_size)
+        total = await self.repo.count(db)
+        return [self._to_out(c) for c in items], total
+
+    async def update_soul_config(self, db: AsyncSession, config_id: int, data: SoulConfigUpdate) -> SoulConfigOut:
+        existing = await self.repo.find_by_id(db, config_id)
+        if not existing:
+            raise RecordNotFoundError("人格配置不存在")
+        update_data = data.model_dump(exclude_unset=True)
+        if not update_data:
+            return self._to_out(existing)
+        config = await self.repo.update(db, config_id, update_data)
+        return self._to_out(config)
+
+    async def delete_soul_config(self, db: AsyncSession, config_id: int) -> bool:
+        existing = await self.repo.find_by_id(db, config_id)
+        if not existing:
+            raise RecordNotFoundError("人格配置不存在")
+        return await self.repo.soft_delete(db, config_id)
+
+    async def get_active_soul_config(self, db: AsyncSession) -> Optional[SoulConfigOut]:
+        config = await self.repo.find_active(db)
+        if not config:
+            return None
+        return self._to_out(config)
+
+    @staticmethod
+    def _to_out(config) -> SoulConfigOut:
+        """ORM → Pydantic 模型"""
+        return SoulConfigOut.model_validate(config)

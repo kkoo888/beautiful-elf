@@ -1,0 +1,140 @@
+.panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 200px;
+}
+
+.typeSelect {
+  min-width: 140px;
+}
+
+.tableWrapper {
+  flex: 1;
+  overflow: auto;
+}
+
+/* ── 上传区域 ─────────────────────────────────── */
+
+.uploadZone {
+  border: 2px dashed var(--ant-color-border, #d9d9d9);
+  border-radius: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
+  margin-bottom: 16px;
+}
+
+.uploadZone:hover,
+.uploadZoneActive {
+  border-color: var(--ant-color-primary, #1677ff);
+  background-color: var(--ant-color-primary-bg, #e6f4ff);
+}
+
+.uploadIcon {
+  font-size: 40px;
+  margin-bottom: 12px;
+  color: var(--ant-color-text-secondary, #8c8c8c);
+}
+
+.uploadTitle {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.uploadHint {
+  font-size: 13px;
+  color: var(--ant-color-text-secondary, #8c8c8c);
+}
+
+/* ── 分块详情 ─────────────────────────────────── */
+
+.chunkCard {
+  margin-bottom: 12px;
+}
+
+.chunkIndex {
+  display: inline-block;
+  min-width: 28px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: 4px;
+  background-color: var(--ant-color-primary-bg, #e6f4ff);
+  color: var(--ant-color-primary, #1677ff);
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.chunkContent {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ant-color-text, #000000d9);
+}
+
+/* ── 回收站 ───────────────────────────────────── */
+
+.recycleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+/* ── 状态标签 ─────────────────────────────────── */
+
+.statusTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.statusDotReady {
+  background-color: #52c41a;
+}
+
+.statusDotIndexing {
+  background-color: #faad14;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.statusDotError {
+  background-color: #ff4d4f;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

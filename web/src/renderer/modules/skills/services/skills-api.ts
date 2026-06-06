@@ -1,0 +1,139 @@
+/**
+ * 技能 API 服务
+ *
+ * 后端 Query 参数: page, page_size, is_enabled → snake_case
+ */
+
+import { apiClient, extractData, extractPaginated } from '@/services/api-client'
+import type {
+  Skill, SkillStats, SkillQueryParams, CreateSkillInput, UpdateSkillInput,
+  InstallSkillInput, RefineResult, PaginatedResult,
+} from '../types/skills'
+
+/** 获取技能列表（分页） */
+export async function fetchSkills(params?: SkillQueryParams): Promise<PaginatedResult<Skill>> {
+  const resp = await apiClient.get('/skills', {
+    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, enabled: params?.isEnabled },
+  })
+  const { items, total, page, pageSize } = extractPaginated(resp as any)
+  return { data: items, total, page, pageSize }
+}
+
+export async function createSkill(input: CreateSkillInput): Promise<Skill> {
+  return extractData(await apiClient.post('/skills', input))
+}
+
+export async function updateSkill(id: number, input: UpdateSkillInput): Promise<Skill> {
+  return extractData(await apiClient.put(`/skills/${id}`, input))
+}
+
+export async function deleteSkill(id: number): Promise<void> {
+  await apiClient.delete(`/skills/${id}`)
+}
+
+export async function enableSkill(id: number): Promise<Skill> {
+  return extractData(await apiClient.patch(`/skills/${id}/enable`))
+}
+
+export async function disableSkill(id: number): Promise<Skill> {
+  return extractData(await apiClient.patch(`/skills/${id}/disable`))
+}
+
+export async function fetchSkillStats(id: number): Promise<SkillStats> {
+  return extractData(await apiClient.get(`/skills/${id}/stats`))
+}
+
+export async function recordSkillCall(id: number, success: boolean, durationMs: number): Promise<void> {
+  await apiClient.post(`/skills/${id}/stats/record`, null, { params: { success, durationMs: durationMs } })
+}
+
+export async function installSkill(input: InstallSkillInput): Promise<Skill> {
+  return extractData(await apiClient.post('/skills', {
+    name: input.name,
+    displayName: input.displayName || input.name,
+    description: input.description,
+    version: input.version ?? '1.0.0',
+    source: input.source,
+    triggerWords: input.triggerWords ?? [],
+    dependencies: input.dependencies ?? [],
+    config: { content: input.content },
+  }))
+}
+
+export async function toggleSkill(id: number, enabled: boolean): Promise<Skill> {
+  return extractData(await apiClient.patch(`/skills/${id}/toggle`, { enabled }))
+}
+
+export async function refineSkill(id: number, prompt?: string): Promise<RefineResult> {
+  return extractData(await apiClient.post(`/skills/${id}/refine`, { prompt }))
+}
+
+/** 安装技能（zip 上传）— 返回安装结果或扫描警告 */
+export async function installSkillZip(input: {
+  zipBlob: Blob
+  name: string
+  displayName?: string
+  description: string
+  version?: string
+  source?: string
+  triggerWords?: string[]
+  dependencies?: string[]
+}): Promise<{ installed: boolean; scanResult?: import('../types/skills').ScanResult; data?: Skill }> {
+  const form = new FormData()
+  form.append('file', input.zipBlob, `${input.name}.zip`)
+  form.append('name', input.name)
+  form.append('display_name', input.displayName || input.name)
+  form.append('description', input.description)
+  form.append('version', input.version ?? '1.0.0')
+  form.append('source', input.source ?? 'folder')
+  form.append('trigger_words', (input.triggerWords ?? []).join(','))
+  form.append('dependencies', (input.dependencies ?? []).join(','))
+
+  try {
+    const data = extractData(await apiClient.post('/skills/install', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    }))
+    return { installed: true, data }
+  } catch (err: any) {
+    // 后端返回 SKILL_SCAN_WARNING 时，axios 会 reject
+    // 从 error response 中提取扫描结果
+    const resp = err?.response?.data
+    if (resp?.code === 'SKILL_SCAN_WARNING' && resp?.data) {
+      return { installed: false, scanResult: resp.data.scanResult }
+    }
+    throw err
+  }
+}
+
+/** 用户确认忽略风险后强制安装 */
+export async function confirmInstallZip(input: {
+  zipBlob: Blob
+  name: string
+  displayName?: string
+  description: string
+  version?: string
+  source?: string
+  triggerWords?: string[]
+  dependencies?: string[]
+}): Promise<Skill> {
+  const form = new FormData()
+  form.append('file', input.zipBlob, `${input.name}.zip`)
+  form.append('name', input.name)
+  form.append('display_name', input.displayName || input.name)
+  form.append('description', input.description)
+  form.append('version', input.version ?? '1.0.0')
+  form.append('source', input.source ?? 'folder')
+  form.append('trigger_words', (input.triggerWords ?? []).join(','))
+  form.append('dependencies', (input.dependencies ?? []).join(','))
+
+  return extractData(await apiClient.post('/skills/confirm', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  }))
+}
+
+/** 取消安装时清理后端已解压的文件 */
+export async function cleanupSkillDir(name: string): Promise<void> {
+  await apiClient.post(`/skills/cleanup?name=${encodeURIComponent(name)}`)
+}

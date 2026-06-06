@@ -1,0 +1,45 @@
+node_modules
+web/node_modules
+
+# 构建产物
+web/out/
+web/dist/
+web/build/
+web/release/
+
+# Vite 缓存
+web/.vite/
+
+# Electron 打包
+web/*.exe
+web/*.dmg
+web/*.AppImage
+web/*.deb
+web/*.rpm
+web/*.snap
+
+# 环境变量（仅忽略本地覆盖，.env / .env.development / .env.production 正常提交）
+.env.local
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OpenClaw workspace
+.openclaw/
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+
+.codegraph/

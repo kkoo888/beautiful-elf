@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/electron-builder.json",
+  "appId": "com.beautiful-elf",
+  "productName": "Beautiful-Elf",
+  "directories": {
+    "buildResources": "resources",
+    "output": "out"
+  },
+  "files": [
+    "out/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": ["nsis"],
+    "icon": "resources/icons/icon.ico"
+  },
+  "mac": {
+    "target": ["dmg"],
+    "icon": "resources/icons/icon.icns"
+  },
+  "linux": {
+    "target": ["AppImage"],
+    "icon": "resources/icons/icon.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true
+  }
+}

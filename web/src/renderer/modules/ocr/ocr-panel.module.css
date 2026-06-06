@@ -1,0 +1,33 @@
+.panel {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.card {
+  min-height: 300px;
+}
+
+.preview {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.previewImg {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+  object-fit: contain;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+}
+
+.historyCard {
+  margin-top: 24px;
+}

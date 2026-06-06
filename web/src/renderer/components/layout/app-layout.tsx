@@ -1,0 +1,53 @@
+import { useState, useEffect } from 'react'
+import { Layout } from 'antd'
+import { Outlet } from 'react-router-dom'
+import { Sidebar } from './sidebar'
+import { Header } from './header'
+import { StatusBar } from './status-bar'
+import { useTheme, useElectronApi } from '@/hooks'
+
+const { Content } = Layout
+
+/**
+ * 全局布局组件
+ * 侧边栏 + 头部 + 内容区 + 底部状态栏
+ * - 侧边栏折叠时内容区自动扩展
+ * - 使用 Ant Design Layout.Sider
+ */
+export function AppLayout() {
+  const [isMaximized, setIsMaximized] = useState(true)
+  const { window: windowApi, isElectron } = useElectronApi()
+
+  // 初始化主题
+  useTheme()
+
+  // 监听窗口最大化状态
+  useEffect(() => {
+    const checkMaximized = async () => {
+      if (isElectron) {
+        const maximized = await windowApi.isMaximized()
+        setIsMaximized(maximized)
+      }
+    }
+    checkMaximized()
+  }, [isElectron, windowApi])
+
+  return (
+    <Layout style={{ height: '100vh' }}>
+      <Sidebar />
+      <Layout>
+        <Header isMaximized={isMaximized} />
+        <Content
+          style={{
+            padding: '16px',
+            overflow: 'auto',
+            backgroundColor: 'var(--ant-color-bg-layout)',
+          }}
+        >
+          <Outlet />
+        </Content>
+        <StatusBar />
+      </Layout>
+    </Layout>
+  )
+}
