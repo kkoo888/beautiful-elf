@@ -117,15 +117,11 @@ async def _handle_agent_ws(websocket: WebSocket, data: dict, user_id: int):
             if event_type == "token":
                 await websocket.send_json({"type": "token", "content": event["content"]})
             elif event_type == "tool_start":
-                await websocket.send_json({"type": "tool_start", "tool": event["tool"], "args": event.get("args", {})})
+                await websocket.send_json({"type": "tool_start", "tool": event["tool"]})
             elif event_type == "tool_end":
-                await websocket.send_json({"type": "tool_end", "tool": event["tool"], "output_preview": event.get("output_preview", "")})
-            elif event_type == "cost_update":
-                await websocket.send_json({"type": "cost_update", "prompt_tokens": event["prompt_tokens"], "completion_tokens": event["completion_tokens"]})
-            elif event_type == "intent_hit":
-                await websocket.send_json({"type": "intent_hit", "intent": event["intent"], "score": event.get("score", 0)})
+                await websocket.send_json({"type": "tool_end", "tool": event["tool"]})
             elif event_type == "done":
-                await websocket.send_json({"type": "done", "tools_used": event.get("tools_used", []), "duration_ms": event.get("duration_ms", 0)})
+                await websocket.send_json({"type": "done"})
             elif event_type == "error":
                 await websocket.send_json({"type": "error", "message": event["message"]})
 
