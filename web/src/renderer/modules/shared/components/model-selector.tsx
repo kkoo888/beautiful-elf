@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Select, Space, Tag, Typography } from 'antd'
 import { CloudOutlined } from '@ant-design/icons'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
-import type { LLMProvider, LLMModelItem } from '@/modules/settings/types/settings'
+import type { LLMProvider, LLMModel } from '@/modules/settings/types/settings'
 
 const { Text } = Typography
 
@@ -83,8 +83,8 @@ export function CompactModelSelect({
   const options = useMemo(() => {
     return providers.flatMap((p) =>
       (p.models ?? []).map((m) => ({
-        label: `${p.name} / ${m.name}`,
-        value: `${p.id}:${m.name}`,
+        label: `${p.name} / ${m.displayName || m.modelName}`,
+        value: `${p.id}:${m.modelName}`,
         provider: p,
         model: m,
       }))
@@ -167,7 +167,7 @@ export function FullModelSelect({
       setSelectedPid(pid)
       const p = providers.find((x) => x.id === pid)
       if (p && p.models.length > 0 && onChange) {
-        onChange(pid, p.models[0].name)
+        onChange(pid, p.models[0].modelName)
       }
     },
     [providers, onChange]
@@ -211,8 +211,8 @@ export function FullModelSelect({
         showSearch
         optionFilterProp="label"
         options={(currentProvider?.models ?? []).map((m) => ({
-          label: m.name,
-          value: m.name,
+          label: m.displayName || m.modelName,
+          value: m.modelName,
         }))}
       />
     </Space>

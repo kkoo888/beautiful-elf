@@ -26,6 +26,7 @@ from app.models.expert_team import (
     ExpertRoleSkill, ExpertRoleRun,
 )
 from app.models.llm_provider import LLMProvider
+from app.models.llm_model import LLMModel
 from app.models.user import User
 from app.models.markdown_memory import MarkdownMemory
 from app.models.cost_tracking import CostRecord

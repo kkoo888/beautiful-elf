@@ -61,17 +61,19 @@ class LLMService:
         """
         from app.services.llm_provider_service import LLMProviderService
         from app.repository.llm_provider_repo import LLMProviderRepository
+        from app.repository.llm_model_repo import LLMModelRepository
         provider_repo = LLMProviderRepository()
+        model_repo = LLMModelRepository()
         # 直接读 ORM 模型，避免 ProviderOut 脱敏 api_key
         provider = await provider_repo.find_by_id(db, provider_id)
 
         if not provider:
             raise ValueError(f"供应商 ID={provider_id} 不存在")
 
-        # 确定模型名
+        # 确定模型名 — 从 llm_model 表查询（方案 A: 两表分离）
         if not model_name:
-            models = provider.models or []
-            model_name = models[0].name if models else ""
+            models = await model_repo.find_enabled_by_provider(db, provider_id)
+            model_name = models[0].model_name if models else ""
 
         if not model_name:
             raise ValueError(f"供应商 '{provider.name}' 未配置模型")

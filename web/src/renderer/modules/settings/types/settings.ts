@@ -122,18 +122,39 @@ export const SPEAKING_STYLES = [
 
 export type SpeakingStyle = (typeof SPEAKING_STYLES)[number]
 
-// ── 大模型供应商 ─────────────────────────────────────────────
+// ── 大模型供应商 + 模型（方案 A: 两表分离）────────────────────
 
 /** 供应商类型 */
 export type ProviderType = 'openai' | 'claude' | 'deepseek' | 'ollama' | 'qwen' | 'custom'
 
-/** 模型列表中的单个模型 */
-export interface LLMModelItem {
-  id: string
-  name: string
+/** 模型配置（独立实体，从 llm_model 表读取） */
+export interface LLMModel {
+  id: number
+  providerId: number
+  modelName: string       // 实际调用名，如 gpt-4o
+  displayName: string     // 显示名，如 GPT-4o
+  contextLength: number   // 上下文窗口
+  maxTokens: number       // 默认最大输出 token
+  temperature: number     // 温度 0-2
+  capabilities: { vision?: boolean; tools?: boolean; streaming?: boolean }
+  isEnabled: number       // 1=启用 0=禁用
+  sortOrder: number       // 排序
+  remark: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/** 创建模型参数 */
+export interface LLMModelPayload {
+  modelName: string
+  displayName?: string
   contextLength?: number
-  supportsVision?: boolean
-  supportsTools?: boolean
+  maxTokens?: number
+  temperature?: number
+  capabilities?: { vision?: boolean; tools?: boolean; streaming?: boolean }
+  isEnabled?: number
+  sortOrder?: number
+  remark?: string
 }
 
 /** 大模型供应商配置 */
@@ -143,9 +164,9 @@ export interface LLMProvider {
   providerType: ProviderType
   baseUrl: string
   apiKey: string
-  models: LLMModelItem[]
-  isEnabled: number  // 1=启用 0=禁用（P3C: is_xxx 命名）
-  isDefault: number  // 1=默认 0=非默认
+  models: LLMModel[]       // 关联的模型列表
+  isEnabled: number
+  isDefault: number
   description: string
   createdAt?: string
   updatedAt?: string
@@ -157,7 +178,7 @@ export interface LLMProviderPayload {
   providerType: ProviderType
   baseUrl: string
   apiKey: string
-  models?: LLMModelItem[]
+  models?: LLMModelPayload[]  // 附带模型列表
   isEnabled?: number
   isDefault?: number
   description?: string

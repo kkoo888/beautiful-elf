@@ -5,7 +5,7 @@
  */
 
 import { apiClient, extractData } from '@/services/api-client'
-import type { AppSettings, SoulConfig, OllamaModel, ConnectionTestResult, LLMProvider, LLMProviderPayload } from '../types/settings'
+import type { AppSettings, SoulConfig, OllamaModel, ConnectionTestResult, LLMProvider, LLMProviderPayload, LLMModel, LLMModelPayload } from '../types/settings'
 
 const DEFAULT_SETTINGS: AppSettings = {
   ollama: { baseUrl: 'http://localhost:11434', chatModel: 'qwen2.5:7b', embedModel: 'nomic-embed-text', visionModel: 'llava:7b' },
@@ -114,4 +114,22 @@ export async function toggleProvider(id: number): Promise<LLMProvider> {
 
 export async function deleteProvider(id: number): Promise<void> {
   await apiClient.delete(`/llm_providers/${id}`)
+}
+
+// ── 模型 API（方案 A: 独立模型管理）───────────────────────────
+
+export async function createModel(providerId: number, payload: LLMModelPayload): Promise<LLMModel> {
+  return extractData(await apiClient.post(`/llm_providers/${providerId}/models`, payload))
+}
+
+export async function updateModel(modelId: number, payload: Partial<LLMModelPayload>): Promise<LLMModel> {
+  return extractData(await apiClient.put(`/llm_providers/models/${modelId}`, payload))
+}
+
+export async function toggleModel(modelId: number): Promise<LLMModel> {
+  return extractData(await apiClient.put(`/llm_providers/models/${modelId}/toggle`))
+}
+
+export async function deleteModel(modelId: number): Promise<void> {
+  await apiClient.delete(`/llm_providers/models/${modelId}`)
 }

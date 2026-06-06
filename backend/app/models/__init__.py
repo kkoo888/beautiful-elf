@@ -66,6 +66,7 @@ from app.models.expert_team import (
 
 # 大模型供应商
 from app.models.llm_provider import LLMProvider
+from app.models.llm_model import LLMModel
 
 # Markdown 记忆文件
 from app.models.markdown_memory import MarkdownMemory
