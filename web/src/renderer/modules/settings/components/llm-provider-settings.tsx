@@ -42,6 +42,8 @@ import {
   RocketOutlined,
   EyeOutlined,
   ToolOutlined,
+  ThunderboltOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import {
   getProviders,
@@ -53,6 +55,8 @@ import {
   updateModel,
   toggleModel,
   deleteModel,
+  testConnection,
+  fetchModels,
 } from '../services/settings-api'
 import type {
   LLMProvider,
@@ -142,6 +146,12 @@ export function LlmProviderSettings() {
   const [modelProviderId, setModelProviderId] = useState<number>(0)
   const [modelForm] = Form.useForm()
   const [selectedProviderType, setSelectedProviderType] = useState<string>('')
+
+  // Ollama 连接测试
+  const [testingOllama, setTestingOllama] = useState<number | null>(null)
+  const [testResult, setTestResult] = useState<Record<number, { success: boolean; message: string; latency?: number }>>({})
+  // Ollama 模型发现
+  const [discoveringModels, setDiscoveringModels] = useState<number | null>(null)
 
   const loadProviders = useCallback(async () => {
     try {
@@ -285,6 +295,51 @@ export function LlmProviderSettings() {
     })
   }, [modelForm])
 
+  // ── Ollama 专属功能 ─────────────────────────────────
+
+  const handleTestOllama = useCallback(async (provider: LLMProvider) => {
+    setTestingOllama(provider.id)
+    setTestResult((prev) => ({ ...prev, [provider.id]: undefined as any }))
+    try {
+      const result = await testConnection(provider.baseUrl)
+      setTestResult((prev) => ({ ...prev, [provider.id]: result }))
+    } finally {
+      setTestingOllama(null)
+    }
+  }, [])
+
+  const handleDiscoverModels = useCallback(async (provider: LLMProvider) => {
+    setDiscoveringModels(provider.id)
+    try {
+      const ollamaModels = await fetchModels(provider.baseUrl)
+      if (ollamaModels.length === 0) {
+        message.warning('未发现任何模型，请检查 Ollama 服务是否正常运行')
+        return
+      }
+      const existingNames = new Set(provider.models.map((m) => m.modelName))
+      let added = 0
+      for (const m of ollamaModels) {
+        if (existingNames.has(m.name)) continue
+        await createModel(provider.id, {
+          modelName: m.name,
+          displayName: m.name,
+          contextLength: 4096,
+        })
+        added++
+      }
+      if (added > 0) {
+        message.success(`发现 ${ollamaModels.length} 个模型，新增 ${added} 个`)
+        await loadProviders()
+      } else {
+        message.info(`发现 ${ollamaModels.length} 个模型，均已存在`)
+      }
+    } catch (e: any) {
+      message.error('模型发现失败：' + (e.message || '未知错误'))
+    } finally {
+      setDiscoveringModels(null)
+    }
+  }, [loadProviders])
+
   const maskKey = (key: string) => {
     if (!key || key.length <= 8) return '****'
     return key.slice(0, 4) + '****' + key.slice(-4)
@@ -345,6 +400,43 @@ export function LlmProviderSettings() {
                   </Popconfirm>
                 </Space>
               </div>
+
+              {/* Ollama 专属：测试连接 + 发现模型 */}
+              {p.providerType === 'ollama' && (
+                <div style={{ margin: '8px 0', padding: '8px 12px', background: '#fafafa', borderRadius: 6, border: '1px dashed #d9d9d9' }}>
+                  <Space size={8} wrap>
+                    <Button
+                      size="small"
+                      type="primary"
+                      icon={<ThunderboltOutlined />}
+                      loading={testingOllama === p.id}
+                      onClick={() => void handleTestOllama(p)}
+                    >
+                      测试连接
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={<ReloadOutlined />}
+                      loading={discoveringModels === p.id}
+                      onClick={() => void handleDiscoverModels(p)}
+                    >
+                      发现模型
+                    </Button>
+                    {testResult[p.id] && (
+                      <Space size={4}>
+                        <span style={{
+                          display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                          background: testResult[p.id].success ? '#52c41a' : '#ff4d4f',
+                        }} />
+                        <Text type={testResult[p.id].success ? 'success' : 'danger'} style={{ fontSize: 12 }}>
+                          {testResult[p.id].message}
+                          {testResult[p.id].latency && ` (${testResult[p.id].latency}ms)`}
+                        </Text>
+                      </Space>
+                    )}
+                  </Space>
+                </div>
+              )}
 
               {/* 模型列表 */}
               <Divider style={{ margin: '8px 0' }} />

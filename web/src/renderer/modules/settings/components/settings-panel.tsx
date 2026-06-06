@@ -6,7 +6,6 @@
 import { useCallback } from 'react'
 import { Tabs, Alert, Spin } from 'antd'
 import {
-  CloudServerOutlined,
   RobotOutlined,
   SettingOutlined,
   KeyOutlined,
@@ -20,7 +19,6 @@ import {
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSettings } from '../hooks/use-settings'
-import { OllamaSettings } from './ollama-settings'
 import { AiSettings } from './ai-settings'
 import { LlmProviderSettings } from './llm-provider-settings'
 import { AppSettingsPanel } from './app-settings'
@@ -43,11 +41,6 @@ const TAB_ITEMS = [
     key: 'llm_provider',
     label: '模型供应商',
     icon: <ApiOutlined />,
-  },
-  {
-    key: 'ollama',
-    label: 'Ollama',
-    icon: <CloudServerOutlined />,
   },
   {
     key: 'ai',
@@ -99,9 +92,6 @@ export default function SettingsPanel() {
     isLoading,
     updateSettings,
     updateSoul,
-    testOllamaConnection,
-    loadModels,
-    models,
     restartHint,
     clearRestartHint,
   } = useSettings()
@@ -113,16 +103,6 @@ export default function SettingsPanel() {
           return <LoginSettings />
         case 'llm_provider':
           return <LlmProviderSettings />
-        case 'ollama':
-          return (
-            <OllamaSettings
-              settings={settings.ollama}
-              models={models}
-              onChange={(p) => updateSettings({ ollama: p })}
-              onTestConnection={testOllamaConnection}
-              onLoadModels={loadModels}
-            />
-          )
         case 'ai':
           return <AiSettings settings={settings.ai} onChange={(p) => updateSettings({ ai: p })} />
         case 'app':
@@ -153,7 +133,7 @@ export default function SettingsPanel() {
           return null
       }
     },
-    [settings, soul, models, updateSettings, updateSoul, testOllamaConnection, loadModels]
+    [settings, soul, updateSettings, updateSoul]
   )
 
   if (isLoading) {
