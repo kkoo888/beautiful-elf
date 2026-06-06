@@ -290,16 +290,18 @@ export function LlmProviderSettings() {
   }, [loadProviders])
 
   const handleMoveModel = useCallback(async (provider: LLMProvider, modelIndex: number, direction: -1 | 1) => {
-    const models = provider.models
+    const models = [...provider.models]
     const targetIndex = modelIndex + direction
     if (targetIndex < 0 || targetIndex >= models.length) return
-    const a = models[modelIndex]
-    const b = models[targetIndex]
+    // 交换位置
+    const temp = models[modelIndex]
+    models[modelIndex] = models[targetIndex]
+    models[targetIndex] = temp
+    // 重新编号 sort_order 并批量更新
     try {
-      await Promise.all([
-        updateModel(provider.id, a.id, { sortOrder: b.sortOrder }),
-        updateModel(provider.id, b.id, { sortOrder: a.sortOrder }),
-      ])
+      await Promise.all(
+        models.map((m, idx) => updateModel(provider.id, m.id, { sortOrder: idx }))
+      )
       await loadProviders()
     } catch {
       message.error('排序失败')
