@@ -9,8 +9,25 @@
 
 .settingsContent {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 0 4px 24px 0;
+  display: flex;
+}
+
+/* 左侧 tab 固定，右侧内容滚动 */
+.settingsContent :global(.ant-tabs) {
+  height: 100%;
+}
+
+.settingsContent :global(.ant-tabs-nav) {
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.settingsContent :global(.ant-tabs-content-holder) {
+  flex: 1;
+  overflow-y: auto;
+  padding-left: 16px;
 }
 
 .sectionTitle {

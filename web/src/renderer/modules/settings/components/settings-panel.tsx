@@ -164,7 +164,7 @@ export default function SettingsPanel() {
         <Tabs
           tabPosition="left"
           items={TAB_ITEMS.map((item) => ({
-            ...item,
+            key: item.key,
             label: (
               <span>
                 {item.icon}

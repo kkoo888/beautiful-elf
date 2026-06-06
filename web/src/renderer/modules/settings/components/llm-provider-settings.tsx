@@ -44,8 +44,8 @@ import {
   ToolOutlined,
   ThunderboltOutlined,
   ReloadOutlined,
-  UpOutlined,
-  DownOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
 } from '@ant-design/icons'
 import {
   getProviders,
@@ -489,14 +489,14 @@ export function LlmProviderSettings() {
                         <Switch checked={m.isEnabled === 1} onChange={() => void handleToggleModel(p.id, m.id)} size="small" style={{ marginLeft: 4 }} />
                       </Tooltip>
                       <Tooltip title="上移">
-                        <UpOutlined
-                          style={{ fontSize: 10, cursor: idx > 0 ? 'pointer' : 'not-allowed', color: idx > 0 ? '#1677ff' : '#d9d9d9' }}
+                        <ArrowUpOutlined
+                          style={{ fontSize: 11, cursor: idx > 0 ? 'pointer' : 'not-allowed', color: idx > 0 ? '#1677ff' : '#d9d9d9' }}
                           onClick={() => idx > 0 && void handleMoveModel(p, idx, -1)}
                         />
                       </Tooltip>
                       <Tooltip title="下移">
-                        <DownOutlined
-                          style={{ fontSize: 10, cursor: idx < p.models.length - 1 ? 'pointer' : 'not-allowed', color: idx < p.models.length - 1 ? '#1677ff' : '#d9d9d9' }}
+                        <ArrowDownOutlined
+                          style={{ fontSize: 11, cursor: idx < p.models.length - 1 ? 'pointer' : 'not-allowed', color: idx < p.models.length - 1 ? '#1677ff' : '#d9d9d9' }}
                           onClick={() => idx < p.models.length - 1 && void handleMoveModel(p, idx, 1)}
                         />
                       </Tooltip>
