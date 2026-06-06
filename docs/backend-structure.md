@@ -66,7 +66,8 @@ beautiful-elf/
 │       │   ├── prompt.py              # Prompt 版本管理
 │       │   ├── action_log.py          # 操作日志
 │       │   ├── expert_team.py         # 专家团 & 成员 & 运行记录
-│       │   └── llm_provider.py        # 🆕 大模型供应商配置
+│       │   ├── llm_provider.py        # 🆕 大模型供应商配置
+│       │   └── llm_model.py           # 🆕 大模型配置（独立于供应商）
 │       │
 │       ├── schemas/                   # 📝 Pydantic 数据模型（API 请求/响应）
 │       │   ├── __init__.py
@@ -136,7 +137,8 @@ beautiful-elf/
 │       │   ├── prompt_repo.py
 │       │   ├── ai_feedback_repo.py
 │       │   ├── action_log_repo.py
-│       │   └── llm_provider_repo.py     # 🆕 大模型供应商 repo
+│       │   ├── llm_provider_repo.py     # 🆕 大模型供应商 repo
+│       │   └── llm_model_repo.py        # 🆕 大模型 repo
 │       │
 │       ├── mappers/                   # 🔄 数据映射器（封装具体存储引擎操作）
 │       │   ├── __init__.py

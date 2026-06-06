@@ -88,24 +88,24 @@ async def create_model(
     return ApiResult(data=item)
 
 
-@router.put("/models/{model_id}", response_model=ApiResult[LLMModelOut])
+@router.put("/{provider_id}/models/{model_id}", response_model=ApiResult[LLMModelOut])
 async def update_model(
-    model_id: int, data: LLMModelUpdate, db: AsyncSession = Depends(get_db)
+    provider_id: int, model_id: int, data: LLMModelUpdate, db: AsyncSession = Depends(get_db)
 ) -> ApiResult[LLMModelOut]:
     """更新单个模型"""
     item = await _service.update_model(db, model_id, data)
     return ApiResult(data=item)
 
 
-@router.put("/models/{model_id}/toggle", response_model=ApiResult[LLMModelOut])
-async def toggle_model(model_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[LLMModelOut]:
+@router.put("/{provider_id}/models/{model_id}/toggle", response_model=ApiResult[LLMModelOut])
+async def toggle_model(provider_id: int, model_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[LLMModelOut]:
     """切换模型启用/禁用状态"""
     item = await _service.toggle_model_enabled(db, model_id)
     return ApiResult(data=item)
 
 
-@router.delete("/models/{model_id}", response_model=ApiResult)
-async def delete_model(model_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
+@router.delete("/{provider_id}/models/{model_id}", response_model=ApiResult)
+async def delete_model(provider_id: int, model_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
     """删除单个模型"""
     await _service.delete_model(db, model_id)
     return ApiResult(message="删除成功")

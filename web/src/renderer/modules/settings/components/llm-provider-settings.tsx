@@ -234,7 +234,7 @@ export function LlmProviderSettings() {
         remark: values.remark || '',
       }
       if (editingModel) {
-        await updateModel(editingModel.id, payload)
+        await updateModel(modelProviderId, editingModel.id, payload)
         message.success('模型已更新')
       } else {
         await createModel(modelProviderId, payload)
@@ -247,13 +247,13 @@ export function LlmProviderSettings() {
     }
   }, [modelForm, editingModel, modelProviderId, loadProviders])
 
-  const handleToggleModel = useCallback(async (modelId: number) => {
-    await toggleModel(modelId)
+  const handleToggleModel = useCallback(async (providerId: number, modelId: number) => {
+    await toggleModel(providerId, modelId)
     await loadProviders()
   }, [loadProviders])
 
-  const handleDeleteModel = useCallback(async (modelId: number) => {
-    await deleteModel(modelId)
+  const handleDeleteModel = useCallback(async (providerId: number, modelId: number) => {
+    await deleteModel(providerId, modelId)
     message.success('模型已删除')
     await loadProviders()
   }, [loadProviders])
@@ -351,12 +351,12 @@ export function LlmProviderSettings() {
                       <span>{m.displayName || m.modelName}</span>
                       {m.contextLength > 0 && <Text type="secondary" style={{ fontSize: 10 }}>{Math.round(m.contextLength / 1000)}k</Text>}
                       <Tooltip title={m.isEnabled ? '点击禁用' : '点击启用'}>
-                        <Switch checked={m.isEnabled === 1} onChange={() => void handleToggleModel(m.id)} size="small" style={{ marginLeft: 4 }} />
+                        <Switch checked={m.isEnabled === 1} onChange={() => void handleToggleModel(p.id, m.id)} size="small" style={{ marginLeft: 4 }} />
                       </Tooltip>
                       <Tooltip title="编辑">
                         <EditOutlined style={{ fontSize: 11, cursor: 'pointer', color: '#1677ff' }} onClick={() => handleEditModel(m)} />
                       </Tooltip>
-                      <Popconfirm title="删除此模型？" onConfirm={() => void handleDeleteModel(m.id)} okText="删除" cancelText="取消">
+                      <Popconfirm title="删除此模型？" onConfirm={() => void handleDeleteModel(p.id, m.id)} okText="删除" cancelText="取消">
                         <DeleteOutlined style={{ fontSize: 11, cursor: 'pointer', color: '#ff4d4f' }} />
                       </Popconfirm>
                     </Tag>

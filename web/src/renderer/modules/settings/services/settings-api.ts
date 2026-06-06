@@ -122,14 +122,14 @@ export async function createModel(providerId: number, payload: LLMModelPayload):
   return extractData(await apiClient.post(`/llm_providers/${providerId}/models`, payload))
 }
 
-export async function updateModel(modelId: number, payload: Partial<LLMModelPayload>): Promise<LLMModel> {
-  return extractData(await apiClient.put(`/llm_providers/models/${modelId}`, payload))
+export async function updateModel(providerId: number, modelId: number, payload: Partial<LLMModelPayload>): Promise<LLMModel> {
+  return extractData(await apiClient.put(`/llm_providers/${providerId}/models/${modelId}`, payload))
 }
 
-export async function toggleModel(modelId: number): Promise<LLMModel> {
-  return extractData(await apiClient.put(`/llm_providers/models/${modelId}/toggle`))
+export async function toggleModel(providerId: number, modelId: number): Promise<LLMModel> {
+  return extractData(await apiClient.put(`/llm_providers/${providerId}/models/${modelId}/toggle`))
 }
 
-export async function deleteModel(modelId: number): Promise<void> {
-  await apiClient.delete(`/llm_providers/models/${modelId}`)
+export async function deleteModel(providerId: number, modelId: number): Promise<void> {
+  await apiClient.delete(`/llm_providers/${providerId}/models/${modelId}`)
 }
