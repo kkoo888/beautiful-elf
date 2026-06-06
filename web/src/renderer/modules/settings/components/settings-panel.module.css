@@ -2,6 +2,7 @@
 
 .settingsPanel {
   height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -12,11 +13,13 @@
   overflow: hidden;
   padding: 0 4px 24px 0;
   display: flex;
+  min-width: 0;
 }
 
 /* 左侧 tab 固定，右侧内容滚动 */
 .settingsContent :global(.ant-tabs) {
   height: 100%;
+  width: 100%;
 }
 
 .settingsContent :global(.ant-tabs-nav) {
@@ -28,6 +31,11 @@
   flex: 1;
   overflow-y: auto;
   padding-left: 16px;
+  min-width: 0;
+}
+
+.settingsContent :global(.ant-tabs-tabpane) {
+  width: 100%;
 }
 
 .sectionTitle {
