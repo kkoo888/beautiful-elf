@@ -113,7 +113,9 @@ const MODEL_PRESETS: Record<string, { modelName: string; displayName: string; co
     { modelName: 'qwen-turbo', displayName: '通义千问 Turbo', contextLength: 131072 },
   ],
   xiaomi: [
-    { modelName: 'MiMo-7B', displayName: 'MiMo 7B', contextLength: 131072 },
+    { modelName: 'mimo-v2.5-pro', displayName: 'MiMo V2.5 Pro', contextLength: 131072 },
+    { modelName: 'mimo-v2-pro', displayName: 'MiMo V2 Pro', contextLength: 131072 },
+    { modelName: 'mimo-v2-flash', displayName: 'MiMo V2 Flash', contextLength: 131072 },
   ],
   zhipu: [
     { modelName: 'glm-4-plus', displayName: 'GLM-4 Plus', contextLength: 128000 },
