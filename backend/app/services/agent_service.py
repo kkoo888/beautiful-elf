@@ -64,12 +64,12 @@ class AgentService:
             try:
                 from app.agent.rag_pipeline import RAGPipeline
                 from app.core.config import settings
-                if hasattr(settings, 'QDRANT_URL') and settings.QDRANT_URL:
-                    rag_pipeline = RAGPipeline(
-                        qdrant_url=settings.QDRANT_URL,
-                        embedding_model=None,  # 由 RAGPipeline 内部初始化
-                    )
-                    logger.info("RAG pipeline 已注入 ContextEngine")
+                qdrant_url = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
+                rag_pipeline = RAGPipeline(
+                    qdrant_url=qdrant_url,
+                    embedding_model=None,  # 由 RAGPipeline 内部初始化
+                )
+                logger.info(f"RAG pipeline 已注入 ContextEngine (qdrant={qdrant_url})")
             except Exception as e:
                 logger.warning(f"RAG pipeline 初始化跳过: {e}")
 
