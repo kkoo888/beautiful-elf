@@ -30,6 +30,7 @@ from app.api.v1 import (
     llm_provider,
     intent,
     auth,
+    debug,
 )
 
 api_router = APIRouter()
@@ -77,3 +78,6 @@ api_router.include_router(backup.router, prefix="/backups", tags=["backup"])
 
 # config 含 /{key} 通配符，放最后
 api_router.include_router(config.router, prefix="/configs", tags=["config"])
+
+# 调试（开发环境可用，生产环境建议关闭）
+api_router.include_router(debug.router, prefix="/debug", tags=["debug"])

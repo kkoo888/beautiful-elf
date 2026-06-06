@@ -28,6 +28,7 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 MAX_MESSAGE_WINDOW = 30
+DEFAULT_AGENT_TIMEOUT = 300  # 全局超时 5 分钟
 
 
 # ── 熔断器 ────────────────────────────────────────────────
@@ -149,12 +150,14 @@ def build_agent_graph(
     skill_executor=None,
     rag_pipeline=None,
     enable_interrupt: bool = False,
+    timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
 ) -> Any:
     """
-    构建 Agent 工作流图（v3.0）。
+    构建 Agent 工作流图（v4.0）。
 
     Args:
         enable_interrupt: 是否启用 interrupt/resume（需要 checkpointer）
+        timeout_seconds: 全局超时（秒），超时后 Agent 强制结束
     """
     graph = StateGraph(AgentState)
 
@@ -326,7 +329,23 @@ def _make_llm_caller(llm):
             "你是一个智能助手，能够使用工具回答用户问题。请用中文回答。"
 
         lc_messages = [SystemMessage(content=system_prompt)]
-        raw_messages = _trim_messages(state["messages"], MAX_MESSAGE_WINDOW)
+
+        # ── Auto-Compaction（压缩旧历史）─────────────
+        raw_messages = state["messages"]
+        if len(raw_messages) > MAX_MESSAGE_WINDOW:
+            try:
+                from app.agent.compaction import maybe_compact
+                raw_messages = await maybe_compact(
+                    messages=[{"role": getattr(m, "role", m.get("role", "user")), "content": getattr(m, "content", m.get("content", ""))} for m in raw_messages],
+                    llm_client=llm,
+                    user_id=state.get("user_id", 0),
+                    conversation_id=state.get("conversation_id", 0),
+                )
+            except Exception as e:
+                logger.warning(f"[llm_call] compaction 失败，降级为窗口裁剪: {e}")
+                raw_messages = _trim_messages(raw_messages, MAX_MESSAGE_WINDOW)
+        else:
+            raw_messages = _trim_messages(raw_messages, MAX_MESSAGE_WINDOW)
 
         for m in raw_messages:
             if isinstance(m, dict):
@@ -358,6 +377,29 @@ def _make_llm_caller(llm):
         elapsed = time.time() - t0
         has_tools = bool(response.tool_calls)
         logger.info(f"[llm_call] tool_calls={has_tools} elapsed={elapsed:.2f}s iterations={state.get('iterations', 0)}")
+
+        # ── 成本追踪 ──────────────────────────────────
+        try:
+            usage = getattr(response, "usage_metadata", None) or getattr(response, "usage", None)
+            if usage:
+                prompt_tokens = getattr(usage, "input_tokens", 0) or (usage.get("input_tokens", 0) if isinstance(usage, dict) else 0)
+                completion_tokens = getattr(usage, "output_tokens", 0) or (usage.get("output_tokens", 0) if isinstance(usage, dict) else 0)
+                if prompt_tokens or completion_tokens:
+                    from app.services.cost_tracker import cost_tracker
+                    from app.core.database import AsyncSessionLocal
+                    async with AsyncSessionLocal() as cost_db:
+                        await cost_tracker.record(
+                            db=cost_db,
+                            user_id=state.get("user_id", 0),
+                            conversation_id=state.get("conversation_id", 0),
+                            model_name=getattr(llm, "model_name", "") or getattr(llm, "model", ""),
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            duration_ms=int(elapsed * 1000),
+                            call_type="chat",
+                        )
+        except Exception as e:
+            logger.debug(f"[llm_call] 成本追踪失败（不影响主流程）: {e}")
 
         if response.tool_calls:
             return {

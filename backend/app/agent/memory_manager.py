@@ -1,17 +1,15 @@
-"""两层记忆管理器 — Redis 会话缓存 + Qdrant 长期记忆
+"""两层记忆管理器 — Redis 会话缓存 + Qdrant 长期记忆（v2.0 升级版）
+
+v2.0 新增:
+  - 混合检索: BM25 关键词 + 向量语义（借鉴 OpenClaw）
+  - 时间衰减: 旧记忆自动降权（半衰期 30 天）
+  - MMR 去重: 最大边际相关性，避免返回重复记忆
+  - Markdown 记忆文件: 支持 daily log 和长期记忆
+  - 结构化标签: topics / decisions / todos
 
 架构:
   短期记忆: Redis（会话上下文缓存，TTL 1h）
-  长期记忆: Qdrant（语义向量，持久化）
-
-职责:
-  - 会话缓存读写（Redis）
-  - 长期记忆存入 / 检索（Qdrant）
-  - 摘要压缩（LLM 驱动）
-
-注意:
-  - 本模块是 Agent 引擎的子系统
-  - 不含路由细节，由 memory_service 调用
+  长期记忆: Qdrant（语义向量，持久化）+ MySQL（Markdown 元数据）
 """
 import json
 import uuid
@@ -244,64 +242,336 @@ class MemoryManager:
     # ── 语义检索 ────────────────────────────────────────
 
     async def search(self, query: str, user_id: int, limit: int = 5) -> str:
-        """检索相关记忆（返回拼装文本）"""
+        """检索相关记忆 — 混合搜索（BM25 + 向量）+ 时间衰减 + MMR 去重
+
+        流程:
+          1. 向量检索（Qdrant）→ 候选池
+          2. BM25 关键词匹配 → 候选池
+          3. 加权合并（向量 0.7 + BM25 0.3）
+          4. 时间衰减（半衰期 30 天）
+          5. MMR 去重（λ=0.7）
+          6. 返回 Top-K
+        """
         query_vector = await self.embedding_func(query)
 
         from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-        results = self.qdrant.search(
+        user_filter = Filter(must=[
+            FieldCondition(key="user_id", match=MatchValue(value=user_id))
+        ]) if user_id else None
+
+        # ── 1. 向量检索（候选池 = limit × 4）──
+        vector_results = self.qdrant.search(
             collection=MEMORY_COLLECTION,
             query_vector=query_vector,
-            limit=limit,
-            score_threshold=0.35,
-            filter_payload=Filter(must=[
-                FieldCondition(key="user_id", match=MatchValue(value=user_id))
-            ]) if user_id else None,
+            limit=limit * 4,
+            score_threshold=0.25,
+            filter_payload=user_filter,
         )
 
-        if not results:
+        # ── 2. BM25 关键词匹配 ──────────────────────
+        bm25_results = self._bm25_search(query, user_id, limit * 4)
+
+        # ── 3. 加权合并 ────────────────────────────
+        merged = self._merge_results(
+            vector_results=vector_results,
+            bm25_results=bm25_results,
+            vector_weight=0.7,
+            text_weight=0.3,
+        )
+
+        # ── 4. 时间衰减 ────────────────────────────
+        merged = self._apply_temporal_decay(merged, half_life_days=30)
+
+        # ── 5. MMR 去重 ────────────────────────────
+        merged = self._apply_mmr(merged, query, lambda_param=0.7)
+
+        # ── 6. Top-K ───────────────────────────────
+        merged = merged[:limit]
+
+        if not merged:
             return ""
 
+        # ── 7. 拼装返回 ────────────────────────────
         parts = []
-        for r in results:
-            ptype = r.payload.get("type", "detail")
-            if ptype == "summary" or ptype == "user_memory":
-                parts.append(f"[记忆 | {r.payload.get('saved_at', '')}] {r.payload.get('summary', '')}")
+        for r in merged:
+            ptype = r.get("type", "detail")
+            score = r.get("score", 0)
+            if ptype in ("summary", "user_memory"):
+                parts.append(f"[记忆 | 相关度:{score:.2f} | {r.get('saved_at', '')}] {r.get('summary', '')}")
             else:
-                msg_count = len(r.payload.get("messages", []))
-                parts.append(f"[对话记录 | {r.payload.get('saved_at', '')} | {msg_count}条消息]")
+                msg_count = len(r.get("messages", []))
+                parts.append(f"[对话记录 | 相关度:{score:.2f} | {r.get('saved_at', '')} | {msg_count}条消息]")
 
         return "\n".join(parts)
 
     async def search_with_scores(self, query: str, user_id: int, limit: int = 10) -> List[dict]:
-        """检索记忆并返回带分数的结果"""
+        """检索记忆并返回带分数的结果（同样使用混合搜索）"""
         query_vector = await self.embedding_func(query)
 
         from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-        results = self.qdrant.search(
+        user_filter = Filter(must=[
+            FieldCondition(key="user_id", match=MatchValue(value=user_id))
+        ]) if user_id else None
+
+        vector_results = self.qdrant.search(
             collection=MEMORY_COLLECTION,
             query_vector=query_vector,
-            limit=limit,
-            score_threshold=0.35,
-            filter_payload=Filter(must=[
-                FieldCondition(key="user_id", match=MatchValue(value=user_id))
-            ]) if user_id else None,
+            limit=limit * 4,
+            score_threshold=0.25,
+            filter_payload=user_filter,
         )
 
+        bm25_results = self._bm25_search(query, user_id, limit * 4)
+        merged = self._merge_results(vector_results, bm25_results, 0.7, 0.3)
+        merged = self._apply_temporal_decay(merged, half_life_days=30)
+        merged = self._apply_mmr(merged, query, lambda_param=0.7)
+
         items = []
-        for r in results:
+        for r in merged[:limit]:
             items.append({
-                "id": r.id,
-                "score": r.score,
-                "type": r.payload.get("type", ""),
-                "summary": r.payload.get("summary", ""),
-                "tags": r.payload.get("tags", []),
-                "importance": r.payload.get("importance", 5),
-                "saved_at": r.payload.get("saved_at", ""),
+                "id": r.get("id", ""),
+                "score": r.get("score", 0),
+                "type": r.get("type", ""),
+                "summary": r.get("summary", ""),
+                "tags": r.get("tags", []),
+                "importance": r.get("importance", 5),
+                "saved_at": r.get("saved_at", ""),
             })
 
         return items
+
+    # ── BM25 关键词搜索 ───────────────────────────────
+
+    def _bm25_search(self, query: str, user_id: int, limit: int) -> List[dict]:
+        """BM25 关键词匹配（基于 Qdrant payload 中的 summary 文本）
+
+        简化实现：用 Python 端的 TF-IDF 近似 BM25
+        生产环境建议用 Elasticsearch 或 SQLite FTS5
+        """
+        import math
+        from collections import Counter
+
+        # 从 Qdrant 获取所有用户记忆（粗暴但有效，后续可换 ES）
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+            user_filter = Filter(must=[
+                FieldCondition(key="user_id", match=MatchValue(value=user_id))
+            ]) if user_id else None
+
+            all_results = self.qdrant.search(
+                collection=MEMORY_COLLECTION,
+                query_vector=[0.0] * 1024,  # 零向量，不过滤相似度
+                limit=500,
+                score_threshold=0.0,
+                filter_payload=user_filter,
+            )
+        except Exception:
+            return []
+
+        if not all_results:
+            return []
+
+        # 简单 BM25 评分
+        query_terms = set(query.lower().split())
+        if not query_terms:
+            return []
+
+        # 计算 IDF
+        doc_count = len(all_results)
+        doc_freq = Counter()
+        for r in all_results:
+            text = (r.payload.get("summary", "") or "").lower()
+            terms_in_doc = set(text.split())
+            for term in query_terms:
+                if term in terms_in_doc:
+                    doc_freq[term] += 1
+
+        # BM25 参数
+        k1 = 1.5
+        b = 0.75
+        avg_dl = sum(len((r.payload.get("summary", "") or "").split()) for r in all_results) / max(doc_count, 1)
+
+        scored = []
+        for r in all_results:
+            text = (r.payload.get("summary", "") or "").lower()
+            terms = text.split()
+            dl = len(terms)
+            tf_map = Counter(terms)
+
+            score = 0.0
+            for term in query_terms:
+                if term not in tf_map:
+                    continue
+                tf = tf_map[term]
+                df = doc_freq.get(term, 0)
+                idf = math.log((doc_count - df + 0.5) / (df + 0.5) + 1)
+                tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / max(avg_dl, 1)))
+                score += idf * tf_norm
+
+            if score > 0:
+                scored.append({
+                    "id": r.id,
+                    "score": score,
+                    "type": r.payload.get("type", "detail"),
+                    "summary": r.payload.get("summary", ""),
+                    "tags": r.payload.get("tags", []),
+                    "importance": r.payload.get("importance", 5),
+                    "saved_at": r.payload.get("saved_at", ""),
+                    "messages": r.payload.get("messages", []),
+                })
+
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored[:limit]
+
+    # ── 结果合并（加权）──────────────────────────────
+
+    def _merge_results(
+        self,
+        vector_results: list,
+        bm25_results: list,
+        vector_weight: float = 0.7,
+        text_weight: float = 0.3,
+    ) -> List[dict]:
+        """加权合并向量和 BM25 结果"""
+        # 归一化分数
+        def normalize(results: list, score_key: str = "score") -> dict:
+            if not results:
+                return {}
+            max_score = max(r.get(score_key, 0) for r in results) or 1
+            return {
+                r.id if hasattr(r, "id") else r.get("id", ""): {
+                    "id": r.id if hasattr(r, "id") else r.get("id", ""),
+                    "score": (r.score if hasattr(r, "score") else r.get("score", 0)) / max_score,
+                    "type": (r.payload if hasattr(r, "payload") else r).get("type", "detail") if hasattr(r, "payload") else r.get("type", "detail"),
+                    "summary": (r.payload if hasattr(r, "payload") else r).get("summary", "") if hasattr(r, "payload") else r.get("summary", ""),
+                    "tags": (r.payload if hasattr(r, "payload") else r).get("tags", []) if hasattr(r, "payload") else r.get("tags", []),
+                    "importance": (r.payload if hasattr(r, "payload") else r).get("importance", 5) if hasattr(r, "payload") else r.get("importance", 5),
+                    "saved_at": (r.payload if hasattr(r, "payload") else r).get("saved_at", "") if hasattr(r, "payload") else r.get("saved_at", ""),
+                    "messages": (r.payload if hasattr(r, "payload") else r).get("messages", []) if hasattr(r, "payload") else r.get("messages", []),
+                }
+                for r in results
+            }
+
+        vec_map = normalize(vector_results)
+        bm25_map = normalize(bm25_results)
+
+        # 合并
+        all_ids = set(vec_map.keys()) | set(bm25_map.keys())
+        merged = []
+        for doc_id in all_ids:
+            vec_score = vec_map.get(doc_id, {}).get("score", 0) * vector_weight
+            bm25_score = bm25_map.get(doc_id, {}).get("score", 0) * text_weight
+            combined_score = vec_score + bm25_score
+
+            doc = vec_map.get(doc_id) or bm25_map.get(doc_id)
+            doc["score"] = combined_score
+            merged.append(doc)
+
+        merged.sort(key=lambda x: x["score"], reverse=True)
+        return merged
+
+    # ── 时间衰减 ──────────────────────────────────────
+
+    def _apply_temporal_decay(self, results: List[dict], half_life_days: int = 30) -> List[dict]:
+        """时间衰减：旧记忆自动降权
+
+        公式: decayed_score = score × e^(-λ × age_days)
+        其中 λ = ln(2) / half_life_days
+
+        半衰期 30 天:
+          - 今天: 100%
+          - 7 天前: ~84%
+          - 30 天前: 50%
+          - 90 天前: 12.5%
+        """
+        import math
+        from datetime import datetime
+
+        lambda_decay = math.log(2) / half_life_days
+        now = datetime.utcnow()
+
+        for r in results:
+            saved_at = r.get("saved_at", "")
+            if not saved_at:
+                continue
+
+            try:
+                saved_dt = datetime.fromisoformat(saved_at.replace("Z", "+00:00").replace("+00:00", ""))
+                age_days = (now - saved_dt).total_seconds() / 86400
+                decay_factor = math.exp(-lambda_decay * age_days)
+                r["score"] = r.get("score", 0) * decay_factor
+                r["decay_factor"] = decay_factor
+            except (ValueError, TypeError):
+                pass
+
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return results
+
+    # ── MMR 去重 ──────────────────────────────────────
+
+    def _apply_mmr(self, results: List[dict], query: str, lambda_param: float = 0.7) -> List[dict]:
+        """MMR（最大边际相关性）去重
+
+        平衡相关性和多样性:
+          MMR = λ × relevance - (1-λ) × max_similarity_to_selected
+
+        lambda_param:
+          - 1.0 = 纯相关性（不去重）
+          - 0.0 = 最大多样性
+          - 0.7 = 默认（轻微去重）
+        """
+        if len(results) <= 2:
+            return results
+
+        selected = []
+        remaining = list(results)
+
+        # 选第一个（分数最高的）
+        remaining.sort(key=lambda x: x.get("score", 0), reverse=True)
+        selected.append(remaining.pop(0))
+
+        while remaining:
+            best_score = -1
+            best_idx = 0
+
+            for i, candidate in enumerate(remaining):
+                relevance = candidate.get("score", 0)
+
+                # 计算与已选结果的最大相似度
+                max_sim = 0
+                for s in selected:
+                    sim = self._jaccard_similarity(
+                        candidate.get("summary", ""),
+                        s.get("summary", ""),
+                    )
+                    max_sim = max(max_sim, sim)
+
+                # MMR 分数
+                mmr_score = lambda_param * relevance - (1 - lambda_param) * max_sim
+
+                if mmr_score > best_score:
+                    best_score = mmr_score
+                    best_idx = i
+
+            selected.append(remaining.pop(best_idx))
+
+        return selected
+
+    @staticmethod
+    def _jaccard_similarity(text1: str, text2: str) -> float:
+        """Jaccard 文本相似度"""
+        if not text1 or not text2:
+            return 0.0
+        set1 = set(text1.lower().split())
+        set2 = set(text2.lower().split())
+        if not set1 or not set2:
+            return 0.0
+        intersection = len(set1 & set2)
+        union = len(set1 | set2)
+        return intersection / union if union > 0 else 0.0
 
     async def delete_memory(self, point_id: str) -> bool:
         """删除记忆"""
