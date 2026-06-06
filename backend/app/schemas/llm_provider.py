@@ -38,14 +38,14 @@ class LLMModelOut(CamelModel):
     id: int
     provider_id: int = Field(alias="providerId")
     model_name: str = Field(alias="modelName")
-    display_name: str = Field(alias="displayName")
-    context_length: int = Field(alias="contextLength")
-    max_tokens: int = Field(alias="maxTokens")
-    temperature: float
-    capabilities: dict
-    is_enabled: int = Field(alias="isEnabled")
-    sort_order: int = Field(alias="sortOrder")
-    remark: str
+    display_name: str = Field(default="", alias="displayName")
+    context_length: int = Field(default=4096, alias="contextLength")
+    max_tokens: int = Field(default=4096, alias="maxTokens")
+    temperature: float = Field(default=0.7)
+    capabilities: dict = Field(default_factory=dict)
+    is_enabled: int = Field(default=1, alias="isEnabled")
+    sort_order: int = Field(default=0, alias="sortOrder")
+    remark: str = Field(default="")
     created_at: Optional[datetime] = Field(default=None, alias="createdAt")
     updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
 
@@ -82,10 +82,10 @@ class ProviderOut(CamelModel):
     name: str
     provider_type: str = Field(alias="providerType")
     base_url: str = Field(alias="baseUrl")
-    api_key: str = Field(alias="apiKey")
-    is_enabled: int = Field(alias="isEnabled")
-    is_default: int = Field(alias="isDefault")
-    description: str
+    api_key: str = Field(default="", alias="apiKey")
+    is_enabled: int = Field(default=1, alias="isEnabled")
+    is_default: int = Field(default=0, alias="isDefault")
+    description: str = Field(default="")
     models: List[LLMModelOut] = Field(default_factory=list, description="该供应商下的模型列表")
     created_at: Optional[datetime] = Field(default=None, alias="createdAt")
     updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
