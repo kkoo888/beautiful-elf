@@ -95,10 +95,12 @@ class ContextEngine:
                 parts["knowledge"] = rag_ctx
                 budget_remaining -= len(rag_ctx)
 
-        # 6. 工具定义摘要
+        # 6. 工具定义摘要（根据意图动态过滤）
         tool_list = tools or self.get_tool_summaries()
         if tool_list and budget_remaining > 300:
-            tools_ctx = self._format_tool_defs(tool_list, budget=1000)
+            # 根据意图过滤工具
+            filtered_tools = self._filter_tools_by_intent(tool_list, intent)
+            tools_ctx = self._format_tool_defs(filtered_tools, budget=1000)
             if tools_ctx:
                 parts["tools"] = tools_ctx
                 budget_remaining -= len(tools_ctx)
@@ -167,6 +169,29 @@ class ContextEngine:
             base += f"\n\n当前激活技能：{intent.get('intent_name', '')}"
         return base
 
+    def _filter_tools_by_intent(self, tools: List[dict], intent: Optional[dict]) -> List[dict]:
+        """根据意图过滤工具列表，只保留该意图需要的工具"""
+        from app.agent.tool_registry import get_tools_for_intent
+
+        intent_name = intent.get("intent_name") if intent else None
+        all_names = [t.get("name", "") for t in tools]
+        recommended = get_tools_for_intent(intent_name, all_names)
+
+        # None 表示不限制，返回全部
+        if recommended is None:
+            return tools
+
+        # 空列表表示不需要工具
+        if not recommended:
+            logger.info(f"[context_engine] 意图 '{intent_name}' 不需要工具，已过滤全部")
+            return []
+
+        # 过滤出推荐的工具
+        recommended_set = set(recommended)
+        filtered = [t for t in tools if t.get("name", "") in recommended_set]
+        logger.info(f"[context_engine] 意图 '{intent_name}' 推荐工具: {recommended}, 过滤后: {len(filtered)}/{len(tools)}")
+        return filtered
+
     async def _retrieve_memory(self, user_id: int, query: str, budget: int = 1500) -> str:
         try:
             memory_text = await self.memory_manager.search(query=query, user_id=user_id, limit=3)
@@ -193,8 +218,8 @@ class ContextEngine:
 
     def _format_tool_defs(self, tools: List[dict], budget: int = 1000) -> str:
         if not tools:
-            return ""
-        lines = ["【可用工具】"]
+            return "【可用工具】本次对话无需使用工具，请直接回答。"
+        lines = ["【本次可用工具】以下是你可以使用的工具列表，请根据用户问题决定是否需要调用："]
         remaining = budget
         for t in tools:
             name = t.get("name", "")
