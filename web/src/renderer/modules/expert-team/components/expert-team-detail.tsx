@@ -171,7 +171,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                         模型: {member.modelName || '默认'}
                       </Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        温度: {member.temperature != null ? member.temperature.toFixed(1) : '模型默认'}
+                        温度: {member.temperature.toFixed(1)}
                       </Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
                         Max Tokens: {member.maxTokens}

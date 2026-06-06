@@ -101,7 +101,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
         memberRole: '',
         avatar: '🤖',
         systemPrompt: '',
-        temperature: null,
+        temperature: 0.7,
         maxTokens: 2048,
         isEnabled: 1,
       },
@@ -350,7 +350,6 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                       min={0}
                       max={2}
                       step={0.1}
-                      placeholder="模型默认"
                       style={{ width: 100 }}
                     />
                   </Form.Item>

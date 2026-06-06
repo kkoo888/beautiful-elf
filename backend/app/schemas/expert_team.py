@@ -15,7 +15,7 @@ class ExpertMemberCreate(CamelModel):
     system_prompt: str = Field(..., min_length=1, description="专家系统提示词")
     model_name: str = Field(default="", max_length=128, description="模型名称")
     provider_id: Optional[int] = Field(default=None, description="供应商 ID (用于读取模型默认温度)")
-    temperature: Optional[float] = Field(default=None, ge=0, le=2, description="温度覆盖 0-2 (为空则用模型默认)")
+    temperature: float = Field(default=0.7, ge=0, le=2, description="温度 0-2")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数")
     tools_json: Optional[List[dict]] = Field(default=None, description="可用工具列表")
     sort_order: int = Field(default=0, description="排序顺序")
@@ -47,7 +47,7 @@ class ExpertMemberOut(CamelModel):
     system_prompt: str
     model_name: str
     provider_id: Optional[int] = None
-    temperature: Optional[float] = None
+    temperature: float = 0.7
     max_tokens: int
     tools_json: Optional[List[dict]] = None
     sort_order: int

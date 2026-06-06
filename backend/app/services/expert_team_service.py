@@ -339,13 +339,7 @@ async def expert_call_node(state: ExpertState) -> dict:
 4. 控制在 300-500 字以内"""
 
     model = member.get("model_name") or None
-    # 温度优先级：成员覆盖 > llm_model 默认 > 全局默认 0.7
-    member_temp = member.get("temperature")
-    if member_temp is not None:
-        temperature = float(member_temp)
-    else:
-        # 从 llm_model 表读取模型默认温度
-        temperature = await _get_model_temperature(db, member.get("provider_id"), model)
+    temperature = float(member.get("temperature") or 0.7)
 
     start_time = datetime.now()
     try:
@@ -586,6 +580,11 @@ class ExpertTeamService:
             member_data = m.model_dump(by_alias=False)
             member_data["team_id"] = team.id
             member_data["sort_order"] = i
+            # 温度未填时，从 llm_model 读取模型默认温度
+            if member_data.get("provider_id") and member_data.get("model_name"):
+                member_data["temperature"] = await _get_model_temperature(
+                    db, member_data["provider_id"], member_data["model_name"]
+                )
             member = await self.repo.create_member(db, member_data)
             members.append(member)
 
@@ -633,6 +632,11 @@ class ExpertTeamService:
             for i, m in enumerate(members_data):
                 m["team_id"] = team_id
                 m["sort_order"] = i
+                # 温度未填时，从 llm_model 读取模型默认温度
+                if m.get("provider_id") and m.get("model_name"):
+                    m["temperature"] = await _get_model_temperature(
+                        db, m["provider_id"], m["model_name"]
+                    )
                 if i < len(old_members):
                     # 更新已有成员
                     old = old_members[i]

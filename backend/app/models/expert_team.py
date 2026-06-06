@@ -35,7 +35,7 @@ class ExpertTeamMember(BaseModel):
     system_prompt = Column(Text, nullable=False, comment="专家系统提示词")
     model_name = Column(String(128), default="", comment="使用的模型名称")
     provider_id = Column(BigInteger, default=None, nullable=True, comment="供应商 ID (关联 llm_model)")
-    temperature = Column(Float, nullable=True, default=None, comment="温度覆盖 (为空则用模型默认温度)")
+    temperature = Column(Float, nullable=False, default=0.7, comment="温度 0-2")
     max_tokens = Column(Integer, default=2048, comment="最大生成 token 数")
     tools_json = Column(JSON, default=None, comment="可用工具列表")
     sort_order = Column(Integer, default=0, comment="排序顺序")

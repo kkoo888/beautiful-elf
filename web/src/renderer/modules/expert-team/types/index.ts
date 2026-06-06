@@ -12,7 +12,7 @@ export interface ExpertMember {
   systemPrompt: string
   modelName: string
   providerId?: number | null
-  temperature: number | null
+  temperature: number
   maxTokens: number
   toolsJson: Record<string, unknown>[] | null
   sortOrder: number
@@ -29,7 +29,7 @@ export interface ExpertMemberFormInput {
   systemPrompt: string
   modelName?: string
   providerId?: number | null
-  temperature?: number | null
+  temperature?: number
   maxTokens?: number
   toolsJson?: Record<string, unknown>[]
   isEnabled?: number
