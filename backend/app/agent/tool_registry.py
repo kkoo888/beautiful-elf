@@ -365,12 +365,21 @@ async def execute_code(language: str, code: str) -> dict:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
-    return {
-        "stdout": stdout.decode()[:5000],
-        "stderr": stderr.decode()[:2000],
-        "exit_code": proc.returncode,
-    }
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        return {
+            "stdout": stdout.decode()[:5000],
+            "stderr": stderr.decode()[:2000],
+            "exit_code": proc.returncode,
+        }
+    except asyncio.TimeoutError:
+        # 修复: 超时后正确杀掉进程
+        try:
+            proc.kill()
+            await proc.wait()
+        except ProcessLookupError:
+            pass
+        return {"error": "代码执行超时（10秒）", "code": "EXECUTION_TIMEOUT"}
 
 
 async def read_file(path: str) -> dict:

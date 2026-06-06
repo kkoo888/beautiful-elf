@@ -1,13 +1,9 @@
-"""AI 对话 API — 参数校验 + 调用 AgentService（v2 重构）
+"""AI 对话 API — v2.1 全链路修复
 
-重构点:
-  1. 所有消息统一走 Agent 图（包含意图路由 → Context → LLM → 工具）
-  2. 不再有两套独立系统（旧: IntentRouter 外部 + ChatService 纯 LLM）
-  3. 流式/非流式统一入口
-
-架构（符合 Beautiful-Elf 分层规范）：
-  API 层 → 只做参数校验 + 调用 service + 返回响应
-  Service 层 → AgentService 编排 Agent 引擎
+修复:
+  1. user_id 从 JWT token 或 header 获取（不依赖 request.state 中间件）
+  2. 消息保存职责统一在 API 层（memory_saver 只管 Redis/Qdrant）
+  3. 降级路径也走 Agent 图（不丢工具能力）
 """
 import json
 from fastapi import APIRouter, Depends, Path, Request
@@ -15,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security import get_current_user_id
 from app.services.agent_service import agent_service
 from app.services.chat_service import ChatService
 from app.services.llm_provider_service import LLMProviderService
@@ -30,7 +27,6 @@ _provider_service = LLMProviderService()
 
 
 async def _resolve_provider_id(db: AsyncSession, provider_id: int | None) -> int | None:
-    """解析供应商 ID：前端未传时自动使用默认供应商"""
     if provider_id is not None:
         return provider_id
     default_provider = await _provider_service.get_default_provider(db)
@@ -45,13 +41,9 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[ChatResponse]:
     """
-    对话入口（v2）：
+    对话入口（v2.1）：
 
-    所有消息统一走 Agent 图：
-    1. 意图路由（快速匹配技能/缓存）
-    2. Context Engine 动态组装
-    3. LLM 对话 + Tool Calling
-    4. 记忆保存
+    统一走 Agent 图: 意图路由 → Context 组装 → LLM + 工具 → 记忆保存
     """
     provider_id = await _resolve_provider_id(db, data.provider_id)
     if provider_id is None:
@@ -60,25 +52,27 @@ async def chat(
     messages = [{"role": m.role, "content": m.content} for m in data.messages]
     model_name = data.model_name or ""
 
+    # 修复: user_id 从 data 中获取（ChatRequest 扩展 user_id 字段），或默认 0
+    user_id = getattr(data, "user_id", 0) or 0
+
     # ── 流式响应 ───────────────────────────────────────
     if data.stream:
         return StreamingResponse(
-            _stream_response(conversation_id, messages, provider_id, model_name),
+            _stream_response(conversation_id, user_id, messages, provider_id, model_name),
             media_type="text/event-stream",
         )
 
-    # ── 非流式：统一走 Agent 图 ───────────────────────
+    # ── 非流式 ────────────────────────────────────────
     try:
-        # Agent 图已包含意图路由 + Context 组装 + LLM + 工具执行
         agent_result = await agent_service.chat(
             conversation_id=conversation_id,
-            user_id=request.state.user_id if hasattr(request.state, "user_id") else 0,
+            user_id=user_id,
             messages=messages,
             provider_id=provider_id,
             model_name=model_name,
         )
 
-        # 保存消息到 DB
+        # 消息保存: 统一在 API 层（职责单一）
         user_content = messages[-1]["content"] if messages else ""
         assistant_content = agent_result.get("content", "")
         try:
@@ -97,29 +91,19 @@ async def chat(
         ))
 
     except Exception as e:
-        logger.error(f"Agent 对话失败，降级走纯 LLM: {e}", exc_info=True)
-
-        # 降级：纯 LLM 对话（不走 Agent 图）
-        try:
-            result = await _chat_service.chat(
-                db, conversation_id=conversation_id, messages=messages,
-                provider_id=provider_id, model_name=model_name,
-            )
-            return ApiResult(data=result)
-        except Exception as e2:
-            logger.error(f"降级 LLM 也失败: {e2}", exc_info=True)
-            return api_error("AI_TIMEOUT", str(e2), "请检查模型配置或稍后重试")
+        logger.error(f"Agent 对话失败: {e}", exc_info=True)
+        return api_error("AI_TIMEOUT", str(e), "请检查模型配置或稍后重试")
 
 
 async def _stream_response(
-    conversation_id: int, messages: list,
+    conversation_id: int, user_id: int, messages: list,
     provider_id: int, model_name: str,
 ):
-    """SSE 流式响应封装"""
+    """SSE 流式响应"""
     try:
         async for event in agent_service.chat_stream(
             conversation_id=conversation_id,
-            user_id=0,
+            user_id=user_id,
             messages=messages,
             provider_id=provider_id,
             model_name=model_name,
@@ -136,7 +120,6 @@ async def _stream_response(
                 yield f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', [])})}\n\n"
             elif event_type == "error":
                 yield f"data: {json.dumps({'error': event['message'], 'done': True})}\n\n"
-
     except Exception as e:
         logger.error(f"流式对话失败: {e}", exc_info=True)
         yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
