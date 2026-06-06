@@ -147,10 +147,24 @@ class ContextEngine:
     def _build_soul_prompt(self, intent: Optional[dict] = None) -> str:
         base = (
             "你是 Beautiful-Elf 智能助手，能够使用工具回答用户问题。\n"
-            "请用中文回答，保持友好、专业的语气。"
+            "请用中文回答，保持友好、专业的语气。\n\n"
+            "## 工具使用规则\n"
+            "你有一组可用工具，但不是每个问题都需要用工具。请严格遵守以下规则：\n\n"
+            "**必须使用工具的情况：**\n"
+            "- 用户明确要求搜索、查询、计算、执行代码、读写文件\n"
+            "- 需要实时信息（天气、新闻、股票等）\n"
+            "- 需要查询数据库或知识库\n"
+            "- 用户的问题涉及外部数据或系统操作\n\n"
+            "**禁止使用工具的情况：**\n"
+            "- 问候、闲聊、告别、感谢（如「你好」「谢谢」「再见」）\n"
+            "- 通用知识问答（你自己能回答的问题）\n"
+            "- 简单的解释、翻译、写作、总结\n"
+            "- 用户没有明确需要外部数据或工具辅助的对话\n\n"
+            "**判断原则：** 先思考「这个问题我自己能回答吗？」如果能，直接回答，不要调用工具。"
+            "只有当问题确实需要外部数据、计算或系统操作时，才使用工具。"
         )
-        if intent and intent.get("intent_name") and intent["intent_name"] != "semantic_cache_hit":
-            base += f"\n当前激活技能：{intent.get('intent_name', '')}"
+        if intent and intent.get("intent_name") and intent["intent_name"] not in ("semantic_cache_hit", "chitchat"):
+            base += f"\n\n当前激活技能：{intent.get('intent_name', '')}"
         return base
 
     async def _retrieve_memory(self, user_id: int, query: str, budget: int = 1500) -> str:

@@ -1,15 +1,17 @@
 """意图路由层 — 向量相似度快速匹配意图
 
 架构:
-  用户输入 → Embedding → Qdrant intent_vectors 检索
+  用户输入 → 闲聊检测（规则快速拦截） → 语义缓存 → 意图向量匹配
   → 命中意图 → 路由到对应模块
   → 未命中 → 进入 Agent 通用对话
 
 设计原则:
   - 意图识别是用户消息进入系统的第一道门
+  - 闲聊检测用规则快速拦截，不走 LLM/Embedding，延迟 <1ms
   - 用向量相似度快速匹配，不走 LLM 推理，延迟低
   - 意图定义存 MySQL intent 表，向量存 Qdrant intent_vectors
 """
+import re
 import uuid
 from typing import Optional, List
 
@@ -28,6 +30,84 @@ INTENT_THRESHOLD_MAP = {
     "fuzzy_match": 0.70,    # 模糊匹配场景（如自然语言）
     "default": INTENT_SCORE_THRESHOLD,
 }
+
+# ── 闲聊检测规则（不走 Embedding，<1ms）─────────────────────
+
+# 问候模式
+_GREETING_PATTERNS = [
+    r"^(hi|hello|hey|yo|嗨|你好|您好|哈喽|嘿|早|早上好|中午好|下午好|晚上好|晚安|good\s*(morning|afternoon|evening|night))[\s!！。.~～]*$",
+    r"^(在吗|在不在|有人吗|喂|哎|诶)[\s?？!！。.]*$",
+]
+
+# 告别模式
+_FAREWELL_PATTERNS = [
+    r"^(bye|goodbye|再见|拜拜|拜|回头见|下次见|走了|先走了|88|886|888)[\s!！。.~～]*$",
+]
+
+# 感谢模式
+_THANKS_PATTERNS = [
+    r"^(谢谢|感谢|多谢|thanks|thank\s*you|thx|3q|谢了|太感谢了|辛苦了)[\s!！。.~～]*$",
+]
+
+# 无意义输入（过短或纯符号）
+_TRIVIAL_PATTERNS = [
+    r"^[\s.。!！?？~～…,，]*$",  # 纯标点/空白
+    r"^.{0,2}$",                  # 2字符以内
+]
+
+# 闲聊回复模板
+_GREETING_REPLIES = [
+    "你好呀～ 有什么我可以帮你的吗？ 😊",
+    "嗨！很高兴见到你，有什么需要帮忙的吗？",
+    "你好！请问有什么可以帮到你的？",
+]
+_FAREWELL_REPLIES = [
+    "再见！有需要随时找我～ 👋",
+    "拜拜！下次见～",
+]
+_THANKS_REPLIES = [
+    "不客气！有需要随时找我～ 😊",
+    "不用谢，能帮到你就好！",
+    "随时为你服务～",
+]
+
+
+def _detect_chitchat(message: str) -> Optional[dict]:
+    """
+    快速闲聊检测（纯规则，不走 Embedding/LLM）。
+
+    Returns:
+        命中: {"intent_name": "chitchat", "subtype": "greeting|farewell|thanks", "reply": str}
+        未命中: None
+    """
+    text = message.strip().lower()
+    if not text:
+        return None
+
+    # 过短/无意义输入
+    for p in _TRIVIAL_PATTERNS:
+        if re.match(p, text):
+            return {"intent_name": "chitchat", "subtype": "trivial", "reply": "你好！请问有什么可以帮到你的？"}
+
+    # 问候
+    for p in _GREETING_PATTERNS:
+        if re.match(p, text):
+            import random
+            return {"intent_name": "chitchat", "subtype": "greeting", "reply": random.choice(_GREETING_REPLIES)}
+
+    # 告别
+    for p in _FAREWELL_PATTERNS:
+        if re.match(p, text):
+            import random
+            return {"intent_name": "chitchat", "subtype": "farewell", "reply": random.choice(_FAREWELL_REPLIES)}
+
+    # 感谢
+    for p in _THANKS_PATTERNS:
+        if re.match(p, text):
+            import random
+            return {"intent_name": "chitchat", "subtype": "thanks", "reply": random.choice(_THANKS_REPLIES)}
+
+    return None
 
 
 class IntentRouter:
@@ -48,7 +128,7 @@ class IntentRouter:
 
     async def route(self, user_message: str, user_id: int = 0) -> Optional[dict]:
         """
-        意图路由：语义缓存 → 意图匹配 → 未命中。
+        意图路由：闲聊检测 → 语义缓存 → 意图匹配 → 未命中。
 
         Args:
             user_message: 用户消息
@@ -60,6 +140,19 @@ class IntentRouter:
         """
         if not user_message or not user_message.strip():
             return None
+
+        # 0. 闲聊快速检测（规则，<1ms，不走 Embedding）
+        chitchat = _detect_chitchat(user_message)
+        if chitchat:
+            logger.info(f"[intent_router] 闲聊命中: subtype={chitchat['subtype']}")
+            return {
+                "intent_id": -2,
+                "intent_name": "chitchat",
+                "score": 1.0,
+                "target_module": "chitchat",
+                "trigger_texts": [],
+                "cached_answer": chitchat["reply"],
+            }
 
         try:
             vector = await self.embedding_func(user_message)
