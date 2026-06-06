@@ -44,6 +44,8 @@ import {
   ToolOutlined,
   ThunderboltOutlined,
   ReloadOutlined,
+  UpOutlined,
+  DownOutlined,
 } from '@ant-design/icons'
 import {
   getProviders,
@@ -287,6 +289,23 @@ export function LlmProviderSettings() {
     await loadProviders()
   }, [loadProviders])
 
+  const handleMoveModel = useCallback(async (provider: LLMProvider, modelIndex: number, direction: -1 | 1) => {
+    const models = provider.models
+    const targetIndex = modelIndex + direction
+    if (targetIndex < 0 || targetIndex >= models.length) return
+    const a = models[modelIndex]
+    const b = models[targetIndex]
+    try {
+      await Promise.all([
+        updateModel(provider.id, a.id, { sortOrder: b.sortOrder }),
+        updateModel(provider.id, b.id, { sortOrder: a.sortOrder }),
+      ])
+      await loadProviders()
+    } catch {
+      message.error('排序失败')
+    }
+  }, [loadProviders])
+
   const handlePresetSelect = useCallback((preset: { modelName: string; displayName: string; contextLength: number }) => {
     modelForm.setFieldsValue({
       modelName: preset.modelName,
@@ -455,7 +474,7 @@ export function LlmProviderSettings() {
                 <Text type="secondary" style={{ fontSize: 12 }}>暂无模型，点击上方添加</Text>
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {p.models.map((m) => (
+                  {p.models.map((m, idx) => (
                     <Tag
                       key={m.id}
                       style={{
@@ -468,6 +487,18 @@ export function LlmProviderSettings() {
                       {m.contextLength > 0 && <Text type="secondary" style={{ fontSize: 10 }}>{Math.round(m.contextLength / 1000)}k</Text>}
                       <Tooltip title={m.isEnabled ? '点击禁用' : '点击启用'}>
                         <Switch checked={m.isEnabled === 1} onChange={() => void handleToggleModel(p.id, m.id)} size="small" style={{ marginLeft: 4 }} />
+                      </Tooltip>
+                      <Tooltip title="上移">
+                        <UpOutlined
+                          style={{ fontSize: 10, cursor: idx > 0 ? 'pointer' : 'not-allowed', color: idx > 0 ? '#1677ff' : '#d9d9d9' }}
+                          onClick={() => idx > 0 && void handleMoveModel(p, idx, -1)}
+                        />
+                      </Tooltip>
+                      <Tooltip title="下移">
+                        <DownOutlined
+                          style={{ fontSize: 10, cursor: idx < p.models.length - 1 ? 'pointer' : 'not-allowed', color: idx < p.models.length - 1 ? '#1677ff' : '#d9d9d9' }}
+                          onClick={() => idx < p.models.length - 1 && void handleMoveModel(p, idx, 1)}
+                        />
                       </Tooltip>
                       <Tooltip title="编辑">
                         <EditOutlined style={{ fontSize: 11, cursor: 'pointer', color: '#1677ff' }} onClick={() => handleEditModel(m)} />
