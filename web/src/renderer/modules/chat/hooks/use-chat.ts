@@ -239,7 +239,7 @@ export function useChat(): UseChatReturn {
         }
       )
     },
-    [isLoading, reasoningDepth, ensureConversationId, addMessage, setMessages, setIsLoading]
+    [isLoading, reasoningDepth, selectedProviderId, selectedModelName, ensureConversationId, addMessage, setMessages, setIsLoading]
   )
 
   /** 发送消息（非流式） */
@@ -316,7 +316,7 @@ export function useChat(): UseChatReturn {
         setIsLoading(false)
       }
     },
-    [isLoading, reasoningDepth, ensureConversationId, addMessage, setIsLoading]
+    [isLoading, reasoningDepth, selectedProviderId, selectedModelName, ensureConversationId, addMessage, setIsLoading]
   )
 
   /** 设置推理深度 */
