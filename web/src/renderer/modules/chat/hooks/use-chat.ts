@@ -97,6 +97,8 @@ export function useChat(): UseChatReturn {
 
   // 缓存 providerId -> providerType 映射，避免每次请求都拉 Provider 列表
   const providerTypeCacheRef = useRef<Record<number, string | undefined>>({})
+  // 标记「正在创建会话」，跳过 useEffect 中的 fetchMessages 避免冲掉新消息
+  const creatingConvRef = useRef(false)
 
   // ── 初始化：加载会话列表 ──────────────────────────────
   useEffect(() => {
@@ -109,6 +111,11 @@ export function useChat(): UseChatReturn {
   useEffect(() => {
     if (!currentConversationId) {
       setMessages([])
+      return
+    }
+    // 如果是 sendMessage 刚创建的会话，跳过 fetch，避免冲掉本地消息
+    if (creatingConvRef.current) {
+      creatingConvRef.current = false
       return
     }
     fetchMessages(currentConversationId).then(({ items }) => {
@@ -135,8 +142,8 @@ export function useChat(): UseChatReturn {
   const ensureConversationId = useCallback(async (): Promise<string> => {
     if (currentConversationId) return currentConversationId
     const store = useChatStore.getState()
+    creatingConvRef.current = true
     const conv = await createConversation('新会话', store.selectedModelName)
-    console.log('[Chat] createConversation result:', conv)
     if (!conv) throw new Error('createConversation returned undefined')
     store.addConversation(conv)
     store.setCurrentConversation(conv.id)

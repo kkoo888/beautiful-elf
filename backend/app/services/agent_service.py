@@ -346,7 +346,7 @@ class AgentService:
                 # 审批模式下不发 done，等 resume API 后续处理
                 return
 
-            # 发送上下文引用（从 context_engine 获取）
+            # 发送上下文引用 + 缓存答案（从 context_engine 获取）
             try:
                 if self._graph and hasattr(self._graph, 'get_state'):
                     state = self._graph.get_state(config)
@@ -354,6 +354,10 @@ class AgentService:
                         intent = state.values.get("intent")
                         if intent:
                             yield {"type": "intent_hit", "intent": intent.get("intent_name", ""), "score": intent.get("score", 0)}
+                        # chitchat/语义缓存命中：final_answer 在 state 但未经过 LLM 流式输出
+                        final = state.values.get("final_answer")
+                        if final and total_prompt_tokens == 0:
+                            yield {"type": "token", "content": final}
             except Exception:
                 pass
 

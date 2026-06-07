@@ -54,7 +54,7 @@ export function ToolFormModal({ open, tool, onOk, onCancel, confirmLoading }: To
         form.resetFields()
         form.setFieldsValue({
           riskLevel: 'low',
-          module: 'builtin',
+          module: '查',
           jsonSchema: DEFAULT_SCHEMA,
         })
       }
