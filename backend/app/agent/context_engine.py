@@ -197,27 +197,8 @@ class ContextEngine:
         return base
 
     def _filter_tools_by_intent(self, tools: List[dict], intent: Optional[dict]) -> List[dict]:
-        """根据意图过滤工具列表，只保留该意图需要的工具"""
-        from app.agent.tool_registry import get_tools_for_intent
-
-        intent_name = intent.get("intent_name") if intent else None
-        all_names = [t.get("name", "") for t in tools]
-        recommended = get_tools_for_intent(intent_name, all_names)
-
-        # None 表示不限制，返回全部
-        if recommended is None:
-            return tools
-
-        # 空列表表示不需要工具
-        if not recommended:
-            logger.info(f"[context_engine] 意图 '{intent_name}' 不需要工具，已过滤全部")
-            return []
-
-        # 过滤出推荐的工具
-        recommended_set = set(recommended)
-        filtered = [t for t in tools if t.get("name", "") in recommended_set]
-        logger.info(f"[context_engine] 意图 '{intent_name}' 推荐工具: {recommended}, 过滤后: {len(filtered)}/{len(tools)}")
-        return filtered
+        """根据意图过滤工具列表（B+C 重构后，工具过滤已在 engine 层完成，此处直接透传）"""
+        return tools
 
     async def _retrieve_memory_with_meta(
         self, user_id: int, query: str, budget: int = 1500
