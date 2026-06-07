@@ -71,7 +71,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
             </Space>
           </Col>
           <Col>
-            <Space direction="vertical" align="end" size="middle">
+            <Space orientation="vertical" align="end" size="middle">
               <Space>
                 <Text type="secondary">状态：</Text>
                 <Switch

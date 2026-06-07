@@ -78,7 +78,7 @@ function DisconnectBanner({
         type={isConnecting ? 'warning' : 'error'}
         showIcon
         icon={isConnecting ? <ReloadOutlined spin /> : <DisconnectOutlined />}
-        message={
+        title={
           <Space>
             <span>
               {isConnecting ? '正在重新连接服务器...' : '与服务器断开连接，部分功能可能不可用'}

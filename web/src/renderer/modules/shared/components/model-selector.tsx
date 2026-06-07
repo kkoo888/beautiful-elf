@@ -185,7 +185,7 @@ export function FullModelSelect({
   const isHorizontal = direction === 'horizontal'
 
   return (
-    <Space direction={isHorizontal ? 'horizontal' : 'vertical'} size={8} wrap>
+    <Space orientation={isHorizontal ? 'horizontal' : 'vertical'} size={8} wrap>
       <Select
         value={selectedPid}
         onChange={handleProviderChange}

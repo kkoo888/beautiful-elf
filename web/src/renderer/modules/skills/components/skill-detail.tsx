@@ -141,7 +141,7 @@ export function SkillDetail({ open, skill, onClose, onRefine, onUpdate, onDelete
         onClose()
       }}
       width={500}
-      destroyOnClose
+      destroyOnHidden
       footer={
         editing ? (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

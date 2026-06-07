@@ -35,7 +35,7 @@ export function ToolProgressIndicator({ tools }: ToolProgressIndicatorProps) {
       borderRadius: 8,
       border: '1px solid #f0f0f0',
     }}>
-      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         {tools.map((tool, index) => {
           const label = TOOL_LABELS[tool.tool] ?? tool.tool
           const isRunning = tool.status === 'running'

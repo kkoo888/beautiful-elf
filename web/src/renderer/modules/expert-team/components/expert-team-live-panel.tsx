@@ -88,7 +88,7 @@ function ExpertCard({ expert }: { expert: LiveExpertState }) {
       }}
       styles={{ body: { padding: '8px 12px' } }}
     >
-      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <Space>
           <Avatar
             size="small"

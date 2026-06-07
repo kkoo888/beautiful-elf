@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Button, Input, Form, Typography, Space, Avatar, Divider, message, Card, Tag } from 'antd'
+import { Button, Input, Form, Typography, Space, Avatar, Divider, App, Card, Tag } from 'antd'
 import {
   UserOutlined,
   LockOutlined,
@@ -59,6 +59,7 @@ export function LoginSettings() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
   const [form] = Form.useForm()
+  const { message } = App.useApp()
 
   // 启动时用 token 拉取最新用户信息
   useEffect(() => {

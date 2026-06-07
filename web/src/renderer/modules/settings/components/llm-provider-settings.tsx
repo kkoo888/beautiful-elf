@@ -526,7 +526,7 @@ export function LlmProviderSettings() {
         okText={editingProvider ? '保存' : '添加'}
         cancelText="取消"
         width={520}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={providerForm} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item name="providerType" label="供应商类型">
@@ -567,7 +567,7 @@ export function LlmProviderSettings() {
         okText={editingModel ? '保存' : '添加'}
         cancelText="取消"
         width={520}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={modelForm} layout="vertical" style={{ marginTop: 16 }}>
           {/* 快捷预设 */}

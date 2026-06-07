@@ -370,7 +370,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
       open={open}
       onClose={handleClose}
       width={480}
-      destroyOnClose
+      destroyOnHidden
       footer={
         step === 'scan' ? (
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>

@@ -156,7 +156,7 @@ export function SnippetsPanel() {
         open={drawerOpen}
         onClose={handleCloseDrawer}
         width={680}
-        destroyOnClose
+        destroyOnHidden
         extra={
           <Space>
             <Button onClick={handleCloseDrawer}>取消</Button>

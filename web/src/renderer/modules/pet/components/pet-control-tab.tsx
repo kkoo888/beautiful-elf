@@ -20,7 +20,7 @@ export default function PetControlTab() {
   }
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+    <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
       {/* 顶部：操作按钮栏 */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Button icon={<PlayCircleOutlined />} type="primary" onClick={handleTogglePet}>
@@ -52,10 +52,10 @@ export default function PetControlTab() {
 
         {/* 右侧：卡片堆叠 */}
         <Col span={10}>
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
             {/* 模型信息 */}
             <Card size="small" title="模型信息">
-              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <Space orientation="vertical" size={4} style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Text type="secondary">名称</Text>
                   <Text>-</Text>
@@ -73,7 +73,7 @@ export default function PetControlTab() {
 
             {/* 实时状态 */}
             <Card size="small" title="实时状态">
-              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+              <Space orientation="vertical" size={4} style={{ width: '100%' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Badge status="default" />
                   <Text>宠物未启动</Text>

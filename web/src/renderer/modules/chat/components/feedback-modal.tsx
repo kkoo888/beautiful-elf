@@ -73,10 +73,10 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
       cancelText="取消"
       confirmLoading={loading}
       okButtonProps={{ disabled: selectedReasons.length === 0 && !comment.trim() }}
-      destroyOnClose
+      destroyOnHidden
       width={420}
     >
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
         <div>
           <Text strong style={{ display: 'block', marginBottom: 8 }}>
             请选择反馈原因（可多选）：

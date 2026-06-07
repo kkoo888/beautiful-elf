@@ -162,7 +162,7 @@ export default function SettingsPanel() {
 
       <div className={styles.settingsContent}>
         <Tabs
-          tabPosition="left"
+          tabPlacement="left"
           items={TAB_ITEMS.map((item) => ({
             key: item.key,
             label: (

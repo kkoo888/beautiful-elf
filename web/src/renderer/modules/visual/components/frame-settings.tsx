@@ -22,7 +22,7 @@ export const FrameSettings: React.FC<FrameSettingsProps> = ({ config, onChange }
 
   return (
     <div className="frame-settings">
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
         <Space style={{ justifyContent: 'space-between', width: '100%' }}>
           <Text>帧变化检测</Text>
           <Switch checked={config.enabled} onChange={(checked) => update({ enabled: checked })} />

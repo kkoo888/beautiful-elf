@@ -39,7 +39,7 @@ export function ExpertTeamList({
           <Avatar size={40} style={{ fontSize: 24, backgroundColor: '#f0f0f0' }}>
             {record.icon}
           </Avatar>
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <Text strong>{record.teamName}</Text>
             {record.description && (
               <Text type="secondary" style={{ fontSize: 12 }} ellipsis={{ tooltip: true }}>

@@ -86,7 +86,7 @@ export const PerformancePanel: React.FC = () => {
       <Row gutter={16} className={styles.metricRow}>
         <Col span={8}>
           <Card hoverable className={styles.metricCard}>
-            <Space direction="vertical" align="center" style={{ width: '100%' }}>
+            <Space orientation="vertical" align="center" style={{ width: '100%' }}>
               <Space>
                 <DesktopOutlined style={{ fontSize: 20, color: 'var(--ant-color-primary)' }} />
                 <span style={{ fontWeight: 600 }}>CPU 使用率</span>
@@ -103,7 +103,7 @@ export const PerformancePanel: React.FC = () => {
         </Col>
         <Col span={8}>
           <Card hoverable className={styles.metricCard}>
-            <Space direction="vertical" align="center" style={{ width: '100%' }}>
+            <Space orientation="vertical" align="center" style={{ width: '100%' }}>
               <Space>
                 <DatabaseOutlined style={{ fontSize: 20, color: 'var(--ant-color-primary)' }} />
                 <span style={{ fontWeight: 600 }}>内存使用率</span>
@@ -120,7 +120,7 @@ export const PerformancePanel: React.FC = () => {
         </Col>
         <Col span={8}>
           <Card hoverable className={styles.metricCard}>
-            <Space direction="vertical" align="center" style={{ width: '100%' }}>
+            <Space orientation="vertical" align="center" style={{ width: '100%' }}>
               <Space>
                 <HddOutlined style={{ fontSize: 20, color: 'var(--ant-color-primary)' }} />
                 <span style={{ fontWeight: 600 }}>磁盘使用率</span>
