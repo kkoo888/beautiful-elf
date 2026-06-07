@@ -128,7 +128,7 @@ export async function saveMessage(
  *                        messages, temperature, max_tokens (alias=maxTokens), stream
  */
 export async function chat(request: ChatRequest): Promise<ChatResponse> {
-  await saveMessage(request.conversationId, 'user', request.message)
+  // 消息保存由后端 save_skill_messages 统一负责，前端不再重复保存
   const data = extractData(await apiClient.post(`/conversations/${request.conversationId}/chat`, {
     provider_id: request.providerId, model_name: request.modelName ?? '',
     messages: [{ role: 'user', content: request.message }],
@@ -159,7 +159,7 @@ export function chatStream(
   const controller = new AbortController()
   const messageId = crypto.randomUUID()
 
-  saveMessage(request.conversationId, 'user', request.message).catch(() => {})
+  // 消息保存由后端 save_skill_messages 统一负责，前端不再重复保存
 
   const doStream = async (): Promise<void> => {
     try {

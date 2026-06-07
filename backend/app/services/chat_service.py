@@ -42,6 +42,7 @@ class ChatService:
         try:
             await self._msg.create_message(db, MessageCreate(
                 conversation_id=conversation_id, role="user", content=user_content,
+                tool_call_id="",
             ))
         except Exception as e:
             logger.warning(f"保存用户消息失败: {e}")
@@ -57,6 +58,7 @@ class ChatService:
             await self._msg.create_message(db, MessageCreate(
                 conversation_id=conversation_id, role="assistant",
                 content=llm_result.content, token_count=llm_result.token_count,
+                tool_call_id="",
             ))
         except Exception as e:
             logger.warning(f"保存助手消息失败: {e}")
@@ -74,6 +76,7 @@ class ChatService:
         try:
             await self._msg.create_message(db, MessageCreate(
                 conversation_id=conversation_id, role="user", content=user_content,
+                tool_call_id="",
             ))
         except Exception as e:
             logger.warning(f"保存用户消息失败: {e}")
@@ -81,6 +84,7 @@ class ChatService:
         try:
             await self._msg.create_message(db, MessageCreate(
                 conversation_id=conversation_id, role="assistant", content=assistant_content,
+                tool_call_id="",
             ))
         except Exception as e:
             logger.warning(f"保存助手消息失败: {e}")
@@ -103,6 +107,7 @@ class ChatService:
             async with AsyncSessionLocal() as save_db:
                 await self._msg.create_message(save_db, MessageCreate(
                     conversation_id=conversation_id, role="user", content=user_content,
+                    tool_call_id="",
                 ))
                 await save_db.commit()
         except Exception as e:
@@ -125,6 +130,7 @@ class ChatService:
                     await self._msg.create_message(save_db, MessageCreate(
                         conversation_id=conversation_id, role="assistant",
                         content=full_content, token_count=0,  # 流式无法精确统计 token
+                        tool_call_id="",
                     ))
                     await save_db.commit()
             except Exception as e:

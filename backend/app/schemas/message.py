@@ -11,7 +11,7 @@ class MessageCreate(CamelModel):
     role: str = Field(..., max_length=32, description="角色 (user/assistant/system/tool)")
     content: str = Field(..., description="消息内容")
     tool_calls: Optional[Any] = Field(default=None, description="工具调用信息")
-    tool_call_id: Optional[str] = Field(default=None, max_length=128, description="工具调用响应 ID")
+    tool_call_id: str = Field(default="", max_length=128, description="工具调用响应 ID")
     token_count: int = Field(default=0, ge=0, description="Token 消耗量")
 
 
@@ -29,7 +29,7 @@ class MessageOut(CamelModel):
     role: str
     content: str
     tool_calls: Optional[Any] = None
-    tool_call_id: Optional[str] = None
+    tool_call_id: str = ""
     token_count: int
     created_at: datetime
     updated_at: datetime

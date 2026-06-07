@@ -25,7 +25,7 @@ class Message(BaseModel):
     role = Column(String(32), nullable=False, comment="角色 (user/assistant/system/tool)")
     content = Column(Text, nullable=False, comment="消息内容")
     tool_calls = Column(JSON, default=None, comment="工具调用信息")
-    tool_call_id = Column(String(128), default=None, comment="工具调用响应 ID")
+    tool_call_id = Column(String(128), nullable=False, default="", comment="工具调用响应 ID")
     token_count = Column(Integer, default=0, comment="Token 消耗量")
 
     __table_args__ = (
