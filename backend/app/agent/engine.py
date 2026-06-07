@@ -126,7 +126,7 @@ class AgentState(TypedDict):
     memory_context: Optional[dict]  # {"ids": [...], "scores": [...], "count": int, "avg_score": float}
     conversation_importance: Optional[int]  # 对话重要性评分 (1-10)
     # ── B+C: 动态工具选择 ──────────────────────────────
-    selected_tools: Optional[list]  # 当前请求选中的 LangChain Tool 列表
+    selected_tools: list  # 当前请求选中的 LangChain Tool 列表
 
 
 # ── 错误契约 ──────────────────────────────────────────────
@@ -812,7 +812,7 @@ def _after_eval(state: AgentState) -> str:
 
 # ── 辅助函数 ──────────────────────────────────────────────
 
-def _select_tools_for_intent(state: AgentState, tool_registry) -> Optional[list]:
+def _select_tools_for_intent(state: AgentState, tool_registry) -> list:
     """
     B+C 核心：根据 intent 动态选择工具。
 
@@ -823,10 +823,10 @@ def _select_tools_for_intent(state: AgentState, tool_registry) -> Optional[list]
       4. 无 intent → 全量工具（Agent 兜底模式）
 
     Returns:
-        LangChain Tool 列表（始终返回列表，None 不再使用）
+        LangChain Tool 列表（始终返回列表）
     """
     if not tool_registry:
-        return tool_registry.get_langchain_tools() if tool_registry else []
+        return []
 
     intent = state.get("intent")
     if not intent:

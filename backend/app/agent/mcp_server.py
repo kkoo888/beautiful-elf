@@ -9,11 +9,6 @@
   - 独立进程: python -m app.agent.mcp_server
   - 嵌入启动: from app.agent.mcp_server import mcp_app; mcp_app.run()
 """
-import asyncio
-import json
-import logging
-from typing import Any
-
 from fastmcp import FastMCP
 
 from app.core.logging import get_logger

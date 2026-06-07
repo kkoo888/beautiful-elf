@@ -76,6 +76,13 @@ async def lifespan(app: FastAPI):
     # 清理资源
     from app.services.ollama_service import close_ollama_client
     await close_ollama_client()
+
+    # 取消 MCP Server 后台任务
+    for task in _mcp_tasks:
+        task.cancel()
+    if _mcp_tasks:
+        logger.info(f"MCP Server 已停止 ({len(_mcp_tasks)} 个任务)")
+
     await close_db()
     await close_redis()
     logger.info("Beautiful-Elf 后端已停止")
@@ -203,17 +210,25 @@ async def _start_mcp_server():
             """后台运行 MCP Server"""
             try:
                 mcp_app.run(transport="sse", host=host, port=port)
+            except asyncio.CancelledError:
+                logger.info("MCP Server 正在停止...")
             except Exception as e:
                 logger.error(f"MCP Server 运行异常: {e}")
 
-        # 后台任务启动，不阻塞主进程
-        asyncio.create_task(_run_mcp())
+        # 后台任务启动，保存引用以便 shutdown 时取消
+        task = asyncio.create_task(_run_mcp())
+        # 存储到 app.state 供 lifespan cleanup 使用
+        _mcp_tasks.append(task)
         logger.info(f"MCP Server 后台启动: {host}:{port}")
 
     except ImportError as e:
         logger.warning(f"fastmcp 未安装，MCP Server 跳过: {e}")
     except Exception as e:
         logger.warning(f"MCP Server 启动失败: {e}")
+
+
+# MCP 后台任务引用（shutdown 时取消）
+_mcp_tasks: list = []
 
 
 app = FastAPI(
