@@ -28,7 +28,7 @@ export function NetworkBanner() {
   }
 
   if (status === 'syncing') {
-    return <Alert message="网络已恢复，正在同步..." type="info" showIcon banner closable={false} />
+    return <Alert title="网络已恢复，正在同步..." type="info" showIcon banner closable={false} />
   }
 
   return null

@@ -10,7 +10,7 @@ const OcrProgressView: React.FC<OcrProgressProps> = ({ progress }) => {
   if (progress.status === 'idle') return null
 
   if (progress.status === 'error') {
-    return <Alert type="error" message="识别失败，请重试" showIcon />
+    return <Alert type="error" title="识别失败，请重试" showIcon />
   }
 
   return (
