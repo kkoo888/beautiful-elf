@@ -1,21 +1,19 @@
 /**
  * 工具管理 API 服务
- *
- * 后端 Query 参数: page, page_size, is_enabled → snake_case
  */
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type {
-  ToolInfo, ToolStats, ToolStatsSummary, ToolQueryParams,
-  CreateToolInput, UpdateToolInput, PaginatedResult,
+  ToolInfo, ToolStats, ToolQueryParams,
+  CreateToolInput, UpdateToolInput,
 } from '../types/tools'
 
-export async function fetchTools(params?: ToolQueryParams): Promise<PaginatedResult<ToolInfo>> {
+export async function fetchTools(params?: ToolQueryParams): Promise<ToolInfo[]> {
   const resp = await apiClient.get('/tools', {
     params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, enabled: params?.isEnabled },
   })
-  const { items, total, page, pageSize } = extractPaginated(resp as any)
-  return { data: items, total, page, pageSize }
+  const { items } = extractPaginated(resp as any)
+  return items
 }
 
 export async function createTool(input: CreateToolInput): Promise<ToolInfo> {
@@ -43,9 +41,5 @@ export async function fetchToolStats(id: number): Promise<ToolStats> {
 }
 
 export async function recordToolCall(id: number, success: boolean, durationMs: number): Promise<void> {
-  await apiClient.post(`/tools/${id}/stats/record`, null, { params: { success, durationMs: durationMs } })
-}
-
-export async function fetchToolStatsSummary(): Promise<ToolStatsSummary> {
-  return extractData(await apiClient.get('/tools/stats/summary'))
+  await apiClient.post(`/tools/${id}/stats/record`, null, { params: { success, durationMs } })
 }

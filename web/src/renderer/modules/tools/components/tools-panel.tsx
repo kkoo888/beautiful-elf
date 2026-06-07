@@ -5,12 +5,11 @@ import { ReloadOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useTools } from '../hooks/use-tools'
 import { ToolList } from './tool-list'
-import { ToolStats } from './tool-stats'
 import styles from './tools-panel.module.css'
 
 /** 工具管理面板 */
 export default function ToolsPanel() {
-  const { toolsWithStats, isLoading, summary, isSummaryLoading } = useTools()
+  const { toolsWithStats, isLoading } = useTools()
 
   return (
     <div className={styles.panel}>
@@ -23,7 +22,6 @@ export default function ToolsPanel() {
           </Button>
         }
       />
-      <ToolStats summary={summary} loading={isSummaryLoading} />
       <ToolList tools={toolsWithStats} loading={isLoading} />
     </div>
   )
