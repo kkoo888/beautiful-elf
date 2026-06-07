@@ -17,11 +17,7 @@ logger = get_logger(__name__)
 
 # ── MCP Server 实例 ──────────────────────────────────────
 
-mcp_app = FastMCP(
-    name="beautiful-elf-tools",
-    version="1.0.0",
-    description="Beautiful Elf Agent 内置工具 MCP Server",
-)
+mcp_app = FastMCP("beautiful-elf-tools")
 
 
 # ── 工具注册 ─────────────────────────────────────────────

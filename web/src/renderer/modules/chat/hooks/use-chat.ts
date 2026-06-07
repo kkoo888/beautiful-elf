@@ -3,9 +3,9 @@
  * 基于 useChatStore，提供聊天操作方法
  */
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
-import { chat, chatStream, submitFeedback, createConversation } from '../services/chat-api'
+import { chat, chatStream, submitFeedback, createConversation, fetchMessages, fetchConversations } from '../services/chat-api'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
 import type {
   ChatMessage,
@@ -97,6 +97,24 @@ export function useChat(): UseChatReturn {
 
   // 缓存 providerId -> providerType 映射，避免每次请求都拉 Provider 列表
   const providerTypeCacheRef = useRef<Record<number, string | undefined>>({})
+
+  // ── 初始化：加载会话列表 ──────────────────────────────
+  useEffect(() => {
+    fetchConversations().then(({ items }) => {
+      useChatStore.getState().setConversations(items)
+    }).catch(() => { /* 忽略 */ })
+  }, [])
+
+  // ── 切换会话时加载消息 ────────────────────────────────
+  useEffect(() => {
+    if (!currentConversationId) {
+      setMessages([])
+      return
+    }
+    fetchMessages(currentConversationId).then(({ items }) => {
+      setMessages(items)
+    }).catch(() => { /* 忽略 */ })
+  }, [currentConversationId])
 
   const getProviderType = useCallback(async (pid?: number): Promise<string | undefined> => {
     if (!pid) return undefined

@@ -152,7 +152,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedbac
           <FeedbackButtons
             messageId={message.id}
             feedback={message.feedback}
-            onSubmit={onFeedback}
+            onFeedback={onFeedback}
           />
         )}
       </div>
