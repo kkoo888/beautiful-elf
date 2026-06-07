@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Upload, message } from 'antd'
+import { Upload, App } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
 import type {} from 'antd'
 import type { FilePreviewData } from './types/file-preview'
@@ -10,6 +10,7 @@ import styles from './file-preview-panel.module.css'
 const { Dragger } = Upload
 
 export function FilePreviewPanel() {
+  const { message } = App.useApp()
   const [previewFile, setPreviewFile] = useState<FilePreviewData | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
 

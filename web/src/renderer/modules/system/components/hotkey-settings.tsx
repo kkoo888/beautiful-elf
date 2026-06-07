@@ -1,13 +1,14 @@
 /** 快捷键设置面板 */
 
 import { useState, useCallback } from 'react'
-import { Table, Button, Tag, message, Popconfirm, Space } from 'antd'
+import { Table, Button, Tag, App, Popconfirm, Space } from 'antd'
 import { EditOutlined, UndoOutlined } from '@ant-design/icons'
 import { useHotkeys } from '../hooks/use-hotkeys'
 import { HotkeyCapture } from './hotkey-capture'
 import type { HotkeyConfig } from '../types/system'
 
 export function HotkeySettings() {
+  const { message } = App.useApp()
   const { hotkeys, isLoading, checkConflict, updateHotkeyShortcut, resetToDefault, isMutating } =
     useHotkeys()
 

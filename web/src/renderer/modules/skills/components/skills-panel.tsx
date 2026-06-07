@@ -1,7 +1,7 @@
 /** 技能管理主面板 */
 
 import { useState, useCallback } from 'react'
-import { Button, Input, Spin, Empty, Drawer, message } from 'antd'
+import { Button, Input, Spin, Empty, Drawer, App } from 'antd'
 import { PlusOutlined, SearchOutlined, ApiOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSkills } from '../hooks/use-skills'
@@ -17,6 +17,7 @@ const { Search } = Input
 
 /** 技能管理面板 */
 export default function SkillsPanel() {
+  const { message } = App.useApp()
   const {
     skills,
     enabledSkills,

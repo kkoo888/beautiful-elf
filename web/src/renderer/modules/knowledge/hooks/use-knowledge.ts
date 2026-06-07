@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { message } from 'antd'
+import { useMessage } from '@/hooks/use-message'
 import type {
   KnowledgeDocument,
   KnowledgeChunk,
@@ -66,6 +66,7 @@ interface UseKnowledgeReturn {
 }
 
 export function useKnowledge(): UseKnowledgeReturn {
+  const { message } = useMessage()
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)

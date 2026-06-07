@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Segmented, Progress, Button, Typography, Empty, Spin, message } from 'antd'
+import { Segmented, Progress, Button, Typography, Empty, Spin, App } from 'antd'
 import { CopyOutlined, EyeOutlined, FileTextOutlined, CodeOutlined } from '@ant-design/icons'
 import type { AnalysisResult, AnalysisMode } from '../types/visual'
 
@@ -18,6 +18,7 @@ const modeOptions = [
 ]
 
 export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ result, loading, onModeChange }) => {
+  const { message } = App.useApp()
   const [mode, setMode] = useState<AnalysisMode>('general')
 
   const handleModeChange = (val: string | number) => {

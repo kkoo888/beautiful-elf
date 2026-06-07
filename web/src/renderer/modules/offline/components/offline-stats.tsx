@@ -1,7 +1,7 @@
 /** 离线存储统计组件 */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Card, Statistic, Button, message, Popconfirm, Row, Col } from 'antd'
+import { Card, Statistic, Button, App, Popconfirm, Row, Col } from 'antd'
 import {
   DeleteOutlined,
   ClockCircleOutlined,
@@ -20,6 +20,7 @@ interface StatusCounts {
 }
 
 export function OfflineStats() {
+  const { message } = App.useApp()
   const [stats, setStats] = useState<OfflineStorageStats>({ count: 0, sizeBytes: 0 })
   const [counts, setCounts] = useState<StatusCounts>({ pending: 0, sending: 0, failed: 0 })
   const [loading, setLoading] = useState(false)

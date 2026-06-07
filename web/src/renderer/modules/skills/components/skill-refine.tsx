@@ -1,7 +1,7 @@
 /** 炼化面板组件（Drawer） */
 
 import { useState, useCallback } from 'react'
-import { Drawer, Input, Button, Spin, message, Typography } from 'antd'
+import { Drawer, Input, Button, Spin, App, Typography } from 'antd'
 import { BulbOutlined, EditOutlined, SaveOutlined } from '@ant-design/icons'
 import type { Skill, RefineResult } from '../types/skills'
 import styles from './skills-panel.module.css'
@@ -19,6 +19,7 @@ interface SkillRefineProps {
 
 /** 炼化面板 Drawer */
 export function SkillRefine({ open, skill, onClose, onRefine, isRefining }: SkillRefineProps) {
+  const { message } = App.useApp()
   const [prompt, setPrompt] = useState('')
   const [result, setResult] = useState<RefineResult | null>(null)
   const [editedContent, setEditedContent] = useState('')

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
-import { message } from 'antd'
+import { useMessage } from '@/hooks/use-message'
 import type { HotkeyConfig } from '../types/system'
 import { detectConflict } from '../types/system'
 import { fetchHotkeys, updateHotkey, resetHotkeys } from '../services/hotkey-api'
@@ -11,6 +11,7 @@ const QUERY_KEY = ['hotkeys']
 
 export function useHotkeys() {
   const queryClient = useQueryClient()
+  const { message } = useMessage()
 
   const { data: hotkeys = [], isLoading } = useQuery({
     queryKey: QUERY_KEY,

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { message } from 'antd'
+import { useMessage } from '@/hooks/use-message'
 import {
   fetchSnippets,
   createSnippet,
@@ -36,6 +36,7 @@ export function useSnippetTags() {
 /** 创建片段 */
 export function useCreateSnippet() {
   const queryClient = useQueryClient()
+  const { message } = useMessage()
 
   return useMutation({
     mutationFn: (data: SnippetFormData) => createSnippet(data),
@@ -52,6 +53,7 @@ export function useCreateSnippet() {
 /** 更新片段 */
 export function useUpdateSnippet() {
   const queryClient = useQueryClient()
+  const { message } = useMessage()
 
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: SnippetFormData }) => updateSnippet(id, data),
@@ -68,6 +70,7 @@ export function useUpdateSnippet() {
 /** 删除片段 */
 export function useDeleteSnippet() {
   const queryClient = useQueryClient()
+  const { message } = useMessage()
 
   return useMutation({
     mutationFn: (id: string) => deleteSnippet(id),

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, Progress, Typography, message } from 'antd'
+import { Button, Progress, Typography, App } from 'antd'
 import { CopyOutlined } from '@ant-design/icons'
 import type { OcrResult } from '../types/ocr'
 
@@ -10,6 +10,7 @@ interface OcrResultProps {
 }
 
 const OcrResultView: React.FC<OcrResultProps> = ({ result }) => {
+  const { message } = App.useApp()
   if (!result) return null
 
   const confidencePercent = Math.round(result.confidence * 100)

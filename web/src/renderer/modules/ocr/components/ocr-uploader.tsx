@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react'
 import { InboxOutlined } from '@ant-design/icons'
-import { Upload, message } from 'antd'
+import { Upload, App } from 'antd'
 import type { UploadFile, RcFile } from 'antd/es/upload'
 
 const { Dragger } = Upload
@@ -20,6 +20,7 @@ function fileToBase64(file: RcFile): Promise<string> {
 }
 
 const OcrUploader: React.FC<OcrUploaderProps> = ({ onImageReady, disabled }) => {
+  const { message } = App.useApp()
   const handleFile = useCallback(
     async (file: RcFile) => {
       const isImage = file.type.startsWith('image/')

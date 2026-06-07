@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { App as AntdApp } from 'antd'
 import { ThemeProvider } from '@/styles/theme-provider'
 import { WebSocketProvider } from '@/services/websocket'
 import { WS_URL } from '@shared/constants'
@@ -89,7 +90,8 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <WebSocketProvider config={{ url: WS_URL }}>
           <ThemeProvider>
-            <BrowserRouter>
+            <AntdApp>
+              <BrowserRouter>
               <Routes>
                 <Route path="/" element={<MainLayout />}>
                   <Route index element={<ChatPage />} />
@@ -114,6 +116,7 @@ export default function App() {
               {/* 命令面板 — 全局覆盖层 */}
               <CommandPalette open={commandPaletteOpen} onClose={closeCommandPalette} />
             </BrowserRouter>
+            </AntdApp>
           </ThemeProvider>
         </WebSocketProvider>
       </QueryClientProvider>

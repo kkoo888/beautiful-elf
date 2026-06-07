@@ -1,7 +1,7 @@
 /** 技能详情组件（Drawer）— 支持查看 / 编辑模式切换 */
 
 import { useState, useCallback, useEffect } from 'react'
-import { Drawer, Tag, Divider, Button, Input, Space, message, Popconfirm } from 'antd'
+import { Drawer, Tag, Divider, Button, Input, Space, App, Popconfirm } from 'antd'
 import {
   ThunderboltOutlined,
   CheckCircleOutlined,
@@ -64,6 +64,7 @@ ${(skill.dependencies ?? []).length > 0 ? (skill.dependencies ?? []).map((d) => 
 
 /** 技能详情 Drawer */
 export function SkillDetail({ open, skill, onClose, onRefine, onUpdate, onDelete }: SkillDetailProps) {
+  const { message } = App.useApp()
   // ─── 编辑模式 ──────────────────────────────
   const [editing, setEditing] = useState(false)
   const [editDisplayName, setEditDisplayName] = useState('')

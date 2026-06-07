@@ -1,6 +1,6 @@
 /** 专家团工作流主面板 */
 
-import { Button, Space, Typography, message, Breadcrumb } from 'antd'
+import { Button, Space, Typography, App, Breadcrumb } from 'antd'
 import {
   PlusOutlined,
   TeamOutlined,
@@ -26,6 +26,7 @@ type ViewMode = 'list' | 'detail' | 'editor' | 'monitor'
 
 /** 专家团工作流主面板 */
 export default function ExpertTeamPanel() {
+  const { message } = App.useApp()
   const {
     teams,
     isLoading,

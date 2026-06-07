@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useMemo, useRef } from 'react'
-import { Input, Select, Slider, Typography, Tag, Upload, message } from 'antd'
+import { Input, Select, Slider, Typography, Tag, Upload, App } from 'antd'
 import { UserOutlined, CameraOutlined } from '@ant-design/icons'
 import type { SoulConfig } from '../types/settings'
 import { PERSONALITY_PRESETS, SPEAKING_STYLES } from '../types/settings'
@@ -19,6 +19,7 @@ interface SoulSettingsProps {
 }
 
 export function SoulSettings({ soul, onChange }: SoulSettingsProps) {
+  const { message } = App.useApp()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   /** 切换性格标签 */

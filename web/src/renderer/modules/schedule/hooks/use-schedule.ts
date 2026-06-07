@@ -14,6 +14,7 @@ import {
 } from '../services/schedule-api'
 import { pollingRegistry } from '@/services/polling-registry'
 import { showUndoToast } from '@/utils/undo-toast'
+import { useMessage } from '@/hooks/use-message'
 import { useAppStore } from '@/stores/use-app-store'
 
 dayjs.extend(isBetween)
@@ -51,6 +52,7 @@ export interface UseScheduleReturn {
 
 export function useSchedule(rangeStart?: string, rangeEnd?: string): UseScheduleReturn {
   const queryClient = useQueryClient()
+  const { message } = useMessage()
   const [keyword, setKeyword] = useState('')
   const [queryParams, setQueryParams] = useState<ScheduleQueryParams>({})
 
@@ -114,7 +116,7 @@ export function useSchedule(rangeStart?: string, rangeEnd?: string): UseSchedule
       const schedule = schedules.find((s) => s.id === id)
       const title = schedule?.title ?? '日程'
       return deleteMut.mutateAsync(id).then(() => {
-        showUndoToast(`已删除「${title}」`, () => {
+        showUndoToast(message, `已删除「${title}」`, () => {
           // 撤销：重新创建（简化处理，触发 refetch）
           void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
         })

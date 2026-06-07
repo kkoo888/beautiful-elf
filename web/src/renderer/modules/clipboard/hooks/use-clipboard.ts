@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { message } from 'antd'
+import { useMessage } from '@/hooks/use-message'
 import { useDebounce } from '@/hooks'
 import type { ClipboardItem, ClipboardContentType } from '../types/clipboard'
 import {
@@ -32,6 +32,7 @@ interface ClipboardState {
  * 剪贴板模块状态管理 Hook
  */
 export function useClipboard() {
+  const { message } = useMessage()
   const [state, setState] = useState<ClipboardState>({
     items: [],
     loading: false,

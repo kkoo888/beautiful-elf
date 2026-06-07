@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { Typography, Button, Drawer, Space, Spin, message } from 'antd'
+import { Typography, Button, Drawer, Space, Spin, App } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { SnippetCard } from './snippet-card'
 import { SnippetForm } from './snippet-form'
@@ -18,6 +18,7 @@ import styles from './snippets-panel.module.css'
 const { Title, Text } = Typography
 
 export function SnippetsPanel() {
+  const { message } = App.useApp()
   // 搜索 / 筛选状态
   const [keyword, setKeyword] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])

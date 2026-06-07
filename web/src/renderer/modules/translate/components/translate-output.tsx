@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useState } from 'react'
-import { Tooltip, message } from 'antd'
+import { Tooltip, App } from 'antd'
 import { CopyOutlined, CheckOutlined } from '@ant-design/icons'
 import styles from './translate-panel.module.css'
 import { TermBadgeList, TermHighlightText } from './term-badge'
@@ -22,6 +22,7 @@ interface TranslateOutputProps {
  * 展示翻译结果，支持术语高亮和一键复制
  */
 export const TranslateOutput: React.FC<TranslateOutputProps> = ({ result, isTranslating }) => {
+  const { message } = App.useApp()
   const [copied, setCopied] = useState(false)
 
   /** 复制译文到剪贴板 */

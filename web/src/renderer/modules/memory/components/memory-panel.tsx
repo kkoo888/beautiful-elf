@@ -1,7 +1,7 @@
 /** 记忆模块主面板 */
 
 import { useState, useCallback } from 'react'
-import { message } from 'antd'
+import { App } from 'antd'
 import { PageHeader } from '@/components/page-header'
 import { MemorySearch } from './memory-search'
 import { MemoryList } from './memory-list'
@@ -15,6 +15,7 @@ import styles from './memory-panel.module.css'
  * 核心入口：语义搜索 + 记忆列表 + 详情 Drawer
  */
 export default function MemoryPanel() {
+  const { message } = App.useApp()
   const {
     memories,
     total,

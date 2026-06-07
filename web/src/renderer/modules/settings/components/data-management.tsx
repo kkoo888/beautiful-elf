@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useState } from 'react'
-import { Button, Card, Upload, message, Space, Typography, Divider, Alert, Popconfirm } from 'antd'
+import { Button, Card, Upload, App, Space, Typography, Divider, Alert, Popconfirm } from 'antd'
 import { DownloadOutlined, UploadOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { UploadProps } from 'antd'
 import styles from './settings-panel.module.css'
@@ -28,6 +28,7 @@ const EXPORT_VERSION = '1.0.0'
  * 导出数据为 JSON 文件并下载
  */
 export function exportToFile(data: ExportData, filename: string): void {
+  const { message } = App.useApp()
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -197,7 +198,7 @@ export function DataManagement() {
       {/* 清除 */}
       <Card size="small" title="🗑️ 清除数据" style={{ marginBottom: 16 }}>
         <Alert
-          message="危险操作"
+          App="危险操作"
           description="清除后所有本地数据将丢失且无法恢复，建议先导出备份。"
           type="warning"
           showIcon
