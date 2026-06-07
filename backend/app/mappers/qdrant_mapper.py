@@ -9,6 +9,7 @@ from qdrant_client.models import (
     Filter,
     FieldCondition,
     MatchValue,
+    MatchText,
     SearchRequest,
 )
 
@@ -66,6 +67,29 @@ class QdrantMapper:
             logger.error(f"Qdrant upsert 失败: {collection}/{point_id}, error={e}")
             raise
 
+    def ensure_payload_index(self, collection: str, field_name: str, field_type: str = "text") -> None:
+        """确保 payload 字段有索引（支持全文检索等）"""
+        try:
+            from qdrant_client.models import PayloadSchemaType
+            type_map = {
+                "text": PayloadSchemaType.TEXT,
+                "keyword": PayloadSchemaType.KEYWORD,
+                "integer": PayloadSchemaType.INTEGER,
+                "float": PayloadSchemaType.FLOAT,
+                "bool": PayloadSchemaType.BOOL,
+            }
+            schema_type = type_map.get(field_type, PayloadSchemaType.TEXT)
+            self._client.create_payload_index(
+                collection_name=collection,
+                field_name=field_name,
+                field_schema=schema_type,
+            )
+            logger.info(f"创建 payload 索引: {collection}.{field_name} ({field_type})")
+        except Exception as e:
+            # 索引已存在时会抛异常，忽略即可
+            if "already exists" not in str(e).lower():
+                logger.warning(f"创建 payload 索引失败（非致命）: {collection}.{field_name}: {e}")
+
     def search(
         self,
         collection: str,
@@ -73,19 +97,28 @@ class QdrantMapper:
         limit: int = 10,
         score_threshold: float = 0.0,
         filter_payload: dict = None,
+        extra_conditions: list = None,
+        raw_filter: Filter = None,
     ) -> List[SearchResult]:
-        """向量搜索"""
+        """向量搜索
+
+        Args:
+            extra_conditions: 额外的 must 条件（如 MatchText 全文检索条件）
+            raw_filter: 直接传入 Filter 对象（优先级高于 filter_payload + extra_conditions）
+        """
         try:
-            query_filter = None
-            if filter_payload:
-                query_filter = Filter(
-                    must=[
-                        FieldCondition(
-                            key=k, match=MatchValue(value=v)
-                        )
+            if raw_filter:
+                query_filter = raw_filter
+            else:
+                must_conditions = []
+                if filter_payload:
+                    must_conditions.extend([
+                        FieldCondition(key=k, match=MatchValue(value=v))
                         for k, v in filter_payload.items()
-                    ]
-                )
+                    ])
+                if extra_conditions:
+                    must_conditions.extend(extra_conditions)
+                query_filter = Filter(must=must_conditions) if must_conditions else None
 
             # qdrant_client >= 1.7 用 query_points，旧版用 search
             if hasattr(self._client, "query_points"):

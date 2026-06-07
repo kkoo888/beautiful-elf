@@ -25,6 +25,10 @@ class ContextResult:
     context_parts: Dict[str, str] = field(default_factory=dict)
     sources_used: List[str] = field(default_factory=list)
     total_chars: int = 0
+    # 记忆元数据（供 State 传递）
+    memory_ids: List[str] = field(default_factory=list)
+    memory_scores: List[float] = field(default_factory=list)
+    memory_count: int = 0
 
 
 class ContextEngine:
@@ -81,9 +85,10 @@ class ContextEngine:
                 parts["preferences"] = prefs
                 budget_remaining -= len(prefs)
 
-        # 4. 长期记忆
+        # 4. 长期记忆（user_message 已在 engine.py 中经过 query rewriting）
+        memory_meta = {"ids": [], "scores": [], "count": 0}
         if self.memory_manager and user_message and budget_remaining > 500:
-            memory_ctx = await self._retrieve_memory(user_id, user_message, budget=1500)
+            memory_ctx, memory_meta = await self._retrieve_memory_with_meta(user_id, user_message, budget=1500)
             if memory_ctx:
                 parts["memory"] = memory_ctx
                 budget_remaining -= len(memory_ctx)
@@ -118,6 +123,9 @@ class ContextEngine:
             context_parts=parts,
             sources_used=list(parts.keys()),
             total_chars=len(system_prompt),
+            memory_ids=memory_meta.get("ids", []),
+            memory_scores=memory_meta.get("scores", []),
+            memory_count=memory_meta.get("count", 0),
         )
 
     async def _retrieve_user_prefs(self, user_id: int, budget: int = 500) -> str:
@@ -192,17 +200,44 @@ class ContextEngine:
         logger.info(f"[context_engine] 意图 '{intent_name}' 推荐工具: {recommended}, 过滤后: {len(filtered)}/{len(tools)}")
         return filtered
 
-    async def _retrieve_memory(self, user_id: int, query: str, budget: int = 1500) -> str:
+    async def _retrieve_memory_with_meta(
+        self, user_id: int, query: str, budget: int = 1500
+    ) -> tuple:
+        """检索记忆并返回元数据（用于 State 传递）
+
+        Returns:
+            (formatted_text, metadata_dict)
+            metadata_dict: {"ids": [...], "scores": [...], "count": int}
+        """
+        meta = {"ids": [], "scores": [], "count": 0}
         try:
-            memory_text = await self.memory_manager.search(query=query, user_id=user_id, limit=3)
-            if not memory_text:
-                return ""
-            if len(memory_text) > budget:
-                memory_text = memory_text[:budget] + "..."
-            return f"【相关记忆】\n{memory_text}"
+            results = await self.memory_manager.search_with_scores(query=query, user_id=user_id, limit=3)
+            if not results:
+                return "", meta
+
+            # 收集元数据
+            meta["ids"] = [r.get("id", "") for r in results]
+            meta["scores"] = [r.get("score", 0) for r in results]
+            meta["count"] = len(results)
+
+            # 格式化文本（复用 search() 的逻辑）
+            parts = []
+            for r in results:
+                ptype = r.get("type", "detail")
+                score = r.get("score", 0)
+                if ptype in ("summary", "user_memory"):
+                    parts.append(f"[记忆 | 相关度:{score:.2f} | {r.get('saved_at', '')}] {r.get('summary', '')}")
+                else:
+                    msg_count = len(r.get("messages", []))
+                    parts.append(f"[对话记录 | 相关度:{score:.2f} | {r.get('saved_at', '')} | {msg_count}条消息]")
+
+            text = "\n".join(parts)
+            if len(text) > budget:
+                text = text[:budget] + "..."
+            return f"【相关记忆】\n{text}", meta
         except Exception as e:
             logger.warning(f"[context_engine] 记忆检索失败（降级跳过）: {e}")
-            return ""
+            return "", meta
 
     async def _retrieve_knowledge(self, query: str, budget: int = 2000) -> str:
         try:

@@ -121,6 +121,9 @@ class AgentState(TypedDict):
     provider_id: Optional[int]
     model_name: str
     evaluation: Optional[dict]  # 评估结果
+    # 记忆元数据（由 context_builder 填充，供 memory_saver / evaluator 消费）
+    memory_context: Optional[dict]  # {"ids": [...], "scores": [...], "count": int, "avg_score": float}
+    conversation_importance: Optional[int]  # 对话重要性评分 (1-10)
 
 
 # ── 错误契约 ──────────────────────────────────────────────
@@ -277,6 +280,7 @@ def _make_context_builder(context_engine, memory_manager):
     async def context_builder_node(state: AgentState) -> dict:
         t0 = time.time()
         query = _extract_last_message(state)
+        memory_context = None  # 记忆元数据，默认无
 
         if context_engine:
             try:
@@ -303,6 +307,17 @@ def _make_context_builder(context_engine, memory_manager):
                     )
 
                 logger.info(f"[context_builder] sources={result.sources_used} chars={result.total_chars} elapsed={time.time()-t0:.2f}s")
+
+                # 记忆元数据 → State（供 memory_saver / evaluator 消费）
+                if result.memory_count > 0:
+                    avg_score = sum(result.memory_scores) / len(result.memory_scores) if result.memory_scores else 0
+                    memory_context = {
+                        "ids": result.memory_ids,
+                        "scores": result.memory_scores,
+                        "count": result.memory_count,
+                        "avg_score": round(avg_score, 3),
+                    }
+                    logger.info(f"[context_builder] 记忆元数据: count={result.memory_count} avg_score={avg_score:.3f}")
             except Exception as e:
                 logger.warning(f"[context_engine] 组装失败，降级为简单提示: {e}")
                 system_prompt = "你是一个智能助手，能够使用工具回答用户问题。请用中文回答。"
@@ -316,7 +331,11 @@ def _make_context_builder(context_engine, memory_manager):
                 except Exception as e:
                     logger.warning(f"[context_builder] 记忆检索失败（降级跳过）: {e}")
 
-        return {"system_prompt": system_prompt, "context": system_prompt}
+        return {
+            "system_prompt": system_prompt,
+            "context": system_prompt,
+            "memory_context": memory_context,
+        }
 
     return context_builder_node
 
@@ -597,6 +616,13 @@ def _make_evaluator_node(llm=None):
         # LLM-as-Judge
         user_query = _extract_last_message(state)
         tools_used = state.get("tools_used", [])
+        memory_ctx = state.get("memory_context") or {}
+
+        # 记忆质量上下文
+        memory_info = ""
+        if memory_ctx.get("count", 0) > 0:
+            avg_score = memory_ctx.get("avg_score", 0)
+            memory_info = f"\n【检索到的记忆】{memory_ctx['count']}条，平均相关度: {avg_score:.2f}"
 
         eval_prompt = f"""你是一个严格的质量评估专家。请评估以下 AI 回答的质量。
 
@@ -607,21 +633,23 @@ def _make_evaluator_node(llm=None):
 {final_answer[:2000]}
 
 【使用的工具】
-{', '.join(tools_used) if tools_used else '无'}
+{', '.join(tools_used) if tools_used else '无'}{memory_info}
 
 请从以下维度评估（1-10分）:
 1. 准确性 — 回答是否正确、是否有事实错误
 2. 完整性 — 是否完整回答了用户的问题
 3. 幻觉检测 — 是否包含捏造的信息或数据
 4. 工具使用 — 如果使用了工具，结果是否被正确引用
+5. 记忆引用 — 如果检索到了记忆，回答中是否正确引用了记忆内容（无记忆时给 7 分）
 
 严格按以下 JSON 格式返回（不要输出其他内容）:
-{{"score": 8, "passed": true, "reason": "简短说明", "dimensions": {{"accuracy": 8, "completeness": 7, "hallucination": 9, "tool_usage": 8}}}}
+{{"score": 8, "passed": true, "reason": "简短说明", "dimensions": {{"accuracy": 8, "completeness": 7, "hallucination": 9, "tool_usage": 8, "memory_usage": 7}}}}
 
 注意:
 - score >= 6 为通过
 - 如果回答包含明显的错误信息或"服务不可用"等，score <= 3
-- 如果使用了工具但回答中没有引用工具结果，tool_usage <= 4"""
+- 如果使用了工具但回答中没有引用工具结果，tool_usage <= 4
+- 如果检索到了相关记忆但回答完全没体现，memory_usage <= 4"""
 
         try:
             response = await llm.ainvoke([HumanMessage(content=eval_prompt)])
@@ -651,6 +679,7 @@ def _make_memory_saver(memory_manager):
             return {}
 
         messages = _build_message_dicts(state)
+        importance = state.get("conversation_importance")
 
         # 短期记忆: Redis
         if memory_manager:
@@ -662,20 +691,39 @@ def _make_memory_saver(memory_manager):
             except Exception as e:
                 logger.warning(f"[memory_saver] Redis 保存失败: {e}")
 
-            # 长期记忆: Qdrant（用重要性评分替代简单阈值）
-            # 有工具调用 或 对话 >= 8 条 时触发评估
+            # ── 长期记忆: 基于 conversation_importance 的智能保存 ──
+            # 计算对话重要性（如果 State 已有则复用）
+            if importance is None:
+                importance = memory_manager._score_conversation_importance(
+                    messages + [{"role": "assistant", "content": state["final_answer"]}]
+                )
+
             tools_used = state.get("tools_used", [])
-            if tools_used or len(messages) >= 8:
+
+            # 保存条件（三选一）:
+            #   1. 有工具调用 → 实际执行了任务，值得记录
+            #   2. 对话轮次 >= 8 且重要性 >= 6 → 深度且有价值的对话
+            #   3. 重要性 >= 8 → 高价值对话（不管有没有工具）
+            should_save = (
+                tools_used
+                or (len(messages) >= 8 and importance >= 6)
+                or importance >= 8
+            )
+
+            if should_save:
                 try:
                     await memory_manager.save_summary(
                         conversation_id=state["conversation_id"],
                         user_id=state.get("user_id", 0),
                         messages=messages + [{"role": "assistant", "content": state["final_answer"]}],
                     )
+                    logger.info(f"[memory_saver] 已保存长期记忆: importance={importance} tools={bool(tools_used)} msgs={len(messages)}")
                 except Exception as e:
                     logger.warning(f"[memory_saver] Qdrant 长期记忆保存失败: {e}")
+            else:
+                logger.debug(f"[memory_saver] 跳过保存: importance={importance} tools={bool(tools_used)} msgs={len(messages)}")
 
-        return {}
+        return {"conversation_importance": importance}
 
     return memory_saver_node
 

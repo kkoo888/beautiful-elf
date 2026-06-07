@@ -37,6 +37,8 @@ class MemoryManager:
         self.embedding_func = embedding_func
         self.llm = llm_client
         self.qdrant.ensure_collection(MEMORY_COLLECTION, vector_size=1024)
+        # 确保 summary 字段有全文索引（用于 BM25 预过滤）
+        self.qdrant.ensure_payload_index(MEMORY_COLLECTION, "summary", field_type="text")
 
     # ── Redis 会话缓存 ──────────────────────────────────
 
@@ -345,41 +347,52 @@ class MemoryManager:
     # ── BM25 关键词搜索 ───────────────────────────────
 
     def _bm25_search(self, query: str, user_id: int, limit: int) -> List[dict]:
-        """BM25 关键词匹配（基于 Qdrant payload 中的 summary 文本）
+        """BM25 关键词匹配（基于 Qdrant 全文索引预过滤 + Python BM25 评分）
 
-        简化实现：用 Python 端的 TF-IDF 近似 BM25
-        生产环境建议用 Elasticsearch 或 SQLite FTS5
+        优化: 用 Qdrant match_text 做预过滤，只拉取包含查询词的文档，
+        而非拉取用户全部记忆（避免 O(N) 全表扫描）。
         """
         import math
         from collections import Counter
 
-        # 从 Qdrant 获取所有用户记忆（粗暴但有效，后续可换 ES）
-        try:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
+        query_terms = [t.strip() for t in query.lower().split() if t.strip()]
+        if not query_terms:
+            return []
 
-            user_filter = Filter(must=[
-                FieldCondition(key="user_id", match=MatchValue(value=user_id))
-            ]) if user_id else None
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchText
+
+            user_conditions = [FieldCondition(key="user_id", match=MatchValue(value=user_id))] if user_id else []
+
+            # 用 match_text 预过滤：任一查询词出现在 summary 中
+            # Qdrant 的全文索引会高效处理这个过滤
+            text_conditions = [
+                FieldCondition(key="summary", match=MatchText(text=term))
+                for term in query_terms
+            ]
+
+            # 用零向量 + 全文预过滤获取候选集（比拉全量高效得多）
+            # should = OR 语义：匹配任一查询词即可
+            text_filter = Filter(
+                must=user_conditions,
+                should=text_conditions,
+            )
 
             all_results = self.qdrant.search(
                 collection=MEMORY_COLLECTION,
-                query_vector=[0.0] * 1024,  # 零向量，不过滤相似度
-                limit=500,
+                query_vector=[0.0] * 1024,
+                limit=min(limit * 2, 100),  # 上限 100，不再拉 500
                 score_threshold=0.0,
-                filter_payload=user_filter,
+                raw_filter=text_filter,
             )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[bm25] Qdrant 全文预过滤失败，降级为空: {e}")
             return []
 
         if not all_results:
             return []
 
-        # 简单 BM25 评分
-        query_terms = set(query.lower().split())
-        if not query_terms:
-            return []
-
-        # 计算 IDF
+        # BM25 评分（仅在预过滤后的候选集上计算）
         doc_count = len(all_results)
         doc_freq = Counter()
         for r in all_results:
@@ -389,7 +402,6 @@ class MemoryManager:
                 if term in terms_in_doc:
                     doc_freq[term] += 1
 
-        # BM25 参数
         k1 = 1.5
         b = 0.75
         avg_dl = sum(len((r.payload.get("summary", "") or "").split()) for r in all_results) / max(doc_count, 1)
