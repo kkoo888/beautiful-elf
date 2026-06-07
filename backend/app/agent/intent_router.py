@@ -195,6 +195,7 @@ class IntentRouter:
             "score": top.score,
             "target_module": payload.get("target_module", ""),
             "trigger_texts": payload.get("trigger_texts", []),
+            "tool_names": payload.get("tool_names"),  # null=全量, []=无工具
         }
 
     async def _check_semantic_cache(self, vector: list) -> Optional[dict]:
@@ -275,6 +276,7 @@ class IntentRouter:
                         "intent_name": intent.name,
                         "target_module": intent.target_module,
                         "trigger_texts": intent.trigger_texts or [],
+                        "tool_names": intent.tool_names,
                     },
                 )
 

@@ -429,65 +429,8 @@ async def query_database(sql: str) -> dict:
             return {"error": f"查询执行失败: {str(e)}"}
 
 
-# ── 意图 → 工具映射表 ──────────────────────────────────────
-# 定义每种意图类型需要哪些工具，未列出的意图不绑定工具（纯对话）
-# None 表示所有工具可用（通用 Agent 模式）
-
-INTENT_TOOL_MAP: Dict[str, Optional[List[str]]] = {
-    # 闲聊/问候/感谢 → 不需要任何工具
-    "chitchat": [],
-    "greeting": [],
-    "farewell": [],
-    "thanks": [],
-
-    # 搜索类意图 → 只给搜索工具
-    "search": ["web_search"],
-    "web_search": ["web_search"],
-    "knowledge_query": ["web_search", "read_file"],
-
-    # 数据类意图 → 只给数据库工具
-    "data_query": ["query_database"],
-    "database": ["query_database"],
-    "analytics": ["query_database"],
-
-    # 文件类意图 → 只给文件工具
-    "file_read": ["read_file"],
-    "code_review": ["read_file"],
-
-    # 开发类意图 → 给代码+文件工具
-    "coding": ["execute_code", "read_file"],
-    "debug": ["execute_code", "read_file", "query_database"],
-
-    # 通用 Agent → 所有工具（兜底）
-    "agent": None,
-    "default": None,
-}
-
-
-def get_tools_for_intent(intent_name: Optional[str], all_tool_names: List[str]) -> Optional[List[str]]:
-    """
-    根据意图返回推荐的工具列表。
-
-    Args:
-        intent_name: 意图名称（来自 IntentRouter）
-        all_tool_names: 所有可用工具名列表
-
-    Returns:
-        推荐的工具名列表。None 表示全部可用（不限制）。
-    """
-    if not intent_name:
-        return None  # 无意图 → 全量
-
-    tools = INTENT_TOOL_MAP.get(intent_name)
-    if tools is None:
-        return None  # 未映射 → 全量（不限制）
-
-    if not tools:
-        return []  # 明确不需要工具
-
-    # 过滤出实际存在的工具
-    available = [t for t in tools if t in all_tool_names]
-    return available if available else None
+# ── B+C: 意图→工具映射已迁移到 DB intent.tool_names 字段
+# 前端可管理，不再硬编码
 
 
 # ─── 全局单例 ────────────────────────────────────────────

@@ -142,4 +142,5 @@ async def test_match(
         score=result["score"],
         target_module=result["target_module"],
         trigger_texts=result["trigger_texts"],
+        tool_names=result.get("tool_names"),
     ))

@@ -39,7 +39,10 @@ class AgentService:
         tool_names: Optional[list] = None,
         enable_interrupt: bool = False,
     ) -> bool:
-        """初始化 Agent 引擎"""
+        """初始化 Agent 引擎（v5.0 — 不再全量 bind_tools）
+
+        B+C 架构: LLM 初始化时不绑定工具，每次请求由 engine 动态选择。
+        """
         from app.agent.llm_service import llm_service
         from app.agent.tool_registry import tool_registry, register_builtin_tools
         from app.agent.engine import build_agent_graph
@@ -51,9 +54,9 @@ class AgentService:
             register_builtin_tools()
             await tool_registry.load_from_db(db)
 
-            lc_tools = tool_registry.get_langchain_tools(tool_names)
+            # ── B+C: LLM 不再 bind_tools，工具由 engine 动态绑定 ──
             llm = await llm_service.get_chat_llm(
-                db, provider_id=provider_id, model_name=model_name, bind_tools=lc_tools,
+                db, provider_id=provider_id, model_name=model_name, bind_tools=None,
             )
 
             memory_manager = memory_service.memory_manager
@@ -95,7 +98,7 @@ class AgentService:
             self._model_name = model_name
             self._initialized = True
 
-            logger.info(f"Agent 引擎 v3.0 初始化完成 (provider={provider_id}, model={model_name}, tools={len(lc_tools)}, interrupt={enable_interrupt})")
+            logger.info(f"Agent 引擎 v5.0 初始化完成 (provider={provider_id}, model={model_name}, B+C动态工具, interrupt={enable_interrupt})")
             return True
 
         except ImportError as e:
@@ -150,6 +153,7 @@ class AgentService:
             "provider_id": provider_id,
             "model_name": model_name,
             "evaluation": None,
+            "selected_tools": None,  # B+C: 由 engine 动态选择
         }
 
         config = self._get_config(conversation_id)
@@ -277,6 +281,7 @@ class AgentService:
                 "model_name": model_name,
                 "evaluation": None,
                 "reasoning_depth": reasoning_depth,
+                "selected_tools": None,  # B+C: 由 engine 动态选择
             }
 
             config = self._get_config(conversation_id)

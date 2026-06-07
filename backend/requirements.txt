@@ -25,3 +25,5 @@ llama-index-vector-stores-qdrant==0.10.1
 llama-index-embeddings-ollama==0.9.0
 llama-index-llms-ollama==0.10.1
 slowapi==0.1.9
+fastmcp>=2.0.0
+mcp>=1.0.0

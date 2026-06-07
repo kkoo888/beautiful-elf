@@ -125,6 +125,8 @@ class AgentState(TypedDict):
     # 记忆元数据（由 context_builder 填充，供 memory_saver / evaluator 消费）
     memory_context: Optional[dict]  # {"ids": [...], "scores": [...], "count": int, "avg_score": float}
     conversation_importance: Optional[int]  # 对话重要性评分 (1-10)
+    # ── B+C: 动态工具选择 ──────────────────────────────
+    selected_tools: Optional[list]  # 当前请求选中的 LangChain Tool 列表
 
 
 # ── 错误契约 ──────────────────────────────────────────────
@@ -157,7 +159,12 @@ def build_agent_graph(
     timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
 ) -> Any:
     """
-    构建 Agent 工作流图（v4.0）。
+    构建 Agent 工作流图（v5.0 — B+C 动态工具绑定）。
+
+    v5.0 变更:
+      - 工具不再在初始化时全量 bind_tools
+      - context_builder 根据 intent 动态选择工具
+      - llm_caller 每次请求动态绑定工具
 
     Args:
         enable_interrupt: 是否启用 interrupt/resume（需要 checkpointer）
@@ -167,7 +174,7 @@ def build_agent_graph(
 
     graph.add_node("intent_router", _make_intent_router(intent_router))
     graph.add_node("skill_executor", _make_skill_executor_node(skill_executor))
-    graph.add_node("context_builder", _make_context_builder(context_engine, memory_manager))
+    graph.add_node("context_builder", _make_context_builder(context_engine, memory_manager, tool_registry))
     graph.add_node("llm_call", _make_llm_caller(llm))
     graph.add_node("tool_executor", _make_tool_executor(tool_registry))
     graph.add_node("approval_node", _make_approval_node(tool_registry))
@@ -277,11 +284,16 @@ def _make_skill_executor_node(skill_executor):
     return skill_executor_node
 
 
-def _make_context_builder(context_engine, memory_manager):
+def _make_context_builder(context_engine, memory_manager, tool_registry=None):
     async def context_builder_node(state: AgentState) -> dict:
         t0 = time.time()
         query = _extract_last_message(state)
         memory_context = None  # 记忆元数据，默认无
+
+        # ── B+C: 根据 intent 动态选择工具 ──────────────
+        selected_tools = _select_tools_for_intent(state, tool_registry)
+        tool_count = len(selected_tools)
+        logger.info(f"[context_builder] 动态工具选择: intent={state.get('intent', {}).get('intent_name', 'none')} tools={tool_count}")
 
         if context_engine:
             try:
@@ -292,12 +304,20 @@ def _make_context_builder(context_engine, memory_manager):
                     conversation_history=messages_for_rewrite[:-1],  # 排除当前消息
                 )
 
+                # 传递选中的工具摘要给 context_engine
+                tool_summaries = None
+                if tool_registry and selected_tools:
+                    tool_summaries = [
+                        {"name": t.name, "description": t.description}
+                        for t in selected_tools
+                    ]
+
                 result = await context_engine.assemble(
                     user_id=state.get("user_id", 0),
                     conversation_id=state.get("conversation_id", 0),
                     user_message=rewritten_query,  # 用改写后的查询
                     intent=state.get("intent"),
-                    tools=context_engine.get_tool_summaries(),
+                    tools=tool_summaries or (context_engine.get_tool_summaries() if context_engine else None),
                 )
                 system_prompt = result.system_prompt
 
@@ -336,6 +356,7 @@ def _make_context_builder(context_engine, memory_manager):
             "system_prompt": system_prompt,
             "context": system_prompt,
             "memory_context": memory_context,
+            "selected_tools": selected_tools,
         }
 
     return context_builder_node
@@ -383,8 +404,16 @@ def _make_llm_caller(llm):
             else:
                 lc_messages.append(HumanMessage(content=content))
 
+        # ── B+C: 动态绑定工具（per-request）────────────
+        selected_tools = state.get("selected_tools") or []
+        current_llm = llm
+        if selected_tools:
+            current_llm = llm.bind_tools(selected_tools)
+            logger.debug(f"[llm_call] 动态绑定 {len(selected_tools)} 个工具")
+        # selected_tools=[] → 不绑定任何工具（纯对话模式）
+
         try:
-            response = await llm.ainvoke(lc_messages)
+            response = await current_llm.ainvoke(lc_messages)
         except Exception as e:
             logger.error(f"[llm_call] LLM 调用失败: {e}")
             return {
@@ -782,6 +811,39 @@ def _after_eval(state: AgentState) -> str:
 
 
 # ── 辅助函数 ──────────────────────────────────────────────
+
+def _select_tools_for_intent(state: AgentState, tool_registry) -> Optional[list]:
+    """
+    B+C 核心：根据 intent 动态选择工具。
+
+    逻辑:
+      1. intent 有 tool_names 且非 null → 只选指定工具
+      2. intent 有 tool_names=[] → 不选任何工具（纯对话）
+      3. intent 无 tool_names（null）→ 全量工具（Agent 兜底模式）
+      4. 无 intent → 全量工具（Agent 兜底模式）
+
+    Returns:
+        LangChain Tool 列表（始终返回列表，None 不再使用）
+    """
+    if not tool_registry:
+        return tool_registry.get_langchain_tools() if tool_registry else []
+
+    intent = state.get("intent")
+    if not intent:
+        # 无 intent → 全量（Agent 兜底模式）
+        return tool_registry.get_langchain_tools()
+
+    tool_names = intent.get("tool_names")
+    if tool_names is None:
+        # null → 全量（Agent 模式）
+        return tool_registry.get_langchain_tools()
+
+    if not tool_names:
+        # [] → 纯对话，不需要工具
+        return []
+
+    # 指定工具列表 → 过滤
+    return tool_registry.get_langchain_tools(tool_names)
 
 def _extract_last_message(state: AgentState) -> str:
     last_msg = state["messages"][-1] if state["messages"] else None

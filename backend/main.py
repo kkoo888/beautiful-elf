@@ -58,6 +58,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"意图路由初始化失败（意图匹配不可用）: {e}")
 
+    # 启动 MCP Server（后台任务，供 Agent 和外部客户端调用）
+    try:
+        await _start_mcp_server()
+    except Exception as e:
+        logger.warning(f"MCP Server 启动失败（MCP 功能不可用）: {e}")
+
     # 初始化可观测性（可选）
     try:
         from app.agent.tracing import init_tracing
@@ -180,6 +186,34 @@ async def _init_intent():
 
     except Exception as e:
         logger.warning(f"意图路由初始化失败: {e}")
+
+
+async def _start_mcp_server():
+    """启动 MCP Server（后台进程，SSE 传输）"""
+    import asyncio
+    import os
+
+    try:
+        from app.agent.mcp_server import mcp_app
+
+        host = os.getenv("MCP_SERVER_HOST", "0.0.0.0")
+        port = int(os.getenv("MCP_SERVER_PORT", "8765"))
+
+        async def _run_mcp():
+            """后台运行 MCP Server"""
+            try:
+                mcp_app.run(transport="sse", host=host, port=port)
+            except Exception as e:
+                logger.error(f"MCP Server 运行异常: {e}")
+
+        # 后台任务启动，不阻塞主进程
+        asyncio.create_task(_run_mcp())
+        logger.info(f"MCP Server 后台启动: {host}:{port}")
+
+    except ImportError as e:
+        logger.warning(f"fastmcp 未安装，MCP Server 跳过: {e}")
+    except Exception as e:
+        logger.warning(f"MCP Server 启动失败: {e}")
 
 
 app = FastAPI(

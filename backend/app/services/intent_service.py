@@ -61,6 +61,7 @@ class IntentService:
             "description": data.description,
             "trigger_texts": data.trigger_texts,
             "target_module": data.target_module,
+            "tool_names": data.tool_names,
             "metadata": data.metadata,
             "is_enabled": 1,
         })
