@@ -21,10 +21,12 @@ const RISK_OPTIONS = [
 ]
 
 const MODULE_OPTIONS = [
-  { value: 'builtin', label: '内置' },
-  { value: 'custom', label: '自定义' },
-  { value: 'skill', label: '技能' },
-  { value: 'mcp', label: 'MCP' },
+  { value: '增', label: '增' },
+  { value: '删', label: '删' },
+  { value: '改', label: '改' },
+  { value: '查', label: '查' },
+  { value: '计算', label: '计算' },
+  { value: '其他', label: '其他' },
 ]
 
 /** 默认 JSON Schema 模板 */

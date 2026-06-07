@@ -48,7 +48,7 @@ export function ToolList({ tools, loading, onEdit, onDelete, onToggle }: ToolLis
       width: 260,
     },
     {
-      title: '模块',
+      title: '功能类别',
       dataIndex: 'module',
       key: 'module',
       width: 90,

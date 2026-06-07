@@ -10,7 +10,7 @@ export interface ToolInfo {
   displayName: string
   /** 描述 */
   description: string
-  /** 所属模块 */
+  /** 功能类别（增/删/改/查/计算/其他） */
   module: string
   /** JSON Schema */
   jsonSchema: Record<string, unknown>
