@@ -23,6 +23,25 @@ logger = get_logger(__name__)
 MEMORY_COLLECTION = "memory_vectors"
 
 
+def _content_to_str(content) -> str:
+    """将消息 content 统一转为字符串（兼容 list content blocks 格式）"""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text", "")
+                if text:
+                    parts.append(text)
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts)
+    return str(content)
+
+
 class MemoryManager:
     """两层记忆管理器"""
 
@@ -69,7 +88,7 @@ class MemoryManager:
         if not messages:
             return
 
-        text = "\n".join(f"[{m.get('role')}] {m.get('content', '')}" for m in messages)
+        text = "\n".join(f"[{m.get('role')}] {_content_to_str(m.get('content', ''))}" for m in messages)
         vector = await self.embedding_func(text[:2000])
         point_id = str(uuid.uuid4())
 
@@ -103,7 +122,7 @@ class MemoryManager:
             logger.debug(f"[memory_saver] 对话重要性过低({importance})，跳过保存")
             return
 
-        text = "\n".join(f"{m.get('role')}: {m.get('content', '')}" for m in messages)
+        text = "\n".join(f"{m.get('role')}: {_content_to_str(m.get('content', ''))}" for m in messages)
 
         # ── 2. LLM 结构化摘要 ─────────────────────────
         summary = text[:500]  # fallback
@@ -185,7 +204,7 @@ class MemoryManager:
         """
         score = 5  # 基础分
 
-        text = " ".join(m.get("content", "") for m in messages)
+        text = " ".join(_content_to_str(m.get("content", "")) for m in messages)
 
         # 工具调用加分
         tool_indicators = ["tool_calls", "function_call", "执行", "查询", "搜索"]

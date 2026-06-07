@@ -24,6 +24,7 @@ from langgraph.types import interrupt, Command
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 from app.core.logging import get_logger
+from app.agent.context_engine import MAX_CONTEXT_CHARS
 
 logger = get_logger(__name__)
 
@@ -355,7 +356,7 @@ def _make_llm_caller(llm):
             try:
                 from app.agent.compaction import maybe_compact
                 raw_messages = await maybe_compact(
-                    messages=[{"role": getattr(m, "role", m.get("role", "user")), "content": getattr(m, "content", m.get("content", ""))} for m in raw_messages],
+                    messages=[{"role": getattr(m, "role", m.get("role", "user")), "content": _content_to_str(getattr(m, "content", m.get("content", "")))} for m in raw_messages],
                     llm_client=llm,
                     user_id=state.get("user_id", 0),
                     conversation_id=state.get("conversation_id", 0),
@@ -368,9 +369,9 @@ def _make_llm_caller(llm):
 
         for m in raw_messages:
             if isinstance(m, dict):
-                role, content = m.get("role", "user"), m.get("content", "")
+                role, content = m.get("role", "user"), _content_to_str(m.get("content", ""))
             else:
-                role, content = getattr(m, "role", "user"), getattr(m, "content", "")
+                role, content = getattr(m, "role", "user"), _content_to_str(getattr(m, "content", ""))
 
             if role == "system":
                 lc_messages.append(SystemMessage(content=content))
@@ -653,7 +654,7 @@ def _make_evaluator_node(llm=None):
 
         try:
             response = await llm.ainvoke([HumanMessage(content=eval_prompt)])
-            eval_text = response.content.strip()
+            eval_text = _content_to_str(response.content).strip()
 
             # 解析 JSON（容错处理）
             if eval_text.startswith("```"):
@@ -785,17 +786,44 @@ def _after_eval(state: AgentState) -> str:
 def _extract_last_message(state: AgentState) -> str:
     last_msg = state["messages"][-1] if state["messages"] else None
     if last_msg:
-        return last_msg.get("content", "") if isinstance(last_msg, dict) else getattr(last_msg, "content", "")
+        content = last_msg.get("content", "") if isinstance(last_msg, dict) else getattr(last_msg, "content", "")
+        return _content_to_str(content)
     return ""
+
+
+def _content_to_str(content) -> str:
+    """将消息 content 统一转为字符串。
+
+    LLM 返回的 content 可能是:
+      - str: 直接返回
+      - None: 返回空字符串
+      - list[dict]: content blocks 格式，提取 text 字段拼接
+      - 其他: str() 强转
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text", "")
+                if text:
+                    parts.append(text)
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts)
+    return str(content)
 
 
 def _build_message_dicts(state: AgentState) -> List[dict]:
     result = []
     for m in state["messages"]:
         if isinstance(m, dict):
-            result.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+            result.append({"role": m.get("role", "user"), "content": _content_to_str(m.get("content", ""))})
         else:
-            result.append({"role": getattr(m, "role", "user"), "content": getattr(m, "content", "")})
+            result.append({"role": getattr(m, "role", "user"), "content": _content_to_str(getattr(m, "content", ""))})
     return result
 
 

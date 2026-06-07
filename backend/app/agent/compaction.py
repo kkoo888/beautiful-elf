@@ -19,6 +19,25 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+
+def _content_to_str(content) -> str:
+    """将消息 content 统一转为字符串（兼容 list content blocks 格式）"""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text", "")
+                if text:
+                    parts.append(text)
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts)
+    return str(content)
+
 # 默认配置
 DEFAULT_MAX_TOKENS = 128000       # context window 大小
 DEFAULT_RESERVE_TOKENS = 20000    # 预留给生成的 token
@@ -47,7 +66,7 @@ class AutoCompactor:
 
     def estimate_tokens(self, messages: List[dict]) -> int:
         """粗略估算消息的 token 数（中文约 1.5 字/token，英文约 4 字符/token）"""
-        total_chars = sum(len(m.get("content", "")) for m in messages)
+        total_chars = sum(len(_content_to_str(m.get("content", ""))) for m in messages)
         # 简单估算：平均每 2 个字符 ≈ 1 token
         return total_chars // 2
 
@@ -107,7 +126,7 @@ class AutoCompactor:
 
     async def _generate_summary(self, messages: List[dict]) -> str:
         """用 LLM 生成对话摘要"""
-        text = "\n".join(f"[{m.get('role', 'user')}] {m.get('content', '')[:500]}" for m in messages)
+        text = "\n".join(f"[{m.get('role', 'user')}] {_content_to_str(m.get('content', ''))[:500]}" for m in messages)
 
         if not self.llm:
             # 无 LLM 时降级为截取关键信息
@@ -127,7 +146,7 @@ class AutoCompactor:
                 )),
                 HumanMessage(content=text[:8000]),
             ])
-            return response.content.strip()
+            return _content_to_str(response.content).strip()
 
         except Exception as e:
             logger.warning(f"[compactor] LLM 摘要失败，降级: {e}")
@@ -143,7 +162,7 @@ class AutoCompactor:
 
         # 取最近 3 条用户消息作为摘要
         for m in user_msgs[-3:]:
-            content = m.get("content", "")[:200]
+            content = _content_to_str(m.get("content", ""))[:200]
             if content:
                 parts.append(f"- 用户: {content}")
 

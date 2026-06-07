@@ -18,6 +18,25 @@ logger = get_logger(__name__)
 MAX_CONTEXT_CHARS = 6000
 
 
+def _content_to_str(content) -> str:
+    """将消息 content 统一转为字符串（兼容 list content blocks 格式）"""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text", "")
+                if text:
+                    parts.append(text)
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts)
+    return str(content)
+
+
 @dataclass
 class ContextResult:
     """Context 组装结果"""
@@ -322,7 +341,7 @@ class ContextEngine:
                 )),
                 HumanMessage(content=text),
             ])
-            compressed = response.content.strip()
+            compressed = _content_to_str(response.content).strip()
             logger.info(f"[context_engine] 压缩: {len(text)} → {len(compressed)} 字符")
             return compressed
 
@@ -348,7 +367,7 @@ class ContextEngine:
         history_text = ""
         if conversation_history:
             recent = conversation_history[-3:]
-            history_text = "\n".join(f"[{m.get('role', 'user')}] {m.get('content', '')}" for m in recent)
+            history_text = "\n".join(f"[{m.get('role', 'user')}] {_content_to_str(m.get('content', ''))}" for m in recent)
 
         try:
             from langchain_core.messages import HumanMessage, SystemMessage
@@ -369,7 +388,7 @@ class ContextEngine:
                 SystemMessage(content="你是一个查询改写专家，只输出改写后的查询文本。"),
                 HumanMessage(content=prompt),
             ])
-            rewritten = response.content.strip()
+            rewritten = _content_to_str(response.content).strip()
 
             if rewritten and rewritten != user_query:
                 logger.info(f"[context_engine] query rewriting: '{user_query[:30]}...' → '{rewritten[:30]}...'")
