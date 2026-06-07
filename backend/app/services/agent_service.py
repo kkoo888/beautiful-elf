@@ -44,14 +44,13 @@ class AgentService:
         B+C 架构: LLM 初始化时不绑定工具，每次请求由 engine 动态选择。
         """
         from app.agent.llm_service import llm_service
-        from app.agent.tool_registry import tool_registry, register_builtin_tools
+        from app.agent.tool_registry import tool_registry
         from app.agent.engine import build_agent_graph
         from app.agent.context_engine import ContextEngine
         from app.services.memory_service import memory_service
         from app.services.intent_service import intent_service
 
         try:
-            register_builtin_tools()
             await tool_registry.load_from_db(db)
 
             # ── B+C: LLM 不再 bind_tools，工具由 engine 动态绑定 ──

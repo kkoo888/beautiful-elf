@@ -88,10 +88,18 @@ class ToolRegistry:
         count = 0
 
         for tool in tools:
+            # DB 元数据 + 代码执行函数自动关联
+            func = _EXEC_FUNC_MAP.get(tool.name)
+
             if tool.name in self._tools:
                 existing = self._tools[tool.name]
                 existing.id = tool.id
+                existing.description = tool.description
+                existing.parameters = tool.json_schema or {}
                 existing.risk_level = RiskLevel(tool.risk_level)
+                existing.module = tool.module
+                if func:
+                    existing.func = func
                 continue
 
             self._tools[tool.name] = ToolDef(
@@ -101,7 +109,7 @@ class ToolRegistry:
                 parameters=tool.json_schema or {},
                 risk_level=RiskLevel(tool.risk_level),
                 module=tool.module,
-                func=None,
+                func=func,
             )
             count += 1
 
@@ -429,6 +437,16 @@ async def query_database(sql: str) -> dict:
             return {"error": f"查询执行失败: {str(e)}"}
 
 
+# ── 执行函数注册表（DB 工具自动关联执行函数）──────────────
+# 工具元数据全部由 DB 管理，这里只做 name → 执行函数的映射
+_EXEC_FUNC_MAP = {
+    "web_search": web_search,
+    "execute_code": execute_code,
+    "read_file": read_file,
+    "query_database": query_database,
+}
+
+
 # ── B+C: 意图→工具映射已迁移到 DB intent.tool_names 字段
 # 前端可管理，不再硬编码
 
@@ -437,47 +455,3 @@ async def query_database(sql: str) -> dict:
 
 tool_registry = ToolRegistry()
 
-
-def register_builtin_tools():
-    """注册内置工具（应用启动时调用）"""
-    tool_registry.register(
-        "web_search", web_search,
-        description="搜索互联网获取实时信息",
-        parameters={"type": "object", "properties": {
-            "query": {"type": "string"},
-            "max_results": {"type": "integer", "default": 5},
-        }, "required": ["query"]},
-        risk_level="low",
-        module="builtin",
-    )
-
-    tool_registry.register(
-        "execute_code", execute_code,
-        description="在沙箱中执行代码",
-        parameters={"type": "object", "properties": {
-            "language": {"type": "string", "enum": ["python", "javascript"]},
-            "code": {"type": "string"},
-        }, "required": ["language", "code"]},
-        risk_level="high",
-        module="builtin",
-    )
-
-    tool_registry.register(
-        "read_file", read_file,
-        description="读取工作空间中的文件",
-        parameters={"type": "object", "properties": {
-            "path": {"type": "string"},
-        }, "required": ["path"]},
-        risk_level="low",
-        module="builtin",
-    )
-
-    tool_registry.register(
-        "query_database", query_database,
-        description="查询数据库（只读 SELECT）",
-        parameters={"type": "object", "properties": {
-            "sql": {"type": "string"},
-        }, "required": ["sql"]},
-        risk_level="medium",
-        module="builtin",
-    )
