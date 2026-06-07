@@ -293,7 +293,7 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
         # ── B+C: 根据 intent 动态选择工具 ──────────────
         selected_tools = _select_tools_for_intent(state, tool_registry)
         tool_count = len(selected_tools)
-        logger.info(f"[context_builder] 动态工具选择: intent={state.get('intent', {}).get('intent_name', 'none')} tools={tool_count}")
+        logger.info(f"[context_builder] 动态工具选择: intent={(state.get('intent') or {}).get('intent_name', 'none')} tools={tool_count}")
 
         if context_engine:
             try:
