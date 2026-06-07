@@ -290,8 +290,17 @@ class AgentService:
             # v3 返回协程，需 await 获取流对象
             stream = await self._graph.astream_events(initial_state, config=config, version="v3")
 
+            # 跟踪 graph state（无 checkpointer 时 get_state 不可用）
+            _final_answer = None
+
             async for event in stream:
                 kind = event.get("event", "")
+
+                # 捕获节点输出，提取 final_answer（chitchat/缓存命中场景）
+                if kind == "on_chain_end":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict) and output.get("final_answer"):
+                        _final_answer = output["final_answer"]
 
                 if kind == "on_chat_model_stream":
                     chunk = event.get("data", {}).get("chunk", None)
@@ -346,7 +355,11 @@ class AgentService:
                 # 审批模式下不发 done，等 resume API 后续处理
                 return
 
-            # 发送上下文引用 + 缓存答案（从 context_engine 获取）
+            # 发送缓存答案（chitchat/语义缓存命中，LLM 未被调用）
+            if _final_answer and total_prompt_tokens == 0:
+                yield {"type": "token", "content": _final_answer}
+
+            # 发送上下文引用
             try:
                 if self._graph and hasattr(self._graph, 'get_state'):
                     state = self._graph.get_state(config)
@@ -354,10 +367,6 @@ class AgentService:
                         intent = state.values.get("intent")
                         if intent:
                             yield {"type": "intent_hit", "intent": intent.get("intent_name", ""), "score": intent.get("score", 0)}
-                        # chitchat/语义缓存命中：final_answer 在 state 但未经过 LLM 流式输出
-                        final = state.values.get("final_answer")
-                        if final and total_prompt_tokens == 0:
-                            yield {"type": "token", "content": final}
             except Exception:
                 pass
 
