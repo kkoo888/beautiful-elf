@@ -1,30 +1,40 @@
 /** 工具管理状态管理 hook（TanStack Query） */
 
-import { useQuery } from '@tanstack/react-query'
-import type { ToolInfo } from '../types/tools'
-import { fetchTools } from '../services/tools-api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { message } from 'antd'
+import type { ToolInfo, ToolQueryParams, CreateToolInput, UpdateToolInput } from '../types/tools'
+import {
+  fetchTools, createTool, updateTool, deleteTool,
+  enableTool, disableTool, fetchToolStatsSummary,
+} from '../services/tools-api'
 
 const TOOLS_KEY = ['tools']
+const SUMMARY_KEY = ['tool-stats-summary']
 
 export interface UseToolsReturn {
   /** 工具列表 */
   tools: ToolInfo[]
-  /** 工具加载中 */
+  /** 加载中 */
   isLoading: boolean
   /** 错误 */
   error: Error | null
-  /** 合并数据（工具信息 + 统计，目前后端未提供汇总接口，直接透传 tools） */
+  /** 合并数据（目前直接透传 tools） */
   toolsWithStats: ToolInfo[]
+  /** 统计汇总 */
+  summary: import('../types/tools').ToolStatsSummary | undefined
+  /** 汇总加载中 */
+  isSummaryLoading: boolean
 }
 
 export function useTools(): UseToolsReturn {
-  const {
-    data: tools = [],
-    isLoading,
-    error,
-  } = useQuery({
+  const { data: tools = [], isLoading, error } = useQuery({
     queryKey: TOOLS_KEY,
-    queryFn: fetchTools,
+    queryFn: () => fetchTools(),
+  })
+
+  const { data: summary, isLoading: isSummaryLoading } = useQuery({
+    queryKey: SUMMARY_KEY,
+    queryFn: fetchToolStatsSummary,
   })
 
   return {
@@ -32,5 +42,63 @@ export function useTools(): UseToolsReturn {
     isLoading,
     error: error as Error | null,
     toolsWithStats: tools,
+    summary,
+    isSummaryLoading,
   }
+}
+
+/** 新增工具 */
+export function useCreateTool() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateToolInput) => createTool(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TOOLS_KEY })
+      qc.invalidateQueries({ queryKey: SUMMARY_KEY })
+      message.success('工具创建成功')
+    },
+    onError: (e: Error) => message.error(`创建失败: ${e.message}`),
+  })
+}
+
+/** 编辑工具 */
+export function useUpdateTool() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, input }: { id: number; input: UpdateToolInput }) => updateTool(id, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TOOLS_KEY })
+      message.success('工具更新成功')
+    },
+    onError: (e: Error) => message.error(`更新失败: ${e.message}`),
+  })
+}
+
+/** 删除工具 */
+export function useDeleteTool() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => deleteTool(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TOOLS_KEY })
+      qc.invalidateQueries({ queryKey: SUMMARY_KEY })
+      message.success('工具已删除')
+    },
+    onError: (e: Error) => message.error(`删除失败: ${e.message}`),
+  })
+}
+
+/** 启用/禁用工具 */
+export function useToggleTool() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, enable }: { id: number; enable: boolean }) =>
+      enable ? enableTool(id) : disableTool(id),
+    onSuccess: (_: unknown, vars: { id: number; enable: boolean }) => {
+      qc.invalidateQueries({ queryKey: TOOLS_KEY })
+      qc.invalidateQueries({ queryKey: SUMMARY_KEY })
+      message.success(vars.enable ? '工具已启用' : '工具已禁用')
+    },
+    onError: (e: Error) => message.error(`操作失败: ${e.message}`),
+  })
 }

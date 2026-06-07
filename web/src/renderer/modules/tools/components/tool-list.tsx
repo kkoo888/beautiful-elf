@@ -1,119 +1,111 @@
 /** 工具注册表组件（Table） */
 
-import { Table, Tag, Typography, Space } from 'antd'
+import { Table, Tag, Typography, Space, Switch, Button, Popconfirm, Tooltip } from 'antd'
+import { EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import type { ToolInfo, ToolStats } from '../types/tools'
+import type { ToolInfo } from '../types/tools'
 import { EmptyState } from '@/components/empty-state'
 import styles from './tools-panel.module.css'
 
 const { Text } = Typography
 
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  active: { label: '活跃', color: 'success' },
-  inactive: { label: '停用', color: 'default' },
-  error: { label: '异常', color: 'error' },
+const RISK_MAP: Record<string, { label: string; color: string }> = {
+  low: { label: '低', color: 'success' },
+  medium: { label: '中', color: 'warning' },
+  high: { label: '高', color: 'error' },
 }
 
 interface ToolListProps {
-  tools: Array<ToolInfo & Partial<ToolStats>>
+  tools: ToolInfo[]
   loading?: boolean
+  onEdit?: (tool: ToolInfo) => void
+  onDelete?: (id: number) => void
+  onToggle?: (id: number, enable: boolean) => void
 }
 
-export function ToolList({ tools, loading }: ToolListProps) {
-  const columns: ColumnsType<ToolInfo & Partial<ToolStats>> = [
+export function ToolList({ tools, loading, onEdit, onDelete, onToggle }: ToolListProps) {
+  const columns: ColumnsType<ToolInfo> = [
     {
       title: '工具名称',
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record) => (
-        <Space orientation="vertical" size={0}>
+        <Space direction="vertical" size={0}>
           <Text code strong>
-            {name}
+            {record.displayName || name}
           </Text>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {record.description}
+            {name}
           </Text>
         </Space>
       ),
     },
     {
-      title: '所属模块',
+      title: '描述',
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true,
+      width: 260,
+    },
+    {
+      title: '模块',
       dataIndex: 'module',
       key: 'module',
-      width: 120,
+      width: 90,
       render: (module: string) => <Tag>{module}</Tag>,
     },
     {
-      title: '版本',
-      dataIndex: 'version',
-      key: 'version',
+      title: '风险',
+      dataIndex: 'riskLevel',
+      key: 'riskLevel',
       width: 80,
-      render: (v: string) => <Text type="secondary">{v}</Text>,
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 80,
-      render: (status: string) => {
-        const { label, color } = STATUS_MAP[status] ?? STATUS_MAP.inactive
+      render: (level: string) => {
+        const { label, color } = RISK_MAP[level] ?? RISK_MAP.low
         return <Tag color={color}>{label}</Tag>
       },
     },
     {
-      title: '调用次数',
-      dataIndex: 'callCount',
-      key: 'callCount',
+      title: '状态',
+      dataIndex: 'isEnabled',
+      key: 'isEnabled',
+      width: 80,
+      render: (enabled: number, record) => (
+        <Switch
+          checked={enabled === 1}
+          size="small"
+          onChange={(checked) => onToggle?.(record.id, checked)}
+        />
+      ),
+    },
+    {
+      title: '操作',
+      key: 'actions',
       width: 100,
-      align: 'right',
-      render: (count?: number) => count?.toLocaleString() ?? '-',
-    },
-    {
-      title: '成功率',
-      key: 'successRate',
-      width: 140,
-      render: (_: unknown, record) => {
-        const rate = record.successRate
-        if (rate === undefined) return '-'
-        const color =
-          rate >= 95
-            ? 'var(--ant-color-success)'
-            : rate >= 85
-              ? 'var(--ant-color-warning)'
-              : 'var(--ant-color-error)'
-        return (
-          <div className={styles.successRateBar}>
-            <div className={styles.rateBar}>
-              <div
-                className={styles.rateBarFill}
-                style={{ width: `${rate}%`, background: color }}
-              />
-            </div>
-            <span className={styles.rateText} style={{ color }}>
-              {rate}%
-            </span>
-          </div>
-        )
-      },
-    },
-    {
-      title: '平均耗时',
-      dataIndex: 'avgDurationMs',
-      key: 'avgDuration',
-      width: 100,
-      align: 'right',
-      render: (ms?: number) => {
-        if (ms === undefined) return '-'
-        return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
-      },
-    },
-    {
-      title: '最近 24h',
-      dataIndex: 'last24hCalls',
-      key: 'last24h',
-      width: 90,
-      align: 'right',
-      render: (count?: number) => count?.toLocaleString() ?? '-',
+      align: 'center',
+      render: (_: unknown, record) => (
+        <Space size="small">
+          <Tooltip title="编辑">
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => onEdit?.(record)}
+            />
+          </Tooltip>
+          <Popconfirm
+            title="确定删除此工具？"
+            description="删除后不可恢复"
+            onConfirm={() => onDelete?.(record.id)}
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+          >
+            <Tooltip title="删除">
+              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
+      ),
     },
   ]
 

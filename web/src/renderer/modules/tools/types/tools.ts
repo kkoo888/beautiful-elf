@@ -14,6 +14,8 @@ export interface ToolInfo {
   module: string
   /** JSON Schema */
   jsonSchema: Record<string, unknown>
+  /** 风险等级 */
+  riskLevel: string
   /** 是否启用 */
   isEnabled: number
   /** 创建时间 */
@@ -65,6 +67,7 @@ export interface CreateToolInput {
   description: string
   module: string
   jsonSchema: Record<string, unknown>
+  riskLevel: string
 }
 
 /** 工具更新参数 */
@@ -73,6 +76,7 @@ export interface UpdateToolInput {
   description?: string
   module?: string
   jsonSchema?: Record<string, unknown>
+  riskLevel?: string
 }
 
 /** 分页结果 */
