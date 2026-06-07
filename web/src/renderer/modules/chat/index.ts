@@ -1,7 +1,7 @@
 /** 聊天模块导出 */
 
 // 组件
-export { ChatPanel } from './components/chat-panel'
+export { ChatContent } from './components/chat-panel'
 export { MessageBubble } from './components/message-bubble'
 export { MessageList, SimpleMessageList } from './components/message-list'
 export { MessageInput } from './components/message-input'

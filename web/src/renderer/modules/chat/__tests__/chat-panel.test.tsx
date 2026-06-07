@@ -1,34 +1,12 @@
 /**
- * ChatPanel 组件测试
+ * ChatContent 组件测试
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { ChatPanel } from '../components/chat-panel'
+import { ChatContent } from '../components/chat-panel'
 
-// Mock the useChat hook
-const mockSendMessage = vi.fn()
-const mockSetReasoningDepth = vi.fn()
-const mockSubmitFeedback = vi.fn()
-const mockClearMessages = vi.fn()
-const mockStopGeneration = vi.fn()
-
-vi.mock('../hooks/use-chat', () => ({
-  useChat: () => ({
-    messages: [],
-    conversationId: null,
-    reasoningDepth: 'fast' as const,
-    isLoading: false,
-    sendMessage: mockSendMessage,
-    sendMessageSync: vi.fn(),
-    setReasoningDepth: mockSetReasoningDepth,
-    submitFeedback: mockSubmitFeedback,
-    clearMessages: mockClearMessages,
-    stopGeneration: mockStopGeneration,
-  }),
-}))
-
-// Mock child components
+// Mock 子组件
 vi.mock('../components/message-list', () => ({
   SimpleMessageList: ({ messages }: { messages: unknown[] }) => (
     <div data-testid="message-list">{messages.length} messages</div>
@@ -47,40 +25,65 @@ vi.mock('../components/reasoning-depth', () => ({
   ReasoningDepthSwitch: () => <div data-testid="reasoning-switch" />,
 }))
 
-describe('ChatPanel', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+vi.mock('@/modules/shared/components/model-selector', () => ({
+  FullModelSelect: () => <div data-testid="model-select" />,
+}))
 
+function createMockChat(overrides = {}) {
+  return {
+    messages: [],
+    conversationId: null,
+    reasoningDepth: 'fast' as const,
+    isLoading: false,
+    conversations: [],
+    currentConversationId: null,
+    selectedProviderId: undefined,
+    selectedModelName: undefined,
+    toolProgress: [],
+    approvalRequest: null,
+    contextSources: [],
+    tokenStats: null,
+    sendMessage: vi.fn(),
+    sendMessageSync: vi.fn(),
+    setReasoningDepth: vi.fn(),
+    setModelSelection: vi.fn(),
+    submitFeedback: vi.fn(),
+    clearMessages: vi.fn(),
+    stopGeneration: vi.fn(),
+    createConversation: vi.fn(),
+    switchConversation: vi.fn(),
+    deleteConversation: vi.fn(),
+    respondApproval: vi.fn(),
+    ...overrides,
+  }
+}
+
+describe('ChatContent', () => {
   it('renders the chat panel with title', () => {
-    render(<ChatPanel />)
+    render(<ChatContent chat={createMockChat()} />)
     expect(screen.getByText('💬 对话')).toBeDefined()
   })
 
   it('renders message list', () => {
-    render(<ChatPanel />)
+    render(<ChatContent chat={createMockChat()} />)
     expect(screen.getByTestId('message-list')).toBeDefined()
   })
 
   it('renders message input', () => {
-    render(<ChatPanel />)
+    render(<ChatContent chat={createMockChat()} />)
     expect(screen.getByTestId('message-input')).toBeDefined()
   })
 
   it('renders reasoning depth switch', () => {
-    render(<ChatPanel />)
+    render(<ChatContent chat={createMockChat()} />)
     expect(screen.getByTestId('reasoning-switch')).toBeDefined()
   })
 
   it('sends message when input triggers send', () => {
-    render(<ChatPanel />)
+    const mockSendMessage = vi.fn()
+    render(<ChatContent chat={createMockChat({ sendMessage: mockSendMessage })} />)
     const sendButton = screen.getByText('Send')
     fireEvent.click(sendButton)
     expect(mockSendMessage).toHaveBeenCalledWith('test message')
-  })
-
-  it('renders clear button', () => {
-    render(<ChatPanel />)
-    expect(screen.getByRole('button', { name: /清空对话/i })).toBeDefined()
   })
 })

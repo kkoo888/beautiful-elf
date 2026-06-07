@@ -1,9 +1,12 @@
 /**
  * 聊天主面板组件（v4.1 — 新增审批/工具进度/上下文引用/token 统计）
  * 整合消息列表、输入框、推理深度切换、模型选择等
+ *
+ * 注意：useChat 由父组件 ChatPanel 调用，本组件通过 props 接收，
+ * 避免重复调用导致 effect 重复触发。
  */
 
-import React, { useCallback, useEffect } from 'react'
+import React, { useCallback } from 'react'
 import { Button, Tooltip } from 'antd'
 import { ClearOutlined } from '@ant-design/icons'
 import styles from './chat-panel.module.css'
@@ -15,11 +18,13 @@ import { ApprovalDialog } from './approval-dialog'
 import { ToolProgressIndicator } from './tool-progress'
 import { TokenStatsBar } from './token-stats-bar'
 import { ContextSourcesDisplay } from './context-sources'
-import { useChat } from '../hooks/use-chat'
-import { useChatStore } from '@/stores/use-chat-store'
-import { getEnabledProviders } from '@/modules/settings/services/settings-api'
+import type { UseChatReturn } from '../hooks/use-chat'
 
-export const ChatPanel: React.FC = () => {
+interface ChatContentProps {
+  chat: UseChatReturn
+}
+
+export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
   const {
     messages,
     reasoningDepth,
@@ -37,19 +42,7 @@ export const ChatPanel: React.FC = () => {
     clearMessages,
     stopGeneration,
     respondApproval,
-  } = useChat()
-
-  const initDefaultModel = useChatStore((s) => s.initDefaultModel)
-
-  // 首次加载：从接口取默认供应商和模型，写入 store
-  useEffect(() => {
-    void (async () => {
-      try {
-        const providers = await getEnabledProviders()
-        initDefaultModel(providers)
-      } catch { /* 忽略，用户可手动选择 */ }
-    })()
-  }, [initDefaultModel])
+  } = chat
 
   const handleSend = useCallback(
     (content: string) => {
@@ -57,10 +50,6 @@ export const ChatPanel: React.FC = () => {
     },
     [sendMessage]
   )
-
-  const handleClear = useCallback(() => {
-    clearMessages()
-  }, [clearMessages])
 
   return (
     <div className={styles.chatPanel}>
@@ -79,7 +68,7 @@ export const ChatPanel: React.FC = () => {
               type="text"
               size="small"
               icon={<ClearOutlined />}
-              onClick={handleClear}
+              onClick={clearMessages}
               disabled={messages.length === 0}
             />
           </Tooltip>

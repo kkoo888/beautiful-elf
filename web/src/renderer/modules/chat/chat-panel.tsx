@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { Button, Tooltip } from 'antd'
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
-import { ChatPanel as ChatContent } from './components/chat-panel'
+import { ChatContent } from './components/chat-panel'
 import { ConversationList } from './components/conversation-list'
 import { useChat } from './hooks/use-chat'
 import styles from './chat-sidebar.module.css'
@@ -10,13 +10,14 @@ import styles from './chat-sidebar.module.css'
 /** 对话模块面板（含会话侧栏） */
 export default function ChatPanel() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const chat = useChat()
   const {
     conversations,
     currentConversationId,
     createConversation,
     switchConversation,
     deleteConversation,
-  } = useChat()
+  } = chat
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => !prev)
@@ -53,7 +54,7 @@ export default function ChatPanel() {
 
         {/* 聊天内容区 */}
         <div className={styles.content}>
-          <ChatContent />
+          <ChatContent chat={chat} />
         </div>
       </div>
     </div>

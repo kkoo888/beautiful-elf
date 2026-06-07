@@ -21,7 +21,7 @@ import type {
 /** 生成唯一 ID */
 const generateId = (): string => crypto.randomUUID()
 
-interface UseChatReturn {
+export interface UseChatReturn {
   /** 消息列表 */
   messages: ChatMessage[]
   /** 当前会话 ID */
