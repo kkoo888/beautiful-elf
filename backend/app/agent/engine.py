@@ -210,7 +210,9 @@ def build_agent_graph(
     if enable_interrupt:
         checkpointer = _create_checkpointer()
         return graph.compile(checkpointer=checkpointer, interrupt_before=["approval_node"])
-    return graph.compile()
+    # [FIX] 始终使用 MemorySaver，确保 get_state() 可用于流式场景的 fallback
+    from langgraph.checkpoint.memory import MemorySaver
+    return graph.compile(checkpointer=MemorySaver())
 
 
 # ── 节点工厂 ──────────────────────────────────────────────
