@@ -1,21 +1,10 @@
 """MCP Server — 完整 MCP 规范实现（v3.0 FastMCP v3 + MCP 2025-06-18）
 
-v3.0: 升级 FastMCP v3，全面支持 MCP 2025-06-18 规范
-  - Streamable HTTP 传输（替代 SSE）
-  - Elicitation（高风险工具二次确认，通过 Context 注入）
-  - Resource Links（工具结果关联 Resource，content 内嵌）
-  - 组件版本管理（FastMCP v3 VersionFilter + LocalProvider）
-  - Tool 超时控制（FastMCP v3 timeout 参数）
-  - 结构化签名（动态生成匹配 inputSchema 的函数签名）
-  - title 字段（MCP 2025-06-18 显示友好名称）
-  - isError 响应字段（MCP 规范要求标识执行错误）
-  - tools/list cursor 分页（MCP 规范要求）
-  - listChanged 通知（工具热加载时自动触发）
-  - Sampling 支持（服务端请求 Client 进行 LLM 推理，多角色专家团场景）
-  - Progress Tracking（长任务进度追踪，专家团场景必备）
-
-架构:
-  MySQL tool 表 → ToolRegistry → FastMCP Server → MCP 协议 → Agent / 外部客户端
+v3.1 重构:
+  - ToolResultBuilder: 结果构建独立（content + structuredContent + isError + resourceLinks）
+  - ToolAnnotations: MCP 2025-06-18 工具注解（DB 存精确值，risk_level 兜底）
+  - 管道拆分: _handle_elicitation / _execute_tool 从 wrapper 提取
+  - structuredContent: 有 outputSchema 时必须返回（MCP 规范 MUST）
 
 规范依据:
   - MCP 2025-06-18: https://modelcontextprotocol.io/specification/2025-06-18
@@ -23,20 +12,18 @@ v3.0: 升级 FastMCP v3，全面支持 MCP 2025-06-18 规范
   - FastMCP Tools: https://gofastmcp.com/servers/tools
   - FastMCP Elicitation: https://gofastmcp.com/servers/elicitation
   - FastMCP Versioning: https://gofastmcp.com/servers/versioning
-  - FastMCP 升级指南: https://gofastmcp.com/getting-started/upgrading/from-fastmcp-2
 
-关键修复记录:
-  - 修复: **kwargs 不被 FastMCP 支持，改用动态生成的类型化签名
-  - 修复: Context 注入通过函数签名类型注解实现，而非 kwargs
-  - 修复: Resource Links 改为 MCP 规范的 content 内嵌格式
-  - 修复: Elicitation 通过 Context 参数正确注入
-  - 移除: confirm_dangerous_action 演示工具（非生产代码）
+架构:
+  MySQL tool 表 → ToolRegistry → FastMCP Server → MCP 协议 → Agent / 外部客户端
 """
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from typing import Any, Optional
+import copy
 import inspect
 import json
 import time
-import functools
 
 from fastmcp import FastMCP, Context
 
@@ -48,39 +35,282 @@ logger = get_logger(__name__)
 
 mcp_app = FastMCP(
     "beautiful-elf-tools",
-    version="3.0.0",
+    version="3.1.0",
 )
 
 
-# ── 动态函数签名生成 ─────────────────────────────────────
+# ══════════════════════════════════════════════════════════
+#  ToolAnnotations — MCP 2025-06-18 工具注解
+# ══════════════════════════════════════════════════════════
+# 规范: https://modelcontextprotocol.io/specification/2025-06-18/server/tools#annotations
+# FastMCP: add_tool(annotations=ToolAnnotations(...))
+#
+# DB 存精确值（tool.annotations JSON 列）。
+# from_risk_level() 仅在 DB 值为空时做兜底默认。
 
-def _build_tool_wrapper(
-    name: str,
-    description: str,
-    input_schema: dict,
-    is_high_risk: bool,
-) -> callable:
-    """为 DB 驱动的工具创建类型化包装函数
 
-    关键: FastMCP 要求工具函数有完整的类型化签名（不支持 **kwargs）。
-    此函数根据 DB 中的 inputSchema 动态生成匹配的函数签名，
-    让 FastMCP 能正确生成 MCP inputSchema 并注入 Context。
+@dataclass
+class ToolAnnotations:
+    """MCP 2025-06-18 Tool Annotations
 
-    来源:
-      - https://gofastmcp.com/servers/tools ("Functions with **kwargs are not supported")
-      - https://gofastmcp.com/servers/elicitation (ctx.elicit() 通过 Context 注入)
+    Client 根据这些注解智能决策（是否弹确认、是否缓存结果等），
+    而不是每次都走 Elicitation。
+
+    字段说明:
+      - title: 显示友好名称（与 display_name 对应）
+      - readOnlyHint: 工具不修改环境（只读查询）
+      - destructiveHint: 工具可能执行破坏性操作（删数据、发邮件）
+      - idempotentHint: 重复调用相同参数无额外效果
+      - openWorldHint: 工具与外部实体交互（网络请求、文件系统）
     """
-    from app.agent.tool_registry import tool_registry
+    title: str = ""
+    readOnlyHint: bool = False
+    destructiveHint: bool = False
+    idempotentHint: bool = True
+    openWorldHint: bool = False
+
+    def to_dict(self) -> dict:
+        """转为 FastMCP 接受的 dict 格式"""
+        return {
+            "title": self.title,
+            "readOnlyHint": self.readOnlyHint,
+            "destructiveHint": self.destructiveHint,
+            "idempotentHint": self.idempotentHint,
+            "openWorldHint": self.openWorldHint,
+        }
+
+    @classmethod
+    def from_db(cls, db_annotations: dict | None, risk_level: str = "low", display_name: str = "") -> ToolAnnotations:
+        """从 DB 加载，DB 为空时从 risk_level 推导兜底
+
+        优先级: DB 精确值 > risk_level 推导默认值
+        """
+        fallback = cls.from_risk_level(risk_level, display_name)
+        if not db_annotations:
+            return fallback
+        return cls(
+            title=db_annotations.get("title", fallback.title),
+            readOnlyHint=db_annotations.get("readOnlyHint", fallback.readOnlyHint),
+            destructiveHint=db_annotations.get("destructiveHint", fallback.destructiveHint),
+            idempotentHint=db_annotations.get("idempotentHint", fallback.idempotentHint),
+            openWorldHint=db_annotations.get("openWorldHint", fallback.openWorldHint),
+        )
+
+    @classmethod
+    def from_risk_level(cls, risk_level: str, display_name: str = "") -> ToolAnnotations:
+        """从 risk_level 推导默认注解（兜底用）"""
+        mapping = {
+            "low": cls(title=display_name, readOnlyHint=True, idempotent=True, openWorldHint=False),
+            "medium": cls(title=display_name, readOnlyHint=False, destructiveHint=False, openWorldHint=True),
+            "high": cls(title=display_name, readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True),
+        }
+        return mapping.get(risk_level, cls(title=display_name))
+
+
+# ══════════════════════════════════════════════════════════
+#  ToolResultBuilder — MCP Tool Result 构建器
+# ══════════════════════════════════════════════════════════
+# 规范: https://modelcontextprotocol.io/specification/2025-06-18/server/tools
+#
+# 职责: 一次构建完整的 MCP Tool Result:
+#   - content: 非结构化内容（text + resource_link）— 向后兼容
+#   - structuredContent: 结构化内容 — 有 outputSchema 时必须返回
+#   - isError: 执行是否出错
+#
+# 关键规则:
+#   1. 有 outputSchema 时 MUST 返回 structuredContent
+#   2. 同时 SHOULD 在 content 中返回序列化 JSON（向后兼容）
+#   3. 不污染原始 exec_result（内部 copy）
+
+
+class ToolResultBuilder:
+    """MCP Tool Result 构建器
+
+    用法:
+        result = ToolResultBuilder(
+            tool_name="get_weather",
+            exec_result={"temp": 22},
+            duration_ms=150,
+            output_schema={"type": "object", "properties": {...}},
+        ).build()
+        # → {"content": [...], "structuredContent": {...}, "isError": false}
+    """
+
+    def __init__(
+        self,
+        tool_name: str,
+        exec_result: Any,
+        duration_ms: int,
+        output_schema: dict | None = None,
+    ):
+        self.tool_name = tool_name
+        self.exec_result = exec_result
+        self.duration_ms = duration_ms
+        self.output_schema = output_schema
+
+    def build(self) -> dict:
+        """构建完整的 MCP Tool Result"""
+        is_error = self._detect_error()
+
+        result: dict[str, Any] = {
+            "content": self._build_content(),
+            "isError": is_error,
+        }
+
+        # structuredContent: 有 outputSchema 且结果是 dict 时返回
+        # 规范: "Servers MUST provide structured results that conform to this schema"
+        if self.output_schema and isinstance(self.exec_result, dict):
+            result["structuredContent"] = self.exec_result
+
+        return result
+
+    def _build_content(self) -> list[dict]:
+        """构建 content 数组（text + resource_links）"""
+        content: list[dict] = []
+
+        # text content — copy 一份，不污染原始数据
+        if isinstance(self.exec_result, dict):
+            data = copy.copy(self.exec_result)
+            data["_duration_ms"] = self.duration_ms
+            content.append({
+                "type": "text",
+                "text": json.dumps(data, ensure_ascii=False, default=str),
+            })
+        else:
+            content.append({"type": "text", "text": str(self.exec_result)})
+
+        # resource links — 内嵌在 content 中
+        for link in self._build_resource_links():
+            content.append({
+                "type": "resource_link",
+                "uri": link["uri"],
+                "name": link["name"],
+                "description": link.get("description", ""),
+            })
+
+        return content
+
+    def _detect_error(self) -> bool:
+        """检测执行是否出错"""
+        return isinstance(self.exec_result, dict) and bool(
+            self.exec_result.get("error") or self.exec_result.get("cancelled")
+        )
+
+    def _build_resource_links(self) -> list[dict]:
+        """构建 Resource Links（MCP 2025-06-18）
+
+        工具执行结果关联到相关 Resource，让 Client 按需 fetch 更多上下文。
+        规范: https://modelcontextprotocol.io/specification/2025-06-18/server/tools
+        """
+        links: list[dict] = []
+        tool_lower = self.tool_name.lower()
+
+        if any(kw in tool_lower for kw in ("llm", "model", "ai", "chat", "completion")):
+            links.append({
+                "uri": "config://llm",
+                "name": "LLM 供应商配置",
+                "description": "当前可用的 LLM 供应商和模型配置",
+            })
+
+        if any(kw in tool_lower for kw in ("config", "setting", "system")):
+            links.append({
+                "uri": "config://app",
+                "name": "应用配置",
+                "description": "当前应用的全局配置信息",
+            })
+
+        if isinstance(self.exec_result, dict) and self.exec_result.get("error"):
+            links.append({
+                "uri": "config://tools",
+                "name": "工具列表",
+                "description": "查看所有可用工具及其状态",
+            })
+
+        return links
+
+
+# ══════════════════════════════════════════════════════════
+#  管道组件 — 从 _build_tool_wrapper 提取
+# ══════════════════════════════════════════════════════════
+
+
+async def _handle_elicitation(ctx: Context, tool_name: str) -> dict | None:
+    """Elicitation 二次确认（高风险工具）
+
+    规范: MCP 2025-06-18 — 人类在回路（human-in-the-loop）
+    FastMCP: https://gofastmcp.com/servers/elicitation
+
+    Returns:
+        None → 用户同意，继续执行
+        dict → 用户拒绝/取消，直接返回此 dict 作为工具结果
+    """
     from fastmcp.server.elicitation import AcceptedElicitation, DeclinedElicitation, CancelledElicitation
 
-    # 从 input_schema 构建函数参数
-    params = []
+    try:
+        result = await ctx.elicit(
+            message=f"⚠️ 即将执行高风险操作「{tool_name}」，确认继续？",
+            response_type=str,
+        )
+        match result:
+            case AcceptedElicitation():
+                return None
+            case DeclinedElicitation():
+                return {"cancelled": True, "message": "用户拒绝执行该操作"}
+            case CancelledElicitation():
+                return {"cancelled": True, "message": "用户取消了操作"}
+    except Exception as e:
+        logger.warning(f"Elicitation 失败（Client 可能不支持）: {e}，跳过确认继续执行")
+        return None
+
+    return None
+
+
+async def _execute_tool(
+    tool_registry: Any,
+    tool_name: str,
+    kwargs: dict,
+    ctx: Context | None,
+) -> tuple[Any, int]:
+    """执行工具 + 进度通知
+
+    Returns:
+        (exec_result, duration_ms)
+    """
+    # 进度: 开始
+    if ctx:
+        try:
+            await ctx.report_progress(progress=0, total=100, message=f"开始执行 {tool_name}")
+        except Exception:
+            pass
+
+    start = time.time()
+    exec_result = await tool_registry.execute(tool_name, kwargs, approved=True)
+    duration_ms = int((time.time() - start) * 1000)
+
+    # 进度: 完成
+    if ctx:
+        try:
+            await ctx.report_progress(progress=100, total=100, message=f"{tool_name} 执行完成")
+        except Exception:
+            pass
+
+    return exec_result, duration_ms
+
+
+def _build_params(input_schema: dict) -> list[inspect.Parameter]:
+    """从 inputSchema 构建 inspect.Parameter 列表
+
+    FastMCP 要求工具函数有完整的类型化签名（不支持 **kwargs）。
+    此函数根据 DB 中的 inputSchema 动态生成匹配的函数参数。
+
+    来源: https://gofastmcp.com/servers/tools
+    """
+    params: list[inspect.Parameter] = []
     properties = (input_schema or {}).get("properties", {})
     required_fields = set((input_schema or {}).get("required", []))
 
     for param_name, param_info in properties.items():
         param_type = _json_type_to_python(param_info.get("type", "string"))
-        param_desc = param_info.get("description", "")
         is_required = param_name in required_fields
 
         if is_required:
@@ -88,17 +318,16 @@ def _build_tool_wrapper(
         else:
             default = param_info.get("default", None)
 
-        annotation = param_type
         params.append(
             inspect.Parameter(
                 param_name,
                 kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
                 default=default,
-                annotation=annotation,
+                annotation=param_type,
             )
         )
 
-    # 添加 Context 参数（FastMCP 会自动注入）
+    # Context 参数（FastMCP 自动注入）
     params.append(
         inspect.Parameter(
             "ctx",
@@ -108,82 +337,7 @@ def _build_tool_wrapper(
         )
     )
 
-    # 构建函数签名
-    sig = inspect.Signature(params, return_annotation=dict)
-
-    # 创建包装函数（用 exec 绑定闭包变量）
-    async def tool_wrapper(**kwargs) -> dict:
-        start = time.time()
-        ctx = kwargs.pop("ctx", None)
-
-        # 高风险工具: Elicitation 二次确认
-        # 来源: https://gofastmcp.com/servers/elicitation
-        if is_high_risk and ctx:
-            try:
-                result = await ctx.elicit(
-                    message=f"⚠️ 即将执行高风险操作「{name}」，确认继续？",
-                    response_type=str,
-                )
-                match result:
-                    case AcceptedElicitation():
-                        pass
-                    case DeclinedElicitation():
-                        return {"cancelled": True, "message": "用户拒绝执行该操作"}
-                    case CancelledElicitation():
-                        return {"cancelled": True, "message": "用户取消了操作"}
-            except Exception as e:
-                logger.warning(f"Elicitation 失败（Client 可能不支持）: {e}，跳过确认继续执行")
-
-        # 执行工具（附带进度通知）
-        if ctx:
-            try:
-                await ctx.report_progress(progress=0, total=100, message=f"开始执行 {name}")
-            except Exception:
-                pass
-
-        exec_result = await tool_registry.execute(name, kwargs, approved=True)
-        duration_ms = int((time.time() - start) * 1000)
-
-        if ctx:
-            try:
-                await ctx.report_progress(progress=100, total=100, message=f"{name} 执行完成")
-            except Exception:
-                pass
-
-        # 包装为 MCP 规范的 Tool Result 格式
-        # Resource Links 内嵌在 content 中（非顶层字段）
-        # 来源: https://modelcontextprotocol.io/specification/2025-06-18/server/tools
-        content = []
-        resource_links = _build_resource_links(name, exec_result)
-
-        if isinstance(exec_result, dict):
-            exec_result["_duration_ms"] = duration_ms
-            content.append({"type": "text", "text": json.dumps(exec_result, ensure_ascii=False, default=str)})
-        else:
-            content.append({"type": "text", "text": str(exec_result)})
-
-        # Resource Links 作为 content 的一部分
-        for link in resource_links:
-            content.append({
-                "type": "resource_link",
-                "uri": link["uri"],
-                "name": link["name"],
-                "description": link.get("description", ""),
-            })
-
-        # isError: MCP 2025-06-18 规范要求标识工具执行是否出错
-        is_error = isinstance(exec_result, dict) and (
-            exec_result.get("error") or exec_result.get("cancelled")
-        )
-        return {"content": content, "isError": bool(is_error)}
-
-    # 设置函数元数据（FastMCP 从中读取 name/description/signature）
-    tool_wrapper.__name__ = name
-    tool_wrapper.__qualname__ = name
-    tool_wrapper.__doc__ = description
-    tool_wrapper.__signature__ = sig
-
-    return tool_wrapper
+    return params
 
 
 def _json_type_to_python(json_type: str) -> type:
@@ -199,22 +353,82 @@ def _json_type_to_python(json_type: str) -> type:
     return mapping.get(json_type, Any)
 
 
-# ── 工具注册（全 DB 驱动）──────────────────────────────────
+# ══════════════════════════════════════════════════════════
+#  _build_tool_wrapper — 工厂函数（签名生成 + 管道调度）
+# ══════════════════════════════════════════════════════════
+# 职责:
+#   1. _build_params() 生成 inspect.Parameter 列表
+#   2. 构建 inspect.Signature
+#   3. 创建 tool_wrapper 闭合（管道调度: elicitation → execute → result）
+#   4. 设置 __name__, __qualname__, __doc__, __signature__
+#
+# 注意: 签名生成必须在此函数内完成，FastMCP 不支持 **kwargs。
+# 来源: https://gofastmcp.com/servers/tools ("Functions with **kwargs are not supported")
+
+
+def _build_tool_wrapper(
+    name: str,
+    description: str,
+    input_schema: dict,
+    is_high_risk: bool,
+    output_schema: dict | None = None,
+) -> callable:
+    """为 DB 驱动的工具创建类型化包装函数"""
+    from app.agent.tool_registry import tool_registry
+
+    # ① 签名生成
+    params = _build_params(input_schema)
+    sig = inspect.Signature(params, return_annotation=dict)
+
+    # ② 管道调度
+    async def tool_wrapper(**kwargs) -> dict:
+        ctx = kwargs.pop("ctx", None)
+
+        # Elicitation（高风险确认）
+        if is_high_risk and ctx:
+            elicit_result = await _handle_elicitation(ctx, name)
+            if elicit_result:
+                return ToolResultBuilder(
+                    tool_name=name,
+                    exec_result=elicit_result,
+                    duration_ms=0,
+                ).build()
+
+        # 执行 + 进度
+        exec_result, duration_ms = await _execute_tool(tool_registry, name, kwargs, ctx)
+
+        # 结果构建（ToolResultBuilder 一次性处理所有规范字段）
+        return ToolResultBuilder(
+            tool_name=name,
+            exec_result=exec_result,
+            duration_ms=duration_ms,
+            output_schema=output_schema,
+        ).build()
+
+    # ③ 函数元数据（FastMCP 从中读取 name/description/signature）
+    tool_wrapper.__name__ = name
+    tool_wrapper.__qualname__ = name
+    tool_wrapper.__doc__ = description
+    tool_wrapper.__signature__ = sig
+
+    return tool_wrapper
+
+
+# ══════════════════════════════════════════════════════════
+#  工具注册（全 DB 驱动）
+# ══════════════════════════════════════════════════════════
+
 
 async def register_tools_from_db(tool_registry) -> int:
     """从 ToolRegistry 加载所有启用的工具到 MCP Server
 
-    MCP 规范:
-      - name: 唯一标识符
-      - description: 人类可读描述
-      - inputSchema: 由 FastMCP 从函数签名自动生成
-      - outputSchema: JSON Schema（可选）
-      - version: 工具版本号（FastMCP v3 组件版本管理）
-
-    FastMCP v3 变更:
-      - add_tool() 不支持 **kwargs，必须有类型化签名
-      - add_tool() 支持 version/timeout/output_schema 参数
-      - Context 通过函数签名的类型注解自动注入
+    FastMCP v3 add_tool 参数:
+      - name, description: 工具标识
+      - version: 组件版本号
+      - timeout: 执行超时
+      - title: 显示名称
+      - output_schema: 输出 JSON Schema
+      - annotations: ToolAnnotations 注解
 
     来源: https://gofastmcp.com/servers/tools
     """
@@ -227,20 +441,16 @@ async def register_tools_from_db(tool_registry) -> int:
 
     count = 0
     for tool in tools:
-        tool_version = getattr(tool, 'version', None) or "1.0.0"
-        timeout = getattr(tool, 'timeout_seconds', None) or 60
-        risk_level = getattr(tool, 'risk_level', 'low')
-        output_schema = getattr(tool, 'output_schema', None)
-
         _register_mcp_tool(
             name=tool.name,
             description=tool.description,
             input_schema=tool.json_schema,
-            output_schema=output_schema,
-            risk_level=risk_level,
-            version=tool_version,
-            timeout=timeout,
+            output_schema=getattr(tool, 'output_schema', None),
+            risk_level=getattr(tool, 'risk_level', 'low'),
+            version=getattr(tool, 'version', None) or "1.0.0",
+            timeout=getattr(tool, 'timeout_seconds', None) or 60,
             title=getattr(tool, 'display_name', None) or None,
+            annotations=getattr(tool, 'annotations', None),
         )
         count += 1
 
@@ -252,13 +462,14 @@ def _register_mcp_tool(
     name: str,
     description: str,
     input_schema: dict,
-    output_schema: dict = None,
+    output_schema: dict | None = None,
     risk_level: str = "low",
     version: str = "1.0.0",
     timeout: int = 60,
-    title: str = None,
+    title: str | None = None,
+    annotations: dict | None = None,
 ):
-    """注册单个 MCP 工具（DB 元数据 + 动态签名 + v3 增强）"""
+    """注册单个 MCP 工具（DB 元数据 + 动态签名 + annotations）"""
     is_high_risk = risk_level in ("high",)
 
     # 动态生成类型化包装函数（解决 **kwargs 问题）
@@ -267,11 +478,11 @@ def _register_mcp_tool(
         description=description,
         input_schema=input_schema,
         is_high_risk=is_high_risk,
+        output_schema=output_schema,
     )
 
-    # FastMCP v3 add_tool: 支持 version + timeout + output_schema
-    # 来源: https://gofastmcp.com/servers/tools (Decorator Arguments)
-    add_kwargs = {
+    # 构建 add_tool 参数
+    add_kwargs: dict[str, Any] = {
         "name": name,
         "description": description,
         "version": version,
@@ -282,51 +493,18 @@ def _register_mcp_tool(
     if output_schema:
         add_kwargs["output_schema"] = output_schema
 
+    # MCP 2025-06-18: Tool Annotations
+    # DB 有精确值用精确值，没有则从 risk_level 推导兜底
+    tool_annotations = ToolAnnotations.from_db(annotations, risk_level, title or name)
+    add_kwargs["annotations"] = tool_annotations.to_dict()
+
     mcp_app.add_tool(tool_func, **add_kwargs)
 
 
-# ── Resource Links 构建 ──────────────────────────────────
-
-def _build_resource_links(tool_name: str, result: Any) -> list:
-    """构建 Resource Links（MCP 2025-06-18）
-
-    工具执行结果关联到相关 Resource，让 Client 可以按需 fetch 更多上下文。
-    返回格式: [{"uri": "...", "name": "...", "description": "..."}]
-
-    来源: https://modelcontextprotocol.io/specification/2025-06-18/server/tools
-    """
-    links = []
-    tool_lower = tool_name.lower()
-
-    if any(kw in tool_lower for kw in ("llm", "model", "ai", "chat", "completion")):
-        links.append({
-            "uri": "config://llm",
-            "name": "LLM 供应商配置",
-            "description": "当前可用的 LLM 供应商和模型配置",
-        })
-
-    if any(kw in tool_lower for kw in ("config", "setting", "system")):
-        links.append({
-            "uri": "config://app",
-            "name": "应用配置",
-            "description": "当前应用的全局配置信息",
-        })
-
-    if isinstance(result, dict) and result.get("error"):
-        links.append({
-            "uri": "config://tools",
-            "name": "工具列表",
-            "description": "查看所有可用工具及其状态",
-        })
-
-    return links
-
-
-# ── Progress Tracking（长任务进度追踪）──────────────────
-# MCP 2025-06-18 规范: 工具执行过程中可向 Client 推送进度
-# 场景: 专家团任务、批量数据处理、代码分析等耗时操作
-# 使用: 工具函数签名声明 ctx: Context，然后调用 ctx.report_progress()
-#
+# ══════════════════════════════════════════════════════════
+#  Progress Tracking（长任务进度追踪）
+# ══════════════════════════════════════════════════════════
+# MCP 2025-06-18: 工具执行过程中可向 Client 推送进度
 # 来源: https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/progress
 
 
@@ -373,15 +551,12 @@ class ProgressTracker:
                 pass
 
 
-# ── Sampling（服务端请求 Client 进行 LLM 推理）──────────
-# MCP 2025-06-18 规范: Server 可请求 Client 执行 LLM 采样
-# 场景: 工具内部需要 LLM 帮忙思考（多角色专家团、代码审查、数据分析等）
-# 关键: 调用 LLM 的决定权在 Client（用户侧），Server 不能直接调
-#
-# 使用方式: 在工具函数签名中声明 ctx: Context，然后调用:
-#   result = await sample_via_client(ctx, prompt, max_tokens=4096)
-#
+# ══════════════════════════════════════════════════════════
+#  Sampling（服务端请求 Client 进行 LLM 推理）
+# ══════════════════════════════════════════════════════════
+# MCP 2025-06-18: Server 可请求 Client 执行 LLM 采样
 # 来源: https://modelcontextprotocol.io/specification/2025-06-18/client/sampling
+
 
 async def sample_via_client(
     ctx: Context,
@@ -402,19 +577,16 @@ async def sample_via_client(
         include_context: 上下文包含策略（"none"/"thisServer"/"allServers"）
 
     Returns:
-        {"role": "assistant", "content": {"type": "text", "text": "..."}, "model": "..."}
+        {"role": "assistant", "content": {"type": "text", "text": "..."}}
         或 {"error": "..."} 如果 Client 不支持 Sampling
     """
     try:
-        # FastMCP v3: ctx.sample() 封装了 MCP Sampling 协议
         result = await ctx.sample(
             messages=prompt,
             max_tokens=max_tokens,
             system_prompt=system_prompt,
             include_context=include_context,
         )
-        # FastMCP v3: ctx.sample() 返回 SamplingResult，用 .text 取文本
-        # 来源: https://gofastmcp.com/servers/sampling
         text = result.text if hasattr(result, 'text') else str(result)
         return {"role": "assistant", "content": {"type": "text", "text": text or ""}}
     except Exception as e:
@@ -422,21 +594,22 @@ async def sample_via_client(
         return {"error": f"Sampling 不可用: {e}", "code": "SAMPLING_NOT_SUPPORTED"}
 
 
-# ── 工具发现 ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════
+#  工具发现（cursor 分页）
+# ══════════════════════════════════════════════════════════
+
 
 @mcp_app.tool()
 async def list_available_tools(cursor: str = "") -> dict:
-    """列出所有可用的工具及其 MCP 元数据（inputSchema + outputSchema）。
+    """列出所有可用的工具及其 MCP 元数据（inputSchema + outputSchema + annotations）。
 
     支持 cursor 分页（MCP 2025-06-18 规范）。
-    cursor 格式: 工具在列表中的偏移量（字符串化的数字）。
     """
     from app.agent.tool_registry import tool_registry
 
     all_tools = tool_registry.list_tools()
     page_size = 50
 
-    # 解析 cursor（偏移量）
     offset = 0
     if cursor:
         try:
@@ -444,7 +617,6 @@ async def list_available_tools(cursor: str = "") -> dict:
         except (ValueError, TypeError):
             offset = 0
 
-    # 分页切片
     page_tools = all_tools[offset:offset + page_size]
     next_offset = offset + page_size
 
@@ -460,6 +632,10 @@ async def list_available_tools(cursor: str = "") -> dict:
         }
         if t.output_schema:
             tool_def["outputSchema"] = t.output_schema
+        # annotations 从 DB 加载，兜底从 risk_level 推导
+        db_annotations = getattr(t, 'annotations', None)
+        tool_annotations = ToolAnnotations.from_db(db_annotations, t.risk_level.value, t.display_name or t.name)
+        tool_def["annotations"] = tool_annotations.to_dict()
         tools.append(tool_def)
 
     result = {
@@ -470,14 +646,16 @@ async def list_available_tools(cursor: str = "") -> dict:
         "server": "beautiful-elf-tools",
     }
 
-    # 有下一页时返回 nextCursor
     if next_offset < len(all_tools):
         result["nextCursor"] = str(next_offset)
 
     return result
 
 
-# ── Resources（MCP 规范: 上下文数据）──────────────────────
+# ══════════════════════════════════════════════════════════
+#  Resources（MCP 规范: 上下文数据）
+# ══════════════════════════════════════════════════════════
+
 
 @mcp_app.resource("config://app")
 async def get_app_config() -> str:
@@ -535,9 +713,12 @@ async def get_tools_config() -> str:
     }, ensure_ascii=False)
 
 
-# ── Prompts（MCP 规范: 预定义提示词模板）──────────────────
-# FastMCP v3: Prompt 返回 str 即可（v2 的 dict 返回不再支持）
+# ══════════════════════════════════════════════════════════
+#  Prompts（MCP 规范: 预定义提示词模板）
+# ══════════════════════════════════════════════════════════
+# FastMCP v3: Prompt 返回 str 即可
 # 来源: https://gofastmcp.com/getting-started/upgrading/from-fastmcp-2
+
 
 @mcp_app.prompt()
 def chat_assistant() -> str:
@@ -580,15 +761,16 @@ def data_analyst(data_description: str, question: str) -> str:
 3. 给出可操作的结论"""
 
 
-# ── 运行时热加载（listChanged 通知）──────────────────────
+# ══════════════════════════════════════════════════════════
+#  运行时热加载（listChanged 通知）
+# ══════════════════════════════════════════════════════════
+
 
 async def reload_tools(tool_registry) -> int:
     """运行时重新加载工具列表（DB 变更后调用）
 
     MCP 规范: 工具列表变更时发送 notifications/tools/list_changed
     FastMCP v3: add_tool() 会自动触发 listChanged 通知
-
-    来源: https://modelcontextprotocol.io/specification/2025-06-18/server/tools
     """
     from app.core.database import AsyncSessionLocal
     from app.repository.tool_repo import ToolRepository
@@ -597,15 +779,13 @@ async def reload_tools(tool_registry) -> int:
     async with AsyncSessionLocal() as db:
         tools = await repo.find_all(db, offset=0, limit=1000, enabled=1)
 
-    # FastMCP v3: 移除旧工具再重新注册，会自动发送 listChanged 通知
+    # 移除旧工具再重新注册，自动发送 listChanged 通知
     try:
         existing_names = {t.name for t in mcp_app._tool_manager.list_tools()}
     except AttributeError:
-        # FastMCP 内部 API 变更时降级：不清理旧工具，只做增量注册
         existing_names = set()
     new_names = {tool.name for tool in tools}
 
-    # 移除已禁用/删除的工具
     for name in existing_names - new_names:
         try:
             mcp_app.remove_tool(name)
@@ -613,23 +793,18 @@ async def reload_tools(tool_registry) -> int:
         except Exception:
             pass
 
-    # 注册/更新工具
     count = 0
     for tool in tools:
-        tool_version = getattr(tool, 'version', None) or "1.0.0"
-        timeout = getattr(tool, 'timeout_seconds', None) or 60
-        risk_level = getattr(tool, 'risk_level', 'low')
-        output_schema = getattr(tool, 'output_schema', None)
-
         _register_mcp_tool(
             name=tool.name,
             description=tool.description,
             input_schema=tool.json_schema,
-            output_schema=output_schema,
-            risk_level=risk_level,
-            version=tool_version,
-            timeout=timeout,
+            output_schema=getattr(tool, 'output_schema', None),
+            risk_level=getattr(tool, 'risk_level', 'low'),
+            version=getattr(tool, 'version', None) or "1.0.0",
+            timeout=getattr(tool, 'timeout_seconds', None) or 60,
             title=getattr(tool, 'display_name', None) or None,
+            annotations=getattr(tool, 'annotations', None),
         )
         count += 1
 
@@ -637,7 +812,10 @@ async def reload_tools(tool_registry) -> int:
     return count
 
 
-# ── 入口 ─────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════
+#  入口
+# ══════════════════════════════════════════════════════════
+
 
 async def init_mcp_server(tool_registry):
     """初始化 MCP Server（从 DB 加载工具）"""
@@ -651,11 +829,6 @@ async def init_mcp_server(tool_registry):
 
 def run_server(host: str = "0.0.0.0", port: int = 8765):
     """启动 MCP Server（Streamable HTTP 传输）
-
-    v3.0 变更:
-      - transport: "sse" → "http"（Streamable HTTP，MCP 2025-06-18 规范）
-      - URL path 默认 /mcp
-      - 支持普通 JSON 响应 + SSE 流式响应
 
     来源: https://gofastmcp.com/getting-started/quickstart
     """
