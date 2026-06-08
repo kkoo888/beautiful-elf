@@ -19,6 +19,7 @@ langchain-core==1.4.0
 langchain-ollama==1.1.0
 langchain-openai==1.2.2
 langsmith>=0.3.0
+# langfuse>=2.0.0  # 可选：LangFuse 自部署可观测性（pip install langfuse）
 jsonschema==4.26.0
 duckduckgo-search==8.1.1
 llama-index==0.14.22
