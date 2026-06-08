@@ -350,41 +350,32 @@ class ContextEngine:
     async def rewrite_query(self, user_query: str, conversation_history: List[dict] = None) -> str:
         """将口语化/模糊的用户查询改写为适合向量检索的精确查询
 
-        场景:
-          - "那个上次说的东西怎么弄" → 基于上下文补全具体指代
-          - "帮我看看这个" → 结合上下文明确"这个"是什么
-          - 口语化表达 → 转为更精确的技术描述
+        v2.3: with_structured_output(RewrittenQuery) 替代手动解析
         """
         if not self.llm_client:
             return user_query
 
-        # 构建上下文（最近 3 条对话）
         history_text = ""
         if conversation_history:
             recent = conversation_history[-3:]
             history_text = "\n".join(f"[{m.get('role', 'user')}] {_content_to_str(m.get('content', ''))}" for m in recent)
 
         try:
+            from app.agent.structured_schemas import RewrittenQuery
             from langchain_core.messages import HumanMessage, SystemMessage
 
-            prompt = f"""将以下用户查询改写为适合向量检索的精确查询。
-
-要求:
-- 如果用户用了"这个""那个""它"等指代词，结合对话历史补全
-- 如果是口语化表达，转为更精确的技术描述
-- 如果查询已经足够精确，直接返回原文
-- 只返回改写后的查询，不要解释
-
-{f"【最近对话】{history_text}" if history_text else ""}
-
-【用户查询】{user_query}"""
-
-            response = await self.llm_client.ainvoke([
-                SystemMessage(content="你是一个查询改写专家，只输出改写后的查询文本。"),
-                HumanMessage(content=prompt),
+            structured_llm = self.llm_client.with_structured_output(RewrittenQuery)
+            result = await structured_llm.ainvoke([
+                SystemMessage(content="你是一个查询改写专家。"),
+                HumanMessage(content=(
+                    f"将以下用户查询改写为适合向量检索的精确查询。\n\n"
+                    f"要求:\n- 指代词结合对话历史补全\n- 口语化转为精确技术描述\n- 已足够精确则返回原文\n\n"
+                    f"{f'【最近对话】{history_text}' if history_text else ''}\n\n"
+                    f"【用户查询】{user_query}"
+                )),
             ])
-            rewritten = _content_to_str(response.content).strip()
 
+            rewritten = result.rewritten_query.strip()
             if rewritten and rewritten != user_query:
                 logger.info(f"[context_engine] query rewriting: '{user_query[:30]}...' → '{rewritten[:30]}...'")
             return rewritten or user_query

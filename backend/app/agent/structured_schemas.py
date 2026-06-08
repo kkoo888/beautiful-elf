@@ -55,3 +55,11 @@ class CompactionSummary(BaseModel):
     key_points: List[str] = Field(description="关键要点列表")
     user_decisions: List[str] = Field(default_factory=list, description="用户决定")
     pending_tasks: List[str] = Field(default_factory=list, description="待办事项")
+
+
+# ── 查询改写（context_engine.py）──
+
+class RewrittenQuery(BaseModel):
+    """查询改写结果"""
+    rewritten_query: str = Field(description="改写后的精确查询，如果无需改写则返回原文")
+    reason: str = Field(default="", description="改写原因（调试用）")
