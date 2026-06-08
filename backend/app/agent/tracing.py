@@ -1,58 +1,58 @@
-"""LangFuse 可观测性 — Agent tracing（v2 重构）
+"""统一可观测性 — LangSmith + 结构化日志（v3 重构）
 
-重构点:
-  1. trace_agent_run: 完整 Agent 调用链路追踪
-  2. trace_node: 节点级追踪（context_builder / llm_call / tool_executor）
-  3. 结构化日志: JSON 格式，便于分析
-  4. 性能指标: 各节点耗时、token 使用、工具调用统计
+架构:
+  LangSmith（LangGraph 原生） → 全链路自动追踪（节点/工具/LLM）
+  结构化日志 → JSON 格式，便于分析和告警
+  自定义 span → 业务级追踪（意图路由、上下文组装、评估）
 
-设计原则:
-  - LangFuse 可选，未配置时降级为结构化日志
-  - 不影响主流程性能
+配置:
+  环境变量（.env）:
+    LANGCHAIN_TRACING_V2=true          # 启用 LangSmith
+    LANGCHAIN_API_KEY=lsv2_xxx         # LangSmith API Key
+    LANGCHAIN_PROJECT=beautiful-elf     # 项目名（LangSmith 控制台显示）
+    LANGCHAIN_ENDPOINT=https://api.smith.langchain.com  # 可选
+
+降级策略:
+  未配置 LangSmith → 仅输出结构化日志（不影响功能）
 """
 import os
 import time
 import json
 from contextlib import contextmanager, asynccontextmanager
 from typing import Optional, Dict, Any, List
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-LANGFUSE_ENABLED = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
-_tracer = None
+# ── LangSmith 状态 ────────────────────────────────────────
+
+LANGSMITH_ENABLED = (
+    os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true"
+    and os.getenv("LANGCHAIN_API_KEY") is not None
+)
 
 # 告警配置
-ALERT_ERROR_RATE_THRESHOLD = 0.3  # 工具失败率 > 30% 触发告警
-_alert_state: Dict[str, Dict] = {}  # 工具调用统计（用于告警判断）
+ALERT_ERROR_RATE_THRESHOLD = 0.3
+_alert_state: Dict[str, Dict] = {}
 
 
 def init_tracing():
-    """初始化 LangFuse（应用启动时调用）"""
-    global _tracer
-    if not LANGFUSE_ENABLED:
-        logger.info("LangFuse 未配置，可观测性降级为结构化日志模式")
-        return
-
-    try:
-        from langfuse import Langfuse
-        _tracer = Langfuse(
-            public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-            secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+    """初始化可观测性（应用启动时调用）"""
+    if LANGSMITH_ENABLED:
+        # LangSmith 通过环境变量自动集成，无需手动初始化
+        # LangGraph 的 astream_events / invoke 自动上报 trace
+        logger.info(
+            f"LangSmith 可观测性已启用 "
+            f"(project={os.getenv('LANGCHAIN_PROJECT', 'default')}, "
+            f"endpoint={os.getenv('LANGCHAIN_ENDPOINT', 'https://api.smith.langchain.com')})"
         )
-        logger.info("LangFuse 可观测性已启用")
-    except ImportError:
-        logger.warning("缺少 langfuse 包，可观测性降级为结构化日志模式")
-    except Exception as e:
-        logger.warning(f"LangFuse 初始化失败: {e}")
-
-
-def get_tracer():
-    """获取 LangFuse 客户端"""
-    return _tracer
+    else:
+        logger.info(
+            "LangSmith 未配置，可观测性降级为结构化日志模式。"
+            "设置 LANGCHAIN_TRACING_V2=true + LANGCHAIN_API_KEY 启用全链路追踪。"
+        )
 
 
 # ── 追踪数据结构 ──────────────────────────────────────────
@@ -83,19 +83,16 @@ class AgentTrace:
     nodes: List[NodeTrace] = field(default_factory=list)
     context_sources: List[str] = field(default_factory=list)
     error: Optional[str] = None
+    # 成本追踪
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 # ── 追踪上下文管理器 ──────────────────────────────────────
 
 @contextmanager
 def trace_span(name: str, metadata: Dict[str, Any] = None):
-    """
-    追踪 span 上下文管理器（同步版）。
-
-    用法:
-        with trace_span("llm_call", {"model": "qwen3.5:7b"}):
-            response = await llm.ainvoke(messages)
-    """
+    """追踪 span（同步版）"""
     node = NodeTrace(name=name, start_time=time.time(), metadata=metadata or {})
     try:
         yield node
@@ -112,13 +109,7 @@ def trace_span(name: str, metadata: Dict[str, Any] = None):
 
 @asynccontextmanager
 async def trace_async_span(name: str, metadata: Dict[str, Any] = None):
-    """
-    追踪 span 上下文管理器（异步版）。
-
-    用法:
-        async with trace_async_span("context_build", {"user_id": 1}):
-            context = await context_engine.assemble(...)
-    """
+    """追踪 span（异步版）"""
     node = NodeTrace(name=name, start_time=time.time(), metadata=metadata or {})
     try:
         yield node
@@ -134,7 +125,7 @@ async def trace_async_span(name: str, metadata: Dict[str, Any] = None):
 
 
 def _log_node_trace(node: NodeTrace):
-    """输出节点追踪日志"""
+    """输出节点追踪日志（结构化 JSON）"""
     log_data = {
         "trace_node": node.name,
         "duration_ms": node.duration_ms,
@@ -150,18 +141,6 @@ def _log_node_trace(node: NodeTrace):
     else:
         logger.warning(f"[trace] {json.dumps(log_data, ensure_ascii=False)}")
 
-    # LangFuse 集成
-    if _tracer:
-        try:
-            _tracer.span(name=node.name, metadata={
-                **node.metadata,
-                "duration_ms": node.duration_ms,
-                "success": node.success,
-                "error": node.error,
-            })
-        except Exception as e:
-            logger.debug(f"LangFuse span 失败: {e}")
-
 
 # ── Agent 级追踪 ──────────────────────────────────────────
 
@@ -169,7 +148,8 @@ def trace_agent_run(trace_data: AgentTrace):
     """
     记录完整 Agent 调用。
 
-    在 Agent 图执行完毕后调用，汇总所有节点的追踪数据。
+    LangSmith 已自动追踪 LangGraph 的节点执行，
+    这里补充业务级元数据（intent、成本、对话 ID）。
     """
     log_data = {
         "trace_type": "agent_run",
@@ -181,6 +161,8 @@ def trace_agent_run(trace_data: AgentTrace):
         "total_duration_ms": trace_data.total_duration_ms,
         "context_sources": trace_data.context_sources,
         "node_count": len(trace_data.nodes),
+        "prompt_tokens": trace_data.prompt_tokens,
+        "completion_tokens": trace_data.completion_tokens,
         "success": trace_data.error is None,
     }
     if trace_data.error:
@@ -188,22 +170,16 @@ def trace_agent_run(trace_data: AgentTrace):
 
     logger.info(f"[AgentTrace] {json.dumps(log_data, ensure_ascii=False)}")
 
-    # LangFuse 集成
-    if _tracer:
+    # LangSmith 已通过 LangGraph 原生集成自动上报
+    # 这里补充业务级 metadata（如果需要在 LangSmith 中显示）
+    if LANGSMITH_ENABLED:
         try:
-            trace = _tracer.trace(
-                name="agent_run",
-                metadata=log_data,
-                user_id=str(trace_data.conversation_id),
-            )
-            # 添加子 span
-            for node in trace_data.nodes:
-                trace.span(
-                    name=node.name,
-                    metadata={**node.metadata, "duration_ms": node.duration_ms, "success": node.success},
-                )
-        except Exception as e:
-            logger.debug(f"LangFuse trace 失败: {e}")
+            from langsmith import traceable
+            # LangSmith trace 由 LangGraph 自动创建，
+            # 此处仅记录额外的业务 metadata 到日志
+            logger.debug(f"[LangSmith] agent_run metadata recorded for conv={trace_data.conversation_id}")
+        except ImportError:
+            pass
 
 
 def trace_agent_call(
@@ -225,12 +201,34 @@ def trace_agent_call(
     ))
 
 
-def check_tool_alert(tool_name: str, success: bool):
-    """
-    工具告警检查：失败率 > 30% 时触发告警。
+# ── 节点级追踪装饰器 ──────────────────────────────────────
 
-    每次工具调用后调用此函数。
-    """
+def trace_node(name: str):
+    """装饰器：自动追踪函数执行（同步 + 异步兼容）"""
+    def decorator(func):
+        if asyncio_iscoroutinefunction(func):
+            async def async_wrapper(*args, **kwargs):
+                async with trace_async_span(name):
+                    return await func(*args, **kwargs)
+            return async_wrapper
+        else:
+            def sync_wrapper(*args, **kwargs):
+                with trace_span(name):
+                    return func(*args, **kwargs)
+            return sync_wrapper
+    return decorator
+
+
+def asyncio_iscoroutinefunction(func):
+    """检查是否为异步函数"""
+    import asyncio
+    return asyncio.iscoroutinefunction(func)
+
+
+# ── 工具告警 ──────────────────────────────────────────────
+
+def check_tool_alert(tool_name: str, success: bool):
+    """工具告警检查：失败率 > 30% 时触发告警"""
     if tool_name not in _alert_state:
         _alert_state[tool_name] = {"calls": 0, "failures": 0}
 
@@ -239,7 +237,6 @@ def check_tool_alert(tool_name: str, success: bool):
     if not success:
         state["failures"] += 1
 
-    # 每 10 次调用检查一次
     if state["calls"] >= 10:
         error_rate = state["failures"] / state["calls"]
         if error_rate > ALERT_ERROR_RATE_THRESHOLD:
@@ -248,5 +245,4 @@ def check_tool_alert(tool_name: str, success: bool):
                 f"超过阈值 {ALERT_ERROR_RATE_THRESHOLD:.0%} "
                 f"({state['failures']}/{state['calls']})"
             )
-        # 重置计数
         _alert_state[tool_name] = {"calls": 0, "failures": 0}

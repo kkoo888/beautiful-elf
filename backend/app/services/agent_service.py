@@ -175,6 +175,8 @@ class AgentService:
             tools_used=result.get("tools_used", []),
             iterations=result.get("iterations", 0),
             total_duration_ms=elapsed,
+            prompt_tokens=result.get("prompt_tokens", 0),
+            completion_tokens=result.get("completion_tokens", 0),
         ))
 
         return {
@@ -523,6 +525,22 @@ class AgentService:
                 pass
 
             elapsed = int((time.time() - t0) * 1000)
+
+            # 追踪（流式路径）
+            try:
+                from app.agent.tracing import trace_agent_run, AgentTrace
+                trace_agent_run(AgentTrace(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    user_message=messages[-1].get("content", "") if messages else "",
+                    tools_used=tools_used,
+                    total_duration_ms=elapsed,
+                    prompt_tokens=total_prompt_tokens,
+                    completion_tokens=total_completion_tokens,
+                ))
+            except Exception:
+                pass
+
             yield {
                 "type": "done",
                 "tools_used": tools_used,
