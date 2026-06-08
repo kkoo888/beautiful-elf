@@ -196,7 +196,12 @@ async def _init_intent():
 
 
 async def _start_mcp_server():
-    """启动 MCP Server（后台进程，SSE 传输，DB 驱动工具）"""
+    """启动 MCP Server（后台进程，Streamable HTTP 传输，DB 驱动工具）
+
+    v3.0 变更:
+      - transport: "sse" → "http"（Streamable HTTP，MCP 2025-06-18 规范）
+      - 来源: https://gofastmcp.com/getting-started/quickstart
+    """
     import asyncio
     import os
 
@@ -211,9 +216,9 @@ async def _start_mcp_server():
         port = int(os.getenv("MCP_SERVER_PORT", "8765"))
 
         async def _run_mcp():
-            """后台运行 MCP Server"""
+            """后台运行 MCP Server（Streamable HTTP）"""
             try:
-                mcp_app.run(transport="sse", host=host, port=port)
+                mcp_app.run(transport="http", host=host, port=port)
             except asyncio.CancelledError:
                 logger.info("MCP Server 正在停止...")
             except Exception as e:
@@ -223,7 +228,7 @@ async def _start_mcp_server():
         task = asyncio.create_task(_run_mcp())
         # 存储到 app.state 供 lifespan cleanup 使用
         _mcp_tasks.append(task)
-        logger.info(f"MCP Server 后台启动: {host}:{port}")
+        logger.info(f"MCP Server 后台启动: {host}:{port} (Streamable HTTP)")
 
     except ImportError as e:
         logger.warning(f"fastmcp 未安装，MCP Server 跳过: {e}")

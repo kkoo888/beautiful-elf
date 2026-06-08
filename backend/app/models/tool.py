@@ -1,4 +1,11 @@
-"""工具模型（MCP 规范: inputSchema + outputSchema）"""
+"""工具模型（MCP 规范: inputSchema + outputSchema + version）
+
+v3.0 变更:
+  - 新增 version 字段（FastMCP v3 组件版本管理）
+  - 新增 timeout_seconds 字段（FastMCP v3 工具超时）
+
+来源: https://gofastmcp.com/servers/tools (version, timeout 参数)
+"""
 from sqlalchemy import Column, BigInteger, Integer, String, DateTime, JSON, Index
 from app.models.base import BaseModel
 
@@ -14,6 +21,8 @@ class Tool(BaseModel):
     output_schema = Column(JSON, nullable=True, comment="输出 JSON Schema (MCP outputSchema, 可选)")
     risk_level = Column(String(16), nullable=False, default="low", comment="风险等级: low/medium/high")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
+    version = Column(String(32), nullable=False, default="1.0.0", comment="工具版本号（FastMCP v3 组件版本管理）")
+    timeout_seconds = Column(Integer, nullable=False, default=60, comment="工具执行超时（秒），FastMCP v3 timeout")
 
     __table_args__ = (
         Index("idx_tool_module", "module"),
