@@ -343,90 +343,54 @@ class ToolRegistrySnapshot:
 # ─── 内置工具实现 ─────────────────────────────────────────
 
 async def web_search(query: str, max_results: int = 5) -> dict:
-    """搜索互联网获取实时信息
-
-    优先级: SearXNG → Tavily → DuckDuckGo → 结构化错误
-    """
+    """搜索互联网获取实时信息（通过 SearXNG）"""
     import os
     import httpx
 
-    # ── 方案 A: SearXNG（自建元搜索引擎） ─────────────
     searxng_url = os.getenv("SEARXNG_URL", "").strip()
-    if searxng_url:
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(
-                    f"{searxng_url.rstrip('/')}/search",
-                    params={"q": query, "format": "json", "count": max_results},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                results = data.get("results", [])[:max_results]
-                if results:
-                    return {"results": [
-                        {
-                            "title": r.get("title", ""),
-                            "url": r.get("url", ""),
-                            "snippet": r.get("content", ""),
-                        }
-                        for r in results
-                    ]}
-        except Exception as e:
-            logger.warning(f"[web_search] SearXNG 失败: {e}")
+    if not searxng_url:
+        return {
+            "success": False,
+            "error": {
+                "code": "SEARCH_NOT_CONFIGURED",
+                "message": "搜索服务未配置",
+                "retryable": False,
+                "user_facing": True,
+                "user_tip": "搜索服务暂未启用，请联系管理员配置 SearXNG",
+            },
+        }
 
-    # ── 方案 B: Tavily（免费 API，每月 1000 次） ──────
-    tavily_key = os.getenv("TAVILY_API_KEY", "").strip()
-    if tavily_key:
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(
-                    "https://api.tavily.com/search",
-                    json={
-                        "api_key": tavily_key,
-                        "query": query,
-                        "max_results": max_results,
-                        "search_depth": "basic",
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                results = data.get("results", [])[:max_results]
-                if results:
-                    return {"results": [
-                        {
-                            "title": r.get("title", ""),
-                            "url": r.get("url", ""),
-                            "snippet": r.get("content", "")[:200],
-                        }
-                        for r in results
-                    ]}
-        except Exception as e:
-            logger.warning(f"[web_search] Tavily 失败: {e}")
-
-    # ── 方案 C: DuckDuckGo 降级 ─────────────────────────
     try:
-        from duckduckgo_search import DDGS
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{searxng_url.rstrip('/')}/search",
+                params={"q": query, "format": "json", "count": max_results},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results", [])[:max_results]
             if results:
                 return {"results": [
-                    {"title": r["title"], "url": r["href"], "snippet": r["body"]}
+                    {
+                        "title": r.get("title", ""),
+                        "url": r.get("url", ""),
+                        "snippet": r.get("content", ""),
+                    }
                     for r in results
                 ]}
+            return {"results": []}
     except Exception as e:
-        logger.warning(f"[web_search] DuckDuckGo 也失败: {e}")
-
-    # ── 全部失败 ────────────────────────────────────────
-    return {
-        "success": False,
-        "error": {
-            "code": "SEARCH_UNAVAILABLE",
-            "message": "搜索引擎暂时不可用",
-            "retryable": False,
-            "user_facing": True,
-            "user_tip": "请稍后再试，或换个方式描述你的问题",
-        },
-    }
+        logger.warning(f"[web_search] SearXNG 请求失败: {e}")
+        return {
+            "success": False,
+            "error": {
+                "code": "SEARCH_ERROR",
+                "message": f"搜索服务异常: {e}",
+                "retryable": True,
+                "user_facing": True,
+                "user_tip": "搜索服务暂时不可用，请稍后再试",
+            },
+        }
 
 
 async def execute_code(language: str, code: str) -> dict:
