@@ -389,6 +389,27 @@ class AgentService:
 
             config = self._get_config(conversation_id)
 
+            # ── 快速路径：闲聊/缓存命中用 ainvoke，避免 v3 流式挂起 ──
+            # LangGraph v1.x 的 MemorySaver + astream_events 在图快速完成时
+            # （如闲聊直接到 END）可能流不关闭。用 ainvoke 绕过。
+            from app.agent.intent_router import _detect_chitchat
+            user_msg = messages[-1].get("content", "") if messages else ""
+            if _detect_chitchat(user_msg):
+                logger.info(f"[chat_stream] 闲聊快速路径: ainvoke")
+                result = await self._graph.ainvoke(initial_state, config=config)
+                answer = result.get("final_answer") or ""
+                if not answer:
+                    for msg in reversed(result.get("messages", [])):
+                        content = getattr(msg, "content", "") if not isinstance(msg, dict) else msg.get("content", "")
+                        if content:
+                            answer = content
+                            break
+                if answer:
+                    yield {"type": "token", "content": answer}
+                elapsed = int((time.time() - t0) * 1000)
+                yield {"type": "done", "tools_used": [], "duration_ms": elapsed, "prompt_tokens": 0, "completion_tokens": 0}
+                return
+
             # [P0] 升级到 v3 以支持 interrupt/resume 事件
             # v3 返回协程，需 await 获取流对象
             stream = await self._graph.astream_events(initial_state, config=config, version="v3")
@@ -403,35 +424,22 @@ class AgentService:
                 _event_count += 1
 
                 # 捕获节点输出，提取 final_answer（chitchat/缓存命中场景）
-                # LangGraph v3 的 on_chain_end 事件结构可能有多种路径，逐个检查
                 if kind == "on_chain_end":
                     output = event.get("data", {}).get("output", {})
                     node_name = event.get("name", "")
-                    # [DEBUG] 打印事件结构，帮助定位 LangGraph v3 事件格式
-                    if _event_count <= 20:
-                        logger.info(f"[chat_stream] on_chain_end event keys={list(event.keys())} name={node_name} data_keys={list(event.get('data', {}).keys())} output_type={type(output).__name__}")
-                        if isinstance(output, dict):
-                            logger.info(f"[chat_stream] on_chain_end output keys={list(output.keys())}")
                     if isinstance(output, dict):
                         if output.get("final_answer"):
                             _final_answer = output["final_answer"]
-                            logger.info(f"[chat_stream] on_chain_end 捕获 final_answer (node={node_name}) len={len(_final_answer)}")
-                        # 兼容：output 可能嵌套在 messages 或其他字段中
                         elif isinstance(output.get("messages"), list):
                             for msg in output["messages"]:
                                 if hasattr(msg, "content") and msg.content:
                                     _final_answer = msg.content
-                                    logger.info(f"[chat_stream] on_chain_end 从 messages 捕获 (node={node_name})")
                                     break
-                    elif output and not isinstance(output, dict):
-                        logger.info(f"[chat_stream] on_chain_end output 非 dict (node={node_name}, type={type(output).__name__})")
 
-                # 额外：从 on_chain_stream 事件捕获（v3 可能通过 stream 事件输出节点结果）
                 elif kind == "on_chain_stream":
                     chunk = event.get("data", {}).get("chunk", {})
                     if isinstance(chunk, dict) and chunk.get("final_answer"):
                         _final_answer = chunk["final_answer"]
-                        logger.info(f"[chat_stream] on_chain_stream 捕获 final_answer")
 
                 if kind == "on_chat_model_stream":
                     chunk = event.get("data", {}).get("chunk", None)
@@ -488,24 +496,18 @@ class AgentService:
                 return
 
             # 发送缓存答案（chitchat/语义缓存命中，LLM 未被调用）
-            # [FIX] 多重 fallback：先用 _final_answer，再从 graph state 读取
-            logger.info(f"[chat_stream] 流结束: events={_event_count} final_answer={'set' if _final_answer else 'None'} llm_tokens={_got_llm_tokens} prompt_tokens={total_prompt_tokens}")
+            logger.info(f"[chat_stream] 流结束: events={_event_count} final_answer={'set' if _final_answer else 'None'} llm_tokens={_got_llm_tokens}")
             if not _final_answer:
-                # Fallback: 从 graph state 读取 final_answer
                 try:
                     if self._graph and hasattr(self._graph, 'get_state'):
                         state_snapshot = self._graph.get_state(config)
                         if state_snapshot and state_snapshot.values:
                             _final_answer = state_snapshot.values.get("final_answer") or ""
-                            if _final_answer:
-                                logger.info(f"[chat_stream] Fallback: 从 graph state 读取 final_answer ({len(_final_answer)} chars)")
                             if not _final_answer:
-                                # Fallback 2: 从 messages 中取最后一条 AI 消息
                                 for msg in reversed(state_snapshot.values.get("messages", [])):
                                     content = getattr(msg, "content", "") if not isinstance(msg, dict) else msg.get("content", "")
                                     if content:
                                         _final_answer = content
-                                        logger.info(f"[chat_stream] Fallback2: 从 messages 读取 ({len(content)} chars)")
                                         break
                 except Exception as e:
                     logger.warning(f"[chat_stream] 读取 graph state 失败: {e}")
@@ -513,7 +515,7 @@ class AgentService:
                 if _final_answer:
                     yield {"type": "token", "content": _final_answer}
                 else:
-                    logger.warning("[chat_stream] 缓存命中但无法提取 final_answer，发送空完成")
+                    logger.warning("[chat_stream] 无法提取 final_answer")
 
             # 发送上下文引用
             try:
