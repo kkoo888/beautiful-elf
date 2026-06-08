@@ -143,7 +143,25 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ---
 
-## 1. 开发哲学（不可违反）
+## 1. 分层纪律（不可违反）— 对齐 FastAPI 官方实践
+
+```
+API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
+```
+
+- [ ] **API 层**：只做参数校验 + 调用 service + 返回响应。
+      通过 `Depends(get_db)` 注入 db session 并透传给 service，
+      禁止在 API 层直接写 SQL 或 CRUD 操作。
+- [ ] **Service 层**：纯业务编排 + 事务管理。接收 db session（`db: AsyncSession`），调用 repo。
+      不含 HTTP 细节、不直接写 SQL 语句。
+- [ ] **Repository 层**：通过 Mapper 基类封装 CRUD 查询，返回 ORM 对象。不含业务逻辑。
+- [ ] **Mapper 层**：封装具体存储引擎操作（MySQL/Redis/Qdrant）。
+
+**违反分层 = 架构腐化的开始。**
+
+---
+
+## 2. 开发哲学（不可违反）
 
 - [ ] **先找根因再动手**：任何 bug / 问题，先定位根本原因，再动手修复。禁止「试一试改一改」的碰运气式开发
 - [ ] **高效有效代码**：每次提交的代码必须是最终版本，不留 TODO、不留「以后再改」、不留半成品
@@ -155,7 +173,7 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ---
 
-## 2. 龙模式工作流（不可违反）
+## 3. 龙模式工作流（不可违反）
 
 **核心原则：先分析，后动手。确认再改。**
 
@@ -175,7 +193,7 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ---
 
-## 3. MySQL P3C 规约（强制）
+## 4. MySQL P3C 规约（强制）
 
 ### 3.1 建表检查清单
 
@@ -209,7 +227,7 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ### 3.2 索引检查清单
 
-- [ ] 命名：主键 `pk_{字段名}`，唯一 `uk_{字段名}`，普通 `idx_{字段名}`
+- [ ] 命名：主键 `pk_{字段名}`，唯一 `uk_{字段名}`，普通 `idx_{表名}_{字段名}`（比 P3C 官方更严格，项目统一）
 - [ ] 业务唯一字段必须建唯一索引（即使应用层校验了，没有唯一索引必然产生脏数据）
 - [ ] 组合索引区分度最高的放最左边（等号条件列前置）
 - [ ] 利用覆盖索引避免回表（explain 结果 extra 列出现 `Using index`）
@@ -231,30 +249,29 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 - [ ] `count(distinct col)` 注意 NULL，若一列全为 NULL 即使另一列不同也返回 0
 - [ ] 分页查询 count 为 0 直接返回，避免执行后续分页语句
 - [ ] 数据订正（UPDATE/DELETE）前先 SELECT 确认
-- [ ] 参数化查询防 SQL 注入（**禁止 `${}`**，用 `#{}` `#param#`）
+- [ ] 参数化查询防 SQL 注入（SQLAlchemy 用 `bindparam` / `:param`，**禁止字符串拼接**）
 - [ ] `in` 操作控制在 1000 个元素内，能避免则避免
 - [ ] 不建议在代码中使用 TRUNCATE（无事务、不触发 trigger，可能造成事故）
 - [ ] 禁用存储过程（难以调试和扩展，没有移植性）
-- [ ] `sum(col)` 注意 NPE：全 NULL 时 sum 返回 NULL，用 `IF(ISNULL(SUM(g)),0,SUM(g))`
-- [ ] 使用 `ISNULL()` 判断 NULL，NULL 与任何值直接比较都为 NULL
+- [ ] `sum(col)` 注意 NPE：全 NULL 时 sum 返回 NULL，用 `func.coalesce(func.sum(col), 0)`
+- [ ] 使用 `IS NULL` / `IS NOT NULL` 判断 NULL，NULL 与任何值直接比较都为 NULL
 - [ ] `NULL<>NULL` 返回 NULL（非 false）
 - [ ] `NULL=NULL` 返回 NULL（非 true）
 
-### 3.4 ORM 检查清单
+### 3.4 ORM 检查清单（SQLAlchemy 2.0 + Pydantic v2）
 
-- [ ] **禁止 `SELECT *`**，明确写出字段列表
-- [ ] POJO 布尔属性不加 `is` 前缀（数据库 `is_xxx`，POJO 用 `xxx`，resultMap 映射）
-- [ ] 不用 resultClass 当返回参数，即使字段一一对应也需定义 resultMap
-- [ ] SQL 参数用 `#{}` `#param#`，**禁止 `${}`** 防止 SQL 注入
-- [ ] 禁用 `queryForList(String, int, int)`（其实现是取出全部再 subList）
+- [ ] **禁止 `SELECT *`**，明确写出字段列表（`select(Model.id, Model.name)` 而非 `select(Model)`）
+- [ ] 使用 SQLAlchemy 2.0 风格：`mapped_column()` + `Mapped[]` 类型注解（弃用 `Column()`）
+- [ ] Pydantic schema 使用 `model_config = ConfigDict(...)`（v2），禁止 `class Config`（v1 旧写法）
+- [ ] SQL 参数用 SQLAlchemy 绑定参数（`param(:name)`），**禁止字符串拼接防 SQL 注入**
 - [ ] 禁止 HashMap/Hashtable 作为查询结果集（值类型不可控）
 - [ ] 更新记录必须同时更新 `updated_at`（为当前时间）
 - [ ] 不写大而全的更新接口，只更新有改动的字段（减少 binlog 存储）
 - [ ] `@Transactional` 不要滥用，事务影响 QPS，需考虑回滚方案（缓存回滚、搜索引擎回滚、消息补偿、统计修正等）
 - [ ] 事务尽量短小，减少锁持有时间
-- [ ] Schema 层负责 `snake_case` → `camelCase` 转换，不暴露数据库字段给前端
-- [ ] `<isEqual>` 中 compareValue 是常量（一般是数字，表示相等时带上此条件）
-- [ ] `<isNotEmpty>` 表示不为空且不为 null 时执行，`<isNotNull>` 表示不为 null 值时执行
+- [ ] Schema 层（CamelModel 基类）负责 `snake_case` → `camelCase` 转换，不暴露数据库字段给前端
+- [ ] `get_db` 依赖中 session 的 commit/rollback/finally 模式保持一致
+- [ ] ORM 模型统一继承 `BaseModel`（提供 id, is_deleted, created_at, updated_at）
 
 ### 3.5 字段命名映射
 
@@ -276,7 +293,7 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ---
 
-## 4. API 设计规约（强制）
+## 5. API 设计规约（强制）
 
 ### 4.1 URL 检查清单
 
@@ -301,16 +318,16 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 ### 4.3 响应格式检查
 
 - [ ] 成功（单个）：`{ "code": "SUCCESS", "message": "操作成功", "data": {...} }`
-- [ ] 成功（分页）：`{ "code": "SUCCESS", "message": "操作成功", "data": [...], "meta": { "total", "page", "page_size" } }`
+- [ ] 成功（分页）：`{ "code": "SUCCESS", "message": "操作成功", "data": [...], "total": 100, "page": 1, "pageSize": 20 }`（顶层字段，非 meta 嵌套）
 - [ ] 错误：`{ "code": "MODULE_ERROR_TYPE", "message": "排查信息", "user_tip": "用户提示", "request_id": "uuid" }`
 - [ ] 空列表返回 `[]`，**不返回 `null`**
 
 ### 4.4 错误码检查
 
 - [ ] 格式：`{MODULE}_{ERROR_TYPE}`
-- [ ] 模块前缀：SYSTEM, PET, SCHEDULE, SKILL, TOOL, CONVERSATION, MESSAGE, CONFIG, PROMPT, NOTIFICATION, BACKUP, AI, AUTH
-- [ ] 错误类型：NOT_FOUND(404), DUPLICATE(409), VALIDATION(400), UNAUTHORIZED(401), FORBIDDEN(403), TIMEOUT(503), INTERNAL_ERROR(500)
-- [ ] 示例：`PET_NOT_FOUND`(404)、`SKILL_DUPLICATE`(409)、`SYSTEM_VALIDATION`(400)、`AI_TIMEOUT`(503)
+- [ ] 模块前缀：SYSTEM, PET, SCHEDULE, SKILL, TOOL, CONVERSATION, MESSAGE, CONFIG, PROMPT, NOTIFICATION, BACKUP, AI, AUTH, AGENT, WORKFLOW, INTENT, KNOWLEDGE, MEMORY, DEBUG, COST
+- [ ] 错误类型：NOT_FOUND(404), DUPLICATE(409), VALIDATION(400), UNAUTHORIZED(401), FORBIDDEN(403), TIMEOUT(503), INTERNAL_ERROR(500), FAILED(500), ERROR(500)
+- [ ] 示例：`PET_NOT_FOUND`(404)、`SKILL_DUPLICATE`(409)、`SYSTEM_VALIDATION`(400)、`AI_TIMEOUT`(503)、`MEMORY_CREATE_FAILED`(500)、`AGENT_RESUME_ERROR`(500)
 - [ ] 错误响应四部分：`code`（机器可读）、`message`（开发者排查）、`user_tip`（用户友好）、`request_id`（追踪 ID）
 
 ### 4.5 分页检查
@@ -325,12 +342,56 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 - [ ] 请求/响应 body：小驼峰 `camelCase`
 - [ ] 数据库字段：下划线 `snake_case`（内部转换，不暴露给前端）
 
+### 4.7 P3C 前后端规约补充（强制/推荐）
+
+- [ ] 【强制】URL 参数不能超过 2048 字节（浏览器最小限制）
+- [ ] 【强制】body 传递内容必须控制长度（nginx 默认 1MB，tomcat 默认 2MB）
+- [ ] 【强制】超大整数（超过 2^53）一律用 String 返回，禁止 Long/Number 类型（JS 精度丢失）
+- [ ] 【强制】服务器内部重定向用 forward，外部重定向用 URL 统一代理模块
+- [ ] 【推荐】时间格式统一 `yyyy-MM-dd HH:mm:ss`，时区统一 GMT
+- [ ] 【推荐】返回数据用 JSON 而非 XML
+- [ ] 【推荐】返回信息标记是否可缓存（Cache-Control s-maxage）
+
 ---
 
-## 5. 安全红线（不可违反）
+## 6. 代码审查清单（强制）
+
+### 6.1 新增 Model 时检查
+
+- [ ] 表名是否单数、小写
+- [ ] 是否继承 `BaseModel`（id, is_deleted, created_at, updated_at）
+- [ ] 布尔字段是否 `is_xxx` 命名
+- [ ] 索引命名是否符合 `idx_{表名}_{字段名}` 规范（项目统一，比 P3C 官方 `idx_{字段名}` 更严格）
+- [ ] 是否在 `__init__.py` 中导出
+
+### 6.2 新增 API 时检查
+
+- [ ] URL 是否 RESTful（名词复数、正确 HTTP 方法）
+- [ ] 是否只做参数校验 + 调用 service（通过 `Depends(get_db)` 注入 db 并透传）
+- [ ] 所有 endpoint 是否声明 `response_model`（FastAPI 自动校验输出 + 生成 OpenAPI schema）
+- [ ] 错误码是否符合 `MODULE_ERROR_TYPE` 格式
+- [ ] 分页参数是否有边界处理
+- [ ] 响应格式是否统一（`ApiResult` / `ApiPageResult` 泛型信封）
+
+### 6.3 新增 Service 时检查
+
+- [ ] 是否纯业务编排，不直接写 SQL 语句、不含 HTTP 细节
+- [ ] 事务管理是否正确（接收 `db: AsyncSession` 参数，调用 repo）
+- [ ] 是否可复用（可被其他 service 调用）
+- [ ] 跨 service 调用时是否共享同一个 db session（保证事务一致性）
+
+### 6.4 新增 Repository 时检查
+
+- [ ] 是否通过 Mapper 基类操作数据库
+- [ ] 是否返回 ORM 对象（不做序列化）
+- [ ] 是否不含业务逻辑
+
+---
+
+## 7. 安全红线（不可违反）
 
 - [ ] 永远不要在 URL 参数中传递敏感信息（token、密码、密钥）
-- [ ] 永远不要使用 `${}` 拼接 SQL 参数
+- [ ] 永远不要用字符串拼接 SQL 参数（SQLAlchemy 用 `bindparam` / `:param`）
 - [ ] 永远不要禁用 CORS 校验（生产环境）
 - [ ] 永远不要在代码中硬编码密钥/密码
 - [ ] 永远不要返回 `SELECT *` 的结果给前端
@@ -344,7 +405,69 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ---
 
-## 6. AI/Agent 开发原则
+## 8. FastAPI 专属规约（对齐官方实践，强制）
+
+### 8.1 依赖注入
+
+- [ ] db session 统一通过 `Depends(get_db)` 注入，**禁止在 route 函数内手动创建 session**
+- [ ] 推荐使用 `Annotated` 类型别名简化注入（如 `DBSession = Annotated[AsyncSession, Depends(get_db)]`）
+- [ ] 全局依赖（分页、认证）放 `core/dependencies.py`，通过 `Depends()` 注入
+- [ ] 认证保护用 `Depends(require_auth)`，公开接口显式不加依赖
+
+### 8.2 响应模型
+
+- [ ] 所有 endpoint 必须声明 `response_model=ApiResult[XxxOut]` 或 `response_model=ApiPageResult[XxxOut]`
+- [ ] 响应 schema 继承 `CamelModel`（自动 snake_case → camelCase）
+- [ ] `response_model` 用于输出校验和 OpenAPI 文档生成，不用于输入校验
+
+### 8.3 生命周期
+
+- [ ] 使用 `lifespan` 上下文管理器（FastAPI 推荐），**弃用 `@app.on_event`**（仍可用但非首选）
+- [ ] 启动初始化（数据库表、缓存预热、外部连接）放 `lifespan` 的 `yield` 之前
+- [ ] 资源清理（关闭连接、取消后台任务）放 `lifespan` 的 `yield` 之后
+- [ ] 可选组件初始化失败应 `try/except` 捕获，不阻塞启动
+
+### 8.4 异常处理
+
+- [ ] 业务异常用自定义 `AppError` 体系，通过全局 `exception_handler` 统一返回
+- [ ] 全局兜底 `Exception` handler 捕获未处理异常，返回 500 + 通用消息
+- [ ] 异常响应格式与正常响应一致（`code`, `message`, `userTip`, `requestId`）
+
+### 8.5 中间件
+
+- [ ] CORS 通过 `CORSMiddleware` 配置，生产环境必须设置白名单 `allow_origins`
+- [ ] trace_id 通过 HTTP 中间件注入（`X-Trace-Id` header），贯穿全链路
+- [ ] 限流通过 `slowapi` 或类似方案实现，返回 429
+
+### 8.6 路由组织
+
+- [ ] 路由统一在 `api/v1/api.py` 中 `include_router` 注册
+- [ ] 每个路由文件用 `APIRouter()` 声明，不直接操作 `app`
+- [ ] prefix 和 tags 在 `api.py` 注册时统一设置，不在路由文件内硬编码
+
+### 8.7 Pydantic v2
+
+- [ ] Schema 基类用 `model_config = ConfigDict(...)`，**禁止 `class Config`**（v1 旧写法）
+- [ ] 使用 `from_attributes=True`（替代 v1 的 `orm_mode = True`）
+- [ ] 使用 `model_dump()` / `model_validate()`（替代 v1 的 `.dict()` / `parse_obj()`）
+
+### 8.8 SQLAlchemy 2.0
+
+- [ ] ORM 模型使用 `mapped_column()` + `Mapped[]` 类型注解（**弃用 `Column()`**）
+- [ ] 使用 `DeclarativeBase`（替代 v1 的 `declarative_base()` 函数）
+- [ ] 使用 `async_sessionmaker`（替代 v1 的 `sessionmaker(class_=AsyncSession)`）
+- [ ] 查询用 `select()` 语句（替代 v1 的 `session.query()`）
+
+### 8.9 测试
+
+- [ ] 使用 `pytest` + `httpx.AsyncClient` 做异步 API 测试
+- [ ] 使用 `pytest-cov` 做覆盖率统计，目标 ≥ 70%
+- [ ] 测试数据库用独立实例或 SQLite，不污染生产数据
+- [ ] 核心 API 的 CRUD + 异常路径必须有测试覆盖
+
+---
+
+## 9. AI/Agent 开发原则
 
 - [ ] **优先使用 LlamaIndex、LangGraph、LangChain 官方最新方法**，禁止自己造轮子
 - [ ] 使用前先查阅官方文档，对比各方案优缺点
@@ -355,7 +478,7 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ---
 
-## 7. 性能意识
+## 10. 性能意识
 
 - [ ] 单表超过 500 万行或 2GB 再考虑分库分表
 - [ ] 合理使用索引，不要宁滥勿缺
@@ -366,36 +489,7 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ---
 
-## 8. 路由映射表（参考）
-
-| 资源 | URL 前缀 |
-|------|----------|
-| 会话 | `/api/v1/conversations` |
-| 消息 | `/api/v1/conversations/{id}/messages` |
-| 日程 | `/api/v1/schedules` |
-| 剪贴板 | `/api/v1/clipboard_items` |
-| 代码片段 | `/api/v1/snippets` |
-| 命令 | `/api/v1/commands` |
-| 宠物 | `/api/v1/pets` |
-| 通知 | `/api/v1/notifications` |
-| 技能 | `/api/v1/skills` |
-| 工具 | `/api/v1/tools` |
-| 配置 | `/api/v1/configs` |
-| 灵魂配置 | `/api/v1/soul_configs` |
-| 提示词 | `/api/v1/prompts` |
-| 性能 | `/api/v1/performance` |
-| 备份 | `/api/v1/backups` |
-| AI 反馈 | `/api/v1/ai_feedback` |
-| 操作日志 | `/api/v1/action_logs` |
-| 命令统计 | `/api/v1/command_usage` |
-| 专家团 | `/api/v1/expert_teams` |
-| 大模型供应商 | `/api/v1/llm_providers` |
-| 健康检查 | `/api/v1/health` |
-| 认证 | `/api/v1/auth` |
-
----
-
-## 9. 核心任务执行协议
+## 11. 核心任务执行协议
 
 **最高原则：用户的指令就是最终交付物。放弃不是选项。**
 
@@ -407,13 +501,23 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 ---
 
-## 10. 多模态理解 - 优先使用 Omni
+## 12. 多模态理解 - 优先使用 Omni
 
 多模态内容禁止使用 read 工具读取，优先调用 `mimo-omni` skill（`bash mimo_api.sh`）：
 
 - **图片**：描述、OCR、图表分析、物体识别、场景理解
 - **视频**：内容描述、字幕提取、动作识别、摘要
 - **音频**：语音转录、说话人区分、声音描述
+
+---
+
+## 13. 沟通风格
+
+- **直接**：发现问题直说，不绕弯子
+- **有理有据**：每条建议都引用具体规约条款
+- **举例说明**：给正例和反例，不空谈
+- **严格但不刻板**：规约是底线，合理变通可以讨论
+- **关注全局**：不只看单个文件，关注架构一致性和可维护性
 
 ---
 
