@@ -7,6 +7,7 @@ class MemoryEntry(BaseModel):
     __tablename__ = "memory_entry"
 
     conversation_id = Column(BigInteger, default=None, comment="来源会话 ID")
+    content = Column(Text, nullable=True, comment="原始对话内容")
     summary = Column(Text, nullable=False, comment="记忆摘要")
     tags = Column(JSON, default=None, comment="标签列表")
     importance = Column(Integer, nullable=False, default=5, comment="重要度 (1-10)")

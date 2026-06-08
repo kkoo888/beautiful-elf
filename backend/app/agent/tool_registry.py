@@ -345,48 +345,12 @@ class ToolRegistrySnapshot:
 async def web_search(query: str, max_results: int = 5) -> dict:
     """搜索互联网获取实时信息
 
-    优先使用 SearXNG（自建元搜索引擎，免费无限制），
-    降级到 DuckDuckGo（国内可能不可用）。
+    优先级: SearXNG → Tavily → DuckDuckGo → 结构化错误
     """
     import os
     import httpx
 
-    # ── 方案 A: 百度搜索（国内优先，零依赖） ────────────
-    try:
-        import re
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-            resp = await client.get(
-                "https://www.baidu.com/s",
-                params={"wd": query, "rn": max_results},
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-            )
-            if resp.status_code == 200:
-                html = resp.text
-                # 提取搜索结果
-                results = []
-                # 匹配标题和摘要
-                for m in re.finditer(
-                    r'<h3[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?</h3>.*?<span class="content-right_8Zs40">(.*?)</span>',
-                    html, re.DOTALL
-                ):
-                    url, title, snippet = m.group(1), m.group(2), m.group(3)
-                    title = re.sub(r'<[^>]+>', '', title).strip()
-                    snippet = re.sub(r'<[^>]+>', '', snippet).strip()
-                    if title:
-                        results.append({"title": title, "url": url, "snippet": snippet})
-                # 简化匹配（备用）
-                if not results:
-                    for m in re.finditer(r'<h3[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>', html, re.DOTALL):
-                        url, title = m.group(1), m.group(2)
-                        title = re.sub(r'<[^>]+>', '', title).strip()
-                        if title:
-                            results.append({"title": title, "url": url, "snippet": ""})
-                if results:
-                    return {"results": results[:max_results]}
-    except Exception as e:
-        logger.warning(f"[web_search] 百度搜索失败: {e}")
-
-    # ── 方案 B: SearXNG（自建元搜索引擎） ─────────────
+    # ── 方案 A: SearXNG（自建元搜索引擎） ─────────────
     searxng_url = os.getenv("SEARXNG_URL", "").strip()
     if searxng_url:
         try:
@@ -408,7 +372,36 @@ async def web_search(query: str, max_results: int = 5) -> dict:
                         for r in results
                     ]}
         except Exception as e:
-            logger.warning(f"[web_search] SearXNG 也失败: {e}")
+            logger.warning(f"[web_search] SearXNG 失败: {e}")
+
+    # ── 方案 B: Tavily（免费 API，每月 1000 次） ──────
+    tavily_key = os.getenv("TAVILY_API_KEY", "").strip()
+    if tavily_key:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    "https://api.tavily.com/search",
+                    json={
+                        "api_key": tavily_key,
+                        "query": query,
+                        "max_results": max_results,
+                        "search_depth": "basic",
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                results = data.get("results", [])[:max_results]
+                if results:
+                    return {"results": [
+                        {
+                            "title": r.get("title", ""),
+                            "url": r.get("url", ""),
+                            "snippet": r.get("content", "")[:200],
+                        }
+                        for r in results
+                    ]}
+        except Exception as e:
+            logger.warning(f"[web_search] Tavily 失败: {e}")
 
     # ── 方案 C: DuckDuckGo 降级 ─────────────────────────
     try:

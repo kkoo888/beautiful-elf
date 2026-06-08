@@ -761,8 +761,14 @@ def _make_memory_saver(memory_manager):
                             from app.repository.memory_repo import MemoryRepository
                             async with AsyncSessionLocal() as db:
                                 repo = MemoryRepository()
+                                # 拼接原始对话内容
+                                content_text = "\n".join(
+                                    f"{m.get('role', 'unknown')}: {m.get('content', '')}"
+                                    for m in messages[-10:]  # 最近 10 条
+                                )
                                 await repo.create(db, {
                                     "conversation_id": state["conversation_id"],
+                                    "content": content_text[:2000],
                                     "summary": meta["summary"],
                                     "tags": meta["tags"],
                                     "importance": meta["importance"],
