@@ -375,7 +375,42 @@ async def web_search(query: str, max_results: int = 5) -> dict:
         except Exception as e:
             logger.warning(f"[web_search] SearXNG 失败，降级到 DuckDuckGo: {e}")
 
-    # ── 方案 B: DuckDuckGo 降级 ─────────────────────────
+    # ── 方案 B: 百度搜索（国内可用，无需 API Key） ──────
+    try:
+        import re
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(
+                "https://www.baidu.com/s",
+                params={"wd": query, "rn": max_results},
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            )
+            if resp.status_code == 200:
+                html = resp.text
+                # 提取搜索结果
+                results = []
+                # 匹配标题和摘要
+                for m in re.finditer(
+                    r'<h3[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>.*?</h3>.*?<span class="content-right_8Zs40">(.*?)</span>',
+                    html, re.DOTALL
+                ):
+                    url, title, snippet = m.group(1), m.group(2), m.group(3)
+                    title = re.sub(r'<[^>]+>', '', title).strip()
+                    snippet = re.sub(r'<[^>]+>', '', snippet).strip()
+                    if title:
+                        results.append({"title": title, "url": url, "snippet": snippet})
+                # 简化匹配（备用）
+                if not results:
+                    for m in re.finditer(r'<h3[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>', html, re.DOTALL):
+                        url, title = m.group(1), m.group(2)
+                        title = re.sub(r'<[^>]+>', '', title).strip()
+                        if title:
+                            results.append({"title": title, "url": url, "snippet": ""})
+                if results:
+                    return {"results": results[:max_results]}
+    except Exception as e:
+        logger.warning(f"[web_search] 百度搜索失败: {e}")
+
+    # ── 方案 C: DuckDuckGo 降级 ─────────────────────────
     try:
         from duckduckgo_search import DDGS
         with DDGS() as ddgs:
