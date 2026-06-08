@@ -552,12 +552,23 @@ class AgentService:
         return dict(self._tool_stats)
 
     async def _lazy_init(self, provider_id: int, model_name: str) -> bool:
-        # [P1] 双重检查锁：外层无锁快速检查，内层加锁防止并发初始化
+        """懒初始化 — 双重检查锁 + provider 变更检测
+
+        当用户切换供应商/模型时，需要重建 graph。
+        """
+        # 快速路径：已初始化且 provider 匹配
         if self._initialized and self._graph is not None:
-            return True
-        async with self._init_lock:
-            if self._initialized and self._graph is not None:
+            if self._provider_id == provider_id and self._model_name == model_name:
                 return True
+            # provider 变更，需要重新初始化
+            logger.info(f"[lazy_init] provider 变更: ({self._provider_id},{self._model_name}) → ({provider_id},{model_name})")
+
+        async with self._init_lock:
+            # 双重检查（锁内再查一次）
+            if self._initialized and self._graph is not None:
+                if self._provider_id == provider_id and self._model_name == model_name:
+                    return True
+
             from app.core.database import AsyncSessionLocal
             async with AsyncSessionLocal() as db:
                 return await self.initialize(db, provider_id=provider_id, model_name=model_name)
