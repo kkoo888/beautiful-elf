@@ -1,17 +1,14 @@
-"""MCP Server — 完整 MCP 规范实现（v2.0）
+"""MCP Server — 完整 MCP 规范实现（v2.1 全 DB 驱动）
 
-v2.0 重构:
-  - 工具: DB 驱动，启动时从 ToolRegistry 加载，支持 outputSchema + structuredContent
-  - Resources: 暴露知识库文档、配置项
-  - Prompts: 暴露预定义提示词模板
-  - 传输: SSE（符合 MCP 规范）
+v2.1: 移除静态工具，全部从 DB 加载
+v2.0: DB 驱动 + Resources/Prompts + outputSchema
 
 架构:
   MySQL tool 表 → ToolRegistry → FastMCP Server → MCP 协议 → Agent / 外部客户端
 
 规范依据: MCP 2025-06-18 (https://modelcontextprotocol.io/specification/2025-06-18)
 """
-from typing import Any, Dict, List
+from typing import Any
 import json
 
 from fastmcp import FastMCP
@@ -24,17 +21,14 @@ logger = get_logger(__name__)
 
 mcp_app = FastMCP(
     "beautiful-elf-tools",
-    version="2.0.0",
+    version="2.1.0",
 )
 
 
-# ── 工具注册（DB 驱动）────────────────────────────────────
+# ── 工具注册（全 DB 驱动）──────────────────────────────────
 
 async def register_tools_from_db(tool_registry) -> int:
-    """从 ToolRegistry 加载启用的工具到 MCP Server
-
-    跳过已有的静态工具（web_search/execute_code/read_file/query_database），
-    避免重复注册。
+    """从 ToolRegistry 加载所有启用的工具到 MCP Server
 
     MCP 规范:
       - name: 唯一标识符
@@ -45,21 +39,16 @@ async def register_tools_from_db(tool_registry) -> int:
     from app.core.database import AsyncSessionLocal
     from app.repository.tool_repo import ToolRepository
 
-    # 已有静态工具，跳过
-    _STATIC_TOOLS = {"web_search", "execute_code", "read_file", "query_database", "list_available_tools"}
-
     repo = ToolRepository()
     async with AsyncSessionLocal() as db:
         tools = await repo.find_all(db, offset=0, limit=1000, enabled=1)
 
     count = 0
     for tool in tools:
-        if tool.name in _STATIC_TOOLS:
-            continue
         _register_mcp_tool(tool.name, tool.description, tool.json_schema, tool.output_schema)
         count += 1
 
-    logger.info(f"MCP Server: 从 DB 加载 {count} 个额外工具（静态工具已内置）")
+    logger.info(f"MCP Server: 从 DB 加载 {count} 个工具")
     return count
 
 
@@ -67,12 +56,10 @@ def _register_mcp_tool(name: str, description: str, input_schema: dict, output_s
     """注册单个 MCP 工具（从 DB 元数据 + ToolRegistry 执行函数）"""
     from app.agent.tool_registry import tool_registry
 
-    # FastMCP 的 @tool 装饰器不支持动态注册，用 add_tool 方法
     async def tool_func(**kwargs) -> Any:
         result = await tool_registry.execute(name, kwargs, approved=True)
         return result
 
-    # 设置函数元数据（FastMCP 从中读取工具定义）
     tool_func.__name__ = name
     tool_func.__doc__ = description
 
@@ -83,52 +70,7 @@ def _register_mcp_tool(name: str, description: str, input_schema: dict, output_s
     )
 
 
-# ── 静态工具（内置，DB 为空时的 fallback）──────────────────
-
-@mcp_app.tool()
-async def web_search(query: str, max_results: int = 5) -> dict:
-    """搜索互联网获取实时信息（通过 SearXNG）。
-
-    Args:
-        query: 搜索关键词
-        max_results: 最大结果数，默认 5
-    """
-    from app.agent.tool_registry import web_search as _web_search
-    return await _web_search(query=query, max_results=max_results)
-
-
-@mcp_app.tool()
-async def execute_code(language: str, code: str) -> dict:
-    """在沙箱中执行代码（Docker 隔离，10 秒超时）。
-
-    Args:
-        language: 编程语言，支持 python 和 javascript
-        code: 要执行的代码
-    """
-    from app.agent.tool_registry import execute_code as _execute_code
-    return await _execute_code(language=language, code=code)
-
-
-@mcp_app.tool()
-async def read_file(path: str) -> dict:
-    """读取工作空间中的文件内容。
-
-    Args:
-        path: 文件路径（相对于工作空间根目录）
-    """
-    from app.agent.tool_registry import read_file as _read_file
-    return await _read_file(path=path)
-
-
-@mcp_app.tool()
-async def query_database(sql: str) -> dict:
-    """查询数据库（只允许 SELECT，自动添加 LIMIT 100）。
-
-    Args:
-        sql: SQL 查询语句（仅 SELECT）
-    """
-    from app.agent.tool_registry import query_database as _query_database
-    return await _query_database(sql=sql)
+# ── 工具发现 ─────────────────────────────────────────────
 
 @mcp_app.tool()
 async def list_available_tools() -> dict:
@@ -144,8 +86,7 @@ async def list_available_tools() -> dict:
             "risk_level": t.risk_level.value,
             "module": t.module,
         }
-        # MCP outputSchema（可选）
-        if hasattr(t, 'output_schema') and t.output_schema:
+        if t.output_schema:
             tool_def["outputSchema"] = t.output_schema
         tools.append(tool_def)
 
@@ -246,7 +187,8 @@ async def init_mcp_server(tool_registry):
         count = await register_tools_from_db(tool_registry)
         logger.info(f"MCP Server 初始化完成: {count} 个工具, Resources + Prompts 就绪")
     except Exception as e:
-        logger.warning(f"MCP Server DB 加载失败（使用静态工具）: {e}")
+        logger.error(f"MCP Server 初始化失败: {e}")
+        raise
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8765):
