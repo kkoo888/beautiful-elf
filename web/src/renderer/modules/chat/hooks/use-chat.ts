@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
-import { chat, chatStream, submitFeedback, createConversation, fetchMessages, fetchConversations } from '../services/chat-api'
+import { chat, chatStream, chatResumeStream, submitFeedback, createConversation, fetchMessages, fetchConversations } from '../services/chat-api'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
 import type {
   ChatMessage,
@@ -427,15 +427,68 @@ export function useChat(): UseChatReturn {
     useChatStore.getState().removeConversation(id)
   }, [])
 
-  /** 响应审批（approved/rejected） */
+  /** 响应审批（approved/rejected）— 调用后端 resume 端点 */
   const respondApproval = useCallback((approved: boolean) => {
-    if (!approvalRequest) return
-    // TODO: 调用后端 /chat/resume 端点
+    if (!approvalRequest || !currentConversationId) return
+
     setApprovalRequest(null)
-    if (approved) {
-      setIsLoading(true)
+    setIsLoading(true)
+
+    // 创建 AI 占位消息用于流式接收
+    const aiMessageId = generateId()
+    const aiMessage: ChatMessage = {
+      id: aiMessageId,
+      conversationId: currentConversationId,
+      role: 'assistant',
+      content: '',
+      createdAt: Date.now(),
     }
-  }, [approvalRequest, setIsLoading])
+    addMessage(aiMessage)
+
+    abortRef.current = chatResumeStream(
+      currentConversationId,
+      {
+        approved,
+        toolName: approvalRequest.tool,
+        toolArgs: approvalRequest.args,
+        userResponse: approved ? '' : '用户拒绝执行此操作',
+      },
+      (token: StreamToken) => {
+        if (token.done) {
+          setIsLoading(false)
+          abortRef.current = null
+          return
+        }
+        const currentMessages = useChatStore.getState().messages
+        const updatedMessages = currentMessages.map((msg) =>
+          msg.id === aiMessageId ? { ...msg, content: msg.content + token.content } : msg
+        )
+        setMessages(updatedMessages)
+      },
+      (error) => {
+        console.error('[Chat] Resume stream error:', error)
+        const currentMessages = useChatStore.getState().messages
+        const updatedMessages = currentMessages.map((msg) =>
+          msg.id === aiMessageId
+            ? { ...msg, content: msg.content || '\n\n⚠️ 审批恢复失败，请重试' }
+            : msg
+        )
+        setMessages(updatedMessages)
+        setIsLoading(false)
+        abortRef.current = null
+      },
+      {
+        onToolStart: (tool, args) => {
+          setToolProgress((prev) => [...prev, { tool, status: 'running', args, startTime: Date.now() }])
+        },
+        onToolEnd: (tool, outputPreview) => {
+          setToolProgress((prev) =>
+            prev.map((t) => t.tool === tool && t.status === 'running' ? { ...t, status: 'done', outputPreview } : t)
+          )
+        },
+      }
+    )
+  }, [approvalRequest, currentConversationId, addMessage, setMessages, setIsLoading])
 
   return {
     messages,

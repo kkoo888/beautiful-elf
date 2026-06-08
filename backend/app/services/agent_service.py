@@ -238,6 +238,108 @@ class AgentService:
             logger.error(f"Agent resume 失败: {e}", exc_info=True)
             return {"error": str(e)}
 
+    async def resume_stream(
+        self,
+        conversation_id: int,
+        approved: bool,
+        tool_name: str = "",
+        tool_args: Optional[dict] = None,
+        user_response: str = "",
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """流式 resume — 按 LangGraph 官方规范使用 stream_events(Command(resume=...))
+
+        官方文档: https://docs.langchain.com/oss/python/langgraph/interrupts
+        推荐模式: graph.stream_events(Command(resume=...), config=config, version="v3")
+        """
+        if not self.is_ready:
+            yield {"type": "error", "message": "Agent 引擎未初始化"}
+            return
+
+        from langgraph.types import Command
+
+        t0 = time.time()
+        config = self._get_config(conversation_id)
+
+        resume_data = {
+            "approved": approved,
+            "tool_name": tool_name,
+            "tool_args": tool_args,
+            "user_response": user_response,
+        }
+
+        tools_used = []
+
+        try:
+            stream = await self._graph.astream_events(
+                Command(resume=resume_data),
+                config=config,
+                version="v3",
+            )
+
+            _final_answer = None
+            _got_llm_tokens = False
+
+            async for event in stream:
+                kind = event.get("event", "")
+
+                if kind == "on_chain_end":
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict) and output.get("final_answer"):
+                        _final_answer = output["final_answer"]
+                    elif isinstance(output, dict) and isinstance(output.get("messages"), list):
+                        for msg in output["messages"]:
+                            if hasattr(msg, "content") and msg.content:
+                                _final_answer = msg.content
+                                break
+
+                if kind == "on_chat_model_stream":
+                    chunk = event.get("data", {}).get("chunk", None)
+                    if chunk and hasattr(chunk, "content") and chunk.content:
+                        _got_llm_tokens = True
+                        yield {"type": "token", "content": chunk.content}
+
+                elif kind == "on_tool_start":
+                    tool_name_ev = event.get("name", "unknown")
+                    tool_input = event.get("data", {}).get("input", {})
+                    tools_used.append(tool_name_ev)
+                    yield {"type": "tool_start", "tool": tool_name_ev, "args": tool_input if isinstance(tool_input, dict) else {}}
+
+                elif kind == "on_tool_end":
+                    tool_name_ev = event.get("name", "unknown")
+                    tool_output = event.get("data", {}).get("output", "")
+                    output_preview = str(tool_output)[:200] if tool_output else ""
+                    yield {"type": "tool_end", "tool": tool_name_ev, "output_preview": output_preview}
+
+            # 缓存答案 fallback
+            if not _got_llm_tokens and not _final_answer:
+                try:
+                    if self._graph and hasattr(self._graph, 'get_state'):
+                        state_snapshot = self._graph.get_state(config)
+                        if state_snapshot and state_snapshot.values:
+                            _final_answer = state_snapshot.values.get("final_answer") or ""
+                            if not _final_answer:
+                                for msg in reversed(state_snapshot.values.get("messages", [])):
+                                    content = getattr(msg, "content", "") if not isinstance(msg, dict) else msg.get("content", "")
+                                    if content:
+                                        _final_answer = content
+                                        break
+                except Exception:
+                    pass
+
+            if _final_answer and not _got_llm_tokens:
+                yield {"type": "token", "content": _final_answer}
+
+            elapsed = int((time.time() - t0) * 1000)
+            yield {
+                "type": "done",
+                "tools_used": tools_used,
+                "duration_ms": elapsed,
+            }
+
+        except Exception as e:
+            logger.error(f"Agent resume_stream 失败: {e}", exc_info=True)
+            yield {"type": "error", "message": str(e)}
+
     async def chat_stream(
         self,
         conversation_id: int,

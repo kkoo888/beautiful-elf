@@ -248,6 +248,91 @@ export function chatStream(
   return { abort: () => controller.abort() }
 }
 
+/**
+ * 审批恢复 — 流式 SSE（LangGraph interrupt/resume 官方模式）
+ *
+ * 后端路径: POST /conversations/{conversation_id}/chat/resume
+ * 流程: 前端发送审批决定 → 后端 Command(resume=...) 恢复 Agent → 流式返回后续执行
+ */
+export function chatResumeStream(
+  conversationId: string,
+  request: { approved: boolean; toolName?: string; toolArgs?: Record<string, unknown>; userResponse?: string },
+  onToken: (token: StreamToken) => void,
+  onError?: (error: Error) => void,
+  callbacks?: {
+    onToolStart?: (tool: string, args: Record<string, unknown>) => void
+    onToolEnd?: (tool: string, outputPreview: string) => void
+  }
+): { abort: () => void } {
+  const controller = new AbortController()
+  const messageId = crypto.randomUUID()
+
+  const doStream = async (): Promise<void> => {
+    try {
+      const url = `${API_BASE_URL}${API_PREFIX}/conversations/${conversationId}/chat/resume`
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Trace-Id': crypto.randomUUID() },
+        body: JSON.stringify({
+          approved: request.approved,
+          tool_name: request.toolName ?? '',
+          tool_args: request.toolArgs ?? null,
+          user_response: request.userResponse ?? '',
+          stream: true,
+        }),
+        signal: controller.signal,
+      })
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`)
+
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('No readable stream')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let firstToken = true
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.error) { onError?.(new Error(data.error)); return }
+
+            if (data.tool_start) {
+              callbacks?.onToolStart?.(data.tool_start, data.tool_args ?? {})
+              continue
+            }
+            if (data.tool_end) {
+              callbacks?.onToolEnd?.(data.tool_end, data.output_preview ?? '')
+              continue
+            }
+            if (data.content || data.done) {
+              onToken({ content: data.content ?? '', done: data.done, messageId: firstToken ? messageId : undefined })
+              firstToken = false
+            }
+            if (data.done) return
+          } catch { /* skip malformed JSON */ }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        onError?.(err instanceof Error ? err : new Error(String(err)))
+      }
+    }
+  }
+
+  doStream()
+  return { abort: () => controller.abort() }
+}
+
 /** 提交反馈 — 调用后端 POST /ai_feedback */
 export async function submitFeedback(request: FeedbackRequest): Promise<FeedbackResponse> {
   extractData(await apiClient.post('/ai_feedback', {
