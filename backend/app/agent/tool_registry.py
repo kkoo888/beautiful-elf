@@ -151,11 +151,13 @@ class ToolRegistry:
 
         for t in target_tools:
             func = t.func or self._make_db_tool_wrapper(t.name)
-            tools.append(StructuredTool.from_function(
+            tool = StructuredTool.from_function(
                 func=func,
                 name=t.name,
                 description=t.description,
-            ))
+                coroutine=func if asyncio.iscoroutinefunction(func) else None,
+            )
+            tools.append(tool)
         return tools
 
     def _make_db_tool_wrapper(self, tool_name: str) -> Callable:
@@ -318,9 +320,11 @@ class ToolRegistrySnapshot:
 
         for t in target:
             func = t.func or self._make_wrapper(t.name)
-            tools.append(StructuredTool.from_function(
+            tool = StructuredTool.from_function(
                 func=func, name=t.name, description=t.description,
-            ))
+                coroutine=func if asyncio.iscoroutinefunction(func) else None,
+            )
+            tools.append(tool)
         return tools
 
     def _make_wrapper(self, tool_name: str) -> Callable:
