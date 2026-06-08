@@ -725,18 +725,28 @@ def _make_evaluator_node(llm=None):
 - 如果检索到了相关记忆但回答完全没体现，memory_usage <= 4"""
 
         try:
-            response = await llm.ainvoke([HumanMessage(content=eval_prompt)])
-            eval_text = _content_to_str(response.content).strip()
+            from app.agent.structured_schemas import EvaluationResult
+            from langchain_core.messages import HumanMessage, SystemMessage
 
-            # 解析 JSON（容错处理）
-            if eval_text.startswith("```"):
-                eval_text = eval_text.split("```")[1]
-                if eval_text.startswith("json"):
-                    eval_text = eval_text[4:]
+            structured_llm = llm.with_structured_output(EvaluationResult)
+            result = await structured_llm.ainvoke([
+                SystemMessage(content="你是一个严格的质量评估专家。"),
+                HumanMessage(content=eval_prompt),
+            ])
 
-            evaluation = json.loads(eval_text)
-            evaluation.setdefault("passed", evaluation.get("score", 0) >= 6)
-            logger.info(f"[evaluator] LLM-as-Judge: score={evaluation.get('score')} passed={evaluation.get('passed')} reason={evaluation.get('reason', '')[:50]}")
+            evaluation = {
+                "score": result.score,
+                "passed": result.passed,
+                "reason": result.reason,
+                "dimensions": {
+                    "accuracy": result.dimensions.accuracy,
+                    "completeness": result.dimensions.completeness,
+                    "hallucination": result.dimensions.hallucination,
+                    "tool_usage": result.dimensions.tool_usage,
+                    "memory_usage": result.dimensions.memory_usage,
+                },
+            }
+            logger.info(f"[evaluator] LLM-as-Judge: score={evaluation['score']} passed={evaluation['passed']} reason={evaluation['reason'][:50]}")
             return {"evaluation": evaluation}
 
         except Exception as e:
@@ -974,6 +984,13 @@ def _trim_messages(messages: list, max_count: int) -> list:
 
 
 def _format_tool_result_json(result: Any, tool_name: str, last_error: str = None) -> str:
+    """格式化工具结果为 JSON 字符串（MCP 规范: content[text] 序列化 JSON）
+
+    MCP 规范要求工具返回:
+      - content: [{"type": "text", "text": "序列化JSON"}]
+      - structuredContent: {结构化对象}（可选，需要 outputSchema）
+    这里统一输出序列化 JSON 字符串，符合 MCP content[text] 格式。
+    """
     if result is None:
         return json.dumps(ErrorContract.retryable(tool_name, last_error or "未知错误", attempt=2), ensure_ascii=False)
     if isinstance(result, str):

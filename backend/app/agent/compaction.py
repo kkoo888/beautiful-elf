@@ -199,27 +199,28 @@ class AutoCompactor:
         return kept, removed
 
     async def _generate_summary(self, messages: List[dict]) -> str:
-        """用 LLM 生成对话摘要"""
+        """用 LLM 生成对话摘要（v2.0: with_structured_output）"""
         text = "\n".join(f"[{m.get('role', 'user')}] {_content_to_str(m.get('content', ''))[:500]}" for m in messages)
 
         if not self.llm:
             return self._fallback_summary(messages)
 
         try:
+            from app.agent.structured_schemas import CompactionSummary
             from langchain_core.messages import HumanMessage, SystemMessage
 
-            response = await self.llm.ainvoke([
-                SystemMessage(content=(
-                    "你是一个对话压缩专家。将以下对话压缩为结构化摘要，要求：\n"
-                    "1. 保留用户的核心需求和关键决定\n"
-                    "2. 保留重要的事实、数字、结论\n"
-                    "3. 保留待办事项和未完成的任务\n"
-                    "4. 丢弃寒暄、重复、无关紧要的内容\n"
-                    "5. 输出格式：要点列表，每个要点一行"
-                )),
-                HumanMessage(content=text[:8000]),
+            structured_llm = self.llm.with_structured_output(CompactionSummary)
+            result = await structured_llm.ainvoke([
+                SystemMessage(content="你是一个对话压缩专家。"),
+                HumanMessage(content=f"将以下对话压缩为结构化摘要。保留核心需求、关键决定、待办事项，丢弃寒暄。\n\n对话:\n{text[:8000]}"),
             ])
-            return _content_to_str(response.content).strip()
+
+            parts = result.key_points
+            if result.user_decisions:
+                parts.extend(f"决定: {d}" for d in result.user_decisions)
+            if result.pending_tasks:
+                parts.extend(f"待办: {t}" for t in result.pending_tasks)
+            return "\n".join(f"- {p}" for p in parts)
 
         except Exception as e:
             logger.warning(f"[compactor] LLM 摘要失败，降级: {e}")

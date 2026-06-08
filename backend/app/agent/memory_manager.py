@@ -121,53 +121,30 @@ class MemoryManager:
 
         text = "\n".join(f"{m.get('role')}: {_content_to_str(m.get('content', ''))}" for m in messages)
 
-        # ── LLM 结构化摘要（v3.0: 使用 Settings.llm）──
+        # ── LLM 结构化摘要（v3.1: structured_predict）──
         summary = text[:500]
         tags = []
         try:
             if self.llm:
+                from app.agent.structured_schemas import MemorySummary
                 from llama_index.core import Settings
                 from llama_index.core.llms import ChatMessage, MessageRole
 
                 llm = Settings.llm or self.llm
-                response = await llm.achat([
-                    ChatMessage(
-                        role=MessageRole.SYSTEM,
-                        content="你是一个对话压缩专家。只输出结构化摘要，不要解释。",
-                    ),
-                    ChatMessage(
-                        role=MessageRole.USER,
-                        content=(
-                            f"将以下对话压缩为结构化摘要（200字内），并提取标签。\n\n"
-                            f"输出格式:\n摘要: <压缩后的摘要>\n话题: <topic1>, <topic2>, <topic3>\n"
-                            f"决策: <用户做出的决定，没有则留空>\n待办: <需要后续跟进的事项，没有则留空>\n\n"
-                            f"对话内容:\n{text[:3000]}"
-                        ),
-                    ),
-                ])
-                result_text = response.message.content.strip() if hasattr(response, 'message') else str(response).strip()
+                result = await llm.structured_predict(
+                    MemorySummary,
+                    messages=[
+                        ChatMessage(role=MessageRole.SYSTEM, content="你是一个对话压缩专家。"),
+                        ChatMessage(role=MessageRole.USER, content=f"将以下对话压缩为结构化摘要（200字内），并提取话题、决策和待办。\n\n对话内容:\n{text[:3000]}"),
+                    ],
+                )
 
-                lines = result_text.split("\n")
-                summary_parts = []
-                for line in lines:
-                    if line.startswith("摘要:") or line.startswith("摘要："):
-                        summary_parts.append(line.split(":", 1)[-1].split("：", 1)[-1].strip())
-                    elif line.startswith("话题:") or line.startswith("话题："):
-                        topics = line.split(":", 1)[-1].split("：", 1)[-1].strip()
-                        tags.extend([t.strip() for t in topics.split(",") if t.strip()])
-                    elif line.startswith("决策:") or line.startswith("决策："):
-                        decision = line.split(":", 1)[-1].split("：", 1)[-1].strip()
-                        if decision:
-                            tags.append(f"决策:{decision}")
-                    elif line.startswith("待办:") or line.startswith("待办："):
-                        todo = line.split(":", 1)[-1].split("：", 1)[-1].strip()
-                        if todo:
-                            tags.append(f"待办:{todo}")
-
-                if summary_parts:
-                    summary = " ".join(summary_parts)
-                elif result_text:
-                    summary = result_text[:500]
+                summary = result.summary
+                tags = list(result.topics)
+                for d in result.decisions:
+                    tags.append(f"决策:{d}")
+                for t in result.todos:
+                    tags.append(f"待办:{t}")
 
         except Exception as e:
             logger.warning(f"LLM 摘要生成失败，降级为截取: {e}")

@@ -230,24 +230,28 @@ class EvalPipeline:
             return ""
 
     async def _llm_judge(self, case: EvalCase, answer: str) -> float:
-        """LLM 复核边界 case"""
+        """LLM 复核边界 case（v2.0: structured_predict）"""
         if not self.llm:
             return 0.5
 
-        prompt = (
-            f"评估回答质量（0-1 的浮点数，只输出数字）：\n"
-            f"问题: {case.question}\n"
-            f"回答: {answer[:1000]}\n"
-            f"期望关键词: {case.expected_keywords}"
-        )
-
         try:
+            from app.agent.structured_schemas import JudgeScore
             from llama_index.core.llms import ChatMessage, MessageRole
 
-            response = await self.llm.achat([
-                ChatMessage(role=MessageRole.USER, content=prompt),
-            ])
-            score = float(str(response).strip())
-            return max(0.0, min(1.0, score))
+            result = await self.llm.structured_predict(
+                JudgeScore,
+                messages=[
+                    ChatMessage(
+                        role=MessageRole.USER,
+                        content=(
+                            f"评估回答质量（0.0-1.0）：\n"
+                            f"问题: {case.question}\n"
+                            f"回答: {answer[:1000]}\n"
+                            f"期望关键词: {case.expected_keywords}"
+                        ),
+                    ),
+                ],
+            )
+            return max(0.0, min(1.0, result.score))
         except Exception:
             return 0.5
