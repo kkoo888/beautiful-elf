@@ -196,12 +196,16 @@ async def _init_intent():
 
 
 async def _start_mcp_server():
-    """启动 MCP Server（后台进程，SSE 传输）"""
+    """启动 MCP Server（后台进程，SSE 传输，DB 驱动工具）"""
     import asyncio
     import os
 
     try:
-        from app.agent.mcp_server import mcp_app
+        from app.agent.mcp_server import mcp_app, init_mcp_server
+        from app.agent.tool_registry import tool_registry
+
+        # 从 DB 加载工具到 MCP Server
+        await init_mcp_server(tool_registry)
 
         host = os.getenv("MCP_SERVER_HOST", "0.0.0.0")
         port = int(os.getenv("MCP_SERVER_PORT", "8765"))

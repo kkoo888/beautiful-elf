@@ -30,14 +30,15 @@ class RiskLevel(str, Enum):
 
 @dataclass
 class ToolDef:
-    """工具定义"""
+    """工具定义（MCP 规范: inputSchema + outputSchema）"""
     id: int                     # DB tool.id
     name: str                   # 工具名称（唯一）
     description: str            # 工具描述
-    parameters: dict            # JSON Schema
+    parameters: dict            # JSON Schema (MCP inputSchema)
     risk_level: RiskLevel       # 风险等级
     module: str                 # 所属模块
     func: Optional[Callable] = None  # 执行函数（可选，内置工具才有）
+    output_schema: Optional[dict] = None  # MCP outputSchema（可选）
 
 
 class ToolRegistry:
@@ -90,12 +91,14 @@ class ToolRegistry:
         for tool in tools:
             # DB 元数据 + 代码执行函数自动关联
             func = _EXEC_FUNC_MAP.get(tool.name)
+            out_schema = getattr(tool, 'output_schema', None)
 
             if tool.name in self._tools:
                 existing = self._tools[tool.name]
                 existing.id = tool.id
                 existing.description = tool.description
                 existing.parameters = tool.json_schema or {}
+                existing.output_schema = out_schema
                 existing.risk_level = RiskLevel(tool.risk_level)
                 existing.module = tool.module
                 if func:
@@ -107,6 +110,7 @@ class ToolRegistry:
                 name=tool.name,
                 description=tool.description,
                 parameters=tool.json_schema or {},
+                output_schema=out_schema,
                 risk_level=RiskLevel(tool.risk_level),
                 module=tool.module,
                 func=func,
@@ -130,9 +134,15 @@ class ToolRegistry:
         return list(self._tools.values())
 
     def list_tool_summaries(self) -> List[dict]:
-        """返回工具摘要（用于 ContextEngine 动态选择）"""
+        """返回工具摘要（用于 ContextEngine 动态选择 + MCP tools/list）"""
         return [
-            {"name": t.name, "description": t.description, "risk": t.risk_level.value, "module": t.module}
+            {
+                "name": t.name,
+                "description": t.description,
+                "risk": t.risk_level.value,
+                "module": t.module,
+                "output_schema": t.output_schema,
+            }
             for t in self._tools.values()
         ]
 
