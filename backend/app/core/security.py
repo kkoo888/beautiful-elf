@@ -6,21 +6,23 @@ import bcrypt
 import jwt
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 
-settings = get_settings()
+logger = get_logger(__name__)
 
-# JWT 配置 — 从 Settings 读取，未配置时给出明确警告
-JWT_SECRET_KEY = settings.JWT_SECRET_KEY
+# JWT 算法，固定不变
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_MINUTES = settings.JWT_EXPIRE_MINUTES
 
-if not JWT_SECRET_KEY or JWT_SECRET_KEY == "beautiful-elf-secret-change-me":
-    import warnings
-    warnings.warn(
-        "JWT_SECRET_KEY 未设置或使用了默认值！"
-        "请在 .env 中设置: python -c 'import secrets; print(secrets.token_urlsafe(64))'",
-        stacklevel=2,
-    )
+
+def _get_jwt_secret() -> str:
+    """获取 JWT 密钥，未配置时启动报错"""
+    secret = get_settings().JWT_SECRET_KEY
+    if not secret:
+        raise RuntimeError(
+            "JWT_SECRET_KEY 未设置！请在 .env 中配置: "
+            "python3 -c \"import secrets; print(secrets.token_urlsafe(64))\""
+        )
+    return secret
 
 
 def hash_password(password: str) -> str:
@@ -35,15 +37,26 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """创建 JWT token"""
+    settings = get_settings()
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=JWT_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.JWT_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return jwt.encode(to_encode, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> Optional[dict]:
-    """解码 JWT token，失败返回 None"""
+    """解码 JWT token，失败返回 None 并记录日志"""
     try:
-        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    except jwt.PyJWTError:
+        return jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        logger.warning("JWT 验证失败: token 已过期")
+        return None
+    except jwt.InvalidSignatureError:
+        logger.error("JWT 验证失败: 签名不匹配（JWT_SECRET_KEY 可能已更换）")
+        return None
+    except jwt.DecodeError as e:
+        logger.warning(f"JWT 验证失败: 解码错误 — {e}")
+        return None
+    except jwt.PyJWTError as e:
+        logger.warning(f"JWT 验证失败: {type(e).__name__} — {e}")
         return None

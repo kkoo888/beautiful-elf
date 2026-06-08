@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # Workspace
     WORKSPACE_DIR: str = "/workspace"
 
-    # JWT
+    # JWT — 必须在 .env 中设置，禁止空值和默认值
     JWT_SECRET_KEY: str = ""
     JWT_EXPIRE_MINUTES: int = 60 * 24  # 默认 24 小时
 

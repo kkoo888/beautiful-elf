@@ -25,6 +25,7 @@ async def _authenticate_ws(websocket: WebSocket, token: str | None) -> int | Non
 
     payload = decode_access_token(token)
     if not payload:
+        # decode_access_token 内部已记录具体失败原因
         return None
 
     user_id = payload.get("user_id") or payload.get("sub")
