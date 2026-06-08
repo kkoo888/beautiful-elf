@@ -30,15 +30,16 @@ class RiskLevel(str, Enum):
 
 @dataclass
 class ToolDef:
-    """工具定义（MCP 规范: inputSchema + outputSchema）"""
+    """工具定义（MCP 规范: inputSchema + outputSchema + title）"""
     id: int                     # DB tool.id
-    name: str                   # 工具名称（唯一）
+    name: str                   # 工具名称（唯一，程序标识符）
     description: str            # 工具描述
     parameters: dict            # JSON Schema (MCP inputSchema)
     risk_level: RiskLevel       # 风险等级
     module: str                 # 所属模块
     func: Optional[Callable] = None  # 执行函数（可选，内置工具才有）
     output_schema: Optional[dict] = None  # MCP outputSchema（可选）
+    display_name: str = ""      # 显示名称（MCP title，友好名称）
 
 
 class ToolRegistry:
@@ -93,6 +94,8 @@ class ToolRegistry:
             func = _EXEC_FUNC_MAP.get(tool.name)
             out_schema = getattr(tool, 'output_schema', None)
 
+            display_name = getattr(tool, 'display_name', '') or ''
+
             if tool.name in self._tools:
                 existing = self._tools[tool.name]
                 existing.id = tool.id
@@ -101,6 +104,7 @@ class ToolRegistry:
                 existing.output_schema = out_schema
                 existing.risk_level = RiskLevel(tool.risk_level)
                 existing.module = tool.module
+                existing.display_name = display_name
                 if func:
                     existing.func = func
                 continue
@@ -114,6 +118,7 @@ class ToolRegistry:
                 risk_level=RiskLevel(tool.risk_level),
                 module=tool.module,
                 func=func,
+                display_name=display_name,
             )
             count += 1
 
@@ -448,9 +453,10 @@ async def execute_code(language: str, code: str) -> dict:
 
 
 async def read_file(path: str) -> dict:
-    """读取工作空间中的文件"""
+    """读取工作空间中的文件（工作目录从 WORKSPACE_DIR 环境变量读取）"""
+    import os
     from pathlib import Path
-    workspace = Path("/workspace").resolve()
+    workspace = Path(os.getenv("WORKSPACE_DIR", "/workspace")).resolve()
     target = (workspace / path).resolve()
     if not str(target).startswith(str(workspace)):
         return {"error": "路径穿越攻击已拦截"}

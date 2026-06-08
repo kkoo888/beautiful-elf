@@ -7,6 +7,12 @@ v3.0: 升级 FastMCP v3，全面支持 MCP 2025-06-18 规范
   - 组件版本管理（FastMCP v3 VersionFilter + LocalProvider）
   - Tool 超时控制（FastMCP v3 timeout 参数）
   - 结构化签名（动态生成匹配 inputSchema 的函数签名）
+  - title 字段（MCP 2025-06-18 显示友好名称）
+  - isError 响应字段（MCP 规范要求标识执行错误）
+  - tools/list cursor 分页（MCP 规范要求）
+  - listChanged 通知（工具热加载时自动触发）
+  - Sampling 支持（服务端请求 Client 进行 LLM 推理，多角色专家团场景）
+  - Progress Tracking（长任务进度追踪，专家团场景必备）
 
 架构:
   MySQL tool 表 → ToolRegistry → FastMCP Server → MCP 协议 → Agent / 外部客户端
@@ -128,9 +134,21 @@ def _build_tool_wrapper(
             except Exception as e:
                 logger.warning(f"Elicitation 失败（Client 可能不支持）: {e}，跳过确认继续执行")
 
-        # 执行工具
+        # 执行工具（附带进度通知）
+        if ctx:
+            try:
+                await ctx.report_progress(progress=0, total=100, message=f"开始执行 {name}")
+            except Exception:
+                pass
+
         exec_result = await tool_registry.execute(name, kwargs, approved=True)
         duration_ms = int((time.time() - start) * 1000)
+
+        if ctx:
+            try:
+                await ctx.report_progress(progress=100, total=100, message=f"{name} 执行完成")
+            except Exception:
+                pass
 
         # 包装为 MCP 规范的 Tool Result 格式
         # Resource Links 内嵌在 content 中（非顶层字段）
@@ -153,7 +171,11 @@ def _build_tool_wrapper(
                 "description": link.get("description", ""),
             })
 
-        return {"content": content}
+        # isError: MCP 2025-06-18 规范要求标识工具执行是否出错
+        is_error = isinstance(exec_result, dict) and (
+            exec_result.get("error") or exec_result.get("cancelled")
+        )
+        return {"content": content, "isError": bool(is_error)}
 
     # 设置函数元数据（FastMCP 从中读取 name/description/signature）
     tool_wrapper.__name__ = name
@@ -218,6 +240,7 @@ async def register_tools_from_db(tool_registry) -> int:
             risk_level=risk_level,
             version=tool_version,
             timeout=timeout,
+            title=getattr(tool, 'display_name', None) or None,
         )
         count += 1
 
@@ -233,6 +256,7 @@ def _register_mcp_tool(
     risk_level: str = "low",
     version: str = "1.0.0",
     timeout: int = 60,
+    title: str = None,
 ):
     """注册单个 MCP 工具（DB 元数据 + 动态签名 + v3 增强）"""
     is_high_risk = risk_level in ("high",)
@@ -253,6 +277,8 @@ def _register_mcp_tool(
         "version": version,
         "timeout": timeout,
     }
+    if title:
+        add_kwargs["title"] = title
     if output_schema:
         add_kwargs["output_schema"] = output_schema
 
@@ -296,17 +322,137 @@ def _build_resource_links(tool_name: str, result: Any) -> list:
     return links
 
 
+# ── Progress Tracking（长任务进度追踪）──────────────────
+# MCP 2025-06-18 规范: 工具执行过程中可向 Client 推送进度
+# 场景: 专家团任务、批量数据处理、代码分析等耗时操作
+# 使用: 工具函数签名声明 ctx: Context，然后调用 ctx.report_progress()
+#
+# 来源: https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/progress
+
+
+class ProgressTracker:
+    """进度追踪器 — 封装 MCP Progress 通知
+
+    用法:
+        tracker = ProgressTracker(ctx, total=100)
+        for i in range(100):
+            do_work(i)
+            await tracker.update(1, f"处理第 {i+1} 条")
+        await tracker.done("全部完成")
+    """
+
+    def __init__(self, ctx: Context, total: int = 100):
+        self.ctx = ctx
+        self.total = total
+        self.current = 0
+
+    async def update(self, increment: int = 1, message: str = ""):
+        """更新进度"""
+        self.current += increment
+        if self.ctx:
+            try:
+                await self.ctx.report_progress(
+                    progress=self.current,
+                    total=self.total,
+                    message=message,
+                )
+            except Exception:
+                pass  # Client 不支持进度通知时静默忽略
+
+    async def done(self, message: str = "完成"):
+        """标记任务完成"""
+        self.current = self.total
+        if self.ctx:
+            try:
+                await self.ctx.report_progress(
+                    progress=self.total,
+                    total=self.total,
+                    message=message,
+                )
+            except Exception:
+                pass
+
+
+# ── Sampling（服务端请求 Client 进行 LLM 推理）──────────
+# MCP 2025-06-18 规范: Server 可请求 Client 执行 LLM 采样
+# 场景: 工具内部需要 LLM 帮忙思考（多角色专家团、代码审查、数据分析等）
+# 关键: 调用 LLM 的决定权在 Client（用户侧），Server 不能直接调
+#
+# 使用方式: 在工具函数签名中声明 ctx: Context，然后调用:
+#   result = await sample_via_client(ctx, prompt, max_tokens=4096)
+#
+# 来源: https://modelcontextprotocol.io/specification/2025-06-18/client/sampling
+
+async def sample_via_client(
+    ctx: Context,
+    prompt: str,
+    max_tokens: int = 4096,
+    model_preferences: dict = None,
+    system_prompt: str = None,
+    include_context: str = "thisServer",
+) -> dict:
+    """通过 Client 请求 LLM 采样（Sampling）
+
+    Args:
+        ctx: FastMCP Context（工具函数签名中声明即可自动注入）
+        prompt: 发给 LLM 的提示词
+        max_tokens: 最大生成 token 数
+        model_preferences: 模型偏好（hints: speedPriority / intelligencePriority）
+        system_prompt: 系统提示词（可选）
+        include_context: 上下文包含策略（"none"/"thisServer"/"allServers"）
+
+    Returns:
+        {"role": "assistant", "content": {"type": "text", "text": "..."}, "model": "..."}
+        或 {"error": "..."} 如果 Client 不支持 Sampling
+    """
+    try:
+        # FastMCP v3: ctx.sample() 封装了 MCP Sampling 协议
+        result = await ctx.sample(
+            messages=prompt,
+            max_tokens=max_tokens,
+            system_prompt=system_prompt,
+            include_context=include_context,
+        )
+        # FastMCP v3: ctx.sample() 返回 SamplingResult，用 .text 取文本
+        # 来源: https://gofastmcp.com/servers/sampling
+        text = result.text if hasattr(result, 'text') else str(result)
+        return {"role": "assistant", "content": {"type": "text", "text": text or ""}}
+    except Exception as e:
+        logger.warning(f"Sampling 请求失败（Client 可能不支持）: {e}")
+        return {"error": f"Sampling 不可用: {e}", "code": "SAMPLING_NOT_SUPPORTED"}
+
+
 # ── 工具发现 ─────────────────────────────────────────────
 
 @mcp_app.tool()
-async def list_available_tools() -> dict:
-    """列出所有可用的工具及其 MCP 元数据（inputSchema + outputSchema）。"""
+async def list_available_tools(cursor: str = "") -> dict:
+    """列出所有可用的工具及其 MCP 元数据（inputSchema + outputSchema）。
+
+    支持 cursor 分页（MCP 2025-06-18 规范）。
+    cursor 格式: 工具在列表中的偏移量（字符串化的数字）。
+    """
     from app.agent.tool_registry import tool_registry
 
+    all_tools = tool_registry.list_tools()
+    page_size = 50
+
+    # 解析 cursor（偏移量）
+    offset = 0
+    if cursor:
+        try:
+            offset = int(cursor)
+        except (ValueError, TypeError):
+            offset = 0
+
+    # 分页切片
+    page_tools = all_tools[offset:offset + page_size]
+    next_offset = offset + page_size
+
     tools = []
-    for t in tool_registry.list_tools():
+    for t in page_tools:
         tool_def = {
             "name": t.name,
+            "title": getattr(t, 'display_name', None) or t.name,
             "description": t.description,
             "inputSchema": t.parameters or {"type": "object", "properties": {}},
             "risk_level": t.risk_level.value,
@@ -316,13 +462,19 @@ async def list_available_tools() -> dict:
             tool_def["outputSchema"] = t.output_schema
         tools.append(tool_def)
 
-    return {
+    result = {
         "tools": tools,
         "count": len(tools),
         "protocol": "mcp",
         "version": "2025-06-18",
         "server": "beautiful-elf-tools",
     }
+
+    # 有下一页时返回 nextCursor
+    if next_offset < len(all_tools):
+        result["nextCursor"] = str(next_offset)
+
+    return result
 
 
 # ── Resources（MCP 规范: 上下文数据）──────────────────────
@@ -426,6 +578,63 @@ def data_analyst(data_description: str, question: str) -> str:
 1. 用数据说话，给出具体数字
 2. 提供可视化建议
 3. 给出可操作的结论"""
+
+
+# ── 运行时热加载（listChanged 通知）──────────────────────
+
+async def reload_tools(tool_registry) -> int:
+    """运行时重新加载工具列表（DB 变更后调用）
+
+    MCP 规范: 工具列表变更时发送 notifications/tools/list_changed
+    FastMCP v3: add_tool() 会自动触发 listChanged 通知
+
+    来源: https://modelcontextprotocol.io/specification/2025-06-18/server/tools
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.repository.tool_repo import ToolRepository
+
+    repo = ToolRepository()
+    async with AsyncSessionLocal() as db:
+        tools = await repo.find_all(db, offset=0, limit=1000, enabled=1)
+
+    # FastMCP v3: 移除旧工具再重新注册，会自动发送 listChanged 通知
+    try:
+        existing_names = {t.name for t in mcp_app._tool_manager.list_tools()}
+    except AttributeError:
+        # FastMCP 内部 API 变更时降级：不清理旧工具，只做增量注册
+        existing_names = set()
+    new_names = {tool.name for tool in tools}
+
+    # 移除已禁用/删除的工具
+    for name in existing_names - new_names:
+        try:
+            mcp_app.remove_tool(name)
+            logger.info(f"[reload] 移除工具: {name}")
+        except Exception:
+            pass
+
+    # 注册/更新工具
+    count = 0
+    for tool in tools:
+        tool_version = getattr(tool, 'version', None) or "1.0.0"
+        timeout = getattr(tool, 'timeout_seconds', None) or 60
+        risk_level = getattr(tool, 'risk_level', 'low')
+        output_schema = getattr(tool, 'output_schema', None)
+
+        _register_mcp_tool(
+            name=tool.name,
+            description=tool.description,
+            input_schema=tool.json_schema,
+            output_schema=output_schema,
+            risk_level=risk_level,
+            version=tool_version,
+            timeout=timeout,
+            title=getattr(tool, 'display_name', None) or None,
+        )
+        count += 1
+
+    logger.info(f"[reload] 工具热加载完成: {count} 个工具")
+    return count
 
 
 # ── 入口 ─────────────────────────────────────────────────
