@@ -747,12 +747,31 @@ def _make_memory_saver(memory_manager):
 
             if should_save:
                 try:
-                    await memory_manager.save_summary(
+                    meta = await memory_manager.save_summary(
                         conversation_id=state["conversation_id"],
                         user_id=state.get("user_id", 0),
                         messages=messages + [{"role": "assistant", "content": state["final_answer"]}],
                     )
                     logger.info(f"[memory_saver] 已保存长期记忆: importance={importance} tools={bool(tools_used)} msgs={len(messages)}")
+
+                    # ── 同步写入 MySQL memory_entry 表 ──
+                    if meta and meta.get("point_id"):
+                        try:
+                            from app.core.database import AsyncSessionLocal
+                            from app.repository.memory_repo import MemoryRepository
+                            async with AsyncSessionLocal() as db:
+                                repo = MemoryRepository()
+                                await repo.create(db, {
+                                    "conversation_id": state["conversation_id"],
+                                    "summary": meta["summary"],
+                                    "tags": meta["tags"],
+                                    "importance": meta["importance"],
+                                    "qdrant_point_id": meta["point_id"],
+                                })
+                                await db.commit()
+                                logger.info(f"[memory_saver] MySQL memory_entry 已同步: point_id={meta['point_id'][:8]}")
+                        except Exception as e:
+                            logger.warning(f"[memory_saver] MySQL 同步失败: {e}")
                 except Exception as e:
                     logger.warning(f"[memory_saver] Qdrant 长期记忆保存失败: {e}")
             else:
@@ -803,14 +822,27 @@ def _after_eval(state: AgentState) -> str:
     evaluation = state.get("evaluation", {})
     passed = evaluation.get("passed", True)
     score = evaluation.get("score", 7)
+    reason = evaluation.get("reason", "")
 
     # score >= 6 或 passed=True → 通过
     if passed and score >= 6:
         return "pass"
-    # [P2] 评估未通过但已有回答 → 强制返回（避免浪费 token 做无意义 replan）
-    # 之前的逻辑是 iterations >= 2 才强制返回，现在有 final_answer 就直接返回
+
+    # [P2] 评估未通过但已有回答 → 替换为用户友好的兜底回答
+    # 评分太低（<4）的回答不如不给，直接用明确的提示替代
     if state.get("final_answer"):
-        logger.warning(f"[evaluator] 评估未通过(score={score})但已有回答，直接返回")
+        if score < 4:
+            logger.warning(f"[evaluator] 评估不通过(score={score})，替换为兜底回答: {reason}")
+            state["final_answer"] = (
+                "抱歉，我暂时无法准确回答这个问题。"
+                "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
+                "你可以试试：\n"
+                "1. 换个方式描述你的问题\n"
+                "2. 稍后再试\n"
+                "3. 如果是天气等实时信息，可以直接告诉我你的城市"
+            )
+        else:
+            logger.warning(f"[evaluator] 评估未通过(score={score})但回答尚可，直接返回")
         return "pass"
     return "replan"
 

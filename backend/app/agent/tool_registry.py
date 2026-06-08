@@ -343,14 +343,62 @@ class ToolRegistrySnapshot:
 # ─── 内置工具实现 ─────────────────────────────────────────
 
 async def web_search(query: str, max_results: int = 5) -> dict:
-    """搜索互联网获取实时信息"""
-    from duckduckgo_search import DDGS
-    with DDGS() as ddgs:
-        results = list(ddgs.text(query, max_results=max_results))
-        return {"results": [
-            {"title": r["title"], "url": r["href"], "snippet": r["body"]}
-            for r in results
-        ]}
+    """搜索互联网获取实时信息
+
+    优先使用 SearXNG（自建元搜索引擎，免费无限制），
+    降级到 DuckDuckGo（国内可能不可用）。
+    """
+    import os
+    import httpx
+
+    # ── 方案 A: SearXNG（推荐） ─────────────────────────
+    searxng_url = os.getenv("SEARXNG_URL", "").strip()
+    if searxng_url:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{searxng_url.rstrip('/')}/search",
+                    params={"q": query, "format": "json", "count": max_results},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                results = data.get("results", [])[:max_results]
+                if results:
+                    return {"results": [
+                        {
+                            "title": r.get("title", ""),
+                            "url": r.get("url", ""),
+                            "snippet": r.get("content", ""),
+                        }
+                        for r in results
+                    ]}
+        except Exception as e:
+            logger.warning(f"[web_search] SearXNG 失败，降级到 DuckDuckGo: {e}")
+
+    # ── 方案 B: DuckDuckGo 降级 ─────────────────────────
+    try:
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            if results:
+                return {"results": [
+                    {"title": r["title"], "url": r["href"], "snippet": r["body"]}
+                    for r in results
+                ]}
+    except Exception as e:
+        logger.warning(f"[web_search] DuckDuckGo 也失败: {e}")
+
+    # ── 全部失败 ────────────────────────────────────────
+    return {
+        "success": False,
+        "error": {
+            "code": "SEARCH_UNAVAILABLE",
+            "message": "搜索引擎暂时不可用",
+            "retryable": False,
+            "user_facing": True,
+            "user_tip": "请稍后再试，或换个方式描述你的问题",
+        },
+    }
 
 
 async def execute_code(language: str, code: str) -> dict:

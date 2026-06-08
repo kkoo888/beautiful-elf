@@ -190,7 +190,15 @@ class MemoryManager:
                 "saved_at": datetime.utcnow().isoformat(),
             },
         )
-        logger.info(f"[memory_saver] 长期记忆已保存: importance={importance} tags={tags[:3]}")
+        logger.info(f"[memory_saver] 长期记忆已保存(Qdrant): importance={importance} tags={tags[:3]}")
+
+        # 返回元数据，供调用方同步写入 MySQL
+        return {
+            "point_id": point_id,
+            "summary": summary,
+            "tags": tags,
+            "importance": importance,
+        }
 
     @staticmethod
     def _score_conversation_importance(messages: list) -> int:
