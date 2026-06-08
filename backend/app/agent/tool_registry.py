@@ -343,11 +343,14 @@ class ToolRegistrySnapshot:
 # ─── 内置工具实现 ─────────────────────────────────────────
 
 async def web_search(query: str, max_results: int = 5) -> dict:
-    """搜索互联网获取实时信息（通过 SearXNG）"""
-    import os
+    """搜索互联网获取实时信息（通过 SearXNG）
+
+    v5.1: 统一从 Settings 读取配置（替代 os.getenv，与 config.py 一致）
+    """
     import httpx
 
-    searxng_url = os.getenv("SEARXNG_URL", "").strip()
+    from app.core.config import get_settings
+    searxng_url = get_settings().SEARXNG_URL.strip()
     if not searxng_url:
         return {
             "success": False,

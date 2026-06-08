@@ -296,6 +296,7 @@ class ContextEngine:
     async def compress_context(self, text: str, target_chars: int = 2000) -> str:
         """用 LLM 将长文本压缩到目标长度，保留核心信息
 
+        v2.3: 优先使用 LlamaIndex SentenceSplitter 分块 + LLM 摘要
         压缩策略:
           - 保留关键事实、数字、结论
           - 丢弃冗余描述、重复信息
@@ -305,12 +306,25 @@ class ContextEngine:
             return text
 
         if not self.llm_client:
-            # 无 LLM 时降级为截取（保留开头和结尾）
             half = target_chars // 2
             return text[:half] + "\n...(已压缩)...\n" + text[-half:]
 
         try:
+            # v2.3: 先用 LlamaIndex SentenceSplitter 分块，再 LLM 摘要
+            # 这样压缩更精准（按语义边界分割，而非随机截断）
             from langchain_core.messages import HumanMessage, SystemMessage
+
+            # 如果文本很长，先分块再压缩（避免超出 LLM context window）
+            chunk_for_llm = text
+            if len(text) > 8000:
+                try:
+                    from llama_index.core.node_parser import SentenceSplitter
+                    splitter = SentenceSplitter(chunk_size=4000, chunk_overlap=200)
+                    chunks = splitter.split_text(text)
+                    # 取首尾两个 chunk（通常包含最重要信息）
+                    chunk_for_llm = chunks[0] + "\n...\n" + chunks[-1] if len(chunks) > 1 else chunks[0]
+                except ImportError:
+                    chunk_for_llm = text[:4000] + "\n...\n" + text[-2000:]
 
             response = await self.llm_client.ainvoke([
                 SystemMessage(content=(
@@ -320,7 +334,7 @@ class ContextEngine:
                     "3. 用要点列表格式输出\n"
                     f"4. 目标长度：{target_chars} 字符以内"
                 )),
-                HumanMessage(content=text),
+                HumanMessage(content=chunk_for_llm),
             ])
             compressed = _content_to_str(response.content).strip()
             logger.info(f"[context_engine] 压缩: {len(text)} → {len(compressed)} 字符")

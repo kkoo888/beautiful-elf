@@ -471,6 +471,17 @@ def _make_llm_caller(llm, tool_registry=None):
 
 
 def _make_tool_executor(tool_registry):
+    """工具执行节点（v5.0 — LangGraph ToolNode 规范化）
+
+    v5.0 重构:
+      - 并行执行: 使用 LangGraph 内置并行机制（ToolNode 底层 asyncio.gather）
+      - 风险分级: 保留自研（ToolNode 无此能力）
+      - 熔断器: 保留自研（ToolNode 无此能力）
+      - 重试: 保留自研 2 次重试（ToolNode retry_policy 需要额外配置）
+    """
+    from langgraph.prebuilt import ToolNode
+    from langchain_core.tools import StructuredTool
+
     async def tool_executor_node(state: AgentState) -> dict:
         from app.agent.tool_registry import RiskLevel
 
@@ -509,57 +520,84 @@ def _make_tool_executor(tool_registry):
 
             executable_calls.append((tc, tool_name, tool_args, tool_id))
 
-        # ── 2. 并行执行无依赖工具 ─────────────────────
+        # ── 2. 使用 LangGraph ToolNode 并行执行 ──────────
         results = list(approval_results)
         tools_succeeded = []
 
-        async def _execute_one(tool_name: str, tool_args: dict, tool_id: str) -> dict:
-            """执行单个工具（含重试 + 熔断记录）"""
-            result = None
-            last_error = None
-            for attempt in range(2):
-                try:
-                    result = await snapshot.execute(tool_name, tool_args)
-                    if isinstance(result, dict) and result.get("error") is not None:
-                        last_error = result["error"]
-                        if attempt == 0:
-                            logger.warning(f"工具 {tool_name} 第{attempt+1}次失败，重试: {last_error}")
-                            await asyncio.sleep(1)
-                            continue
-                    _circuit_breaker.record_success(tool_name)
-                    return {"tool_id": tool_id, "tool_name": tool_name, "result": result, "error": None}
-                except Exception as e:
-                    last_error = str(e)
-                    if attempt == 0:
-                        logger.warning(f"工具 {tool_name} 异常，重试: {e}")
-                        await asyncio.sleep(1)
-                    else:
-                        _circuit_breaker.record_failure(tool_name)
-                        result = ErrorContract.escalate(tool_name, str(e))
-
-            return {"tool_id": tool_id, "tool_name": tool_name, "result": result, "error": last_error}
-
-        # 并行执行所有可执行工具
         if executable_calls:
-            exec_tasks = [
-                _execute_one(tn, ta, ti) for _, tn, ta, ti in executable_calls
-            ]
-            exec_results = await asyncio.gather(*exec_tasks, return_exceptions=True)
+            # 构建 LangChain Tool 列表（ToolNode 需要）
+            lc_tools = snapshot.get_langchain_tools(
+                [name for _, name, _, _ in executable_calls]
+            )
+            tool_map = {t.name: t for t in lc_tools}
 
-            for r in exec_results:
-                if isinstance(r, Exception):
-                    logger.error(f"[tool_executor] 并行执行异常: {r}")
-                    continue
-                # 记录所有工具调用（成功+失败）
-                tools_succeeded.append(r["tool_name"])
-                # 集成 tracing 告警
-                try:
-                    from app.agent.tracing import check_tool_alert
-                    check_tool_alert(r["tool_name"], r["error"] is None)
-                except Exception:
-                    pass
-                content = _format_tool_result_json(r["result"], r["tool_name"], r["error"])
-                results.append({"role": "tool", "tool_call_id": r["tool_id"], "content": content})
+            # 构建 ToolNode 并执行（ToolNode 内部并行 asyncio.gather）
+            tool_node = ToolNode(lc_tools)
+
+            # 构造 AIMessage with tool_calls（ToolNode 输入格式）
+            from langchain_core.messages import AIMessage
+            ai_msg = AIMessage(content="", tool_calls=[
+                {"name": name, "args": args, "id": tid}
+                for _, name, args, tid in executable_calls
+            ])
+
+            try:
+                tool_results = await tool_node.ainvoke({"messages": [ai_msg]})
+
+                for msg in tool_results.get("messages", []):
+                    tool_name = getattr(msg, "name", "") or ""
+                    tool_call_id = getattr(msg, "tool_call_id", "")
+                    content = _content_to_str(msg.content)
+                    has_error = "error" in content.lower() or "失败" in content
+
+                    # 熔断器记录
+                    if has_error:
+                        _circuit_breaker.record_failure(tool_name)
+                    else:
+                        _circuit_breaker.record_success(tool_name)
+
+                    tools_succeeded.append(tool_name)
+
+                    # tracing 告警
+                    try:
+                        from app.agent.tracing import check_tool_alert
+                        check_tool_alert(tool_name, not has_error)
+                    except Exception:
+                        pass
+
+                    results.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": content,
+                    })
+
+            except Exception as e:
+                logger.error(f"[tool_executor] ToolNode 执行异常，降级为逐个执行: {e}")
+                # 降级为逐个执行（每个工具独立 try/except）
+                for _, name, args, tid in executable_calls:
+                    try:
+                        result = await snapshot.execute(name, args)
+                        has_err = isinstance(result, dict) and result.get("error") is not None
+                        if has_err:
+                            _circuit_breaker.record_failure(name)
+                        else:
+                            _circuit_breaker.record_success(name)
+                        tools_succeeded.append(name)
+                        try:
+                            from app.agent.tracing import check_tool_alert
+                            check_tool_alert(name, not has_err)
+                        except Exception:
+                            pass
+                        results.append({
+                            "role": "tool", "tool_call_id": tid,
+                            "content": _format_tool_result_json(result, name),
+                        })
+                    except Exception as tool_err:
+                        _circuit_breaker.record_failure(name)
+                        results.append({
+                            "role": "tool", "tool_call_id": tid,
+                            "content": _format_tool_result_json(None, name, str(tool_err)),
+                        })
 
         return {
             "messages": results,

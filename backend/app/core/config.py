@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Ollama
     OLLAMA_HOST: str = "http://localhost:11434"
 
+    # SearXNG
+    SEARXNG_URL: str = ""
+
     # JWT
     JWT_SECRET_KEY: str = ""
     JWT_EXPIRE_MINUTES: int = 60 * 24  # 默认 24 小时
