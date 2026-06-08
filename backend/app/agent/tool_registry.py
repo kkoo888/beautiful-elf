@@ -351,31 +351,7 @@ async def web_search(query: str, max_results: int = 5) -> dict:
     import os
     import httpx
 
-    # ── 方案 A: SearXNG（推荐） ─────────────────────────
-    searxng_url = os.getenv("SEARXNG_URL", "").strip()
-    if searxng_url:
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(
-                    f"{searxng_url.rstrip('/')}/search",
-                    params={"q": query, "format": "json", "count": max_results},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                results = data.get("results", [])[:max_results]
-                if results:
-                    return {"results": [
-                        {
-                            "title": r.get("title", ""),
-                            "url": r.get("url", ""),
-                            "snippet": r.get("content", ""),
-                        }
-                        for r in results
-                    ]}
-        except Exception as e:
-            logger.warning(f"[web_search] SearXNG 失败，降级到 DuckDuckGo: {e}")
-
-    # ── 方案 B: 百度搜索（国内可用，无需 API Key） ──────
+    # ── 方案 A: 百度搜索（国内优先，零依赖） ────────────
     try:
         import re
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
@@ -409,6 +385,30 @@ async def web_search(query: str, max_results: int = 5) -> dict:
                     return {"results": results[:max_results]}
     except Exception as e:
         logger.warning(f"[web_search] 百度搜索失败: {e}")
+
+    # ── 方案 B: SearXNG（自建元搜索引擎） ─────────────
+    searxng_url = os.getenv("SEARXNG_URL", "").strip()
+    if searxng_url:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{searxng_url.rstrip('/')}/search",
+                    params={"q": query, "format": "json", "count": max_results},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                results = data.get("results", [])[:max_results]
+                if results:
+                    return {"results": [
+                        {
+                            "title": r.get("title", ""),
+                            "url": r.get("url", ""),
+                            "snippet": r.get("content", ""),
+                        }
+                        for r in results
+                    ]}
+        except Exception as e:
+            logger.warning(f"[web_search] SearXNG 也失败: {e}")
 
     # ── 方案 C: DuckDuckGo 降级 ─────────────────────────
     try:
