@@ -31,7 +31,10 @@ mcp_app = FastMCP(
 # ── 工具注册（DB 驱动）────────────────────────────────────
 
 async def register_tools_from_db(tool_registry) -> int:
-    """从 ToolRegistry 加载所有启用的工具到 MCP Server
+    """从 ToolRegistry 加载启用的工具到 MCP Server
+
+    跳过已有的静态工具（web_search/execute_code/read_file/query_database），
+    避免重复注册。
 
     MCP 规范:
       - name: 唯一标识符
@@ -42,17 +45,21 @@ async def register_tools_from_db(tool_registry) -> int:
     from app.core.database import AsyncSessionLocal
     from app.repository.tool_repo import ToolRepository
 
+    # 已有静态工具，跳过
+    _STATIC_TOOLS = {"web_search", "execute_code", "read_file", "query_database", "list_available_tools"}
+
     repo = ToolRepository()
     async with AsyncSessionLocal() as db:
         tools = await repo.find_all(db, offset=0, limit=1000, enabled=1)
 
     count = 0
     for tool in tools:
-        # 构建 MCP 工具函数（闭包捕获 tool.name）
+        if tool.name in _STATIC_TOOLS:
+            continue
         _register_mcp_tool(tool.name, tool.description, tool.json_schema, tool.output_schema)
         count += 1
 
-    logger.info(f"MCP Server: 从 DB 加载 {count} 个工具")
+    logger.info(f"MCP Server: 从 DB 加载 {count} 个额外工具（静态工具已内置）")
     return count
 
 
@@ -76,7 +83,52 @@ def _register_mcp_tool(name: str, description: str, input_schema: dict, output_s
     )
 
 
-# ── 静态工具（内置，不走 DB）──────────────────────────────
+# ── 静态工具（内置，DB 为空时的 fallback）──────────────────
+
+@mcp_app.tool()
+async def web_search(query: str, max_results: int = 5) -> dict:
+    """搜索互联网获取实时信息（通过 SearXNG）。
+
+    Args:
+        query: 搜索关键词
+        max_results: 最大结果数，默认 5
+    """
+    from app.agent.tool_registry import web_search as _web_search
+    return await _web_search(query=query, max_results=max_results)
+
+
+@mcp_app.tool()
+async def execute_code(language: str, code: str) -> dict:
+    """在沙箱中执行代码（Docker 隔离，10 秒超时）。
+
+    Args:
+        language: 编程语言，支持 python 和 javascript
+        code: 要执行的代码
+    """
+    from app.agent.tool_registry import execute_code as _execute_code
+    return await _execute_code(language=language, code=code)
+
+
+@mcp_app.tool()
+async def read_file(path: str) -> dict:
+    """读取工作空间中的文件内容。
+
+    Args:
+        path: 文件路径（相对于工作空间根目录）
+    """
+    from app.agent.tool_registry import read_file as _read_file
+    return await _read_file(path=path)
+
+
+@mcp_app.tool()
+async def query_database(sql: str) -> dict:
+    """查询数据库（只允许 SELECT，自动添加 LIMIT 100）。
+
+    Args:
+        sql: SQL 查询语句（仅 SELECT）
+    """
+    from app.agent.tool_registry import query_database as _query_database
+    return await _query_database(sql=sql)
 
 @mcp_app.tool()
 async def list_available_tools() -> dict:
