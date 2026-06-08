@@ -148,6 +148,9 @@ async def _stream_response(
     conversation_id: int, user_id: int, messages: list,
     provider_id: int, model_name: str, reasoning_depth: str = "balanced",
 ):
+    # [FIX] 收集完整 AI 回复，流结束后保存到 DB
+    _full_content = []
+
     try:
         async for event in agent_service.chat_stream(
             conversation_id=conversation_id,
@@ -159,6 +162,7 @@ async def _stream_response(
         ):
             event_type = event.get("type", "")
             if event_type == "token":
+                _full_content.append(event.get("content", ""))
                 yield f"data: {json.dumps({'content': event['content'], 'done': False})}\n\n"
             elif event_type == "tool_start":
                 yield f"data: {json.dumps({'tool_start': event['tool'], 'tool_args': event.get('args', {}), 'done': False})}\n\n"
@@ -178,3 +182,20 @@ async def _stream_response(
     except Exception as e:
         logger.error(f"流式对话失败: {e}", exc_info=True)
         yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+    finally:
+        # [FIX] 流结束后，独立事务保存消息（不影响已发送的 SSE 流）
+        assistant_content = "".join(_full_content)
+        if assistant_content:
+            try:
+                from app.core.database import AsyncSessionLocal
+                user_content = messages[-1]["content"] if messages else ""
+                async with AsyncSessionLocal() as save_db:
+                    await _chat_service.save_skill_messages(
+                        save_db,
+                        conversation_id=conversation_id,
+                        user_content=user_content,
+                        assistant_content=assistant_content,
+                    )
+                    await save_db.commit()
+            except Exception as e:
+                logger.warning(f"流式消息保存失败: {e}")
