@@ -453,10 +453,10 @@ async def execute_code(language: str, code: str) -> dict:
 
 
 async def read_file(path: str) -> dict:
-    """读取工作空间中的文件（工作目录从 WORKSPACE_DIR 环境变量读取）"""
-    import os
+    """读取工作空间中的文件"""
+    from app.core.config import get_settings
     from pathlib import Path
-    workspace = Path(os.getenv("WORKSPACE_DIR", "/workspace")).resolve()
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
     target = (workspace / path).resolve()
     if not str(target).startswith(str(workspace)):
         return {"error": "路径穿越攻击已拦截"}

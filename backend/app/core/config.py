@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # SearXNG
     SEARXNG_URL: str = ""
 
+    # MCP Server
+    MCP_SERVER_HOST: str = "0.0.0.0"
+    MCP_SERVER_PORT: int = 8765
+
+    # Workspace
+    WORKSPACE_DIR: str = "/workspace"
+
     # JWT
     JWT_SECRET_KEY: str = ""
     JWT_EXPIRE_MINUTES: int = 60 * 24  # 默认 24 小时

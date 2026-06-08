@@ -203,7 +203,6 @@ async def _start_mcp_server():
       - 来源: https://gofastmcp.com/getting-started/quickstart
     """
     import asyncio
-    import os
 
     try:
         from app.agent.mcp_server import mcp_app, init_mcp_server
@@ -212,8 +211,8 @@ async def _start_mcp_server():
         # 从 DB 加载工具到 MCP Server
         await init_mcp_server(tool_registry)
 
-        host = os.getenv("MCP_SERVER_HOST", "0.0.0.0")
-        port = int(os.getenv("MCP_SERVER_PORT", "8765"))
+        host = settings.MCP_SERVER_HOST
+        port = settings.MCP_SERVER_PORT
 
         async def _run_mcp():
             """后台运行 MCP Server（Streamable HTTP）"""

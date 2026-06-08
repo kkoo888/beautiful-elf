@@ -664,7 +664,6 @@ def run_server(host: str = "0.0.0.0", port: int = 8765):
 
 
 if __name__ == "__main__":
-    import os
-    host = os.getenv("MCP_SERVER_HOST", "0.0.0.0")
-    port = int(os.getenv("MCP_SERVER_PORT", "8765"))
-    run_server(host, port)
+    from app.core.config import get_settings
+    _settings = get_settings()
+    run_server(_settings.MCP_SERVER_HOST, _settings.MCP_SERVER_PORT)
