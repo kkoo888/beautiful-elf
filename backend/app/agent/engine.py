@@ -463,7 +463,7 @@ def _make_llm_caller(llm, tool_registry=None):
             }
         return {
             "messages": [AIMessage(content=response.content)],
-            "final_answer": response.content,
+            "final_answer": _content_to_str(response.content),
             "tool_calls": [],
         }
 
@@ -669,6 +669,8 @@ def _make_evaluator_node(llm=None):
     # 规则评估降级版（仅在无 LLM 时使用）
     def _rule_based_eval(state: AgentState) -> dict:
         final_answer = state.get("final_answer", "")
+        if isinstance(final_answer, list):
+            final_answer = _content_to_str(final_answer)
         if not final_answer:
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
         if len(final_answer.strip()) < 10:
@@ -679,6 +681,8 @@ def _make_evaluator_node(llm=None):
 
     async def evaluator_node(state: AgentState) -> dict:
         final_answer = state.get("final_answer", "")
+        if isinstance(final_answer, list):
+            final_answer = _content_to_str(final_answer)
         if not final_answer:
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
 
