@@ -11,6 +11,7 @@ import uuid
 from typing import Optional, AsyncIterator, Dict, Any
 
 from app.core.logging import get_logger
+from app.agent.state import _content_blocks_to_str
 
 logger = get_logger(__name__)
 
@@ -291,14 +292,15 @@ class AgentService:
                     elif isinstance(output, dict) and isinstance(output.get("messages"), list):
                         for msg in output["messages"]:
                             if hasattr(msg, "content") and msg.content:
-                                _final_answer = msg.content
+                                _final_answer = _content_blocks_to_str(msg.content)
                                 break
 
                 if kind == "on_chat_model_stream":
                     chunk = event.get("data", {}).get("chunk", None)
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         _got_llm_tokens = True
-                        yield {"type": "token", "content": chunk.content}
+                        token = chunk.content if isinstance(chunk.content, str) else _content_blocks_to_str(chunk.content)
+                        yield {"type": "token", "content": token}
 
                 elif kind == "on_tool_start":
                     tool_name_ev = event.get("name", "unknown")
@@ -433,7 +435,7 @@ class AgentService:
                         elif isinstance(output.get("messages"), list):
                             for msg in output["messages"]:
                                 if hasattr(msg, "content") and msg.content:
-                                    _final_answer = msg.content
+                                    _final_answer = _content_blocks_to_str(msg.content)
                                     break
 
                 elif kind == "on_chain_stream":
@@ -445,7 +447,8 @@ class AgentService:
                     chunk = event.get("data", {}).get("chunk", None)
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         _got_llm_tokens = True
-                        yield {"type": "token", "content": chunk.content}
+                        token = chunk.content if isinstance(chunk.content, str) else _content_blocks_to_str(chunk.content)
+                        yield {"type": "token", "content": token}
 
                 elif kind == "on_chat_model_end":
                     # 提取 token 使用量

@@ -178,3 +178,11 @@ class AgentState(BaseModel):
         if hasattr(v, "model_dump"):
             return v.model_dump()
         return None
+
+    @field_validator("skill_answer", mode="before")
+    @classmethod
+    def _normalize_skill_answer(cls, v: Any) -> Optional[str]:
+        """归一化 skill_answer — skill_executor 返回 result.content 可能是 list。"""
+        if v is None:
+            return None
+        return _content_blocks_to_str(v)

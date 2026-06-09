@@ -923,7 +923,8 @@ def _after_eval(state: AgentState) -> str:
     if state.get("final_answer"):
         if score < 4:
             logger.warning(f"[evaluator] 评估不通过(score={score})，替换为兜底回答: {reason}")
-            state["final_answer"] = (
+            # 注意：用属性赋值确保触发 Pydantic field_validator
+            state.final_answer = (
                 "抱歉，我暂时无法准确回答这个问题。"
                 "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
                 "你可以试试：\n"
