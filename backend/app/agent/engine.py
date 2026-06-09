@@ -198,6 +198,7 @@ def build_agent_graph(
 
 def _make_intent_router(intent_router):
     async def intent_router_node(state: AgentState) -> dict:
+        state = _normalize_state(state)
         if not intent_router:
             return {"intent": None}
 
@@ -228,6 +229,7 @@ def _make_intent_router(intent_router):
 
 def _make_skill_executor_node(skill_executor):
     async def skill_executor_node(state: AgentState) -> dict:
+        state = _normalize_state(state)
         if not skill_executor or not state.get("intent"):
             return {"skill_answer": None, "final_answer": None}
 
@@ -267,6 +269,7 @@ def _make_skill_executor_node(skill_executor):
 
 def _make_context_builder(context_engine, memory_manager, tool_registry=None):
     async def context_builder_node(state: AgentState) -> dict:
+        state = _normalize_state(state)
         t0 = time.time()
         query = _extract_last_message(state)
         memory_context = None  # 记忆元数据，默认无
@@ -346,6 +349,7 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
 
 def _make_llm_caller(llm, tool_registry=None):
     async def llm_call_node(state: AgentState) -> dict:
+        state = _normalize_state(state)
         t0 = time.time()
 
         system_prompt = state.get("system_prompt") or state.get("context") or \
@@ -462,6 +466,7 @@ def _make_tool_executor(tool_registry):
     from langchain_core.tools import StructuredTool
 
     async def tool_executor_node(state: AgentState) -> dict:
+        state = _normalize_state(state)
         from app.agent.tool_registry import RiskLevel
 
         snapshot = tool_registry.create_snapshot()
@@ -601,6 +606,7 @@ def _make_approval_node(tool_registry):
     """
 
     async def approval_node(state: AgentState) -> dict:
+        state = _normalize_state(state)
         pending = state.get("pending_tool_call")
         if not pending:
             return {"needs_approval": False, "pending_tool_call": None}
@@ -646,8 +652,9 @@ def _make_evaluator_node(llm=None):
     """
 
     # 规则评估降级版（仅在无 LLM 时使用）
-    def _rule_based_eval(state: AgentState) -> dict:
-        final_answer = state.get("final_answer", "")
+    def _rule_based_eval(state) -> dict:
+        s = _normalize_state(state)
+        final_answer = s.get("final_answer", "")
         if not final_answer:
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
         if len(final_answer.strip()) < 10:
@@ -657,6 +664,7 @@ def _make_evaluator_node(llm=None):
         return {"evaluation": {"passed": True, "reason": "", "score": 7}}
 
     async def evaluator_node(state: AgentState) -> dict:
+        state = _normalize_state(state)
         final_answer = state.get("final_answer", "")
         if not final_answer:
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
@@ -737,6 +745,7 @@ def _make_evaluator_node(llm=None):
 
 def _make_memory_saver(memory_manager):
     async def memory_saver_node(state: AgentState) -> dict:
+        state = _normalize_state(state)
         if not state.get("final_answer"):
             return {}
 
@@ -875,8 +884,9 @@ def _make_memory_saver(memory_manager):
 # ── 条件路由 ──────────────────────────────────────────────
 
 def _route_after_intent(state: AgentState) -> str:
-    intent = state.get("intent")
-    if intent and intent.get("cached_answer") and state.get("final_answer"):
+    s = _normalize_state(state)
+    intent = s.get("intent")
+    if intent and intent.get("cached_answer") and s.get("final_answer"):
         return "cache_return"
     if intent and intent.get("target_module") and intent["target_module"] != "cache":
         return "skill"
@@ -884,20 +894,22 @@ def _route_after_intent(state: AgentState) -> str:
 
 
 def _should_use_tools(state: AgentState) -> str:
-    if state.get("iterations", 0) >= 10:
+    s = _normalize_state(state)
+    if s.get("iterations", 0) >= 10:
         logger.warning("[agent] 工具调用达到上限(10轮)，强制结束")
         return "finish"
-    if state.get("needs_approval"):
+    if s.get("needs_approval"):
         return "finish"
-    if state.get("skill_answer"):
+    if s.get("skill_answer"):
         return "finish"
-    if state.get("tool_calls"):
+    if s.get("tool_calls"):
         return "use_tools"
     return "finish"
 
 
 def _after_tool_exec(state: AgentState) -> str:
-    if state.get("needs_approval"):
+    s = _normalize_state(state)
+    if s.get("needs_approval"):
         return "needs_approval"
     return "continue"
 
@@ -940,17 +952,18 @@ def _after_eval(state: AgentState) -> str:
 
 # ── 辅助函数 ──────────────────────────────────────────────
 
-def _select_tool_names_for_intent(state: AgentState, tool_registry) -> list:
+def _select_tool_names_for_intent(state, tool_registry) -> list:
     """
     B+C 核心：根据 intent 动态选择工具名。
 
     Returns:
         工具名字符串列表（可序列化，存入 state 供 llm_call 使用）
     """
+    s = _normalize_state(state)
     if not tool_registry:
         return []
 
-    intent = state.get("intent")
+    intent = s.get("intent")
     if not intent:
         # 无 intent → 全量（Agent 兜底模式）
         return [t.name for t in tool_registry.list_tools()]
@@ -968,8 +981,17 @@ def _select_tool_names_for_intent(state: AgentState, tool_registry) -> list:
     all_names = {t.name for t in tool_registry.list_tools()}
     return [n for n in tool_names if n in all_names]
 
-def _extract_last_message(state: AgentState) -> str:
-    last_msg = state["messages"][-1] if state["messages"] else None
+def _normalize_state(state) -> dict:
+    """将 Pydantic AgentState 或 dict 统一转为 dict，兼容所有节点函数。"""
+    if isinstance(state, dict):
+        return state
+    return state.model_dump()
+
+
+def _extract_last_message(state) -> str:
+    s = _normalize_state(state)
+    messages = s.get("messages", [])
+    last_msg = messages[-1] if messages else None
     if last_msg:
         content = last_msg.get("content", "") if isinstance(last_msg, dict) else getattr(last_msg, "content", "")
         return _content_to_str(content)
@@ -981,9 +1003,10 @@ def _content_to_str(content) -> str:
     return _content_blocks_to_str(content)
 
 
-def _build_message_dicts(state: AgentState) -> List[dict]:
+def _build_message_dicts(state) -> List[dict]:
+    s = _normalize_state(state)
     result = []
-    for m in state["messages"]:
+    for m in s.get("messages", []):
         if isinstance(m, dict):
             result.append({"role": m.get("role", "user"), "content": _content_to_str(m.get("content", ""))})
         else:
