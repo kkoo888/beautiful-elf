@@ -1,9 +1,11 @@
-"""Agent 业务服务 — v4.2 完整版
+"""Agent 业务服务 — v4.3 完整版
 
+v4.3 变更:
+  1. [P0] 流式对话改用 astream + stream_mode=["messages","updates"]，替代已废弃的 astream_events v3
+  2. [P0] AgentState 从 Pydantic BaseModel 迁移到 TypedDict（LangGraph 官方推荐）
 v4.2 变更:
-  1. [P0] 流式对话升级 stream_events v3，支持 interrupt/resume 审批事件
-  2. [P1] 初始化加 asyncio.Lock 防竞态
-  3. [P2] LLM 缓存加 TTL 过期机制
+  1. [P0] 初始化加 asyncio.Lock 防竞态
+  2. [P2] LLM 缓存加 TTL 过期机制
 """
 import asyncio
 import time
@@ -249,10 +251,10 @@ class AgentService:
         tool_args: Optional[dict] = None,
         user_response: str = "",
     ) -> AsyncIterator[Dict[str, Any]]:
-        """流式 resume — 按 LangGraph 官方规范使用 stream_events(Command(resume=...))
+        """流式 resume — 按 LangGraph 官方规范使用 astream(Command(resume=...))
 
         官方文档: https://docs.langchain.com/oss/python/langgraph/interrupts
-        推荐模式: graph.stream_events(Command(resume=...), config=config, version="v3")
+        推荐模式: graph.astream(Command(resume=...), stream_mode=["messages","updates"], version="v2")
         """
         if not self.is_ready:
             yield {"type": "error", "message": "Agent 引擎未初始化"}

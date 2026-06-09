@@ -122,7 +122,7 @@ async def chat_resume(
       4. 流式返回 Agent 后续执行结果
 
     LangGraph 官方模式:
-      graph.stream_events(Command(resume=...), config=config, version="v3")
+      graph.astream(Command(resume=...), stream_mode=["messages","updates"], version="v2")
     """
     _full_content = []
     _queue: asyncio.Queue = asyncio.Queue()
