@@ -273,46 +273,45 @@ class AgentService:
         tools_used = []
 
         try:
-            stream = await self._graph.astream_events(
+            stream = self._graph.astream(
                 Command(resume=resume_data),
                 config=config,
-                version="v3",
+                stream_mode=["messages", "updates"],
+                version="v2",
             )
 
             _final_answer = None
             _got_llm_tokens = False
 
-            async for event in stream:
-                kind = event.get("event", "")
+            async for chunk in stream:
+                chunk_type = chunk.get("type", "")
+                chunk_data = chunk.get("data", None)
 
-                if kind == "on_chain_end":
-                    output = event.get("data", {}).get("output", {})
-                    if isinstance(output, dict) and output.get("final_answer"):
-                        _final_answer = output["final_answer"]
-                    elif isinstance(output, dict) and isinstance(output.get("messages"), list):
-                        for msg in output["messages"]:
-                            if hasattr(msg, "content") and msg.content:
-                                _final_answer = _content_blocks_to_str(msg.content)
-                                break
-
-                if kind == "on_chat_model_stream":
-                    chunk = event.get("data", {}).get("chunk", None)
-                    if chunk and hasattr(chunk, "content") and chunk.content:
+                if chunk_type == "messages":
+                    msg_chunk, metadata = chunk_data
+                    if hasattr(msg_chunk, "content") and msg_chunk.content:
                         _got_llm_tokens = True
-                        token = chunk.content if isinstance(chunk.content, str) else _content_blocks_to_str(chunk.content)
+                        token = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
                         yield {"type": "token", "content": token}
 
-                elif kind == "on_tool_start":
-                    tool_name_ev = event.get("name", "unknown")
-                    tool_input = event.get("data", {}).get("input", {})
-                    tools_used.append(tool_name_ev)
-                    yield {"type": "tool_start", "tool": tool_name_ev, "args": tool_input if isinstance(tool_input, dict) else {}}
-
-                elif kind == "on_tool_end":
-                    tool_name_ev = event.get("name", "unknown")
-                    tool_output = event.get("data", {}).get("output", "")
-                    output_preview = str(tool_output)[:200] if tool_output else ""
-                    yield {"type": "tool_end", "tool": tool_name_ev, "output_preview": output_preview}
+                elif chunk_type == "updates":
+                    if isinstance(chunk_data, dict):
+                        for node_name, node_output in chunk_data.items():
+                            if not isinstance(node_output, dict):
+                                continue
+                            if node_output.get("final_answer"):
+                                _final_answer = node_output["final_answer"]
+                            if node_name == "tool_executor":
+                                for msg in node_output.get("messages", []):
+                                    if isinstance(msg, dict) and msg.get("role") == "tool":
+                                        tn = msg.get("name", "unknown")
+                                        yield {"type": "tool_end", "tool": tn, "output_preview": str(msg.get("content", ""))[:200]}
+                            if node_name == "llm_call" and node_output.get("tool_calls"):
+                                for tc in node_output["tool_calls"]:
+                                    tn = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                                    ta = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+                                    tools_used.append(tn)
+                                    yield {"type": "tool_start", "tool": tn, "args": ta if isinstance(ta, dict) else {}}
 
             # 缓存答案 fallback
             if not _got_llm_tokens and not _final_answer:
@@ -412,94 +411,90 @@ class AgentService:
                 yield {"type": "done", "tools_used": [], "duration_ms": elapsed, "prompt_tokens": 0, "completion_tokens": 0}
                 return
 
-            # [P0] 升级到 v3 以支持 interrupt/resume 事件
-            # v3 返回协程，需 await 获取流对象
-            stream = await self._graph.astream_events(initial_state, config=config, version="v3")
+            # [P0] 使用 LangGraph 原生 astream（v2 stream_mode）
+            # 旧代码用 astream_events(version="v3") 但用 v2 方式迭代 —— v3 API 已改为
+            # typed projections（stream.messages），直接迭代收不到任何事件。
+            # 改用 astream + stream_mode=["messages", "updates"]，官方推荐方案。
+            stream = self._graph.astream(
+                initial_state,
+                config=config,
+                stream_mode=["messages", "updates"],
+                version="v2",
+            )
 
-            # 跟踪 graph state（无 checkpointer 时 get_state 不可用）
             _final_answer = None
             _got_llm_tokens = False
-            _event_count = 0
 
-            async for event in stream:
-                kind = event.get("event", "")
-                _event_count += 1
+            async for chunk in stream:
+                chunk_type = chunk.get("type", "")
+                chunk_data = chunk.get("data", None)
 
-                # 捕获节点输出，提取 final_answer（chitchat/缓存命中场景）
-                if kind == "on_chain_end":
-                    output = event.get("data", {}).get("output", {})
-                    node_name = event.get("name", "")
-                    if isinstance(output, dict):
-                        if output.get("final_answer"):
-                            _final_answer = output["final_answer"]
-                        elif isinstance(output.get("messages"), list):
-                            for msg in output["messages"]:
-                                if hasattr(msg, "content") and msg.content:
-                                    _final_answer = _content_blocks_to_str(msg.content)
-                                    break
-
-                elif kind == "on_chain_stream":
-                    chunk = event.get("data", {}).get("chunk", {})
-                    if isinstance(chunk, dict) and chunk.get("final_answer"):
-                        _final_answer = chunk["final_answer"]
-
-                if kind == "on_chat_model_stream":
-                    chunk = event.get("data", {}).get("chunk", None)
-                    if chunk and hasattr(chunk, "content") and chunk.content:
+                if chunk_type == "messages":
+                    # LLM token 流式输出 — (message_chunk, metadata) 元组
+                    msg_chunk, metadata = chunk_data
+                    if hasattr(msg_chunk, "content") and msg_chunk.content:
                         _got_llm_tokens = True
-                        token = chunk.content if isinstance(chunk.content, str) else _content_blocks_to_str(chunk.content)
+                        token = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
                         yield {"type": "token", "content": token}
-
-                elif kind == "on_chat_model_end":
-                    # 提取 token 使用量
-                    output = event.get("data", {}).get("output", None)
-                    if output:
-                        usage = getattr(output, "usage_metadata", None) or getattr(output, "usage", None)
-                        if usage:
-                            pt = getattr(usage, "input_tokens", 0) or (usage.get("input_tokens", 0) if isinstance(usage, dict) else 0)
-                            ct = getattr(usage, "output_tokens", 0) or (usage.get("output_tokens", 0) if isinstance(usage, dict) else 0)
+                    # 提取 usage
+                    if hasattr(msg_chunk, "usage_metadata") and msg_chunk.usage_metadata:
+                        usage = msg_chunk.usage_metadata
+                        pt = getattr(usage, "input_tokens", 0) or 0
+                        ct = getattr(usage, "output_tokens", 0) or 0
+                        if pt or ct:
                             total_prompt_tokens += pt
                             total_completion_tokens += ct
                             yield {"type": "cost_update", "prompt_tokens": total_prompt_tokens, "completion_tokens": total_completion_tokens}
 
-                elif kind == "on_tool_start":
-                    tool_name = event.get("name", "unknown")
-                    tool_input = event.get("data", {}).get("input", {})
-                    tools_used.append(tool_name)
-                    yield {"type": "tool_start", "tool": tool_name, "args": tool_input if isinstance(tool_input, dict) else {}}
+                elif chunk_type == "updates":
+                    # 节点状态更新 — {node_name: state_delta} 或 {node_name: state_delta, ...}
+                    if isinstance(chunk_data, dict):
+                        for node_name, node_output in chunk_data.items():
+                            if not isinstance(node_output, dict):
+                                continue
+                            # 捕获 final_answer
+                            if node_output.get("final_answer"):
+                                _final_answer = node_output["final_answer"]
+                            # 工具执行事件
+                            if node_name == "tool_executor":
+                                # 工具结果在 messages 里
+                                for msg in node_output.get("messages", []):
+                                    if isinstance(msg, dict) and msg.get("role") == "tool":
+                                        tool_name = msg.get("name", "unknown")
+                                        output_preview = str(msg.get("content", ""))[:200]
+                                        yield {"type": "tool_end", "tool": tool_name, "output_preview": output_preview}
+                            # 工具调用事件（从 llm_call 的 tool_calls 字段）
+                            if node_name == "llm_call" and node_output.get("tool_calls"):
+                                for tc in node_output["tool_calls"]:
+                                    tool_name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                                    tool_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+                                    tools_used.append(tool_name)
+                                    yield {"type": "tool_start", "tool": tool_name, "args": tool_args if isinstance(tool_args, dict) else {}}
 
-                elif kind == "on_tool_end":
-                    tool_name = event.get("name", "unknown")
-                    tool_output = event.get("data", {}).get("output", "")
-                    output_preview = str(tool_output)[:200] if tool_output else ""
-                    yield {"type": "tool_end", "tool": tool_name, "output_preview": output_preview}
-
-            # [P0] v3 流结束后检查 interrupt（审批暂停）
-            if hasattr(stream, 'interrupted') and stream.interrupted:
-                interrupts_attr = getattr(stream, 'interrupts', None)
-                interrupts = await interrupts_attr() if callable(interrupts_attr) else (interrupts_attr or ())
-                for intr in interrupts:
-                    value = getattr(intr, 'value', intr) if not isinstance(intr, dict) else intr
-                    if isinstance(value, dict) and value.get("type") == "approval_required":
-                        yield {
-                            "type": "approval_required",
-                            "tool": value.get("tool", ""),
-                            "args": value.get("args", {}),
-                            "message": value.get("message", "需要用户确认"),
-                        }
-                    else:
-                        # 通用 interrupt 格式
-                        yield {
-                            "type": "approval_required",
-                            "tool": value.get("tool", "") if isinstance(value, dict) else str(value),
-                            "args": value.get("args", {}) if isinstance(value, dict) else {},
-                            "message": value.get("message", "需要用户确认") if isinstance(value, dict) else "需要用户确认",
-                        }
-                # 审批模式下不发 done，等 resume API 后续处理
-                return
+            # 检查 interrupt（审批暂停）— 通过 get_state 检查
+            try:
+                if self._graph and hasattr(self._graph, 'get_state'):
+                    state_snapshot = self._graph.get_state(config)
+                    if state_snapshot and hasattr(state_snapshot, 'next') and state_snapshot.next:
+                        # 有 pending node = interrupt 状态
+                        for pending_node in state_snapshot.next:
+                            if pending_node == "approval_node":
+                                # 从 state 读取 pending_tool_call
+                                values = state_snapshot.values or {}
+                                pending = values.get("pending_tool_call")
+                                if pending:
+                                    yield {
+                                        "type": "approval_required",
+                                        "tool": pending.get("name", ""),
+                                        "args": pending.get("args", {}),
+                                        "message": pending.get("message", "需要用户确认"),
+                                    }
+                                    return  # 审批模式下不发 done
+            except Exception:
+                pass
 
             # 发送缓存答案（chitchat/语义缓存命中，LLM 未被调用）
-            logger.info(f"[chat_stream] 流结束: events={_event_count} final_answer={'set' if _final_answer else 'None'} llm_tokens={_got_llm_tokens}")
+            logger.info(f"[chat_stream] 流结束: final_answer={'set' if _final_answer else 'None'} llm_tokens={_got_llm_tokens}")
             if not _final_answer:
                 try:
                     if self._graph and hasattr(self._graph, 'get_state'):
