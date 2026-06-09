@@ -44,7 +44,7 @@ function createMockChat(overrides = {}) {
     contextSources: [],
     tokenStats: null,
     sendMessage: vi.fn(),
-    sendMessageSync: vi.fn(),
+
     setReasoningDepth: vi.fn(),
     setModelSelection: vi.fn(),
     submitFeedback: vi.fn(),

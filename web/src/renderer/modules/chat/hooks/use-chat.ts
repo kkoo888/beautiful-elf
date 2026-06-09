@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
-import { chat, chatStream, chatResumeStream, submitFeedback, createConversation, fetchMessages, fetchConversations, deleteConversationApi } from '../services/chat-api'
+import { chatStream, chatResumeStream, submitFeedback, createConversation, fetchMessages, fetchConversations, deleteConversationApi } from '../services/chat-api'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
 import type {
   ChatMessage,
@@ -48,8 +48,7 @@ export interface UseChatReturn {
   tokenStats: { promptTokens: number; completionTokens: number } | null
   /** 发送消息（流式） */
   sendMessage: (content: string) => void
-  /** 发送消息（非流式） */
-  sendMessageSync: (content: string) => Promise<void>
+
   /** 设置推理深度 */
   setReasoningDepth: (depth: ReasoningDepth) => void
   /** 设置模型选择 */
@@ -281,83 +280,6 @@ export function useChat(): UseChatReturn {
     [isLoading, reasoningDepth, selectedProviderId, selectedModelName, ensureConversationId, addMessage, setMessages, setIsLoading]
   )
 
-  /** 发送消息（非流式） */
-  const sendMessageSync = useCallback(
-    async (content: string): Promise<void> => {
-      if (isLoading || !content.trim()) return
-
-      const convId = await ensureConversationId()
-
-      // 添加用户消息
-      const userMessage: ChatMessage = {
-        id: generateId(),
-        conversationId: convId,
-        role: 'user',
-        content: content.trim(),
-        createdAt: Date.now(),
-      }
-      addMessage(userMessage)
-
-      // 更新会话
-      useChatStore.getState().updateConversation(convId, {
-        updatedAt: Date.now(),
-        lastMessage: content.trim(),
-        messageCount:
-          (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ?? 0) +
-          1,
-      })
-
-      setIsLoading(true)
-
-      try {
-        const providerType = await getProviderType(selectedProviderId)
-        const response = await chat({
-          conversationId: convId,
-          message: content.trim(),
-          reasoningDepth,
-          providerId: selectedProviderId,
-          providerType,
-          modelName: selectedModelName,
-        })
-
-        const aiMessage: ChatMessage = {
-          id: response.id,
-          conversationId: convId,
-          role: 'assistant',
-          content: response.content,
-          createdAt: Date.now(),
-          metadata: {
-            isCached: response.isCached,
-            intentRoute: response.intentRoute,
-            model: response.model,
-          },
-        }
-        addMessage(aiMessage)
-
-        // 更新会话
-        useChatStore.getState().updateConversation(convId, {
-          lastMessage: response.content.slice(0, 100),
-          messageCount:
-            (useChatStore.getState().conversations.find((c) => c.id === convId)?.messageCount ??
-              0) + 1,
-        })
-      } catch (error) {
-        console.error('[Chat] Request error:', error)
-        const errorMessage: ChatMessage = {
-          id: generateId(),
-          conversationId: convId,
-          role: 'assistant',
-          content: '⚠️ 请求失败，请检查网络后重试',
-          createdAt: Date.now(),
-        }
-        addMessage(errorMessage)
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [isLoading, reasoningDepth, selectedProviderId, selectedModelName, ensureConversationId, addMessage, setIsLoading]
-  )
-
   /** 设置推理深度 */
   const setReasoningDepth = useCallback(
     (depth: ReasoningDepth) => {
@@ -538,7 +460,6 @@ export function useChat(): UseChatReturn {
     contextSources,
     tokenStats,
     sendMessage,
-    sendMessageSync,
     setReasoningDepth,
     setModelSelection,
     submitFeedback: handleFeedback,

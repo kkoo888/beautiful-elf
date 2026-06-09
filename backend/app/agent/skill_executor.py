@@ -41,6 +41,8 @@ class SkillExecutor:
         messages: List[dict],
         provider_id: Optional[int] = None,
         model_name: str = "",
+        context_engine=None,
+        memory_manager=None,
     ) -> str:
         """
         执行技能。
@@ -52,6 +54,8 @@ class SkillExecutor:
             messages: 完整对话历史
             provider_id: LLM 供应商 ID（可选，不传用默认）
             model_name: 模型名称
+            context_engine: 上下文引擎（可选，用于 RAG 检索）
+            memory_manager: 记忆管理器（可选，用于相关记忆检索）
 
         Returns:
             技能执行结果（文本）
@@ -63,7 +67,10 @@ class SkillExecutor:
         skill = await self._find_skill(db, skill_service, skill_name)
         if not skill:
             logger.warning(f"技能 '{skill_name}' 不存在，降级走 LLM")
-            return await self._fallback_llm(db, user_message, messages, provider_id, model_name)
+            return await self._fallback_llm(
+                db, user_message, messages, provider_id, model_name,
+                context_engine=context_engine, memory_manager=memory_manager,
+            )
 
         config = skill.config or {}
         tool_defs = config.get("tools", [])
@@ -76,10 +83,11 @@ class SkillExecutor:
                 user_message, messages, provider_id, model_name,
             )
 
-        # 3. 无工具 → LLM + 技能上下文
+        # 3. 无工具 → LLM + 技能上下文 + 记忆/RAG
         return await self._execute_with_context(
             db, skill_name, skill_description, config,
             user_message, messages, provider_id, model_name,
+            context_engine=context_engine, memory_manager=memory_manager,
         )
 
     async def _find_skill(self, db, skill_service, skill_name):
@@ -166,8 +174,9 @@ class SkillExecutor:
     async def _execute_with_context(
         self, db, skill_name, skill_description, config,
         user_message, messages, provider_id, model_name,
+        context_engine=None, memory_manager=None,
     ) -> str:
-        """无工具：LLM + 技能描述作为上下文"""
+        """无工具：LLM + 技能描述 + 记忆/RAG 上下文"""
         from app.services.llm_chat_service import LLMChatService
         from app.services.llm_provider_service import LLMProviderService
 
@@ -179,13 +188,34 @@ class SkillExecutor:
         if provider_id is None:
             return "⚠️ 请先选择 AI 供应商"
 
+        # 组装上下文（记忆 + RAG）
+        context_parts = [f"技能说明：{skill_description}"]
+
+        if memory_manager:
+            try:
+                memories = await memory_manager.search(user_message, limit=3)
+                if memories:
+                    memory_text = "\n".join(f"- {m.content}" for m in memories if m.content)
+                    context_parts.append(f"相关记忆：\n{memory_text}")
+            except Exception as e:
+                logger.debug(f"记忆检索失败（跳过）: {e}")
+
+        if context_engine:
+            try:
+                rag_results = await context_engine.retrieve(user_message, top_k=3)
+                if rag_results:
+                    rag_text = "\n".join(f"- {r.get('content', '')}" for r in rag_results if r.get('content'))
+                    context_parts.append(f"知识库参考：\n{rag_text}")
+            except Exception as e:
+                logger.debug(f"RAG 检索失败（跳过）: {e}")
+
         # 注入技能上下文到 system message
         system_msg = {
             "role": "system",
             "content": (
                 f"你现在使用技能「{skill_name}」回答用户问题。\n"
-                f"技能说明：{skill_description}\n"
-                f"请根据技能说明的专业领域回答用户问题。"
+                f"{chr(10).join(context_parts)}\n"
+                f"请根据以上上下文回答用户问题。"
             ),
         }
         enriched_messages = [system_msg] + messages
@@ -199,8 +229,9 @@ class SkillExecutor:
 
     async def _fallback_llm(
         self, db, user_message, messages, provider_id, model_name,
+        context_engine=None, memory_manager=None,
     ) -> str:
-        """降级：纯 LLM 对话"""
+        """降级：纯 LLM 对话 + 可用上下文"""
         from app.services.llm_chat_service import LLMChatService
         from app.services.llm_provider_service import LLMProviderService
 
@@ -211,10 +242,26 @@ class SkillExecutor:
         if provider_id is None:
             return "⚠️ 请先选择 AI 供应商"
 
+        # 降级时也尝试注入记忆上下文
+        context_parts = []
+        if memory_manager:
+            try:
+                memories = await memory_manager.search(user_message, limit=3)
+                if memories:
+                    memory_text = "\n".join(f"- {m.content}" for m in memories if m.content)
+                    context_parts.append(f"相关记忆：\n{memory_text}")
+            except Exception:
+                pass
+
+        enriched_messages = messages
+        if context_parts:
+            system_msg = {"role": "system", "content": "\n".join(context_parts)}
+            enriched_messages = [system_msg] + messages
+
         llm_chat = LLMChatService()
         result = await llm_chat.chat(
             db, provider_id=provider_id, model_name=model_name,
-            messages=messages, temperature=0.7, max_tokens=2048,
+            messages=enriched_messages, temperature=0.7, max_tokens=2048,
         )
         return result.content
 

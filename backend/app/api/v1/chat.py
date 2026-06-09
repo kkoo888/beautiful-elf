@@ -1,15 +1,12 @@
-"""AI 对话 API — v3.0 完整版
+"""AI 对话 API — 流式 SSE 唯一路径
 
-新增:
-  1. /chat/resume 端点（interrupt/resume 审批确认）
-  2. /chat/tool-stats 端点（工具使用统计）
-  3. user_id 正确获取
-  4. [FIX] SSE 心跳保活（防止代理超时断开）
-  5. [FIX] 流式消息持久化
+端点:
+  - POST /chat — 流式对话（SSE + 心跳保活）
+  - POST /chat/resume — 审批恢复（流式）
+  - GET  /chat/tool-stats — 工具使用统计
 """
 import asyncio
 import json
-import time
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -20,7 +17,7 @@ from app.core.database import get_db
 from app.services.agent_service import agent_service
 from app.services.chat_service import ChatService
 from app.services.llm_provider_service import LLMProviderService
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import ChatRequest
 from app.schemas.response import ApiResult, api_error
 from app.core.logging import get_logger
 
@@ -44,7 +41,6 @@ class ResumeRequest(BaseModel):
     tool_name: str = ""
     tool_args: Optional[dict] = None
     user_response: str = ""
-    stream: bool = True  # 默认流式返回（LangGraph 官方推荐）
 
 
 class ChatRequestExtended(ChatRequest):
@@ -52,14 +48,14 @@ class ChatRequestExtended(ChatRequest):
     reasoning_depth: Optional[str] = "balanced"
 
 
-@router.post("/conversations/{conversation_id}/chat", response_model=ApiResult[ChatResponse])
+@router.post("/conversations/{conversation_id}/chat")
 async def chat(
     request: Request,
     conversation_id: int = Path(..., description="会话 ID"),
     data: ChatRequestExtended = ...,
     db: AsyncSession = Depends(get_db),
-) -> ApiResult[ChatResponse]:
-    """对话入口（v4.1 — 新增 reasoning_depth + 审批/进度/引用事件）"""
+):
+    """对话入口 — 流式 SSE（唯一路径）"""
     provider_id = await _resolve_provider_id(db, data.provider_id)
     if provider_id is None:
         return api_error("CONVERSATION_VALIDATION", "请先选择 AI 供应商", "请在设置中选择供应商和模型")
@@ -69,41 +65,10 @@ async def chat(
     user_id = getattr(data, "user_id", 0) or 0
     reasoning_depth = getattr(data, "reasoning_depth", "balanced") or "balanced"
 
-    if data.stream:
-        return StreamingResponse(
-            _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth),
-            media_type="text/event-stream",
-        )
-
-    try:
-        agent_result = await agent_service.chat(
-            conversation_id=conversation_id,
-            user_id=user_id,
-            messages=messages,
-            provider_id=provider_id,
-            model_name=model_name,
-        )
-
-        user_content = messages[-1]["content"] if messages else ""
-        assistant_content = agent_result.get("content", "")
-        try:
-            await _chat_service.save_skill_messages(
-                db, conversation_id=conversation_id,
-                user_content=user_content, assistant_content=assistant_content,
-            )
-        except Exception as e:
-            logger.warning(f"保存消息失败: {e}")
-
-        return ApiResult(data=ChatResponse(
-            content=assistant_content,
-            model=model_name or "agent",
-            provider_type="agent",
-            token_count=0,
-        ))
-
-    except Exception as e:
-        logger.error(f"Agent 对话失败: {e}", exc_info=True)
-        return api_error("AI_TIMEOUT", str(e), "请检查模型配置或稍后重试")
+    return StreamingResponse(
+        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("/conversations/{conversation_id}/chat/resume")
@@ -127,6 +92,38 @@ async def chat_resume(
     _full_content = []
     _queue: asyncio.Queue = asyncio.Queue()
     _stream_done = asyncio.Event()
+
+    # 流开始前保存用户审批消息
+    user_msg = data.user_response or f"[审批: {'批准' if data.approved else '拒绝'}] {data.tool_name}"
+    try:
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as save_db:
+            await _chat_service.save_skill_messages(
+                save_db,
+                conversation_id=conversation_id,
+                user_content=user_msg,
+                assistant_content="",
+            )
+            await save_db.commit()
+    except Exception as e:
+        logger.warning(f"保存审批消息失败: {e}")
+
+    async def _save_assistant_message(content: str):
+        """done 时保存助手回复"""
+        if not content:
+            return
+        try:
+            from app.core.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as save_db:
+                await _chat_service.save_skill_messages(
+                    save_db,
+                    conversation_id=conversation_id,
+                    user_content="",
+                    assistant_content=content,
+                )
+                await save_db.commit()
+        except Exception as e:
+            logger.warning(f"保存助手消息失败: {e}")
 
     async def _heartbeat():
         try:
@@ -155,6 +152,8 @@ async def chat_resume(
                 elif event_type == "tool_end":
                     await _queue.put(f"data: {json.dumps({'tool_end': event['tool'], 'output_preview': event.get('output_preview', ''), 'done': False})}\n\n")
                 elif event_type == "done":
+                    # done 时保存助手回复（数据完整）
+                    await _save_assistant_message("".join(_full_content))
                     await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0)})}\n\n")
                 elif event_type == "error":
                     await _queue.put(f"data: {json.dumps({'error': event['message'], 'done': True})}\n\n")
@@ -165,58 +164,21 @@ async def chat_resume(
             _stream_done.set()
             await _queue.put(None)
 
-    if data.stream:
-        heartbeat_task = asyncio.create_task(_heartbeat())
-        producer_task = asyncio.create_task(_produce())
+    heartbeat_task = asyncio.create_task(_heartbeat())
+    producer_task = asyncio.create_task(_produce())
 
-        async def _sse_generator():
-            try:
-                while True:
-                    item = await _queue.get()
-                    if item is None:
-                        break
-                    yield item
-            finally:
-                heartbeat_task.cancel()
-                producer_task.cancel()
-                # 保存 resume 后的消息
-                assistant_content = "".join(_full_content)
-                if assistant_content:
-                    try:
-                        from app.core.database import AsyncSessionLocal
-                        async with AsyncSessionLocal() as save_db:
-                            await _chat_service.save_skill_messages(
-                                save_db,
-                                conversation_id=conversation_id,
-                                user_content=data.user_response or f"[审批: {'批准' if data.approved else '拒绝'}] {data.tool_name}",
-                                assistant_content=assistant_content,
-                            )
-                            await save_db.commit()
-                    except Exception as e:
-                        logger.warning(f"Resume 消息保存失败: {e}")
+    async def _sse_generator():
+        try:
+            while True:
+                item = await _queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            heartbeat_task.cancel()
+            producer_task.cancel()
 
-        return StreamingResponse(_sse_generator(), media_type="text/event-stream")
-
-    # 非流式 fallback
-    try:
-        result = await agent_service.resume(
-            conversation_id=conversation_id,
-            approved=data.approved,
-            tool_name=data.tool_name,
-            tool_args=data.tool_args,
-            user_response=data.user_response,
-        )
-        if "error" in result:
-            return api_error("AGENT_RESUME_ERROR", result["error"], "请重试或联系管理员")
-        return ApiResult(data=ChatResponse(
-            content=result.get("content", ""),
-            model="agent-resume",
-            provider_type="agent",
-            token_count=0,
-        ))
-    except Exception as e:
-        logger.error(f"Agent resume 失败: {e}", exc_info=True)
-        return api_error("AGENT_RESUME_ERROR", str(e), "请重试")
+    return StreamingResponse(_sse_generator(), media_type="text/event-stream")
 
 
 @router.get("/chat/tool-stats")
@@ -235,6 +197,11 @@ async def _stream_response(
 ):
     """SSE 流式响应 — 带心跳保活 + 消息持久化
 
+    消息保存策略（业内标准）:
+      - 用户消息：流开始前保存（确保不丢）
+      - 助手回复：done 事件时保存（数据完整 + 携带 token 统计）
+      - 流中断/报错：助手回复不保存（前端本地有 token，刷新后丢失是预期行为）
+
     心跳机制（业内规范）:
       - 发送 SSE 注释行 ': heartbeat\\n\\n'，不触发前端 onmessage
       - 间隔 15s（< nginx 60s proxy_read_timeout）
@@ -243,6 +210,21 @@ async def _stream_response(
     _full_content = []
     _queue: asyncio.Queue = asyncio.Queue()
     _stream_done = asyncio.Event()
+
+    # 流开始前保存用户消息（独立事务，确保不丢）
+    user_content = messages[-1]["content"] if messages else ""
+    try:
+        from app.core.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as save_db:
+            await _chat_service.save_skill_messages(
+                save_db,
+                conversation_id=conversation_id,
+                user_content=user_content,
+                assistant_content="",  # 仅保存用户消息
+            )
+            await save_db.commit()
+    except Exception as e:
+        logger.warning(f"保存用户消息失败: {e}")
 
     async def _heartbeat():
         """心跳协程 — 定期发送 SSE 注释保活"""
@@ -253,6 +235,24 @@ async def _stream_response(
                     await _queue.put(": heartbeat\n\n")
         except asyncio.CancelledError:
             pass
+
+    async def _save_assistant_message(content: str, token_count: int):
+        """done 时保存助手回复（独立事务）"""
+        if not content:
+            return
+        try:
+            from app.core.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as save_db:
+                await _chat_service.save_skill_messages(
+                    save_db,
+                    conversation_id=conversation_id,
+                    user_content="",  # 仅保存助手回复
+                    assistant_content=content,
+                    token_count=token_count,
+                )
+                await save_db.commit()
+        except Exception as e:
+            logger.warning(f"保存助手消息失败: {e}")
 
     async def _produce():
         """业务事件生产者 — 从 agent_service 读取事件放入队列"""
@@ -280,7 +280,12 @@ async def _stream_response(
                 elif event_type == "approval_required":
                     await _queue.put(f"data: {json.dumps({'approval_required': {'tool': event.get('tool', ''), 'args': event.get('args', {}), 'message': event.get('message', '')}, 'done': False})}\n\n")
                 elif event_type == "done":
-                    await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': event.get('prompt_tokens', 0), 'completion_tokens': event.get('completion_tokens', 0)})}\n\n")
+                    prompt_tokens = event.get("prompt_tokens", 0)
+                    completion_tokens = event.get("completion_tokens", 0)
+                    total_tokens = prompt_tokens + completion_tokens
+                    # done 时保存助手回复（数据完整）
+                    await _save_assistant_message("".join(_full_content), total_tokens)
+                    await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens})}\n\n")
                 elif event_type == "error":
                     await _queue.put(f"data: {json.dumps({'error': event['message'], 'done': True})}\n\n")
         except Exception as e:
@@ -304,19 +309,3 @@ async def _stream_response(
     finally:
         heartbeat_task.cancel()
         producer_task.cancel()
-        # 流结束后，独立事务保存消息
-        assistant_content = "".join(_full_content)
-        if assistant_content:
-            try:
-                from app.core.database import AsyncSessionLocal
-                user_content = messages[-1]["content"] if messages else ""
-                async with AsyncSessionLocal() as save_db:
-                    await _chat_service.save_skill_messages(
-                        save_db,
-                        conversation_id=conversation_id,
-                        user_content=user_content,
-                        assistant_content=assistant_content,
-                    )
-                    await save_db.commit()
-            except Exception as e:
-                logger.warning(f"流式消息保存失败: {e}")

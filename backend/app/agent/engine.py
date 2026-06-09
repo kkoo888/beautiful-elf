@@ -152,7 +152,7 @@ def build_agent_graph(
     graph = StateGraph(AgentState)
 
     graph.add_node("intent_router", _make_intent_router(intent_router))
-    graph.add_node("skill_executor", _make_skill_executor_node(skill_executor))
+    graph.add_node("skill_executor", _make_skill_executor_node(skill_executor, context_engine, memory_manager))
     graph.add_node("context_builder", _make_context_builder(context_engine, memory_manager, tool_registry))
     graph.add_node("llm_call", _make_llm_caller(llm, tool_registry))
     graph.add_node("tool_executor", _make_tool_executor(tool_registry))
@@ -226,7 +226,7 @@ def _make_intent_router(intent_router):
     return intent_router_node
 
 
-def _make_skill_executor_node(skill_executor):
+def _make_skill_executor_node(skill_executor, context_engine=None, memory_manager=None):
     async def skill_executor_node(state: AgentState) -> dict:
         if not skill_executor or not state.get("intent"):
             return {"skill_answer": None, "final_answer": None}
@@ -247,6 +247,8 @@ def _make_skill_executor_node(skill_executor):
                     messages=_build_message_dicts(state),
                     provider_id=state.get("provider_id"),
                     model_name=state.get("model_name", ""),
+                    context_engine=context_engine,
+                    memory_manager=memory_manager,
                 )
         except Exception as e:
             logger.error(f"[skill_executor] 技能 '{target}' 执行失败: {e}", exc_info=True)

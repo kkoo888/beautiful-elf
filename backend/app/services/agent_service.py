@@ -50,6 +50,7 @@ class AgentService:
         from app.agent.tool_registry import tool_registry
         from app.agent.engine import build_agent_graph
         from app.agent.context_engine import ContextEngine
+        from app.agent.skill_executor import skill_executor
         from app.services.memory_service import memory_service
         from app.services.intent_service import intent_service
 
@@ -92,7 +93,7 @@ class AgentService:
                 context_engine=context_engine,
                 memory_manager=memory_manager,
                 intent_router=intent_router,
-                skill_executor=None,
+                skill_executor=skill_executor,
                 rag_pipeline=rag_pipeline,
                 enable_interrupt=enable_interrupt,
             )

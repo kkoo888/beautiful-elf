@@ -1,8 +1,10 @@
-"""统一 LLM 对话服务 — 支持 OpenAI 兼容 + Ollama + Claude"""
+"""统一 LLM 对话服务 — 支持 OpenAI 兼容 + Ollama
 
-import json
+供 skill_executor 调用（非流式直接 LLM 调用）。
+对话主路径走 agent_service → LangGraph，不经过本服务。
+"""
 import logging
-from typing import List, Optional, AsyncIterator
+from typing import List
 import httpx
 
 from app.schemas.chat import ChatResponse
@@ -15,7 +17,7 @@ OPENAI_COMPAT_TYPES = {"openai", "deepseek", "qwen", "custom"}
 
 
 class LLMChatService:
-    """统一 LLM 对话服务"""
+    """统一 LLM 对话服务（供 skill_executor 使用）"""
 
     def __init__(self):
         self.provider_service = LLMProviderService()
@@ -44,7 +46,7 @@ class LLMChatService:
         temperature: float = 0.7,
         max_tokens: int = 2048,
     ) -> ChatResponse:
-        """非流式对话"""
+        """非流式对话（skill_executor 使用）"""
         provider = await self.provider_service.get_provider(db, provider_id)
         provider_type = provider.provider_type
 
@@ -56,32 +58,6 @@ class LLMChatService:
             return await self._chat_ollama(
                 provider, model_name, messages, temperature, max_tokens
             )
-        else:
-            raise ValueError(f"不支持的供应商类型: {provider_type}")
-
-    async def chat_stream(
-        self,
-        db,
-        provider_id: int,
-        model_name: str,
-        messages: List[dict],
-        temperature: float = 0.7,
-        max_tokens: int = 2048,
-    ) -> AsyncIterator[str]:
-        """流式对话，逐 token 返回"""
-        provider = await self.provider_service.get_provider(db, provider_id)
-        provider_type = provider.provider_type
-
-        if provider_type in OPENAI_COMPAT_TYPES:
-            async for chunk in self._stream_openai_compat(
-                provider, model_name, messages, temperature, max_tokens
-            ):
-                yield chunk
-        elif provider_type == "ollama":
-            async for chunk in self._stream_ollama(
-                provider, model_name, messages, temperature, max_tokens
-            ):
-                yield chunk
         else:
             raise ValueError(f"不支持的供应商类型: {provider_type}")
 
@@ -126,48 +102,6 @@ class LLMChatService:
             token_count=usage.get("total_tokens", 0),
         )
 
-    async def _stream_openai_compat(
-        self, provider, model: str, messages: List[dict],
-        temperature: float, max_tokens: int,
-    ) -> AsyncIterator[str]:
-        base_url = provider.base_url.rstrip("/")
-        api_key = getattr(provider, "api_key", "") or ""
-
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": True,
-        }
-
-        client = self._get_client()
-        async with client.stream(
-            "POST",
-            f"{base_url}/chat/completions",
-            json=payload,
-            headers=headers,
-        ) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line or not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str.strip() == "[DONE]":
-                    break
-                try:
-                    data = json.loads(data_str)
-                    delta = data.get("choices", [{}])[0].get("delta", {})
-                    content = delta.get("content", "")
-                    if content:
-                        yield content
-                except json.JSONDecodeError:
-                    continue
-
     # ── Ollama 接口 ──────────────────────────────────────────
 
     async def _chat_ollama(
@@ -197,35 +131,3 @@ class LLMChatService:
             provider_type="ollama",
             token_count=data.get("eval_count", 0),
         )
-
-    async def _stream_ollama(
-        self, provider, model: str, messages: List[dict],
-        temperature: float, max_tokens: int,
-    ) -> AsyncIterator[str]:
-        base_url = provider.base_url.rstrip("/")
-
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": True,
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens,
-            },
-        }
-
-        client = self._get_client()
-        async with client.stream("POST", f"{base_url}/api/chat", json=payload) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                    content = data.get("message", {}).get("content", "")
-                    if content:
-                        yield content
-                    if data.get("done"):
-                        break
-                except json.JSONDecodeError:
-                    continue

@@ -17,7 +17,7 @@
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 import type {
-  ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse,
+  ChatRequest, FeedbackRequest, FeedbackResponse,
   StreamToken, Conversation, ChatMessage, ToolProgress, ApprovalRequest, ContextSource,
 } from '../types/chat'
 
@@ -123,26 +123,7 @@ export async function saveMessage(
 // ── AI 对话 API ──────────────────────────────────────────────
 
 /**
- * 发送非流式聊天请求
- * 后端路径: POST /conversations/{conversation_id}/chat
- * 后端 ChatRequest 字段: provider_id (alias=providerId), model_name (alias=modelName),
- *                        messages, temperature, max_tokens (alias=maxTokens), stream
- */
-export async function chat(request: ChatRequest): Promise<ChatResponse> {
-  // 消息保存由后端 save_skill_messages 统一负责，前端不再重复保存
-  const data = extractData(await apiClient.post(`/conversations/${request.conversationId}/chat`, {
-    provider_id: request.providerId, model_name: request.modelName ?? '',
-    messages: [{ role: 'user', content: request.message }],
-    temperature: 0.7, max_tokens: 2048, stream: false,
-  })) as any
-  return {
-    id: crypto.randomUUID(), content: data.content ?? '',
-    isCached: false, model: data.model ?? '',
-  }
-}
-
-/**
- * 创建流式聊天连接（SSE）— v4.1 支持审批/工具进度/上下文引用/成本事件
+ * 创建流式聊天连接（SSE）— 支持审批/工具进度/上下文引用/成本事件
  * 后端路径: POST /conversations/{conversation_id}/chat
  */
 export function chatStream(
