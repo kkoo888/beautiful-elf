@@ -651,7 +651,8 @@ def _make_evaluator_node(llm=None):
         if not final_answer:
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
         if len(final_answer.strip()) < 10:
-            return {"evaluation": {"passed": False, "reason": "回答过短", "score": 2}}
+            return {"evaluation": {"passed": False, "reason": "回答过短", "score": 2},
+                    "final_answer": "抱歉，我暂时无法准确回答这个问题。你可以换个方式描述，或稍后再试。"}
         if "抱歉" in final_answer and "不可用" in final_answer:
             return {"evaluation": {"passed": False, "reason": "包含错误信息", "score": 2}}
         return {"evaluation": {"passed": True, "reason": "", "score": 7}}
@@ -726,7 +727,20 @@ def _make_evaluator_node(llm=None):
                 },
             }
             logger.info(f"[evaluator] LLM-as-Judge: score={evaluation['score']} passed={evaluation['passed']} reason={evaluation['reason'][:50]}")
-            return {"evaluation": evaluation}
+
+            # 评分太低（<4）的回答替换为兜底
+            result = {"evaluation": evaluation}
+            if evaluation["score"] < 4 and state.get("final_answer"):
+                logger.warning(f"[evaluator] 评估不通过(score={evaluation['score']})，替换为兜底回答")
+                result["final_answer"] = (
+                    "抱歉，我暂时无法准确回答这个问题。"
+                    "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
+                    "你可以试试：\n"
+                    "1. 换个方式描述你的问题\n"
+                    "2. 稍后再试\n"
+                    "3. 如果是天气等实时信息，可以直接告诉我你的城市"
+                )
+            return result
 
         except Exception as e:
             logger.warning(f"[evaluator] LLM 评估失败，降级为规则评估: {e}")
@@ -912,28 +926,13 @@ def _after_eval(state: AgentState) -> str:
     evaluation = state.get("evaluation", {})
     passed = evaluation.get("passed", True)
     score = evaluation.get("score", 7)
-    reason = evaluation.get("reason", "")
 
     # score >= 6 或 passed=True → 通过
     if passed and score >= 6:
         return "pass"
 
-    # [P2] 评估未通过但已有回答 → 替换为用户友好的兜底回答
-    # 评分太低（<4）的回答不如不给，直接用明确的提示替代
+    # 评估未通过但已有回答 → 仍然放行（兜底回答已在 evaluator 节点中替换）
     if state.get("final_answer"):
-        if score < 4:
-            logger.warning(f"[evaluator] 评估不通过(score={score})，替换为兜底回答: {reason}")
-            # 注意：用属性赋值确保触发 Pydantic field_validator
-            state.final_answer = (
-                "抱歉，我暂时无法准确回答这个问题。"
-                "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
-                "你可以试试：\n"
-                "1. 换个方式描述你的问题\n"
-                "2. 稍后再试\n"
-                "3. 如果是天气等实时信息，可以直接告诉我你的城市"
-            )
-        else:
-            logger.warning(f"[evaluator] 评估未通过(score={score})但回答尚可，直接返回")
         return "pass"
     return "replan"
 
