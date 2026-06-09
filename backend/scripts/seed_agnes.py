@@ -4,7 +4,10 @@ Agnes AI 官方文档: https://agnes-ai.com/doc/overview
   - Base URL: https://apihub.agnes-ai.com/v1
   - 认证方式: Bearer Token（从 platform.agnes-ai.com 获取 API Key）
   - 协议: 完全兼容 OpenAI SDK
-  - 默认模型: agnes-2.0-flash
+  - 模型列表（官方文档）:
+      文本: Agnes 1.5 Flash, Agnes 2.0 Flash (NEW)
+      图像: Agnes Image 2.0 Flash (NEW), Agnes Image 2.1 Flash (NEW)
+      视频: Agnes Video V2.0 (NEW)
 
 用法:
   cd backend && python -m scripts.seed_agnes
@@ -41,6 +44,28 @@ AGNES_MODELS = [
         "is_enabled": 1,
         "sort_order": 0,
         "remark": "Agnes 旗舰文本模型，支持工具调用和多模态",
+    },
+    {
+        "model_name": "agnes-image-2.1-flash",
+        "display_name": "Agnes Image 2.1 Flash",
+        "context_length": 4096,
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "capabilities": {"vision": True, "streaming": True},
+        "is_enabled": 1,
+        "sort_order": 1,
+        "remark": "Agnes 图像生成模型",
+    },
+    {
+        "model_name": "agnes-video-v2.0",
+        "display_name": "Agnes Video V2.0",
+        "context_length": 4096,
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "capabilities": {"streaming": True},
+        "is_enabled": 1,
+        "sort_order": 2,
+        "remark": "Agnes 视频生成模型",
     },
 ]
 

@@ -103,8 +103,8 @@ const MODEL_PRESETS: Record<string, { modelName: string; displayName: string; co
     { modelName: 'o3-mini', displayName: 'o3-mini', contextLength: 200000 },
   ],
   claude: [
-    { modelName: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4', contextLength: 200000 },
-    { modelName: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku', contextLength: 200000 },
+    { modelName: 'claude-sonnet-4-5-20250929', displayName: 'Claude Sonnet 4.5', contextLength: 200000 },
+    { modelName: 'claude-haiku-4-5-20251001', displayName: 'Claude Haiku 4.5', contextLength: 200000 },
   ],
   deepseek: [
     { modelName: 'deepseek-chat', displayName: 'DeepSeek-V3', contextLength: 64000 },
@@ -130,6 +130,11 @@ const MODEL_PRESETS: Record<string, { modelName: string; displayName: string; co
   moonshot: [
     { modelName: 'moonshot-v1-128k', displayName: 'Moonshot V1 128K', contextLength: 128000 },
     { modelName: 'moonshot-v1-32k', displayName: 'Moonshot V1 32K', contextLength: 32000 },
+  ],
+  agnes: [
+    { modelName: 'agnes-2.0-flash', displayName: 'Agnes 2.0 Flash', contextLength: 128000 },
+    { modelName: 'agnes-image-2.1-flash', displayName: 'Agnes Image 2.1 Flash', contextLength: 4096 },
+    { modelName: 'agnes-video-v2.0', displayName: 'Agnes Video V2.0', contextLength: 4096 },
   ],
 }
 

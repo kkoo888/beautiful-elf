@@ -125,7 +125,7 @@ export type SpeakingStyle = (typeof SPEAKING_STYLES)[number]
 // ── 大模型供应商 + 模型（方案 A: 两表分离）────────────────────
 
 /** 供应商类型 */
-export type ProviderType = 'openai' | 'claude' | 'deepseek' | 'ollama' | 'qwen' | 'xiaomi' | 'zhipu' | 'moonshot' | 'custom'
+export type ProviderType = 'openai' | 'claude' | 'deepseek' | 'ollama' | 'qwen' | 'xiaomi' | 'zhipu' | 'moonshot' | 'agnes' | 'custom'
 
 /** 模型配置（独立实体，从 llm_model 表读取） */
 export interface LLMModel {
@@ -194,6 +194,7 @@ export const PROVIDER_PRESETS: Record<ProviderType, { name: string; baseUrl: str
   xiaomi: { name: '小米 MiMo', baseUrl: 'https://api.xiaomimimo.com/v1', placeholder: 'sk-...' },
   zhipu: { name: '智谱 AI', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', placeholder: '...' },
   moonshot: { name: '月之暗面', baseUrl: 'https://api.moonshot.cn/v1', placeholder: 'sk-...' },
+  agnes: { name: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', placeholder: '输入 API Key' },
   custom: { name: '自定义', baseUrl: '', placeholder: '输入 API Key' },
 }
 
