@@ -1,6 +1,6 @@
 /** 专家团编辑器组件 */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Form,
   Input,
@@ -12,16 +12,15 @@ import {
   Typography,
   Popconfirm,
   Switch,
-  Tag,
-  Popover,
+  Modal,
   message,
 } from 'antd'
 import {
-  PlusOutlined,
   DeleteOutlined,
   SaveOutlined,
   ArrowLeftOutlined,
   UserAddOutlined,
+  EditOutlined,
 } from '@ant-design/icons'
 import { CompactModelSelect } from '@/modules/shared/components/model-selector'
 import type { ExpertTeam, ExpertTeamFormInput, ExpertMemberFormInput } from '../types'
@@ -79,8 +78,8 @@ const PRESET_EXPERTS: ExpertMemberFormInput[] = [
   },
 ]
 
-/** Emoji 网格选择器 */
-function EmojiPicker({
+/** Emoji 网格选择器（用于弹窗内） */
+function EmojiGrid({
   value,
   options,
   onChange,
@@ -90,7 +89,7 @@ function EmojiPicker({
   onChange: (v: string) => void
 }) {
   return (
-    <div className={styles.emojiGrid}>
+    <div className={styles.modalEmojiGrid}>
       {options.map((emoji) => (
         <div
           key={emoji}
@@ -104,6 +103,158 @@ function EmojiPicker({
   )
 }
 
+/** 成员编辑弹窗 */
+function MemberEditModal({
+  open,
+  member,
+  isNew,
+  onOk,
+  onCancel,
+}: {
+  open: boolean
+  member: ExpertMemberFormInput | null
+  isNew: boolean
+  onOk: (updated: ExpertMemberFormInput) => void
+  onCancel: () => void
+}) {
+  const [form] = Form.useForm()
+  const [avatar, setAvatar] = useState(member?.avatar ?? '🤖')
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+
+  useEffect(() => {
+    if (open && member) {
+      setAvatar(member.avatar ?? '🤖')
+      form.setFieldsValue({
+        memberName: member.memberName,
+        memberRole: member.memberRole,
+        systemPrompt: member.systemPrompt,
+        modelName: member.modelName || '',
+        temperature: member.temperature,
+        maxTokens: member.maxTokens,
+        isEnabled: member.isEnabled !== 0,
+      })
+    }
+  }, [open, member, form])
+
+  const handleOk = useCallback(async () => {
+    try {
+      const values = await form.validateFields()
+      onOk({
+        memberName: values.memberName,
+        memberRole: values.memberRole,
+        avatar,
+        systemPrompt: values.systemPrompt,
+        modelName: values.modelName || undefined,
+        temperature: values.temperature,
+        maxTokens: values.maxTokens,
+        isEnabled: values.isEnabled ? 1 : 0,
+      })
+    } catch {
+      // validation failed
+    }
+  }, [form, avatar, onOk])
+
+  const roleColor = member ? getExpertRoleColor(member.memberRole) : '#d9d9d9'
+
+  return (
+    <Modal
+      open={open}
+      title={isNew ? '添加专家成员' : '编辑专家成员'}
+      onOk={handleOk}
+      onCancel={onCancel}
+      width={600}
+      okText="确定"
+      cancelText="取消"
+      destroyOnClose
+    >
+      {/* 头像区域 */}
+      <div className={styles.modalAvatarWrap}>
+        <div
+          className={styles.modalAvatarLarge}
+          style={{ backgroundColor: roleColor + '18', color: roleColor }}
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+        >
+          {avatar}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 16 }}>
+            {member?.memberName || '新专家'}
+          </div>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            {member?.memberRole || '点击头像更换'}
+          </Text>
+        </div>
+      </div>
+
+      {showEmojiPicker && (
+        <div style={{ marginBottom: 16 }}>
+          <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+            选择头像（点击选中，再次点击收起）
+          </Text>
+          <EmojiGrid
+            value={avatar}
+            options={PRESET_AVATARS}
+            onChange={(v) => {
+              setAvatar(v)
+              setShowEmojiPicker(false)
+            }}
+          />
+        </div>
+      )}
+
+      <Form form={form} layout="vertical">
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Form.Item
+            name="memberName"
+            label="名称"
+            rules={[{ required: true, message: '请输入名称' }]}
+            style={{ flex: 1 }}
+          >
+            <Input placeholder="专家名称" />
+          </Form.Item>
+          <Form.Item
+            name="memberRole"
+            label="角色"
+            rules={[{ required: true, message: '请输入角色' }]}
+            style={{ flex: 1 }}
+          >
+            <Input placeholder="如: 架构师" />
+          </Form.Item>
+        </div>
+
+        <Form.Item
+          name="systemPrompt"
+          label="系统提示词"
+          rules={[{ required: true, message: '请输入系统提示词' }]}
+        >
+          <TextArea rows={5} placeholder="定义这个专家的专业领域和行为方式..." />
+        </Form.Item>
+
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <Form.Item label="模型" style={{ flex: 1, minWidth: 200 }}>
+            <CompactModelSelect
+              value={form.getFieldValue('modelName') || ''}
+              onChange={(_val, _pid, modelName) => form.setFieldValue('modelName', modelName)}
+              placeholder="默认模型"
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+          <Form.Item label="温度" name="temperature" initialValue={0.7}>
+            <InputNumber min={0} max={2} step={0.1} style={{ width: 100 }} />
+          </Form.Item>
+          <Form.Item label="Max Tokens" name="maxTokens" initialValue={2048}>
+            <InputNumber min={1} max={8192} style={{ width: 120 }} />
+          </Form.Item>
+        </div>
+
+        <Form.Item name="isEnabled" label="启用状态" valuePropName="checked" initialValue={true}>
+          <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+}
+
 interface ExpertTeamEditorProps {
   team?: ExpertTeam
   onSave: (input: ExpertTeamFormInput) => Promise<void>
@@ -114,6 +265,7 @@ interface ExpertTeamEditorProps {
 export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeamEditorProps) {
   const [form] = Form.useForm()
   const [teamIcon, setTeamIcon] = useState(team?.icon ?? '👥')
+  const [showTeamIconPicker, setShowTeamIconPicker] = useState(false)
   const [members, setMembers] = useState<ExpertMemberFormInput[]>(
     team?.members.map((m) => ({
       memberName: m.memberName,
@@ -127,19 +279,37 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
     })) ?? []
   )
 
-  const handleAddMember = useCallback(() => {
-    setMembers((prev) => [
-      ...prev,
-      {
-        memberName: '',
-        memberRole: '',
-        avatar: '🤖',
-        systemPrompt: '',
-        temperature: 0.7,
-        maxTokens: 2048,
-        isEnabled: 1,
-      },
-    ])
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+
+  const openEditModal = useCallback((index: number) => {
+    setEditingIndex(index)
+    setModalOpen(true)
+  }, [])
+
+  const openAddModal = useCallback(() => {
+    setEditingIndex(null)
+    setModalOpen(true)
+  }, [])
+
+  const handleModalOk = useCallback((updated: ExpertMemberFormInput) => {
+    if (editingIndex !== null) {
+      // Update existing
+      setMembers((prev) =>
+        prev.map((m, i) => (i === editingIndex ? updated : m))
+      )
+    } else {
+      // Add new
+      setMembers((prev) => [...prev, updated])
+    }
+    setModalOpen(false)
+    setEditingIndex(null)
+  }, [editingIndex])
+
+  const handleModalCancel = useCallback(() => {
+    setModalOpen(false)
+    setEditingIndex(null)
   }, [])
 
   const handleAddPreset = useCallback((preset: ExpertMemberFormInput) => {
@@ -155,15 +325,6 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
   const handleRemoveMember = useCallback((index: number) => {
     setMembers((prev) => prev.filter((_, i) => i !== index))
   }, [])
-
-  const handleMemberChange = useCallback(
-    (index: number, field: keyof ExpertMemberFormInput, value: unknown) => {
-      setMembers((prev) =>
-        prev.map((m, i) => (i === index ? { ...m, [field]: value } : m))
-      )
-    },
-    []
-  )
 
   const handleSubmit = useCallback(async () => {
     try {
@@ -198,6 +359,10 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
     }
   }, [form, members, teamIcon, onSave])
 
+  // Current member being edited in modal
+  const editingMember = editingIndex !== null ? members[editingIndex] : null
+  const isNewMember = editingIndex === null
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Form
@@ -217,25 +382,24 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
           <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
             {/* 图标选择 */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <Popover
-                trigger="click"
-                placement="bottomLeft"
-                content={
-                  <EmojiPicker
-                    value={teamIcon}
-                    options={TEAM_ICONS}
-                    onChange={(v) => {
-                      setTeamIcon(v)
-                      form.setFieldValue('icon', v)
-                    }}
-                  />
-                }
+              <div
+                className={styles.iconPreview}
+                style={{ cursor: 'pointer' }}
+                onClick={() => setShowTeamIconPicker(!showTeamIconPicker)}
               >
-                <div className={styles.iconPreview} style={{ cursor: 'pointer' }}>
-                  {teamIcon}
-                </div>
-              </Popover>
+                {teamIcon}
+              </div>
               <Text type="secondary" style={{ fontSize: 11 }}>点击更换</Text>
+              {showTeamIconPicker && (
+                <EmojiGrid
+                  value={teamIcon}
+                  options={TEAM_ICONS}
+                  onChange={(v) => {
+                    setTeamIcon(v)
+                    setShowTeamIconPicker(false)
+                  }}
+                />
+              )}
             </div>
 
             {/* 名称和分类 */}
@@ -311,7 +475,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                 }))}
                 allowClear
               />
-              <Button icon={<UserAddOutlined />} onClick={handleAddMember}>
+              <Button icon={<UserAddOutlined />} onClick={openAddModal}>
                 自定义专家
               </Button>
             </Space>
@@ -328,56 +492,32 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
               return (
                 <div
                   key={index}
-                  className={`${styles.memberListCard} ${member.isEnabled === 0 ? styles.memberCardDisabled : ''}`}
+                  className={`${styles.memberListCard} ${styles.memberListCardEditable} ${member.isEnabled === 0 ? styles.memberCardDisabled : ''}`}
                   style={{ borderLeft: `3px solid ${member.memberRole ? roleColor : '#d9d9d9'}` }}
+                  onClick={() => openEditModal(index)}
                 >
-                  {/* 成员头部 */}
                   <div className={styles.memberListCardHeader}>
-                    <Popover
-                      trigger="click"
-                      placement="bottomLeft"
-                      content={
-                        <EmojiPicker
-                          value={member.avatar || '🤖'}
-                          options={PRESET_AVATARS}
-                          onChange={(v) => handleMemberChange(index, 'avatar', v)}
-                        />
-                      }
+                    <div
+                      className={styles.memberAvatar}
+                      style={{ backgroundColor: roleColor + '18', color: roleColor }}
                     >
-                      <div
-                        className={styles.memberAvatar}
-                        style={{
-                          backgroundColor: roleColor + '18',
-                          color: roleColor,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {member.avatar || '🤖'}
-                      </div>
-                    </Popover>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <Input
-                        value={member.memberName}
-                        onChange={(e) => handleMemberChange(index, 'memberName', e.target.value)}
-                        placeholder="专家名称"
-                        variant="borderless"
-                        style={{ fontWeight: 600, padding: 0 }}
-                      />
+                      {member.avatar || '🤖'}
                     </div>
-                    <Input
-                      value={member.memberRole}
-                      onChange={(e) => handleMemberChange(index, 'memberRole', e.target.value)}
-                      placeholder="角色"
-                      variant="borderless"
-                      style={{ width: 100 }}
-                    />
-                    <Space size={4}>
-                      <Switch
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Space>
+                        <Text strong>{member.memberName || `专家 #${index + 1}`}</Text>
+                        {member.memberRole && (
+                          <Text type="secondary">({member.memberRole})</Text>
+                        )}
+                        {!member.isEnabled && <span style={{ fontSize: 12, color: '#999' }}>已禁用</span>}
+                      </Space>
+                    </div>
+                    <Space size={4} onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        type="text"
+                        icon={<EditOutlined />}
                         size="small"
-                        checked={member.isEnabled !== 0}
-                        onChange={(checked) => handleMemberChange(index, 'isEnabled', checked ? 1 : 0)}
-                        checkedChildren="启用"
-                        unCheckedChildren="禁用"
+                        onClick={() => openEditModal(index)}
                       />
                       <Popconfirm
                         title="确定移除此专家？"
@@ -387,48 +527,13 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
                       </Popconfirm>
                     </Space>
                   </div>
-
-                  {/* 提示词 */}
-                  <TextArea
-                    value={member.systemPrompt}
-                    onChange={(e) => handleMemberChange(index, 'systemPrompt', e.target.value)}
-                    rows={2}
-                    placeholder="定义这个专家的专业领域和行为方式..."
-                    variant="borderless"
-                    style={{ backgroundColor: 'transparent', padding: 0, fontSize: 13 }}
-                  />
-
-                  {/* 模型参数 */}
-                  <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                    <CompactModelSelect
-                      value={member.modelName || ''}
-                      onChange={(_val, _pid, modelName) => handleMemberChange(index, 'modelName', modelName)}
-                      placeholder="默认模型"
-                      style={{ width: 200 }}
-                    />
-                    <Space size={4}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>温度</Text>
-                      <InputNumber
-                        value={member.temperature}
-                        onChange={(v) => handleMemberChange(index, 'temperature', v)}
-                        min={0}
-                        max={2}
-                        step={0.1}
-                        size="small"
-                        style={{ width: 70 }}
-                      />
-                    </Space>
-                    <Space size={4}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>Tokens</Text>
-                      <InputNumber
-                        value={member.maxTokens}
-                        onChange={(v) => handleMemberChange(index, 'maxTokens', v)}
-                        min={1}
-                        max={8192}
-                        size="small"
-                        style={{ width: 90 }}
-                      />
-                    </Space>
+                  <p className={styles.memberPrompt}>
+                    {member.systemPrompt || '暂无提示词，点击编辑添加...'}
+                  </p>
+                  <div className={styles.memberMeta}>
+                    <span>模型: {member.modelName || '默认'}</span>
+                    <span>温度: {member.temperature.toFixed(1)}</span>
+                    <span>Tokens: {member.maxTokens}</span>
                   </div>
                 </div>
               )
@@ -451,6 +556,15 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
           </Button>
         </Space>
       </div>
+
+      {/* 成员编辑弹窗 */}
+      <MemberEditModal
+        open={modalOpen}
+        member={editingMember}
+        isNew={isNewMember}
+        onOk={handleModalOk}
+        onCancel={handleModalCancel}
+      />
     </div>
   )
 }

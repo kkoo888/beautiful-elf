@@ -1,9 +1,11 @@
 /**
- * 聊天主面板组件（v4.1 — 新增审批/工具进度/上下文引用/token 统计）
+ * 聊天主面板组件（v4.2 — 进展信息移至右侧面板）
  * 整合消息列表、输入框、推理深度切换、模型选择等
  *
  * 注意：useChat 由父组件 ChatPanel 调用，本组件通过 props 接收，
  * 避免重复调用导致 effect 重复触发。
+ * 进展类信息（Agent 进展、工具进度、上下文引用、token 统计）
+ * 由父组件统一在右侧面板展示。
  */
 
 import React, { useCallback } from 'react'
@@ -15,10 +17,6 @@ import { MessageInput } from './message-input'
 import { ReasoningDepthSwitch } from './reasoning-depth'
 import { FullModelSelect } from '@/modules/shared/components/model-selector'
 import { ApprovalDialog } from './approval-dialog'
-import { ToolProgressIndicator } from './tool-progress'
-import { AgentProgressIndicator } from './agent-progress'
-import { TokenStatsBar } from './token-stats-bar'
-import { ContextSourcesDisplay } from './context-sources'
 import type { UseChatReturn } from '../hooks/use-chat'
 
 interface ChatContentProps {
@@ -32,11 +30,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
     isLoading,
     selectedProviderId,
     selectedModelName,
-    toolProgress,
     approvalRequest,
-    contextSources,
-    tokenStats,
-    progressSteps,
     sendMessage,
     setReasoningDepth,
     setModelSelection,
@@ -78,31 +72,8 @@ export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
         </div>
       </div>
 
-      {/* 工具执行进度 */}
-      {toolProgress.length > 0 && (
-        <ToolProgressIndicator tools={toolProgress} />
-      )}
-
-      {/* Agent 执行进展 */}
-      {progressSteps.length > 0 && (
-        <AgentProgressIndicator steps={progressSteps} />
-      )}
-
       {/* 消息列表 */}
       <SimpleMessageList messages={messages} isLoading={isLoading} onFeedback={submitFeedback} />
-
-      {/* 上下文引用来源 */}
-      {contextSources.length > 0 && (
-        <ContextSourcesDisplay sources={contextSources} />
-      )}
-
-      {/* Token 统计 */}
-      {tokenStats && (
-        <TokenStatsBar
-          promptTokens={tokenStats.promptTokens}
-          completionTokens={tokenStats.completionTokens}
-        />
-      )}
 
       {/* 输入框 */}
       <MessageInput

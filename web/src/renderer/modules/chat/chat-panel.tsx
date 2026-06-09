@@ -1,15 +1,27 @@
 import { useState, useCallback } from 'react'
-import { Button, Tooltip } from 'antd'
-import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
+import { Button, Tooltip, Typography } from 'antd'
+import {
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
+} from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { ChatContent } from './components/chat-panel'
 import { ConversationList } from './components/conversation-list'
+import { AgentProgressIndicator } from './components/agent-progress'
+import { ToolProgressIndicator } from './components/tool-progress'
+import { ContextSourcesDisplay } from './components/context-sources'
+import { TokenStatsBar } from './components/token-stats-bar'
 import { useChat } from './hooks/use-chat'
 import styles from './chat-sidebar.module.css'
 
-/** 对话模块面板（含会话侧栏） */
+const { Text } = Typography
+
+/** 对话模块面板（含会话侧栏 + 右侧进展面板） */
 export default function ChatPanel() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [progressCollapsed, setProgressCollapsed] = useState(false)
   const chat = useChat()
   const {
     conversations,
@@ -17,11 +29,25 @@ export default function ChatPanel() {
     createConversation,
     switchConversation,
     deleteConversation,
+    toolProgress,
+    contextSources,
+    tokenStats,
+    progressSteps,
   } = chat
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => !prev)
   }, [])
+
+  const toggleProgress = useCallback(() => {
+    setProgressCollapsed((prev) => !prev)
+  }, [])
+
+  const hasProgressData =
+    toolProgress.length > 0 ||
+    progressSteps.length > 0 ||
+    contextSources.length > 0 ||
+    tokenStats !== null
 
   return (
     <div className={styles.layout}>
@@ -29,13 +55,27 @@ export default function ChatPanel() {
         title="💬 对话"
         description="与 AI 助手对话"
         extra={
-          <Tooltip title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
-            <Button
-              type="text"
-              icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={toggleSidebar}
-            />
-          </Tooltip>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <Tooltip title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
+              <Button
+                type="text"
+                icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={toggleSidebar}
+              />
+            </Tooltip>
+            <Tooltip title={progressCollapsed ? '展开进展面板' : '收起进展面板'}>
+              <Button
+                type="text"
+                icon={progressCollapsed ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                onClick={toggleProgress}
+                style={{
+                  color: hasProgressData && progressCollapsed
+                    ? 'var(--color-primary, #ff8c42)'
+                    : undefined,
+                }}
+              />
+            </Tooltip>
+          </div>
         }
       />
       <div className={styles.body}>
@@ -55,6 +95,64 @@ export default function ChatPanel() {
         {/* 聊天内容区 */}
         <div className={styles.content}>
           <ChatContent chat={chat} />
+        </div>
+
+        {/* 右侧进展面板 */}
+        <div
+          className={`${styles.progressPanel} ${progressCollapsed ? styles.progressPanelCollapsed : ''}`}
+        >
+          {!progressCollapsed && (
+            <div className={styles.progressPanelInner}>
+              <h4 className={styles.progressPanelTitle}>
+                ⚡ 执行进展
+              </h4>
+
+              {/* Agent 执行进展 */}
+              {progressSteps.length > 0 && (
+                <div className={styles.progressSection}>
+                  <div className={styles.progressSectionTitle}>Agent 步骤</div>
+                  <AgentProgressIndicator steps={progressSteps} />
+                </div>
+              )}
+
+              {/* 工具执行进度 */}
+              {toolProgress.length > 0 && (
+                <div className={styles.progressSection}>
+                  <div className={styles.progressSectionTitle}>工具调用</div>
+                  <ToolProgressIndicator tools={toolProgress} />
+                </div>
+              )}
+
+              {/* 上下文引用来源 */}
+              {contextSources.length > 0 && (
+                <div className={styles.progressSection}>
+                  <div className={styles.progressSectionTitle}>参考来源</div>
+                  <ContextSourcesDisplay sources={contextSources} />
+                </div>
+              )}
+
+              {/* Token 统计 */}
+              {tokenStats && (
+                <div className={styles.progressSection}>
+                  <div className={styles.progressSectionTitle}>Token 消耗</div>
+                  <TokenStatsBar
+                    promptTokens={tokenStats.promptTokens}
+                    completionTokens={tokenStats.completionTokens}
+                  />
+                </div>
+              )}
+
+              {/* 无数据时展示空状态 */}
+              {!hasProgressData && (
+                <div className={styles.progressEmpty}>
+                  <span className={styles.progressEmptyIcon}>🔍</span>
+                  <Text className={styles.progressEmptyText} type="secondary">
+                    发送消息后，这里将展示 Agent 的执行进展
+                  </Text>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

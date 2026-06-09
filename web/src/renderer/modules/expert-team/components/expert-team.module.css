@@ -291,17 +291,60 @@
   border: 2px dashed var(--ant-color-border, #d9d9d9);
 }
 
+/* ── 成员编辑弹窗 ── */
+.modalAvatarWrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+}
+
+.modalAvatarLarge {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.modalAvatarLarge:hover {
+  transform: scale(1.08);
+}
+
+.modalEmojiGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+/* 编辑器中可点击的成员卡片 */
+.memberListCardEditable {
+  cursor: pointer;
+}
+
+.memberListCardEditable:hover {
+  border-color: var(--ant-color-primary, #1677ff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
 /* ── 编辑器底部操作栏 ── */
 .editorFooter {
-  position: sticky;
-  bottom: 0;
-  background: var(--ant-color-bg-container, #fff);
+  padding: 16px 0 0;
+  margin-top: 8px;
   border-top: 1px solid var(--ant-color-border-secondary, #f0f0f0);
-  padding: 12px 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  z-index: 10;
 }
 
 /* ── 响应式 ── */
