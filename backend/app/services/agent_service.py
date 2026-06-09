@@ -153,7 +153,7 @@ class AgentService:
             "provider_id": provider_id,
             "model_name": model_name,
             "evaluation": None,
-            "selected_tools": None,  # B+C: 由 engine 动态选择
+            # selected_tools 由 engine 动态选择，不传则 default_factory=list 自动给 []
         }
 
         config = self._get_config(conversation_id)
@@ -386,7 +386,7 @@ class AgentService:
                 "model_name": model_name,
                 "evaluation": None,
                 "reasoning_depth": reasoning_depth,
-                "selected_tools": None,  # B+C: 由 engine 动态选择
+                # selected_tools 由 engine 动态选择，不传则 default_factory=list 自动给 []
             }
 
             config = self._get_config(conversation_id)
