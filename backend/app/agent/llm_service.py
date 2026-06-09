@@ -121,7 +121,7 @@ class LLMService:
 
         if provider_type == "ollama":
             return self._create_ollama_llm(base_url, model, temperature, max_tokens)
-        elif provider_type in ("openai", "deepseek", "qwen", "custom"):
+        elif provider_type in ("openai", "deepseek", "qwen", "agnes", "custom"):
             return self._create_openai_compat_llm(
                 base_url, api_key, model, temperature, max_tokens
             )

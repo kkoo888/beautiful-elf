@@ -782,6 +782,7 @@ def _make_memory_saver(memory_manager):
                 )
 
             tools_used = state.get("tools_used", [])
+            meta = None  # 预初始化，避免 should_save=False 时 NameError
 
             # 保存条件（三选一）:
             #   1. 有工具调用 → 实际执行了任务，值得记录

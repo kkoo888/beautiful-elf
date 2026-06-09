@@ -2,12 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Typography, Button, Card, Spin, message, Space, Empty } from 'antd'
-import { EditOutlined, SaveOutlined, EyeOutlined, BookOutlined } from '@ant-design/icons'
+import { EditOutlined, SaveOutlined, BookOutlined } from '@ant-design/icons'
 import { fetchLongTermMemory, updateLongTermMemory } from '../services/memory-api'
 import type { MarkdownMemoryEntry } from '../services/memory-api'
 
-const { Text, Paragraph } = Typography
-const { TextArea } = require('antd').Input ?? { TextArea: null }
+const { Text } = Typography
 
 export function LongTermTab() {
   const [memory, setMemory] = useState<MarkdownMemoryEntry | null>(null)

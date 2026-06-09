@@ -6,7 +6,7 @@ import { CalendarOutlined, FileTextOutlined } from '@ant-design/icons'
 import { fetchDailyLogs, fetchMarkdownMemory } from '../services/memory-api'
 import type { MarkdownMemoryEntry } from '../services/memory-api'
 
-const { Text, Paragraph, Title } = Typography
+const { Text } = Typography
 
 export function DailyLogTab() {
   const [logs, setLogs] = useState<MarkdownMemoryEntry[]>([])
