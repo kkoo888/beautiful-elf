@@ -627,6 +627,14 @@ def _make_tool_executor(tool_registry):
                             "content": _format_tool_result_json(None, name, str(tool_err)),
                         })
 
+        # 工具执行完成（无论成功失败都发 done 事件）
+        all_names = [name for _, name, _, _ in executable_calls]
+        failed_names = [n for n in all_names if n not in tools_succeeded]
+        if failed_names:
+            writer({"step": "tools", "status": "error", "message": f"工具执行完成: {', '.join(tools_succeeded)} 成功, {', '.join(failed_names)} 失败", "succeeded": tools_succeeded, "failed": failed_names})
+        else:
+            writer({"step": "tools", "status": "done", "message": f"工具执行完成: {', '.join(tools_succeeded)}", "succeeded": tools_succeeded})
+
         return {
             "messages": results,
             "tools_used": tools_succeeded,
