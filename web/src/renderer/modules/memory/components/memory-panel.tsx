@@ -1,21 +1,29 @@
-/** 记忆模块主面板 */
+/** 记忆模块主面板 — 三 Tab 布局 */
 
 import { useState, useCallback } from 'react'
-import { App } from 'antd'
+import { App, Tabs } from 'antd'
+import {
+  SearchOutlined, CalendarOutlined, BookOutlined,
+} from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { MemorySearch } from './memory-search'
 import { MemoryList } from './memory-list'
 import { MemoryDetail } from './memory-detail'
+import { DailyLogTab } from './daily-log-tab'
+import { LongTermTab } from './longterm-tab'
 import { useMemory } from '../hooks/use-memory'
 import type { MemoryEntry } from '../types/memory'
 import styles from './memory-panel.module.css'
 
 /**
- * 记忆面板
- * 核心入口：语义搜索 + 记忆列表 + 详情 Drawer
+ * 记忆面板 — 三 Tab 布局
+ * - 向量记忆：语义搜索 + 列表
+ * - 每日日志：Markdown 日记
+ * - 长期记忆：MEMORY 编辑
  */
 export default function MemoryPanel() {
   const { message } = App.useApp()
+  const [activeTab, setActiveTab] = useState('vector')
   const {
     memories,
     total,
@@ -61,28 +69,69 @@ export default function MemoryPanel() {
   // 当前展示的数据
   const displayMemories = isSearchMode ? searchResults : memories
 
+  const tabItems = [
+    {
+      key: 'vector',
+      label: (
+        <span>
+          <SearchOutlined />
+          向量记忆
+        </span>
+      ),
+      children: (
+        <div>
+          <MemorySearch
+            value={searchQuery}
+            onSearch={doSearch}
+            onClear={clearSearch}
+            isSearchMode={isSearchMode}
+            resultCount={searchResults.length}
+            loading={isSearching}
+          />
+          <MemoryList
+            memories={displayMemories}
+            total={isSearchMode ? searchResults.length : total}
+            page={page}
+            pageSize={pageSize}
+            loading={isLoading || isSearching}
+            onPageChange={setPage}
+            onCardClick={handleCardClick}
+            showSimilarity={isSearchMode}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'daily',
+      label: (
+        <span>
+          <CalendarOutlined />
+          每日日志
+        </span>
+      ),
+      children: <DailyLogTab />,
+    },
+    {
+      key: 'longterm',
+      label: (
+        <span>
+          <BookOutlined />
+          长期记忆
+        </span>
+      ),
+      children: <LongTermTab />,
+    },
+  ]
+
   return (
     <div className={styles.panel}>
-      <PageHeader title="🧠 记忆" description="长期记忆与语义检索" />
+      <PageHeader title="🧠 记忆" description="向量检索 · 每日日志 · 长期记忆" />
 
-      <MemorySearch
-        value={searchQuery}
-        onSearch={doSearch}
-        onClear={clearSearch}
-        isSearchMode={isSearchMode}
-        resultCount={searchResults.length}
-        loading={isSearching}
-      />
-
-      <MemoryList
-        memories={displayMemories}
-        total={isSearchMode ? searchResults.length : total}
-        page={page}
-        pageSize={pageSize}
-        loading={isLoading || isSearching}
-        onPageChange={setPage}
-        onCardClick={handleCardClick}
-        showSimilarity={isSearchMode}
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={tabItems}
+        style={{ padding: '0 16px' }}
       />
 
       <MemoryDetail

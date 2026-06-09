@@ -831,6 +831,62 @@ def _make_memory_saver(memory_manager):
             else:
                 logger.debug(f"[memory_saver] 跳过保存: importance={importance} tools={bool(tools_used)} msgs={len(messages)}")
 
+            # ── Markdown 每日日志：每次对话都追加 ──
+            try:
+                from app.core.database import AsyncSessionLocal
+                from app.services.markdown_memory_service import markdown_memory_service
+                from datetime import datetime
+
+                user_content = ""
+                for m in messages:
+                    if m.get("role") == "user":
+                        user_content = _content_to_str(m.get("content", ""))
+                        break
+
+                assistant_answer = state.get("final_answer", "")
+                summary_text = meta.get("summary", "") if meta else ""
+                if not summary_text:
+                    summary_text = (user_content[:100] + "...") if len(user_content) > 100 else user_content
+
+                now = datetime.utcnow()
+                time_str = now.strftime("%H:%M")
+                conv_id = state["conversation_id"]
+
+                # 生成会话标题（首次对话时自动设置）
+                conv_title = state.get("conversation_title", "")
+                if not conv_title and user_content:
+                    conv_title = user_content[:20].replace("\n", " ").strip()
+                    if len(user_content) > 20:
+                        conv_title += "..."
+
+                log_entry = f"## {time_str} | {conv_title}\n{summary_text}\n"
+
+                async with AsyncSessionLocal() as md_db:
+                    await markdown_memory_service.append_daily_log(
+                        md_db, user_id=state.get("user_id", 0), content=log_entry,
+                    )
+                    await md_db.commit()
+                    logger.info(f"[memory_saver] Markdown daily log 已追加: {conv_title}")
+
+                    # ── 自动生成会话标题（首条消息）──
+                    if not state.get("conversation_title") and user_content:
+                        try:
+                            from app.repository.conversation_repo import ConversationRepository
+                            conv_repo = ConversationRepository()
+                            conv = await conv_repo.find_by_id(md_db, conv_id)
+                            if conv and (not conv.title or conv.title == "新会话"):
+                                auto_title = user_content[:20].replace("\n", " ").strip()
+                                if len(user_content) > 20:
+                                    auto_title += "..."
+                                await conv_repo.update(md_db, conv_id, {"title": auto_title})
+                                await md_db.commit()
+                                logger.info(f"[memory_saver] 会话标题已更新: {auto_title}")
+                        except Exception as e:
+                            logger.warning(f"[memory_saver] 会话标题更新失败: {e}")
+
+            except Exception as e:
+                logger.warning(f"[memory_saver] Markdown daily log 失败: {e}")
+
         return {"conversation_importance": importance}
 
     return memory_saver_node

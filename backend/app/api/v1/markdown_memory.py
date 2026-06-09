@@ -90,6 +90,44 @@ async def append_daily_log(
         return api_error("MEMORY_APPEND_FAILED", str(e), "追加失败，请重试")
 
 
+@router.get("/longterm", response_model=ApiResult[MarkdownMemoryOut])
+async def get_longterm_memory(
+    user_id: int = Query(default=0, alias="userId"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """获取长期记忆"""
+    try:
+        item = await markdown_memory_service.get_or_create_longterm(db, user_id)
+        return ApiResult(data=item)
+    except Exception as e:
+        return api_error("MEMORY_NOT_FOUND", str(e), "获取长期记忆失败")
+
+
+@router.put("/longterm", response_model=ApiResult[MarkdownMemoryOut])
+async def update_longterm_memory(
+    data: MarkdownMemoryCreate,
+    user_id: int = Query(default=0, alias="userId"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """更新长期记忆"""
+    try:
+        item = await markdown_memory_service.update_longterm(db, user_id, data.content)
+        return ApiResult(data=item, message="保存成功")
+    except Exception as e:
+        return api_error("MEMORY_UPDATE_FAILED", str(e), "保存失败，请重试")
+
+
+@router.get("/daily/list", response_model=ApiPageResult)
+async def list_daily_logs(
+    user_id: int = Query(default=0, alias="userId"),
+    limit: int = Query(default=7, ge=1, le=30, description="返回天数"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiPageResult:
+    """获取最近 N 天的 daily log 列表"""
+    items = await markdown_memory_service.list_daily_logs(db, user_id, limit)
+    return ApiPageResult(data=items, total=len(items))
+
+
 @router.delete("/{memory_id}")
 async def delete_markdown_memory(
     memory_id: int = Path(..., description="记忆 ID"),

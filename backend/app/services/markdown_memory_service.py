@@ -89,9 +89,38 @@ class MarkdownMemoryService:
             new_content = existing.content + "\n" + content
             item = await self.repo.upsert(db, user_id, today, new_content, "daily")
         else:
-            item = await self.repo.upsert(db, user_id, today, content, "daily")
+            # 新建 daily log，加日期标题
+            header = f"# {today} 每日日志\n\n"
+            item = await self.repo.upsert(db, user_id, today, header + content, "daily")
 
         return self._to_out(item)
+
+    async def get_or_create_longterm(self, db: AsyncSession, user_id: int = 0) -> MarkdownMemoryOut:
+        """获取或创建长期记忆文件"""
+        existing = await self.repo.find_by_title(db, user_id, "MEMORY")
+        if existing:
+            return self._to_out(existing)
+        # 创建默认长期记忆
+        default_content = "# 长期记忆\n\n> 由 Agent 自动提炼和用户手动维护\n\n"
+        item = await self.repo.upsert(db, user_id, "MEMORY", default_content, "longterm")
+        return self._to_out(item)
+
+    async def update_longterm(
+        self, db: AsyncSession, user_id: int, content: str
+    ) -> MarkdownMemoryOut:
+        """更新长期记忆内容"""
+        item = await self.repo.upsert(db, user_id, "MEMORY", content, "longterm")
+        return self._to_out(item)
+
+    async def list_daily_logs(
+        self, db: AsyncSession, user_id: int = 0, limit: int = 7
+    ) -> List[MarkdownMemoryListOut]:
+        """获取最近 N 天的 daily log 列表"""
+        items = await self.repo.find_all(
+            db, offset=0, limit=limit,
+            user_id=user_id, memory_type="daily",
+        )
+        return [self._to_list_out(i) for i in items]
 
     async def delete_memory(self, db: AsyncSession, memory_id: int) -> bool:
         """软删除记忆"""

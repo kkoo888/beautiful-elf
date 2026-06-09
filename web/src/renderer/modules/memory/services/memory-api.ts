@@ -1,5 +1,5 @@
 /**
- * 记忆 API 服务 — 对接后端 /api/v1/memory 真实接口
+ * 记忆 API 服务 — 对接后端 /api/v1/memories + /api/v1/markdown_memories 真实接口
  */
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
@@ -110,4 +110,108 @@ export async function createMemory(data: {
     }) as any
   ) as BackendMemory
   return adaptMemory(raw)
+}
+
+// ── Markdown 记忆 API ──────────────────────────────────────
+
+interface BackendMarkdownMemory {
+  id: number
+  userId?: number
+  title: string
+  content: string
+  memoryType?: string
+  wordCount?: number
+  qdrantSynced?: number
+}
+
+interface BackendMarkdownListItem {
+  id: number
+  title: string
+  memoryType?: string
+  wordCount?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface MarkdownMemoryEntry {
+  id: string
+  title: string
+  content: string
+  memoryType: string
+  wordCount: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+function adaptMarkdownMemory(item: BackendMarkdownMemory): MarkdownMemoryEntry {
+  return {
+    id: String(item.id),
+    title: item.title ?? '',
+    content: item.content ?? '',
+    memoryType: item.memoryType ?? 'daily',
+    wordCount: item.wordCount ?? 0,
+  }
+}
+
+function adaptMarkdownListItem(item: BackendMarkdownListItem): MarkdownMemoryEntry {
+  return {
+    id: String(item.id),
+    title: item.title ?? '',
+    content: '',
+    memoryType: item.memoryType ?? 'daily',
+    wordCount: item.wordCount ?? 0,
+    createdAt: item.createdAt ?? undefined,
+    updatedAt: item.updatedAt ?? undefined,
+  }
+}
+
+/** 获取每日日志列表（最近 N 天） */
+export async function fetchDailyLogs(limit = 7): Promise<MarkdownMemoryEntry[]> {
+  const { items } = extractPaginated(
+    await apiClient.get('/markdown_memories/daily/list', {
+      params: { limit },
+    }) as any
+  )
+  return (items as BackendMarkdownListItem[]).map(adaptMarkdownListItem)
+}
+
+/** 获取指定日期的 daily log */
+export async function fetchDailyLog(date: string): Promise<MarkdownMemoryEntry | null> {
+  const data = extractData(
+    await apiClient.get(`/markdown_memories`, {
+      params: { memoryType: 'daily' },
+    }) as any
+  )
+  if (!data) return null
+  const items = Array.isArray(data) ? data : (data as any).items ?? []
+  const found = (items as BackendMarkdownMemory[]).find(i => i.title === date)
+  return found ? adaptMarkdownMemory(found) : null
+}
+
+/** 获取指定 ID 的 markdown 记忆详情 */
+export async function fetchMarkdownMemory(id: string): Promise<MarkdownMemoryEntry> {
+  const raw = extractData(
+    await apiClient.get(`/markdown_memories/${id}`) as any
+  ) as BackendMarkdownMemory
+  return adaptMarkdownMemory(raw)
+}
+
+/** 获取长期记忆 */
+export async function fetchLongTermMemory(): Promise<MarkdownMemoryEntry> {
+  const raw = extractData(
+    await apiClient.get('/markdown_memories/longterm') as any
+  ) as BackendMarkdownMemory
+  return adaptMarkdownMemory(raw)
+}
+
+/** 更新长期记忆 */
+export async function updateLongTermMemory(content: string): Promise<MarkdownMemoryEntry> {
+  const raw = extractData(
+    await apiClient.put('/markdown_memories/longterm', {
+      title: 'MEMORY',
+      content,
+      memoryType: 'longterm',
+    }) as any
+  ) as BackendMarkdownMemory
+  return adaptMarkdownMemory(raw)
 }
