@@ -12,7 +12,7 @@ v4.0 重构清单:
   9. Error Contract 三级分类
   10. 全链路可观测 + trace 回放
 """
-from typing import TypedDict, Annotated, Optional, List, Dict, Any, Callable
+from typing import Annotated, Optional, List, Dict, Any, Callable
 import operator
 import time
 import json
@@ -25,6 +25,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Tool
 
 from app.core.logging import get_logger
 from app.agent.context_engine import MAX_CONTEXT_CHARS
+from app.agent.state import AgentState, _content_blocks_to_str
 
 logger = get_logger(__name__)
 
@@ -103,30 +104,8 @@ def _create_checkpointer():
 
 # ── 状态定义 ──────────────────────────────────────────────
 
-class AgentState(TypedDict):
-    conversation_id: int
-    user_id: int
-    messages: Annotated[list, operator.add]
-    context: str
-    system_prompt: str
-    tool_calls: list
-    tools_used: Annotated[list, operator.add]
-    final_answer: Optional[str]
-    iterations: int
-    needs_approval: bool
-    pending_tool_call: Optional[dict]
-    intent: Optional[dict]
-    skill_answer: Optional[str]
-    error: Optional[str]
-    trace_metadata: dict
-    provider_id: Optional[int]
-    model_name: str
-    evaluation: Optional[dict]  # 评估结果
-    # 记忆元数据（由 context_builder 填充，供 memory_saver / evaluator 消费）
-    memory_context: Optional[dict]  # {"ids": [...], "scores": [...], "count": int, "avg_score": float}
-    conversation_importance: Optional[int]  # 对话重要性评分 (1-10)
-    # ── B+C: 动态工具选择 ──────────────────────────────
-    selected_tools: list  # 当前请求选中的工具名列表（str），非 Tool 对象（避免序列化问题）
+# AgentState 已迁移到 state.py（Pydantic BaseModel，2026 行业标准）
+# 见: app/agent/state.py
 
 
 # ── 错误契约 ──────────────────────────────────────────────
@@ -669,8 +648,6 @@ def _make_evaluator_node(llm=None):
     # 规则评估降级版（仅在无 LLM 时使用）
     def _rule_based_eval(state: AgentState) -> dict:
         final_answer = state.get("final_answer", "")
-        if isinstance(final_answer, list):
-            final_answer = _content_to_str(final_answer)
         if not final_answer:
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
         if len(final_answer.strip()) < 10:
@@ -681,8 +658,6 @@ def _make_evaluator_node(llm=None):
 
     async def evaluator_node(state: AgentState) -> dict:
         final_answer = state.get("final_answer", "")
-        if isinstance(final_answer, list):
-            final_answer = _content_to_str(final_answer)
         if not final_answer:
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
 
@@ -1001,29 +976,8 @@ def _extract_last_message(state: AgentState) -> str:
 
 
 def _content_to_str(content) -> str:
-    """将消息 content 统一转为字符串。
-
-    LLM 返回的 content 可能是:
-      - str: 直接返回
-      - None: 返回空字符串
-      - list[dict]: content blocks 格式，提取 text 字段拼接
-      - 其他: str() 强转
-    """
-    if content is None:
-        return ""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict):
-                text = block.get("text", "")
-                if text:
-                    parts.append(text)
-            elif isinstance(block, str):
-                parts.append(block)
-        return "\n".join(parts)
-    return str(content)
+    """将消息 content 统一转为字符串。委托给 state._content_blocks_to_str。"""
+    return _content_blocks_to_str(content)
 
 
 def _build_message_dicts(state: AgentState) -> List[dict]:
