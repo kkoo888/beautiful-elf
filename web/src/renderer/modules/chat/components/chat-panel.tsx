@@ -16,6 +16,7 @@ import { ReasoningDepthSwitch } from './reasoning-depth'
 import { FullModelSelect } from '@/modules/shared/components/model-selector'
 import { ApprovalDialog } from './approval-dialog'
 import { ToolProgressIndicator } from './tool-progress'
+import { AgentProgressIndicator } from './agent-progress'
 import { TokenStatsBar } from './token-stats-bar'
 import { ContextSourcesDisplay } from './context-sources'
 import type { UseChatReturn } from '../hooks/use-chat'
@@ -35,6 +36,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
     approvalRequest,
     contextSources,
     tokenStats,
+    progressSteps,
     sendMessage,
     setReasoningDepth,
     setModelSelection,
@@ -79,6 +81,11 @@ export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
       {/* 工具执行进度 */}
       {toolProgress.length > 0 && (
         <ToolProgressIndicator tools={toolProgress} />
+      )}
+
+      {/* Agent 执行进展 */}
+      {progressSteps.length > 0 && (
+        <AgentProgressIndicator steps={progressSteps} />
       )}
 
       {/* 消息列表 */}

@@ -40,6 +40,7 @@ function createMockChat(overrides = {}) {
     selectedProviderId: undefined,
     selectedModelName: undefined,
     toolProgress: [],
+    progressSteps: [],
     approvalRequest: null,
     contextSources: [],
     tokenStats: null,
