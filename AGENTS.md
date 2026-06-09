@@ -476,6 +476,65 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] **严禁捏造版本号或功能支持情况**，必须先验证 PyPI/npm 实际可安装版本
 - [ ] 版本号、API 签名、参数名必须与官方文档完全一致，禁止「大概」「应该」「我记得」
 
+### 9.1 State Schema 规约（强制）
+
+**核心原则：State 是节点间的接口契约。类型安全由 State 层统一负责，不是每个消费节点自己负责。**
+
+#### State 定义
+
+- [ ] **必须使用 Pydantic BaseModel**，禁止 TypedDict（2026 行业标准）
+- [ ] 定义在 `backend/app/agent/state.py`，与 engine 分离
+- [ ] 每个字段必须有 `Field(description=...)`，自动出现在 LangSmith 追踪面板
+- [ ] 可变字段用 `Field(default_factory=list/dict)`，禁止裸 `[]` 或 `{}` 作为默认值
+- [ ] 需要 LangGraph reducer（追加语义）的字段用 `Annotated[list, operator.add]`
+
+#### 类型归一化（field_validator）
+
+**规则：任何可能从外部模型/工具返回非 str 类型的字段，必须加 `field_validator(mode='before')`。**
+
+```python
+# ✅ 正确 — 写入时归一化
+@field_validator("final_answer", mode="before")
+@classmethod
+def _normalize_final_answer(cls, v):
+    if v is None:
+        return None
+    return _content_blocks_to_str(v)
+
+# ❌ 错误 — 每个消费节点都写 isinstance 检查
+final_answer = state.get("final_answer", "")
+if isinstance(final_answer, list):
+    final_answer = _content_to_str(final_answer)
+```
+
+#### 必须加 validator 的字段类型
+
+| 场景 | 原因 | 示例 |
+|------|------|------|
+| LLM 返回的 content | 模型可能返回 `str` 或 `list[dict]`（content blocks） | `final_answer`, `skill_answer` |
+| 多路径写入的字段 | 不同代码路径返回不同类型 | `memory_context`（dict 或 str） |
+| Pydantic 模型输出 | `with_structured_output` 可能返回模型实例而非 dict | `evaluation` |
+
+#### Content 归一化
+
+- [ ] **统一使用 `state._content_blocks_to_str()`**，禁止各文件自定义 `_content_to_str`
+- [ ] 处理格式：`str` → 直接返回，`None` → `""`，`list[dict]` → 提取 text 拼接
+- [ ] 消费 `msg.content` / `chunk.content` 时，必须归一化后再使用或 yield
+
+#### State 访问
+
+- [ ] 读取用 `state.get("field")` 或 `state["field"]`（Pydantic BaseModel 兼容）
+- [ ] **条件边中修改 State 必须用属性赋值** `state.field = value`（触发 Pydantic 校验）
+- [ ] 禁止条件边中用字典赋值 `state["field"] = value`（可能绕过校验）
+
+#### 新增 State 字段检查清单
+
+- [ ] 类型声明是否准确？（`str` vs `Optional[str]` vs `list`）
+- [ ] 是否有 `Field(default=..., description=...)`？
+- [ ] 写入方是否可能传入不同类型？→ 加 `field_validator`
+- [ ] 消费方是否做了类型假设？→ Pydantic 已保证，移除防御代码
+- [ ] 是否需要 reducer？（`Annotated[list, operator.add]`）
+
 ---
 
 ## 10. 性能意识
