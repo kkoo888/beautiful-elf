@@ -151,6 +151,9 @@ async def chat_resume(
                     await _queue.put(f"data: {json.dumps({'tool_start': event['tool'], 'tool_args': event.get('args', {}), 'done': False})}\n\n")
                 elif event_type == "tool_end":
                     await _queue.put(f"data: {json.dumps({'tool_end': event['tool'], 'output_preview': event.get('output_preview', ''), 'done': False})}\n\n")
+                elif event_type == "progress":
+                    progress = {k: v for k, v in event.items() if k != "type"}
+                    await _queue.put(f"data: {json.dumps({'progress': progress, 'done': False})}\n\n")
                 elif event_type == "done":
                     # done 时保存助手回复（数据完整）
                     await _save_assistant_message("".join(_full_content))
@@ -279,6 +282,10 @@ async def _stream_response(
                     await _queue.put(f"data: {json.dumps({'cost': {'prompt_tokens': event['prompt_tokens'], 'completion_tokens': event['completion_tokens']}, 'done': False})}\n\n")
                 elif event_type == "approval_required":
                     await _queue.put(f"data: {json.dumps({'approval_required': {'tool': event.get('tool', ''), 'args': event.get('args', {}), 'message': event.get('message', '')}, 'done': False})}\n\n")
+                elif event_type == "progress":
+                    # Agent 执行进展事件（AG-UI 协议兼容）
+                    progress = {k: v for k, v in event.items() if k != "type"}
+                    await _queue.put(f"data: {json.dumps({'progress': progress, 'done': False})}\n\n")
                 elif event_type == "done":
                     prompt_tokens = event.get("prompt_tokens", 0)
                     completion_tokens = event.get("completion_tokens", 0)

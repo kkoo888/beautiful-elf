@@ -76,6 +76,20 @@ export interface ToolProgress {
   startTime?: number
 }
 
+/** Agent 执行进展步骤 */
+export interface ProgressStep {
+  /** 步骤标识 */
+  step: string
+  /** 状态 */
+  status: 'searching' | 'executing' | 'calling' | 'checking' | 'saving' | 'done' | 'error' | 'skipped'
+  /** 进展消息 */
+  message: string
+  /** 耗时 ms */
+  elapsedMs?: number
+  /** 附加数据 */
+  [key: string]: unknown
+}
+
 /** 审批请求 */
 export interface ApprovalRequest {
   /** 工具名称 */

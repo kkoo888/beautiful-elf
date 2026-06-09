@@ -279,7 +279,7 @@ class AgentService:
             stream = self._graph.astream(
                 Command(resume=resume_data),
                 config=config,
-                stream_mode=["messages", "updates"],
+                stream_mode=["messages", "updates", "custom"],
                 version="v2",
             )
 
@@ -315,6 +315,11 @@ class AgentService:
                                     ta = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
                                     tools_used.append(tn)
                                     yield {"type": "tool_start", "tool": tn, "args": ta if isinstance(ta, dict) else {}}
+
+                elif chunk_type == "custom":
+                    # 自定义进展事件 — 从 get_stream_writer() 发射
+                    if isinstance(chunk_data, dict):
+                        yield {"type": "progress", **chunk_data}
 
             # 缓存答案 fallback
             if not _got_llm_tokens and not _final_answer:
@@ -417,11 +422,11 @@ class AgentService:
             # [P0] 使用 LangGraph 原生 astream（v2 stream_mode）
             # 旧代码用 astream_events(version="v3") 但用 v2 方式迭代 —— v3 API 已改为
             # typed projections（stream.messages），直接迭代收不到任何事件。
-            # 改用 astream + stream_mode=["messages", "updates"]，官方推荐方案。
+            # 改用 astream + stream_mode=["messages", "updates", "custom"]，官方推荐方案。
             stream = self._graph.astream(
                 initial_state,
                 config=config,
-                stream_mode=["messages", "updates"],
+                stream_mode=["messages", "updates", "custom"],
                 version="v2",
             )
 
@@ -473,6 +478,11 @@ class AgentService:
                                     tool_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
                                     tools_used.append(tool_name)
                                     yield {"type": "tool_start", "tool": tool_name, "args": tool_args if isinstance(tool_args, dict) else {}}
+
+                elif chunk_type == "custom":
+                    # 自定义进展事件 — 从 get_stream_writer() 发射
+                    if isinstance(chunk_data, dict):
+                        yield {"type": "progress", **chunk_data}
 
             # 检查 interrupt（审批暂停）— 通过 get_state 检查
             try:

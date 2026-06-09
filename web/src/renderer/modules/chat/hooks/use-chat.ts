@@ -16,6 +16,7 @@ import type {
   ToolProgress,
   ApprovalRequest,
   ContextSource,
+  ProgressStep,
 } from '../types/chat'
 
 /** 生成唯一 ID */
@@ -46,6 +47,8 @@ export interface UseChatReturn {
   contextSources: ContextSource[]
   /** token 统计 */
   tokenStats: { promptTokens: number; completionTokens: number } | null
+  /** Agent 执行进展 */
+  progressSteps: ProgressStep[]
   /** 发送消息（流式） */
   sendMessage: (content: string) => void
 
@@ -93,6 +96,7 @@ export function useChat(): UseChatReturn {
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null)
   const [contextSources, setContextSources] = useState<ContextSource[]>([])
   const [tokenStats, setTokenStats] = useState<{ promptTokens: number; completionTokens: number } | null>(null)
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([])
 
   // 缓存 providerId -> providerType 映射，避免每次请求都拉 Provider 列表
   const providerTypeCacheRef = useRef<Record<number, string | undefined>>({})
@@ -208,6 +212,7 @@ export function useChat(): UseChatReturn {
       setToolProgress([])
       setContextSources([])
       setTokenStats(null)
+      setProgressSteps([])
 
       abortRef.current = chatStream(
         {
@@ -273,6 +278,17 @@ export function useChat(): UseChatReturn {
           },
           onIntentHit: (name, score) => {
             setContextSources((prev) => [...prev, { type: 'intent', name, score }])
+          },
+          onProgress: (progress) => {
+            setProgressSteps((prev) => {
+              const idx = prev.findIndex((s) => s.step === progress.step)
+              if (idx >= 0) {
+                const next = [...prev]
+                next[idx] = { ...next[idx], ...progress }
+                return next
+              }
+              return [...prev, progress]
+            })
           },
         }
       )
@@ -459,6 +475,7 @@ export function useChat(): UseChatReturn {
     approvalRequest,
     contextSources,
     tokenStats,
+    progressSteps,
     sendMessage,
     setReasoningDepth,
     setModelSelection,

@@ -18,7 +18,7 @@ import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 import type {
   ChatRequest, FeedbackRequest, FeedbackResponse,
-  StreamToken, Conversation, ChatMessage, ToolProgress, ApprovalRequest, ContextSource,
+  StreamToken, Conversation, ChatMessage, ToolProgress, ApprovalRequest, ContextSource, ProgressStep,
 } from '../types/chat'
 
 // ── 业务适配（id 类型转换）──────────────────────────────────
@@ -136,6 +136,7 @@ export function chatStream(
     onApproval?: (req: ApprovalRequest) => void
     onCostUpdate?: (promptTokens: number, completionTokens: number) => void
     onIntentHit?: (name: string, score: number) => void
+    onProgress?: (progress: ProgressStep) => void
   }
 ): { abort: () => void } {
   const controller = new AbortController()
@@ -208,6 +209,11 @@ export function chatStream(
             // 意图命中事件
             if (data.intent_hit) {
               callbacks?.onIntentHit?.(data.intent_hit, data.intent_score ?? 0)
+              continue
+            }
+            // 进展事件（AG-UI 协议兼容）
+            if (data.progress) {
+              callbacks?.onProgress?.(data.progress as ProgressStep)
               continue
             }
             // token 事件

@@ -198,12 +198,18 @@ def build_agent_graph(
 
 def _make_intent_router(intent_router):
     async def intent_router_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
         if not intent_router:
+            writer({"step": "intent", "status": "skipped", "message": "意图路由未初始化"})
             return {"intent": None}
 
         t0 = time.time()
+        writer({"step": "intent", "status": "searching", "message": "正在分析意图..."})
         query = _extract_last_message(state)
         if not query or not query.strip():
+            writer({"step": "intent", "status": "skipped", "message": "空消息，跳过意图路由"})
             return {"intent": None}
 
         try:
@@ -212,15 +218,25 @@ def _make_intent_router(intent_router):
             logger.warning(f"[intent_router] 路由失败（降级走 Agent）: {e}")
             intent = None
 
-        logger.info(f"[intent_router] hit={intent is not None} elapsed={time.time()-t0:.3f}s")
+        elapsed = time.time() - t0
+        logger.info(f"[intent_router] hit={intent is not None} elapsed={elapsed:.3f}s")
 
         if intent and intent.get("cached_answer"):
+            writer({"step": "intent", "status": "done", "message": f"缓存命中 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000)})
             return {
                 "intent": intent,
                 "final_answer": intent["cached_answer"],
                 "skill_answer": intent["cached_answer"],
                 "messages": [AIMessage(content=intent["cached_answer"])],
             }
+
+        if intent:
+            name = intent.get("intent_name", "unknown")
+            score = intent.get("score", 0)
+            writer({"step": "intent", "status": "done", "message": f"命中「{name}」(置信度 {score:.0%})", "intent": name, "score": score, "elapsed_ms": int(elapsed * 1000)})
+        else:
+            writer({"step": "intent", "status": "done", "message": f"未命中，走通用对话 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000)})
+
         return {"intent": intent}
 
     return intent_router_node
@@ -228,6 +244,9 @@ def _make_intent_router(intent_router):
 
 def _make_skill_executor_node(skill_executor, context_engine=None, memory_manager=None):
     async def skill_executor_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
         if not skill_executor or not state.get("intent"):
             return {"skill_answer": None, "final_answer": None}
 
@@ -236,6 +255,7 @@ def _make_skill_executor_node(skill_executor, context_engine=None, memory_manage
         if not target or target == "cache":
             return {"skill_answer": None, "final_answer": None}
 
+        writer({"step": "skill", "status": "executing", "message": f"正在执行技能「{target}」..."})
         t0 = time.time()
         try:
             from app.core.database import AsyncSessionLocal
@@ -254,14 +274,17 @@ def _make_skill_executor_node(skill_executor, context_engine=None, memory_manage
             logger.error(f"[skill_executor] 技能 '{target}' 执行失败: {e}", exc_info=True)
             answer = None
 
-        logger.info(f"[skill_executor] skill={target} elapsed={time.time()-t0:.2f}s success={answer is not None}")
+        elapsed = time.time() - t0
+        logger.info(f"[skill_executor] skill={target} elapsed={elapsed:.2f}s success={answer is not None}")
 
         if answer:
+            writer({"step": "skill", "status": "done", "message": f"技能「{target}」执行完成 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000)})
             return {
                 "skill_answer": answer,
                 "final_answer": answer,
                 "messages": [AIMessage(content=answer)],
             }
+        writer({"step": "skill", "status": "error", "message": f"技能「{target}」执行失败"})
         return {"skill_answer": None, "final_answer": None}
 
     return skill_executor_node
@@ -269,23 +292,30 @@ def _make_skill_executor_node(skill_executor, context_engine=None, memory_manage
 
 def _make_context_builder(context_engine, memory_manager, tool_registry=None):
     async def context_builder_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
         t0 = time.time()
         query = _extract_last_message(state)
         memory_context = None  # 记忆元数据，默认无
 
         # ── B+C: 根据 intent 动态选择工具（存储工具名，非 Tool 对象）──
+        writer({"step": "tools", "status": "searching", "message": "正在选择工具..."})
         selected_tool_names = _select_tool_names_for_intent(state, tool_registry)
         tool_count = len(selected_tool_names)
         logger.info(f"[context_builder] 动态工具选择: intent={(state.get('intent') or {}).get('intent_name', 'none')} tools={tool_count}")
+        writer({"step": "tools", "status": "done", "message": f"已选 {tool_count} 个工具", "count": tool_count})
 
         if context_engine:
             try:
                 # ── Query Rewriting（RAG 检索前改写口语化查询）──
+                writer({"step": "rewrite", "status": "searching", "message": "正在改写查询..."})
                 messages_for_rewrite = _build_message_dicts(state)
                 rewritten_query = await context_engine.rewrite_query(
                     user_query=query,
                     conversation_history=messages_for_rewrite[:-1],  # 排除当前消息
                 )
+                writer({"step": "rewrite", "status": "done", "message": "查询改写完成"})
 
                 # 传递选中的工具名摘要给 context_engine
                 tool_summaries = None
@@ -296,6 +326,7 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
                         if tdef:
                             tool_summaries.append({"name": tdef.name, "description": tdef.description})
 
+                writer({"step": "context", "status": "searching", "message": "正在组装上下文（记忆 + RAG）..."})
                 result = await context_engine.assemble(
                     user_id=state.get("user_id", 0),
                     conversation_id=state.get("conversation_id", 0),
@@ -312,6 +343,11 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
                     )
 
                 logger.info(f"[context_builder] sources={result.sources_used} chars={result.total_chars} elapsed={time.time()-t0:.2f}s")
+
+                elapsed = time.time() - t0
+                sources = result.sources_used or []
+                source_desc = "、".join(sources) if sources else "无"
+                writer({"step": "context", "status": "done", "message": f"上下文就绪 ({source_desc}, {result.total_chars}字, {elapsed:.1f}s)", "sources": sources, "chars": result.total_chars, "elapsed_ms": int(elapsed * 1000)})
 
                 # 记忆元数据 → State（供 memory_saver / evaluator 消费）
                 if result.memory_count > 0:
@@ -348,7 +384,11 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
 
 def _make_llm_caller(llm, tool_registry=None):
     async def llm_call_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
         t0 = time.time()
+        writer({"step": "llm", "status": "calling", "message": "正在生成回答..."})
 
         system_prompt = state.get("system_prompt") or state.get("context") or \
             "你是一个智能助手，能够使用工具回答用户问题。请用中文回答。"
@@ -437,11 +477,14 @@ def _make_llm_caller(llm, tool_registry=None):
             logger.debug(f"[llm_call] 成本追踪失败（不影响主流程）: {e}")
 
         if response.tool_calls:
+            tool_names = [tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "") for tc in response.tool_calls]
+            writer({"step": "llm", "status": "done", "message": f"需要调用工具: {', '.join(tool_names)} ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000), "has_tools": True})
             return {
                 "messages": [AIMessage(content=response.content or "", tool_calls=response.tool_calls)],
                 "tool_calls": response.tool_calls,
                 "final_answer": None,
             }
+        writer({"step": "llm", "status": "done", "message": f"回答生成完成 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000), "has_tools": False})
         return {
             "messages": [AIMessage(content=response.content)],
             "final_answer": _content_to_str(response.content),
@@ -464,7 +507,9 @@ def _make_tool_executor(tool_registry):
     from langchain_core.tools import StructuredTool
 
     async def tool_executor_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
         from app.agent.tool_registry import RiskLevel
+        writer = get_stream_writer()
 
         snapshot = tool_registry.create_snapshot()
         tool_calls = state.get("tool_calls", [])
@@ -506,6 +551,8 @@ def _make_tool_executor(tool_registry):
         tools_succeeded = []
 
         if executable_calls:
+            exec_names = [name for _, name, _, _ in executable_calls]
+            writer({"step": "tools", "status": "executing", "message": f"正在执行 {len(exec_names)} 个工具: {', '.join(exec_names)}", "tools": exec_names})
             # 构建 LangChain Tool 列表（ToolNode 需要）
             lc_tools = snapshot.get_langchain_tools(
                 [name for _, name, _, _ in executable_calls]
@@ -660,9 +707,15 @@ def _make_evaluator_node(llm=None):
         return {"evaluation": {"passed": True, "reason": "", "score": 7}}
 
     async def evaluator_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
         final_answer = state.get("final_answer", "")
         if not final_answer:
+            writer({"step": "eval", "status": "skipped", "message": "无回答，跳过评估"})
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
+
+        writer({"step": "eval", "status": "checking", "message": "正在评估回答质量..."})
 
         # 无 LLM 时降级为规则评估
         if not llm:
@@ -730,6 +783,14 @@ def _make_evaluator_node(llm=None):
             }
             logger.info(f"[evaluator] LLM-as-Judge: score={evaluation['score']} passed={evaluation['passed']} reason={evaluation['reason'][:50]}")
 
+            score = evaluation['score']
+            passed = evaluation['passed']
+            if passed:
+                writer({"step": "eval", "status": "done", "message": f"质量评估通过 (评分 {score}/10)", "score": score})
+            else:
+                reason = evaluation.get('reason', '')
+                writer({"step": "eval", "status": "done", "message": f"质量评估未通过 (评分 {score}/10, {reason})", "score": score})
+
             # 评分太低（<4）的回答替换为兜底
             result = {"evaluation": evaluation}
             if evaluation["score"] < 4 and state.get("final_answer"):
@@ -753,8 +814,13 @@ def _make_evaluator_node(llm=None):
 
 def _make_memory_saver(memory_manager):
     async def memory_saver_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
         if not state.get("final_answer"):
             return {}
+
+        writer({"step": "memory_save", "status": "saving", "message": "正在保存记忆..."})
 
         messages = _build_message_dicts(state)
         importance = state.get("conversation_importance")
@@ -883,6 +949,7 @@ def _make_memory_saver(memory_manager):
             except Exception as e:
                 logger.warning(f"[memory_saver] Markdown daily log 失败: {e}")
 
+        writer({"step": "memory_save", "status": "done", "message": "记忆保存完成"})
         return {"conversation_importance": importance}
 
     return memory_saver_node
