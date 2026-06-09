@@ -55,7 +55,7 @@ export async function fetchMemories(
 ): Promise<MemoryListResponse> {
   const { page = 1, pageSize = 20 } = params
   const { items, total } = extractPaginated(
-    await apiClient.get('/memory', {
+    await apiClient.get('/memories', {
       params: { page, pageSize },
     }) as any
   )
@@ -76,7 +76,7 @@ export async function searchMemories(query: string): Promise<MemorySearchResult>
   }
 
   const data = extractData(
-    await apiClient.get('/memory/search', {
+    await apiClient.get('/memories/search', {
       params: { q: query, limit: 10 },
     }) as any
   ) as { items?: BackendSearchItem[] } | null
@@ -89,7 +89,7 @@ export async function searchMemories(query: string): Promise<MemorySearchResult>
 
 /** 删除记忆 */
 export async function deleteMemory(id: string): Promise<void> {
-  await apiClient.delete(`/memory/${id}`)
+  await apiClient.delete(`/memories/${id}`)
 }
 
 // ── 创建记忆 ────────────────────────────────────────────────
@@ -102,7 +102,7 @@ export async function createMemory(data: {
   conversationId?: number
 }): Promise<MemoryEntry> {
   const raw = extractData(
-    await apiClient.post('/memory', {
+    await apiClient.post('/memories', {
       summary: data.summary,
       tags: data.tags ?? [],
       importance: data.importance ?? 5,

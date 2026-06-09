@@ -153,6 +153,8 @@ async def _init_memory():
         )
 
         memory_service.set_memory_manager(manager)
+        from app.services.markdown_memory_service import markdown_memory_service
+        markdown_memory_service.set_memory_manager(manager)
         logger.info("记忆管理器就绪")
 
     except Exception as e:

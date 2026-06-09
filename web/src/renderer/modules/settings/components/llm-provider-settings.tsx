@@ -79,6 +79,7 @@ const PROVIDER_TYPE_OPTIONS = [
   { label: '小米 MiMo', value: 'xiaomi' },
   { label: '智谱 GLM', value: 'zhipu' },
   { label: '月之暗面', value: 'moonshot' },
+  { label: 'Agnes AI', value: 'agnes' },
   { label: 'Ollama (本地)', value: 'ollama' },
   { label: '自定义', value: 'custom' },
 ]
@@ -92,6 +93,7 @@ const TYPE_COLORS: Record<string, string> = {
   xiaomi: '#ff6900',
   zhipu: '#2d5dea',
   moonshot: '#7c3aed',
+  agnes: '#059669',
   custom: '#6b7280',
 }
 
