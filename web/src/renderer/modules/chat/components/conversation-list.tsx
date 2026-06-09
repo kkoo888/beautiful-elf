@@ -138,11 +138,9 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   const filtered = useMemo(() => {
     // 防御：过滤掉无效条目
     const valid = conversations.filter(Boolean) as Conversation[]
-    // 按更新时间倒序排列，最新会话在最前面
-    const sorted = [...valid].sort((a, b) => b.updatedAt - a.updatedAt)
-    if (!debouncedSearch.trim()) return sorted
+    if (!debouncedSearch.trim()) return valid
     const q = debouncedSearch.toLowerCase()
-    return sorted.filter(
+    return valid.filter(
       (c) => c.title.toLowerCase().includes(q) || c.lastMessage?.toLowerCase().includes(q)
     )
   }, [conversations, debouncedSearch])
