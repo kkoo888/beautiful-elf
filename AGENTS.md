@@ -21,7 +21,7 @@ Don't ask permission. Just do it.
 
 You wake up fresh each session. These files are your continuity:
 
-- **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
+- **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened（日期和时间均使用北京时间 Asia/Shanghai）
 - **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
 
 Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
@@ -349,7 +349,7 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] 【强制】body 传递内容必须控制长度（nginx 默认 1MB，tomcat 默认 2MB）
 - [ ] 【强制】超大整数（超过 2^53）一律用 String 返回，禁止 Long/Number 类型（JS 精度丢失）
 - [ ] 【强制】服务器内部重定向用 forward，外部重定向用 URL 统一代理模块
-- [ ] 【推荐】时间格式统一 `yyyy-MM-dd HH:mm:ss`，时区统一 GMT
+- [ ] 【推荐】时间格式统一 `yyyy-MM-dd HH:mm:ss`，时区统一 Asia/Shanghai（北京时间，GMT+8）
 - [ ] 【推荐】返回数据用 JSON 而非 XML
 - [ ] 【推荐】返回信息标记是否可缓存（Cache-Control s-maxage）
 
