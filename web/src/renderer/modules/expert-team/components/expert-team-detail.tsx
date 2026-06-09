@@ -2,17 +2,13 @@
 
 import {
   Card,
-  Descriptions,
   Tag,
   Space,
   Button,
   Typography,
-  Avatar,
-  List,
-  Row,
-  Col,
   Statistic,
   Switch,
+  Collapse,
   message,
 } from 'antd'
 import {
@@ -20,13 +16,15 @@ import {
   PlayCircleOutlined,
   UserOutlined,
   ThunderboltOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons'
 import { useCallback } from 'react'
 import type { ExpertTeam } from '../types'
 import { getExpertRoleColor } from '../types'
 import { updateExpertTeam } from '../services/expert-team-api'
+import styles from './expert-team.module.css'
 
-const { Title, Text, Paragraph } = Typography
+const { Text, Paragraph } = Typography
 
 interface ExpertTeamDetailProps {
   team: ExpertTeam
@@ -47,165 +45,151 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
   }, [team.id, onRefresh])
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* 头部信息 */}
       <Card>
-        <Row justify="space-between" align="top">
-          <Col>
-            <Space align="start">
-              <Avatar size={64} style={{ fontSize: 36, backgroundColor: '#f0f0f0' }}>
-                {team.icon}
-              </Avatar>
-              <div>
-                <Title level={4} style={{ margin: 0 }}>{team.teamName}</Title>
-                <Space style={{ marginTop: 8 }}>
-                  <Tag>{team.category}</Tag>
-                  <Tag color="blue">v{team.version}</Tag>
-                </Space>
-                {team.description && (
-                  <Paragraph type="secondary" style={{ marginTop: 8, maxWidth: 500 }}>
-                    {team.description}
-                  </Paragraph>
-                )}
+        <div className={styles.detailHeader}>
+          <Space align="start" size={16}>
+            <div className={styles.detailAvatar}>{team.icon}</div>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.4 }}>
+                {team.teamName}
               </div>
-            </Space>
-          </Col>
-          <Col>
-            <Space orientation="vertical" align="end" size="middle">
-              <Space>
-                <Text type="secondary">状态：</Text>
-                <Switch
-                  checked={team.isEnabled === 1}
-                  onChange={handleToggleEnabled}
-                  checkedChildren="启用"
-                  unCheckedChildren="禁用"
-                />
+              <Space style={{ marginTop: 6 }}>
+                <Tag>{team.category}</Tag>
+                <Tag color="blue">v{team.version}</Tag>
+                <Tag color={team.isEnabled ? 'green' : 'default'}>
+                  {team.isEnabled ? '启用' : '禁用'}
+                </Tag>
               </Space>
-              <Space>
-                <Button icon={<EditOutlined />} onClick={onEdit}>
-                  编辑
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<PlayCircleOutlined />}
-                  onClick={onExecute}
-                  disabled={team.members.length === 0 || team.isEnabled !== 1}
-                >
-                  执行
-                </Button>
-              </Space>
+              {team.description && (
+                <Paragraph type="secondary" style={{ marginTop: 8, maxWidth: 500, margin: 0 }}>
+                  {team.description}
+                </Paragraph>
+              )}
+            </div>
+          </Space>
+          <div className={styles.detailActions}>
+            <Space>
+              <Text type="secondary">状态</Text>
+              <Switch
+                checked={team.isEnabled === 1}
+                onChange={handleToggleEnabled}
+                checkedChildren="启用"
+                unCheckedChildren="禁用"
+              />
             </Space>
-          </Col>
-        </Row>
+            <Space>
+              <Button icon={<EditOutlined />} onClick={onEdit}>编辑</Button>
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={onExecute}
+                disabled={team.members.length === 0 || team.isEnabled !== 1}
+              >
+                执行
+              </Button>
+            </Space>
+          </div>
+        </div>
       </Card>
 
       {/* 统计信息 */}
-      <Row gutter={16} style={{ marginTop: 16 }}>
-        <Col span={8}>
-          <Card>
-            <Statistic
-              title="专家成员"
-              value={team.members.length}
-              prefix={<UserOutlined />}
-              suffix="人"
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card>
-            <Statistic
-              title="最大讨论轮次"
-              value={team.maxRounds}
-              prefix={<ThunderboltOutlined />}
-              suffix="轮"
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card>
-            <Statistic
-              title="启用成员"
-              value={team.members.filter((m) => m.isEnabled).length}
-              suffix={`/ ${team.members.length}`}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <div className={styles.statGrid}>
+        <Card>
+          <Statistic title="专家成员" value={team.members.length} prefix={<UserOutlined />} suffix="人" />
+        </Card>
+        <Card>
+          <Statistic title="最大讨论轮次" value={team.maxRounds} prefix={<ThunderboltOutlined />} suffix="轮" />
+        </Card>
+        <Card>
+          <Statistic
+            title="启用成员"
+            value={team.members.filter((m) => m.isEnabled).length}
+            suffix={`/ ${team.members.length}`}
+          />
+        </Card>
+      </div>
 
       {/* 专家成员列表 */}
-      <Card title="👥 专家成员" style={{ marginTop: 16 }}>
-        <List
-          dataSource={team.members}
-          renderItem={(member) => (
-            <List.Item>
-              <List.Item.Meta
-                avatar={
-                  <Avatar
-                    style={{
-                      backgroundColor: getExpertRoleColor(member.memberRole) + '20',
-                      color: getExpertRoleColor(member.memberRole),
-                      fontSize: 24,
-                    }}
-                  >
-                    {member.avatar}
-                  </Avatar>
-                }
-                title={
+      <Card title="👥 专家成员" styles={{ body: { padding: '12px 16px' } }}>
+        {team.members.map((member) => {
+          const roleColor = getExpertRoleColor(member.memberRole)
+          return (
+            <div
+              key={member.id}
+              className={styles.memberListCard}
+              style={{ borderLeft: `3px solid ${roleColor}` }}
+            >
+              <div className={styles.memberListCardHeader}>
+                <div
+                  className={styles.memberAvatar}
+                  style={{ backgroundColor: roleColor + '18', color: roleColor }}
+                >
+                  {member.avatar}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <Space>
                     <Text strong>{member.memberName}</Text>
-                    <Tag color={getExpertRoleColor(member.memberRole)}>{member.memberRole}</Tag>
+                    <Tag color={roleColor} style={{ margin: 0 }}>{member.memberRole}</Tag>
                     {!member.isEnabled && <Tag color="default">已禁用</Tag>}
                   </Space>
-                }
-                description={
-                  <div>
-                    <Paragraph
-                      type="secondary"
-                      ellipsis={{ rows: 2, tooltip: true }}
-                      style={{ margin: 0 }}
-                    >
-                      {member.systemPrompt}
-                    </Paragraph>
-                    <Space style={{ marginTop: 4 }}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        模型: {member.modelName || '默认'}
-                      </Text>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        温度: {member.temperature.toFixed(1)}
-                      </Text>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        Max Tokens: {member.maxTokens}
-                      </Text>
-                    </Space>
-                  </div>
-                }
-              />
-            </List.Item>
-          )}
-        />
+                </div>
+              </div>
+              <p className={styles.memberPrompt}>{member.systemPrompt}</p>
+              <div className={styles.memberMeta}>
+                <span>模型: {member.modelName || '默认'}</span>
+                <span>温度: {member.temperature.toFixed(1)}</span>
+                <span>Max Tokens: {member.maxTokens}</span>
+              </div>
+            </div>
+          )
+        })}
+        {team.members.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <Text type="secondary">暂无成员</Text>
+          </div>
+        )}
       </Card>
 
       {/* 提示词配置 */}
-      <Card title="📝 提示词配置" style={{ marginTop: 16 }}>
-        <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label="编排器提示词">
-            <Paragraph
-              ellipsis={{ rows: 3, expandable: true, symbol: '展开' }}
-              style={{ margin: 0 }}
-            >
-              {team.orchestratorPrompt || '（使用默认编排器提示词）'}
-            </Paragraph>
-          </Descriptions.Item>
-          <Descriptions.Item label="汇总器提示词">
-            <Paragraph
-              ellipsis={{ rows: 3, expandable: true, symbol: '展开' }}
-              style={{ margin: 0 }}
-            >
-              {team.synthesizerPrompt || '（使用默认汇总器提示词）'}
-            </Paragraph>
-          </Descriptions.Item>
-        </Descriptions>
-      </Card>
+      <Collapse
+        items={[
+          {
+            key: 'prompts',
+            label: (
+              <Space>
+                <FileTextOutlined />
+                <span>📝 提示词配置</span>
+              </Space>
+            ),
+            children: (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <Text strong style={{ fontSize: 13 }}>编排器提示词</Text>
+                  <Paragraph
+                    type="secondary"
+                    ellipsis={{ rows: 4, expandable: true, symbol: '展开' }}
+                    style={{ marginTop: 4, marginBottom: 0 }}
+                  >
+                    {team.orchestratorPrompt || '（使用默认编排器提示词）'}
+                  </Paragraph>
+                </div>
+                <div>
+                  <Text strong style={{ fontSize: 13 }}>汇总器提示词</Text>
+                  <Paragraph
+                    type="secondary"
+                    ellipsis={{ rows: 4, expandable: true, symbol: '展开' }}
+                    style={{ marginTop: 4, marginBottom: 0 }}
+                  >
+                    {team.synthesizerPrompt || '（使用默认汇总器提示词）'}
+                  </Paragraph>
+                </div>
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

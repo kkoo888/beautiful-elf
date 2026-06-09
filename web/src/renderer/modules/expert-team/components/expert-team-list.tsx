@@ -1,15 +1,15 @@
-/** 专家团列表组件 */
+/** 专家团列表组件 — 卡片网格 */
 
-import { Table, Tag, Space, Button, Popconfirm, Typography, Avatar, Tooltip } from 'antd'
+import { Card, Tag, Space, Button, Popconfirm, Typography, Avatar, Tooltip, Spin } from 'antd'
 import {
   PlayCircleOutlined,
   EditOutlined,
   DeleteOutlined,
   EyeOutlined,
 } from '@ant-design/icons'
-import type { ColumnsType } from 'antd/es/table'
 import type { ExpertTeam } from '../types'
 import { EmptyState } from '@/components/empty-state'
+import styles from './expert-team.module.css'
 
 const { Text } = Typography
 
@@ -30,116 +30,13 @@ export function ExpertTeamList({
   onDelete,
   onExecute,
 }: ExpertTeamListProps) {
-  const columns: ColumnsType<ExpertTeam> = [
-    {
-      title: '专家团',
-      key: 'name',
-      render: (_: unknown, record: ExpertTeam) => (
-        <Space>
-          <Avatar size={40} style={{ fontSize: 24, backgroundColor: '#f0f0f0' }}>
-            {record.icon}
-          </Avatar>
-          <Space orientation="vertical" size={0}>
-            <Text strong>{record.teamName}</Text>
-            {record.description && (
-              <Text type="secondary" style={{ fontSize: 12 }} ellipsis={{ tooltip: true }}>
-                {record.description}
-              </Text>
-            )}
-          </Space>
-        </Space>
-      ),
-    },
-    {
-      title: '分类',
-      dataIndex: 'category',
-      key: 'category',
-      width: 100,
-      render: (category: string) => <Tag>{category}</Tag>,
-    },
-    {
-      title: '专家成员',
-      key: 'members',
-      width: 200,
-      render: (_: unknown, record: ExpertTeam) => (
-        <Space size={4} wrap>
-          {record.members.slice(0, 5).map((m) => (
-            <Tooltip key={m.id} title={`${m.memberName} (${m.memberRole})`}>
-              <Avatar size={28} style={{ fontSize: 16, backgroundColor: '#e6f7ff' }}>
-                {m.avatar}
-              </Avatar>
-            </Tooltip>
-          ))}
-          {record.members.length > 5 && (
-            <Tag>+{record.members.length - 5}</Tag>
-          )}
-          {record.members.length === 0 && (
-            <Text type="secondary" style={{ fontSize: 12 }}>暂无成员</Text>
-          )}
-        </Space>
-      ),
-    },
-    {
-      title: '最大轮次',
-      dataIndex: 'maxRounds',
-      key: 'maxRounds',
-      width: 100,
-      align: 'center',
-      render: (rounds: number) => <Tag color="blue">{rounds} 轮</Tag>,
-    },
-    {
-      title: '状态',
-      key: 'status',
-      width: 80,
-      render: (_: unknown, record: ExpertTeam) => (
-        <Tag color={record.isEnabled ? 'green' : 'default'}>
-          {record.isEnabled ? '启用' : '禁用'}
-        </Tag>
-      ),
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 200,
-      render: (_: unknown, record: ExpertTeam) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => onView(record.id)}
-          >
-            详情
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<PlayCircleOutlined />}
-            onClick={() => onExecute(record)}
-            disabled={record.members.length === 0}
-          >
-            执行
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => onEdit(record.id)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定删除此专家团？"
-            onConfirm={() => onDelete(record.id)}
-          >
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ]
+  if (loading && teams.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
+        <Spin size="large" tip="加载中..." />
+      </div>
+    )
+  }
 
   if (!loading && teams.length === 0) {
     return (
@@ -151,16 +48,79 @@ export function ExpertTeamList({
   }
 
   return (
-    <Table
-      columns={columns}
-      dataSource={teams}
-      rowKey="id"
-      loading={loading}
-      pagination={false}
-      onRow={(record) => ({
-        onClick: () => onView(record.id),
-        style: { cursor: 'pointer' },
-      })}
-    />
+    <div className={styles.cardGrid}>
+      {teams.map((team) => (
+        <Card
+          key={team.id}
+          className={styles.teamCard}
+          hoverable
+          styles={{ body: { padding: '20px' } }}
+          onClick={() => onView(team.id)}
+        >
+          {/* 头部：图标 + 名称 + 描述 */}
+          <div className={styles.teamCardHeader}>
+            <div className={styles.teamCardAvatar}>{team.icon}</div>
+            <div className={styles.teamCardInfo}>
+              <div className={styles.teamCardName}>{team.teamName}</div>
+              {team.description && (
+                <div className={styles.teamCardDesc}>{team.description}</div>
+              )}
+            </div>
+            <Tag color={team.isEnabled ? 'green' : 'default'} style={{ margin: 0 }}>
+              {team.isEnabled ? '启用' : '禁用'}
+            </Tag>
+          </div>
+
+          {/* 标签区 */}
+          <div className={styles.teamCardMeta}>
+            <Tag>{team.category}</Tag>
+            <Tag color="blue">v{team.version}</Tag>
+            <Tag color="geekblue">{team.maxRounds} 轮</Tag>
+          </div>
+
+          {/* 成员头像行 + 操作按钮 */}
+          <div className={styles.teamCardMembers}>
+            <Space size={0}>
+              {team.members.slice(0, 6).map((m) => (
+                <Tooltip key={m.id} title={`${m.memberName} (${m.memberRole})`}>
+                  <Avatar
+                    size={28}
+                    style={{ fontSize: 14, backgroundColor: '#e6f7ff', marginRight: -4 }}
+                  >
+                    {m.avatar}
+                  </Avatar>
+                </Tooltip>
+              ))}
+              {team.members.length > 6 && (
+                <Tag style={{ marginLeft: 8 }}>+{team.members.length - 6}</Tag>
+              )}
+              {team.members.length === 0 && (
+                <Text type="secondary" style={{ fontSize: 12 }}>暂无成员</Text>
+              )}
+            </Space>
+            <div className={styles.teamCardActions} onClick={(e) => e.stopPropagation()}>
+              <Tooltip title="查看详情">
+                <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => onView(team.id)} />
+              </Tooltip>
+              <Tooltip title="执行">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<PlayCircleOutlined />}
+                  onClick={() => onExecute(team)}
+                  disabled={team.members.length === 0}
+                />
+              </Tooltip>
+              <Tooltip title="编辑">
+                <Button type="text" size="small" icon={<EditOutlined />} onClick={() => onEdit(team.id)} />
+              </Tooltip>
+              <Popconfirm title="确定删除此专家团？" onConfirm={() => onDelete(team.id)}>
+                <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={(e) => e.stopPropagation()} />
+              </Popconfirm>
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
   )
 }

@@ -122,6 +122,8 @@ export interface Conversation {
   id: string
   /** 会话标题 */
   title: string
+  /** 关联的模型名称 */
+  modelName?: string
   /** 创建时间 */
   createdAt: number
   /** 更新时间 */

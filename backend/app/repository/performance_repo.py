@@ -20,9 +20,9 @@ class PerformanceRepo:
     async def get_latest(
         self, db: AsyncSession, limit: int = 60
     ) -> List[PerformanceMetric]:
-        """获取最近 N 条采样数据（按时间倒序）"""
+        """获取最近 N 条采样数据（按时间正序，最新数据在最后）"""
         return await self.mapper.find_all(
-            db, offset=0, limit=limit, order_by=PerformanceMetric.created_at.desc()
+            db, offset=0, limit=limit, order_by=PerformanceMetric.created_at.asc()
         )
 
     async def count_all(self, db: AsyncSession) -> int:
@@ -36,7 +36,7 @@ class PerformanceRepo:
             if total <= keep:
                 return 0
 
-            # 找到第 keep 条的 created_at 作为分界线
+            # 找到第 keep 条的 created_at 作为分界线（按时间正序）
             subq = (
                 select(PerformanceMetric.created_at)
                 .where(PerformanceMetric.is_deleted == 0)
@@ -51,7 +51,7 @@ class PerformanceRepo:
                     PerformanceMetric.is_deleted == 0,
                     PerformanceMetric.created_at < subq,
                 )
-                .values(deleted=1)
+                .values(is_deleted=1)
             )
             result = await db.execute(stmt)
             await db.flush()

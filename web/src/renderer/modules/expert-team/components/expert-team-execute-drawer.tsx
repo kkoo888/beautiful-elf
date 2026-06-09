@@ -4,6 +4,7 @@ import { Drawer, Form, Input, InputNumber, Button, Space, Typography, Tag } from
 import { PlayCircleOutlined } from '@ant-design/icons'
 import { useEffect } from 'react'
 import type { ExpertTeam, ExpertTeamExecuteInput } from '../types'
+import styles from './expert-team.module.css'
 
 const { TextArea } = Input
 const { Text } = Typography
@@ -68,14 +69,7 @@ export function ExpertTeamExecuteDrawer({
       }
     >
       {/* 专家团信息 */}
-      <div
-        style={{
-          background: '#f5f5f5',
-          borderRadius: 8,
-          padding: 16,
-          marginBottom: 24,
-        }}
-      >
+      <div className={styles.drawerInfoPanel}>
         <Text type="secondary" style={{ fontSize: 12 }}>参与专家</Text>
         <div style={{ marginTop: 8 }}>
           <Space wrap>
@@ -125,14 +119,7 @@ export function ExpertTeamExecuteDrawer({
       </Form>
 
       {/* 执行说明 */}
-      <div
-        style={{
-          background: '#e6f7ff',
-          borderRadius: 8,
-          padding: 12,
-          marginTop: 16,
-        }}
-      >
+      <div className={styles.drawerHintPanel}>
         <Text style={{ fontSize: 13 }}>
           💡 执行流程：编排器分析任务 → 各专家并行讨论（最多{' '}
           <Tag color="blue">{team.maxRounds}</Tag> 轮）→ 汇总器生成最终报告

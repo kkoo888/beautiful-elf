@@ -1,14 +1,33 @@
 /**
- * 消息输入框组件
- * 多行输入，Enter 发送，Shift+Enter 换行
+ * 消息输入框组件 — 现代 AI 助手风格
+ * 圆角容器包裹、内部工具栏（专家团/技能选择）+ 多行输入区
  */
 
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Dropdown, Tooltip } from 'antd'
+import type { MenuProps } from 'antd'
+import {
+  RobotOutlined,
+  ThunderboltOutlined,
+  SendOutlined,
+  StopOutlined,
+  CloseOutlined,
+  DownOutlined,
+} from '@ant-design/icons'
+import { fetchExpertTeams } from '@/modules/expert-team/services/expert-team-api'
+import type { ExpertTeam } from '@/modules/expert-team/types'
+import { fetchSkills } from '@/modules/skills/services/skills-api'
+import type { Skill } from '@/modules/skills/types/skills'
 import styles from './chat-panel.module.css'
+
+interface SendOptions {
+  expertTeamId?: number
+  skillId?: number
+}
 
 interface MessageInputProps {
   /** 发送消息回调 */
-  onSend: (content: string) => void
+  onSend: (content: string, options?: SendOptions) => void
   /** 是否禁用（正在生成中） */
   disabled?: boolean
   /** 停止生成回调 */
@@ -26,12 +45,50 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // 专家团 / 技能列表
+  const [expertTeams, setExpertTeams] = useState<ExpertTeam[]>([])
+  const [skills, setSkills] = useState<Skill[]>([])
+
+  // 当前选中
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
+  const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null)
+
+  // 加载专家团列表
+  useEffect(() => {
+    let cancelled = false
+    fetchExpertTeams({ enabled: 1 })
+      .then(({ items }) => {
+        if (!cancelled) setExpertTeams(items)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // 加载技能列表
+  useEffect(() => {
+    let cancelled = false
+    fetchSkills({ isEnabled: 1, pageSize: 100 })
+      .then(({ data }) => {
+        if (!cancelled) setSkills(data)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // 派生：选中项名称
+  const selectedTeamName = selectedTeamId
+    ? expertTeams.find((t) => t.id === selectedTeamId)?.teamName
+    : undefined
+  const selectedSkillName = selectedSkillId
+    ? skills.find((s) => s.id === selectedSkillId)?.displayName
+    : undefined
+
   /** 自动调整高度 */
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
   }, [])
 
   /** 发送消息 */
@@ -39,7 +96,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     const trimmed = value.trim()
     if (!trimmed || disabled) return
 
-    onSend(trimmed)
+    const options: SendOptions = {}
+    if (selectedTeamId != null) options.expertTeamId = selectedTeamId
+    if (selectedSkillId != null) options.skillId = selectedSkillId
+
+    onSend(trimmed, options)
     setValue('')
 
     // 重置高度
@@ -48,9 +109,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         textareaRef.current.style.height = 'auto'
       }
     })
-  }, [value, disabled, onSend])
+  }, [value, disabled, onSend, selectedTeamId, selectedSkillId])
 
-  /** 键盘事件 */
+  /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -58,7 +119,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         handleSend()
       }
     },
-    [handleSend]
+    [handleSend],
   )
 
   /** 输入变化 */
@@ -67,52 +128,170 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       setValue(e.target.value)
       adjustHeight()
     },
-    [adjustHeight]
+    [adjustHeight],
   )
 
+  // ─── 专家团下拉菜单 ────────────────────────────────
+  const expertTeamMenuItems: MenuProps['items'] = [
+    ...expertTeams.map((team) => ({
+      key: String(team.id),
+      label: (
+        <div className={styles.menuItemInner}>
+          <span className={styles.menuItemLabel}>{team.icon || '🤖'} {team.teamName}</span>
+          {team.description && (
+            <span className={styles.menuItemDesc}>{team.description}</span>
+          )}
+        </div>
+      ),
+    })),
+    { type: 'divider' as const },
+    {
+      key: 'clear',
+      label: '默认（不指定专家团）',
+    },
+  ]
+
+  const handleExpertTeamSelect: NonNullable<MenuProps['onClick']> = (info) => {
+    if (info.key === 'clear') {
+      setSelectedTeamId(null)
+    } else {
+      setSelectedTeamId(Number(info.key))
+    }
+  }
+
+  // ─── 技能下拉菜单 ──────────────────────────────────
+  const skillMenuItems: MenuProps['items'] = [
+    ...skills.map((skill) => ({
+      key: String(skill.id),
+      label: (
+        <div className={styles.menuItemInner}>
+          <span className={styles.menuItemLabel}>⚡ {skill.displayName}</span>
+          {skill.description && (
+            <span className={styles.menuItemDesc}>{skill.description}</span>
+          )}
+        </div>
+      ),
+    })),
+    { type: 'divider' as const },
+    {
+      key: 'clear',
+      label: '默认（不指定技能）',
+    },
+  ]
+
+  const handleSkillSelect: NonNullable<MenuProps['onClick']> = (info) => {
+    if (info.key === 'clear') {
+      setSelectedSkillId(null)
+    } else {
+      setSelectedSkillId(Number(info.key))
+    }
+  }
+
+  // ─── 渲染 ──────────────────────────────────────────
   return (
     <div className={styles.inputContainer}>
-      <div className={styles.inputWrapper}>
+      <div className={styles.inputBox}>
+        {/* 多行输入区域 */}
         <textarea
           ref={textareaRef}
           className={styles.inputTextarea}
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="输入消息... (Enter 发送，Shift+Enter 换行)"
+          placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
           disabled={disabled}
           rows={1}
           aria-label="消息输入框"
         />
-        {isLoading && onStop ? (
-          <button
-            className={styles.stopButton}
-            onClick={onStop}
-            aria-label="停止生成"
-            title="停止生成"
-          >
-            ■
-          </button>
-        ) : (
-          <button
-            className={styles.sendButton}
-            onClick={handleSend}
-            disabled={!value.trim() || disabled}
-            aria-label="发送消息"
-            title="发送消息"
-          >
-            ➤
-          </button>
-        )}
-      </div>
-      <div className={styles.inputHint}>
-        <div className={styles.shortcutHint}>
-          <span className={styles.shortcutKey}>Enter</span>
-          <span>发送</span>
-          <span className={styles.shortcutKey}>Shift</span>
-          <span>+</span>
-          <span className={styles.shortcutKey}>Enter</span>
-          <span>换行</span>
+
+        {/* 底部工具栏 */}
+        <div className={styles.toolbar}>
+          {/* 左侧选择器 */}
+          <div className={styles.toolbarLeft}>
+            {/* 专家团选择 */}
+            <Dropdown
+              menu={{ items: expertTeamMenuItems, onClick: handleExpertTeamSelect, selectedKeys: selectedTeamId ? [String(selectedTeamId)] : [] }}
+              trigger={['click']}
+              placement="topLeft"
+            >
+              <button
+                type="button"
+                className={`${styles.toolButton} ${selectedTeamId != null ? styles.toolButtonActive : ''}`}
+              >
+                <RobotOutlined />
+                <span className={styles.toolButtonLabel}>
+                  {selectedTeamName ?? '专家团'}
+                </span>
+                {selectedTeamId != null && (
+                  <span
+                    className={styles.toolButtonClear}
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); setSelectedTeamId(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setSelectedTeamId(null) } }}
+                  >
+                    <CloseOutlined />
+                  </span>
+                )}
+                <DownOutlined className={styles.toolButtonArrow} />
+              </button>
+            </Dropdown>
+
+            {/* 技能选择 */}
+            <Dropdown
+              menu={{ items: skillMenuItems, onClick: handleSkillSelect, selectedKeys: selectedSkillId ? [String(selectedSkillId)] : [] }}
+              trigger={['click']}
+              placement="topLeft"
+            >
+              <button
+                type="button"
+                className={`${styles.toolButton} ${selectedSkillId != null ? styles.toolButtonActive : ''}`}
+              >
+                <ThunderboltOutlined />
+                <span className={styles.toolButtonLabel}>
+                  {selectedSkillName ?? '技能'}
+                </span>
+                {selectedSkillId != null && (
+                  <span
+                    className={styles.toolButtonClear}
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); setSelectedSkillId(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setSelectedSkillId(null) } }}
+                  >
+                    <CloseOutlined />
+                  </span>
+                )}
+                <DownOutlined className={styles.toolButtonArrow} />
+              </button>
+            </Dropdown>
+          </div>
+
+          {/* 右侧发送 / 停止 */}
+          <div className={styles.toolbarRight}>
+            {isLoading && onStop ? (
+              <Tooltip title="停止生成">
+                <button
+                  className={styles.stopButton}
+                  onClick={onStop}
+                  aria-label="停止生成"
+                >
+                  <StopOutlined />
+                </button>
+              </Tooltip>
+            ) : (
+              <Tooltip title="发送消息">
+                <button
+                  className={styles.sendButton}
+                  onClick={handleSend}
+                  disabled={!value.trim() || disabled}
+                  aria-label="发送消息"
+                >
+                  <SendOutlined />
+                </button>
+              </Tooltip>
+            )}
+          </div>
         </div>
       </div>
     </div>

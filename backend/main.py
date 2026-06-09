@@ -1,4 +1,5 @@
 """FastAPI 入口"""
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 
@@ -64,6 +65,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"MCP Server 启动失败（MCP 功能不可用）: {e}")
 
+    # 启动性能监控自动采集（后台任务，每 30 秒采样一次）
+    try:
+        _start_perf_collector()
+    except Exception as e:
+        logger.warning(f"性能采集启动失败: {e}")
+
     # 初始化可观测性（可选）
     try:
         from app.agent.tracing import init_tracing
@@ -82,6 +89,11 @@ async def lifespan(app: FastAPI):
         task.cancel()
     if _mcp_tasks:
         logger.info(f"MCP Server 已停止 ({len(_mcp_tasks)} 个任务)")
+
+    # 取消性能采集任务
+    if _perf_task:
+        _perf_task.cancel()
+        logger.info("性能采集已停止")
 
     await close_db()
     await close_redis()
@@ -239,6 +251,35 @@ async def _start_mcp_server():
 
 # MCP 后台任务引用（shutdown 时取消）
 _mcp_tasks: list = []
+
+# 性能采集后台任务（shutdown 时取消）
+_perf_task: asyncio.Task | None = None
+
+
+def _start_perf_collector(interval: int = 30):
+    """启动性能监控自动采集（后台 asyncio 任务，每 interval 秒采样一次）"""
+    from app.core.database import AsyncSessionLocal
+    from app.services.performance_service import PerformanceService
+    from app.repository.performance_repo import PerformanceRepo
+
+    global _perf_task
+
+    async def _collect_loop():
+        service = PerformanceService(PerformanceRepo())
+        while True:
+            try:
+                await asyncio.sleep(interval)
+                async with AsyncSessionLocal() as db:
+                    await service.collect_and_store(db)
+                    await db.commit()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"性能采集异常: {e}")
+                await asyncio.sleep(interval)
+
+    _perf_task = asyncio.create_task(_collect_loop())
+    logger.info(f"性能采集已启动（每 {interval} 秒采样）")
 
 
 app = FastAPI(

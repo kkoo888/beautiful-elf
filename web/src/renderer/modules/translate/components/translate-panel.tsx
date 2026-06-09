@@ -4,8 +4,6 @@
  */
 
 import React, { useCallback } from 'react'
-import {} from 'antd'
-import {} from '@ant-design/icons'
 import styles from './translate-panel.module.css'
 import { LanguageSelector } from './language-selector'
 import { TranslateInput } from './translate-input'

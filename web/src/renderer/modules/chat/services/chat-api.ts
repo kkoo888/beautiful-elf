@@ -27,6 +27,7 @@ function adaptConversation(item: any): Conversation {
   return {
     id: String(item.id),
     title: item.title || '新会话',
+    modelName: item.modelName ?? '',
     createdAt: new Date(item.createdAt).getTime(),
     updatedAt: new Date(item.updatedAt).getTime(),
     messageCount: item.messageCount ?? 0,

@@ -27,7 +27,7 @@ interface ChatState {
   setReasoningDepth: (depth: 'fast' | 'deep' | 'full') => void
   setModelSelection: (providerId: number, modelName: string) => void
   /** 从已启用供应商列表中提取默认供应商和模型，写入 store */
-  initDefaultModel: (providers: { id: number; isDefault: number; models: { name: string }[] }[]) => void
+  initDefaultModel: (providers: { id: number; isDefault: number; models: { modelName: string }[] }[]) => void
   setIsLoading: (loading: boolean) => void
   clearMessages: () => void
 

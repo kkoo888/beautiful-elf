@@ -10,10 +10,10 @@ import {
   Space,
   Card,
   Typography,
-  Divider,
   Popconfirm,
   Switch,
   Tag,
+  Popover,
   message,
 } from 'antd'
 import {
@@ -25,6 +25,8 @@ import {
 } from '@ant-design/icons'
 import { CompactModelSelect } from '@/modules/shared/components/model-selector'
 import type { ExpertTeam, ExpertTeamFormInput, ExpertMemberFormInput } from '../types'
+import { getExpertRoleColor } from '../types'
+import styles from './expert-team.module.css'
 
 const { TextArea } = Input
 const { Text } = Typography
@@ -35,6 +37,12 @@ const PRESET_AVATARS = [
   '🎨', '🔬', '🎯', '💡', '🔍', '📝', '🧠', '👨‍🔬',
   '👩‍🔬', '👨‍🏫', '👩‍🏫', '🧙‍♂️', '🦾', '👁️', '🗣️', '🤝',
   '🎭', '⚖️', '📈', '🗄️', '🌐', '🔧', '⚙️', '🚀',
+]
+
+/** 专家团图标列表 */
+const TEAM_ICONS = [
+  '👥', '🧠', '🏗️', '🔬', '🎯', '💡', '🚀', '⚡',
+  '🌐', '📊', '🛡️', '🎨', '🤖', '🔧', '⚙️', '📋',
 ]
 
 /** 预设专家角色 */
@@ -71,6 +79,31 @@ const PRESET_EXPERTS: ExpertMemberFormInput[] = [
   },
 ]
 
+/** Emoji 网格选择器 */
+function EmojiPicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: string
+  options: string[]
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className={styles.emojiGrid}>
+      {options.map((emoji) => (
+        <div
+          key={emoji}
+          className={`${styles.emojiItem} ${value === emoji ? styles.emojiItemSelected : ''}`}
+          onClick={() => onChange(emoji)}
+        >
+          {emoji}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 interface ExpertTeamEditorProps {
   team?: ExpertTeam
   onSave: (input: ExpertTeamFormInput) => Promise<void>
@@ -80,6 +113,7 @@ interface ExpertTeamEditorProps {
 
 export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeamEditorProps) {
   const [form] = Form.useForm()
+  const [teamIcon, setTeamIcon] = useState(team?.icon ?? '👥')
   const [members, setMembers] = useState<ExpertMemberFormInput[]>(
     team?.members.map((m) => ({
       memberName: m.memberName,
@@ -150,7 +184,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
       const input: ExpertTeamFormInput = {
         teamName: values.teamName,
         description: values.description ?? '',
-        icon: values.icon ?? '👥',
+        icon: teamIcon,
         category: values.category ?? '通用',
         orchestratorPrompt: values.orchestratorPrompt ?? '',
         synthesizerPrompt: values.synthesizerPrompt ?? '',
@@ -162,17 +196,16 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
     } catch {
       // form validation failed
     }
-  }, [form, members, onSave])
+  }, [form, members, teamIcon, onSave])
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Form
         form={form}
         layout="vertical"
         initialValues={{
           teamName: team?.teamName ?? '',
           description: team?.description ?? '',
-          icon: team?.icon ?? '👥',
           category: team?.category ?? '通用',
           orchestratorPrompt: team?.orchestratorPrompt ?? '',
           synthesizerPrompt: team?.synthesizerPrompt ?? '',
@@ -181,34 +214,59 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
       >
         {/* 基本信息 */}
         <Card title="📝 基本信息">
-          <Space style={{ width: '100%' }} size="large" align="start" wrap>
-            <Form.Item name="icon" label="图标" style={{ width: 100 }}>
-              <Input placeholder="👥" style={{ textAlign: 'center', fontSize: 24 }} />
-            </Form.Item>
-            <Form.Item
-              name="teamName"
-              label="专家团名称"
-              rules={[{ required: true, message: '请输入名称' }]}
-              style={{ flex: 1, minWidth: 200 }}
-            >
-              <Input placeholder="例如: 产品评审专家团" />
-            </Form.Item>
-            <Form.Item name="category" label="分类" style={{ width: 150 }}>
-              <Select
-                options={[
-                  { label: '通用', value: '通用' },
-                  { label: '技术', value: '技术' },
-                  { label: '产品', value: '产品' },
-                  { label: '设计', value: '设计' },
-                  { label: '安全', value: '安全' },
-                  { label: '数据', value: '数据' },
-                ]}
-              />
-            </Form.Item>
-          </Space>
-          <Form.Item name="description" label="描述">
-            <TextArea rows={2} placeholder="这个专家团用来做什么..." />
-          </Form.Item>
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+            {/* 图标选择 */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <Popover
+                trigger="click"
+                placement="bottomLeft"
+                content={
+                  <EmojiPicker
+                    value={teamIcon}
+                    options={TEAM_ICONS}
+                    onChange={(v) => {
+                      setTeamIcon(v)
+                      form.setFieldValue('icon', v)
+                    }}
+                  />
+                }
+              >
+                <div className={styles.iconPreview} style={{ cursor: 'pointer' }}>
+                  {teamIcon}
+                </div>
+              </Popover>
+              <Text type="secondary" style={{ fontSize: 11 }}>点击更换</Text>
+            </div>
+
+            {/* 名称和分类 */}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Form.Item
+                  name="teamName"
+                  label="专家团名称"
+                  rules={[{ required: true, message: '请输入名称' }]}
+                  style={{ flex: 1 }}
+                >
+                  <Input placeholder="例如: 产品评审专家团" />
+                </Form.Item>
+                <Form.Item name="category" label="分类" style={{ width: 150 }}>
+                  <Select
+                    options={[
+                      { label: '通用', value: '通用' },
+                      { label: '技术', value: '技术' },
+                      { label: '产品', value: '产品' },
+                      { label: '设计', value: '设计' },
+                      { label: '安全', value: '安全' },
+                      { label: '数据', value: '数据' },
+                    ]}
+                  />
+                </Form.Item>
+              </div>
+              <Form.Item name="description" label="描述" style={{ marginBottom: 0 }}>
+                <TextArea rows={2} placeholder="这个专家团用来做什么..." />
+              </Form.Item>
+            </div>
+          </div>
         </Card>
 
         {/* 提示词配置 */}
@@ -225,7 +283,7 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
               placeholder="留空使用默认汇总器。自定义汇总器可以控制输出格式和风格..."
             />
           </Form.Item>
-          <Form.Item name="maxRounds" label="最大讨论轮次">
+          <Form.Item name="maxRounds" label="最大讨论轮次" style={{ marginBottom: 0 }}>
             <InputNumber min={1} max={10} style={{ width: 120 }} />
           </Form.Item>
         </Card>
@@ -265,117 +323,124 @@ export function ExpertTeamEditor({ team, onSave, onCancel, loading }: ExpertTeam
               <Text type="secondary">暂无专家成员，请点击上方按钮添加</Text>
             </div>
           ) : (
-            members.map((member, index) => (
-              <Card
-                key={index}
-                size="small"
-                style={{ marginBottom: 12, opacity: member.isEnabled === 0 ? 0.5 : 1 }}
-                title={
-                  <Space>
-                    <span style={{ fontSize: 20 }}>{member.avatar || '🤖'}</span>
-                    <Text strong>{member.memberName || `专家 #${index + 1}`}</Text>
-                    {member.memberRole && (
-                      <Text type="secondary">({member.memberRole})</Text>
-                    )}
-                    {member.isEnabled === 0 && <Tag color="default">已禁用</Tag>}
-                  </Space>
-                }
-                extra={
-                  <Space>
-                    <Switch
-                      size="small"
-                      checked={member.isEnabled !== 0}
-                      onChange={(checked) => handleMemberChange(index, 'isEnabled', checked ? 1 : 0)}
-                      checkedChildren="启用"
-                      unCheckedChildren="禁用"
-                    />
-                    <Popconfirm
-                      title="确定移除此专家？"
-                      onConfirm={() => handleRemoveMember(index)}
+            members.map((member, index) => {
+              const roleColor = getExpertRoleColor(member.memberRole)
+              return (
+                <div
+                  key={index}
+                  className={`${styles.memberListCard} ${member.isEnabled === 0 ? styles.memberCardDisabled : ''}`}
+                  style={{ borderLeft: `3px solid ${member.memberRole ? roleColor : '#d9d9d9'}` }}
+                >
+                  {/* 成员头部 */}
+                  <div className={styles.memberListCardHeader}>
+                    <Popover
+                      trigger="click"
+                      placement="bottomLeft"
+                      content={
+                        <EmojiPicker
+                          value={member.avatar || '🤖'}
+                          options={PRESET_AVATARS}
+                          onChange={(v) => handleMemberChange(index, 'avatar', v)}
+                        />
+                      }
                     >
-                      <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-                    </Popconfirm>
-                  </Space>
-                }
-              >
-                <Space style={{ width: '100%' }} size="middle" align="start" wrap>
-                  <Form.Item label="头像" style={{ width: 120, marginBottom: 8 }}>
-                    <Select
-                      value={member.avatar || '🤖'}
-                      onChange={(v) => handleMemberChange(index, 'avatar', v)}
-                      style={{ width: '100%' }}
-                      popupMatchSelectWidth={false}
-                      options={PRESET_AVATARS.map((a) => ({
-                        label: <span style={{ fontSize: 20 }}>{a}</span>,
-                        value: a,
-                      }))}
-                    />
-                  </Form.Item>
-                  <Form.Item label="名称" required style={{ flex: 1, minWidth: 120, marginBottom: 8 }}>
-                    <Input
-                      value={member.memberName}
-                      onChange={(e) => handleMemberChange(index, 'memberName', e.target.value)}
-                      placeholder="专家名称"
-                    />
-                  </Form.Item>
-                  <Form.Item label="角色" required style={{ flex: 1, minWidth: 120, marginBottom: 8 }}>
+                      <div
+                        className={styles.memberAvatar}
+                        style={{
+                          backgroundColor: roleColor + '18',
+                          color: roleColor,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {member.avatar || '🤖'}
+                      </div>
+                    </Popover>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Input
+                        value={member.memberName}
+                        onChange={(e) => handleMemberChange(index, 'memberName', e.target.value)}
+                        placeholder="专家名称"
+                        variant="borderless"
+                        style={{ fontWeight: 600, padding: 0 }}
+                      />
+                    </div>
                     <Input
                       value={member.memberRole}
                       onChange={(e) => handleMemberChange(index, 'memberRole', e.target.value)}
-                      placeholder="如: 架构师"
+                      placeholder="角色"
+                      variant="borderless"
+                      style={{ width: 100 }}
                     />
-                  </Form.Item>
-                </Space>
-                <Form.Item label="系统提示词" required style={{ marginBottom: 8 }}>
+                    <Space size={4}>
+                      <Switch
+                        size="small"
+                        checked={member.isEnabled !== 0}
+                        onChange={(checked) => handleMemberChange(index, 'isEnabled', checked ? 1 : 0)}
+                        checkedChildren="启用"
+                        unCheckedChildren="禁用"
+                      />
+                      <Popconfirm
+                        title="确定移除此专家？"
+                        onConfirm={() => handleRemoveMember(index)}
+                      >
+                        <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                      </Popconfirm>
+                    </Space>
+                  </div>
+
+                  {/* 提示词 */}
                   <TextArea
                     value={member.systemPrompt}
                     onChange={(e) => handleMemberChange(index, 'systemPrompt', e.target.value)}
-                    rows={3}
+                    rows={2}
                     placeholder="定义这个专家的专业领域和行为方式..."
+                    variant="borderless"
+                    style={{ backgroundColor: 'transparent', padding: 0, fontSize: 13 }}
                   />
-                </Form.Item>
-                <Space>
-                  <Form.Item label="模型" style={{ marginBottom: 0 }}>
+
+                  {/* 模型参数 */}
+                  <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
                     <CompactModelSelect
                       value={member.modelName || ''}
                       onChange={(_val, _pid, modelName) => handleMemberChange(index, 'modelName', modelName)}
                       placeholder="默认模型"
-                      style={{ width: 220 }}
+                      style={{ width: 200 }}
                     />
-                  </Form.Item>
-                  <Form.Item label="温度" style={{ marginBottom: 0 }}>
-                    <InputNumber
-                      value={member.temperature}
-                      onChange={(v) => handleMemberChange(index, 'temperature', v)}
-                      min={0}
-                      max={2}
-                      step={0.1}
-                      style={{ width: 100 }}
-                    />
-                  </Form.Item>
-                  <Form.Item label="Max Tokens" style={{ marginBottom: 0 }}>
-                    <InputNumber
-                      value={member.maxTokens}
-                      onChange={(v) => handleMemberChange(index, 'maxTokens', v)}
-                      min={1}
-                      max={8192}
-                      style={{ width: 120 }}
-                    />
-                  </Form.Item>
-                </Space>
-              </Card>
-            ))
+                    <Space size={4}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>温度</Text>
+                      <InputNumber
+                        value={member.temperature}
+                        onChange={(v) => handleMemberChange(index, 'temperature', v)}
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        size="small"
+                        style={{ width: 70 }}
+                      />
+                    </Space>
+                    <Space size={4}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>Tokens</Text>
+                      <InputNumber
+                        value={member.maxTokens}
+                        onChange={(v) => handleMemberChange(index, 'maxTokens', v)}
+                        min={1}
+                        max={8192}
+                        size="small"
+                        style={{ width: 90 }}
+                      />
+                    </Space>
+                  </div>
+                </div>
+              )
+            })
           )}
         </Card>
       </Form>
 
       {/* 底部操作栏 */}
-      <Divider />
-      <div style={{ textAlign: 'right' }}>
+      <div className={styles.editorFooter}>
         <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={onCancel}>
-            取消
-          </Button>
+          <Button icon={<ArrowLeftOutlined />} onClick={onCancel}>取消</Button>
           <Button
             type="primary"
             icon={<SaveOutlined />}

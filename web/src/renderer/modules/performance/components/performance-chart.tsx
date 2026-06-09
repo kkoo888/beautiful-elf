@@ -4,6 +4,7 @@
  */
 
 import React, { useMemo } from 'react'
+import { Tooltip } from 'antd'
 import type { PerformanceMetric } from '../types/performance'
 import styles from './performance-panel.module.css'
 
@@ -24,7 +25,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
   title,
   threshold,
 }) => {
-  // 提取最近 20 个数据点用于展示
+  // 提取最近 20 个数据点
   const chartData = useMemo(() => {
     return data.slice(-20).map((d) => ({
       value: d[field] as number,
@@ -33,6 +34,7 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
         minute: '2-digit',
         second: '2-digit',
       }),
+      fullTime: new Date(d.timestamp).toLocaleString('zh-CN'),
     }))
   }, [data, field])
 
@@ -56,20 +58,24 @@ export const PerformanceChart: React.FC<PerformanceChartProps> = ({
                 />
               </div>
               {index % 4 === 0 && (
-                <span className={styles.chartLabel}>
-                  {point.time.split(':').slice(1).join(':')}
-                </span>
+                <Tooltip title={point.fullTime}>
+                  <span className={styles.chartLabel}>
+                    {point.time.slice(0, 5)}
+                  </span>
+                </Tooltip>
               )}
             </div>
           )
         })}
-      </div>
-      {/* 阈值线 */}
-      <div
-        className={styles.chartThresholdLine}
-        style={{ bottom: `${(threshold / maxValue) * 100}%` }}
-      >
-        <span className={styles.chartThresholdLabel}>阈值 {threshold}%</span>
+        {/* 阈值线 — 在 chartBody 内定位（条形区 116px + 底部 label 24px） */}
+        {chartData.length > 0 && (
+          <div
+            className={styles.chartThresholdLine}
+            style={{ bottom: `calc(24px + ${(threshold / maxValue) * 116}px)` }}
+          >
+            <span className={styles.chartThresholdLabel}>阈值 {threshold}%</span>
+          </div>
+        )}
       </div>
     </div>
   )

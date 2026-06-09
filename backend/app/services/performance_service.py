@@ -1,5 +1,6 @@
 """性能监控 Service"""
 import asyncio
+import platform
 import time
 from typing import List
 
@@ -15,6 +16,13 @@ logger = get_logger(__name__)
 MAX_SAMPLES = 360
 
 
+def _disk_path() -> str:
+    """获取磁盘采集路径（跨平台）"""
+    if platform.system() == "Windows":
+        return "C:\\"
+    return "/"
+
+
 class PerformanceService:
     """性能监控业务层"""
 
@@ -25,7 +33,18 @@ class PerformanceService:
         """同步采集系统指标（在线程中运行）"""
         cpu_percent = psutil.cpu_percent(interval=0.5)
         memory = psutil.virtual_memory()
-        disk = psutil.disk_usage("/")
+
+        # 磁盘采集（跨平台 + 容错）
+        disk_percent = 0.0
+        disk_used_gb = 0
+        disk_total_gb = 0
+        try:
+            disk = psutil.disk_usage(_disk_path())
+            disk_percent = round(disk.percent, 2)
+            disk_used_gb = disk.used // (1024 * 1024 * 1024)
+            disk_total_gb = disk.total // (1024 * 1024 * 1024)
+        except OSError as e:
+            logger.warning(f"磁盘采集失败: {e}")
 
         # 尝试采集 GPU（可选）
         gpu_percent = None
@@ -42,9 +61,9 @@ class PerformanceService:
             "memory_percent": round(memory.percent, 2),
             "memory_used_mb": memory.used // (1024 * 1024),
             "memory_total_mb": memory.total // (1024 * 1024),
-            "disk_percent": round(disk.percent, 2),
-            "disk_used_gb": disk.used // (1024 * 1024 * 1024),
-            "disk_total_gb": disk.total // (1024 * 1024 * 1024),
+            "disk_percent": disk_percent,
+            "disk_used_gb": disk_used_gb,
+            "disk_total_gb": disk_total_gb,
             "gpu_percent": gpu_percent,
             "uptime_seconds": time.time() - psutil.boot_time(),
         }

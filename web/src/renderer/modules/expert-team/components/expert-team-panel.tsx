@@ -3,13 +3,11 @@
 import { Button, Space, Typography, App, Breadcrumb } from 'antd'
 import {
   PlusOutlined,
-  TeamOutlined,
   PlayCircleOutlined,
   HistoryOutlined,
   ArrowLeftOutlined,
 } from '@ant-design/icons'
 import { useState, useCallback } from 'react'
-import { PageHeader } from '@/components/page-header'
 import { ModuleErrorBoundary } from '@/components/error-boundary/module-error-boundary'
 import { useExpertTeam } from '../hooks/use-expert-team'
 import { ExpertTeamList } from './expert-team-list'
@@ -19,6 +17,7 @@ import { ExpertTeamMonitor } from './expert-team-monitor'
 import { ExpertTeamExecuteDrawer } from './expert-team-execute-drawer'
 import { ExpertTeamLivePanel } from './expert-team-live-panel'
 import type { ExpertTeam, ExpertTeamFormInput, ExpertTeamExecuteInput } from '../types'
+import styles from './expert-team.module.css'
 
 const { Text } = Typography
 
@@ -128,10 +127,9 @@ export default function ExpertTeamPanel() {
   const handleExecuteSubmit = useCallback(
     async (input: ExpertTeamExecuteInput) => {
       if (!executeTeam) return
-      // 先切换到监控视图，显示实时面板
       setView('monitor')
       setActiveTab('monitor')
-      setLiveRunId(undefined) // 重置
+      setLiveRunId(undefined)
       setLiveMaxRounds(input.maxRounds || executeTeam.maxRounds)
       setExecuteDrawerOpen(false)
 
@@ -147,20 +145,19 @@ export default function ExpertTeamPanel() {
   const renderHeader = () => {
     if (view === 'list') {
       return (
-        <PageHeader
-          title="👥 专家团工作流"
-          subtitle="多专家协作，AI 驱动的智能分析"
-          extra={
-            <Space>
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                新建专家团
-              </Button>
-              <Button icon={<HistoryOutlined />} onClick={() => { setView('monitor'); setActiveTab('monitor') }}>
-                运行记录
-              </Button>
-            </Space>
-          }
-        />
+        <div className={styles.toolbar}>
+          <span className={styles.toolbarTitle}>
+            {teams.length} 个专家团 · 多专家协作，AI 驱动的智能分析
+          </span>
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              新建专家团
+            </Button>
+            <Button icon={<HistoryOutlined />} onClick={() => { setView('monitor'); setActiveTab('monitor') }}>
+              运行记录
+            </Button>
+          </Space>
+        </div>
       )
     }
 
@@ -172,20 +169,19 @@ export default function ExpertTeamPanel() {
     }
 
     return (
-      <div style={{ marginBottom: 16 }}>
+      <div className={styles.subHeader}>
         <Breadcrumb
           items={[
             { title: <a onClick={goList}>专家团列表</a> },
             { title: titles[view] },
           ]}
-          style={{ marginBottom: 12 }}
         />
-        <Space align="center">
+        <div className={styles.subHeaderRow}>
           <Button icon={<ArrowLeftOutlined />} onClick={goList}>
             返回列表
           </Button>
           <Text strong style={{ fontSize: 16 }}>{titles[view]}</Text>
-        </Space>
+        </div>
       </div>
     )
   }
@@ -251,7 +247,7 @@ export default function ExpertTeamPanel() {
 
   return (
     <ModuleErrorBoundary module="expert-team">
-      <div style={{ padding: '0 24px 24px' }}>
+      <div className={styles.panel}>
         {renderHeader()}
         {renderView()}
 

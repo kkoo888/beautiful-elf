@@ -107,6 +107,20 @@ export function useChat(): UseChatReturn {
     }).catch(() => { /* 忽略 */ })
   }, [])
 
+  // ── 初始化：设置默认模型（仅首次且未手动选择时）─────────
+  const hasInitModelRef = useRef(false)
+  useEffect(() => {
+    if (hasInitModelRef.current) return
+    hasInitModelRef.current = true
+    getEnabledProviders().then((providers) => {
+      const store = useChatStore.getState()
+      // 仅当没有手动选择的模型时才初始化默认值
+      if (store.selectedProviderId === undefined) {
+        store.initDefaultModel(providers)
+      }
+    }).catch(() => { /* 忽略 */ })
+  }, [])
+
   // ── 切换会话时加载消息 ────────────────────────────────
   useEffect(() => {
     if (!currentConversationId) {
@@ -417,9 +431,24 @@ export function useChat(): UseChatReturn {
     store.clearMessages()
   }, [])
 
-  /** 切换会话 */
-  const switchConversation = useCallback((id: string) => {
-    useChatStore.getState().setCurrentConversation(id)
+  /** 切换会话 — 同时恢复该会话关联的模型选择 */
+  const switchConversation = useCallback(async (id: string) => {
+    const store = useChatStore.getState()
+    store.setCurrentConversation(id)
+
+    // 从会话的 modelName 恢复模型选择
+    const conv = store.conversations.find((c) => c.id === id)
+    if (conv?.modelName) {
+      try {
+        const providers = await getEnabledProviders()
+        const provider = providers.find((p) =>
+          p.models?.some((m) => m.modelName === conv.modelName)
+        )
+        if (provider) {
+          store.setModelSelection(provider.id, conv.modelName)
+        }
+      } catch { /* 忽略 */ }
+    }
   }, [])
 
   /** 删除会话 */
