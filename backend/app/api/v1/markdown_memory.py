@@ -49,47 +49,6 @@ async def get_today_log(
     return ApiResult(data=item)
 
 
-@router.get("/{memory_id}", response_model=ApiResult[MarkdownMemoryOut])
-async def get_markdown_memory(
-    memory_id: int = Path(..., description="记忆 ID"),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult:
-    """获取记忆详情"""
-    try:
-        item = await markdown_memory_service.get_memory(db, memory_id)
-        return ApiResult(data=item)
-    except Exception as e:
-        return api_error("MEMORY_NOT_FOUND", str(e), "请检查记忆 ID")
-
-
-@router.post("", response_model=ApiResult[MarkdownMemoryOut])
-async def create_or_update_memory(
-    data: MarkdownMemoryCreate,
-    user_id: int = Query(default=0, alias="userId"),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult:
-    """创建或更新 Markdown 记忆"""
-    try:
-        item = await markdown_memory_service.upsert_memory(db, user_id, data)
-        return ApiResult(data=item, message="保存成功")
-    except Exception as e:
-        return api_error("MEMORY_CREATE_FAILED", str(e), "保存失败，请重试")
-
-
-@router.post("/daily", response_model=ApiResult[MarkdownMemoryOut])
-async def append_daily_log(
-    content: str = Query(..., description="追加内容"),
-    user_id: int = Query(default=0, alias="userId"),
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult:
-    """追加到今日 daily log"""
-    try:
-        item = await markdown_memory_service.append_daily_log(db, user_id, content)
-        return ApiResult(data=item, message="追加成功")
-    except Exception as e:
-        return api_error("MEMORY_APPEND_FAILED", str(e), "追加失败，请重试")
-
-
 @router.get("/longterm", response_model=ApiResult[MarkdownMemoryOut])
 async def get_longterm_memory(
     user_id: int = Query(default=0, alias="userId"),
@@ -126,6 +85,49 @@ async def list_daily_logs(
     """获取最近 N 天的 daily log 列表"""
     items = await markdown_memory_service.list_daily_logs(db, user_id, limit)
     return ApiPageResult(data=items, total=len(items))
+
+
+@router.post("/daily", response_model=ApiResult[MarkdownMemoryOut])
+async def append_daily_log(
+    content: str = Query(..., description="追加内容"),
+    user_id: int = Query(default=0, alias="userId"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """追加到今日 daily log"""
+    try:
+        item = await markdown_memory_service.append_daily_log(db, user_id, content)
+        return ApiResult(data=item, message="追加成功")
+    except Exception as e:
+        return api_error("MEMORY_APPEND_FAILED", str(e), "追加失败，请重试")
+
+
+# ---- 通配路由必须在具体路由之后 ----
+
+@router.get("/{memory_id}", response_model=ApiResult[MarkdownMemoryOut])
+async def get_markdown_memory(
+    memory_id: int = Path(..., description="记忆 ID"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """获取记忆详情"""
+    try:
+        item = await markdown_memory_service.get_memory(db, memory_id)
+        return ApiResult(data=item)
+    except Exception as e:
+        return api_error("MEMORY_NOT_FOUND", str(e), "请检查记忆 ID")
+
+
+@router.post("", response_model=ApiResult[MarkdownMemoryOut])
+async def create_or_update_memory(
+    data: MarkdownMemoryCreate,
+    user_id: int = Query(default=0, alias="userId"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """创建或更新 Markdown 记忆"""
+    try:
+        item = await markdown_memory_service.upsert_memory(db, user_id, data)
+        return ApiResult(data=item, message="保存成功")
+    except Exception as e:
+        return api_error("MEMORY_CREATE_FAILED", str(e), "保存失败，请重试")
 
 
 @router.delete("/{memory_id}")

@@ -79,7 +79,7 @@ export default function MemoryPanel() {
         </span>
       ),
       children: (
-        <div>
+        <div className={styles.vectorTabContent}>
           <MemorySearch
             value={searchQuery}
             onSearch={doSearch}
@@ -125,14 +125,18 @@ export default function MemoryPanel() {
 
   return (
     <div className={styles.panel}>
-      <PageHeader title="🧠 记忆" description="向量检索 · 每日日志 · 长期记忆" />
+      <div className={styles.panelHeader}>
+        <PageHeader title="🧠 记忆" description="向量检索 · 每日日志 · 长期记忆" />
+      </div>
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={tabItems}
-        style={{ padding: '0 16px' }}
-      />
+      <div className={styles.tabWrapper}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
+          items={tabItems}
+          style={{ padding: '0 16px' }}
+        />
+      </div>
 
       <MemoryDetail
         memory={selectedMemory}

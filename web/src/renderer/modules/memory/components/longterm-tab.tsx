@@ -87,8 +87,8 @@ export function LongTermTab() {
           </Button>
         )
       }
-      style={{ height: '100%' }}
-      styles={{ body: { padding: '16px 24px', height: 'calc(100% - 56px)', overflow: 'auto' } }}
+      style={{ height: '100%', minHeight: 0 }}
+      styles={{ body: { padding: '16px 24px', height: 'calc(100% - 56px)', overflowY: 'auto', minHeight: 0 } }}
     >
       {editing ? (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

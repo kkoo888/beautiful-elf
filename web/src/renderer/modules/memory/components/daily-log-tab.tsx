@@ -40,9 +40,9 @@ export function DailyLogTab() {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: '100%', minHeight: 400 }}>
+    <div style={{ display: 'flex', gap: 16, height: '100%', minHeight: 0 }}>
       {/* 左侧：日期列表 */}
-      <div style={{ width: 200, flexShrink: 0, overflowY: 'auto' }}>
+      <div style={{ width: 200, flexShrink: 0, overflowY: 'auto', minHeight: 0 }}>
         <List
           size="small"
           dataSource={logs}
@@ -74,8 +74,8 @@ export function DailyLogTab() {
 
       {/* 右侧：日志内容 */}
       <Card
-        style={{ flex: 1, overflow: 'auto' }}
-        styles={{ body: { padding: '16px 24px' } }}
+        style={{ flex: 1, overflow: 'auto', minHeight: 0 }}
+        styles={{ body: { padding: '16px 24px', overflowY: 'auto', height: '100%' } }}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <FileTextOutlined />

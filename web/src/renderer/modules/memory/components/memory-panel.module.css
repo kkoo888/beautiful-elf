@@ -4,9 +4,61 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 16px;
   padding: 16px;
   overflow: hidden;
+}
+
+.panelHeader {
+  flex-shrink: 0;
+}
+
+/* ── Tabs 固定导航 + 内容滚动 ── */
+
+.tabWrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 让 ant-tabs 整体撑满 tabWrapper */
+.tabWrapper :global(.ant-tabs) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* tab 导航栏固定在顶部 */
+.tabWrapper :global(.ant-tabs-nav) {
+  flex-shrink: 0;
+}
+
+/* 内容区撑满剩余空间并可滚动 */
+.tabWrapper :global(.ant-tabs-content-holder) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tabWrapper :global(.ant-tabs-content) {
+  height: 100%;
+}
+
+.tabWrapper :global(.ant-tabs-tabpane) {
+  height: 100%;
+}
+
+.tabWrapper :global(.ant-tabs-tabpane-active) {
+  height: 100%;
+}
+
+/* ── 向量 Tab 内容区 flex 布局 ── */
+
+.vectorTabContent {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 /* ── 搜索区域 ── */
