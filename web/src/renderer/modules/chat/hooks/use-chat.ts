@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
-import { chat, chatStream, chatResumeStream, submitFeedback, createConversation, fetchMessages, fetchConversations } from '../services/chat-api'
+import { chat, chatStream, chatResumeStream, submitFeedback, createConversation, fetchMessages, fetchConversations, deleteConversationApi } from '../services/chat-api'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
 import type {
   ChatMessage,
@@ -423,8 +423,13 @@ export function useChat(): UseChatReturn {
   }, [])
 
   /** 删除会话 */
-  const deleteConversation = useCallback((id: string) => {
-    useChatStore.getState().removeConversation(id)
+  const deleteConversation = useCallback(async (id: string) => {
+    try {
+      await deleteConversationApi(id)
+      useChatStore.getState().removeConversation(id)
+    } catch (err) {
+      console.error("删除会话失败:", err)
+    }
   }, [])
 
   /** 响应审批（approved/rejected）— 调用后端 resume 端点 */
