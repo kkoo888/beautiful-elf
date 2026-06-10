@@ -177,7 +177,7 @@ class SkillExecutor:
         context_engine=None, memory_manager=None,
     ) -> str:
         """无工具：LLM + 技能描述 + 记忆/RAG 上下文"""
-        from app.services.llm_chat_service import LLMChatService
+        from app.services.llm_chat_service import llm_chat_service
         from app.services.llm_provider_service import LLMProviderService
 
         # 解析 provider_id
@@ -220,11 +220,12 @@ class SkillExecutor:
         }
         enriched_messages = [system_msg] + messages
 
-        llm_chat = LLMChatService()
-        result = await llm_chat.chat(
+        result = await llm_chat_service.chat(
             db, provider_id=provider_id, model_name=model_name,
             messages=enriched_messages, temperature=0.7, max_tokens=2048,
         )
+        if result.error:
+            logger.warning(f"技能 '{skill_name}' LLM 调用失败: {result.error}")
         return result.content
 
     async def _fallback_llm(
@@ -232,7 +233,7 @@ class SkillExecutor:
         context_engine=None, memory_manager=None,
     ) -> str:
         """降级：纯 LLM 对话 + 可用上下文"""
-        from app.services.llm_chat_service import LLMChatService
+        from app.services.llm_chat_service import llm_chat_service
         from app.services.llm_provider_service import LLMProviderService
 
         if provider_id is None:
@@ -258,11 +259,12 @@ class SkillExecutor:
             system_msg = {"role": "system", "content": "\n".join(context_parts)}
             enriched_messages = [system_msg] + messages
 
-        llm_chat = LLMChatService()
-        result = await llm_chat.chat(
+        result = await llm_chat_service.chat(
             db, provider_id=provider_id, model_name=model_name,
             messages=enriched_messages, temperature=0.7, max_tokens=2048,
         )
+        if result.error:
+            logger.warning(f"降级 LLM 调用失败: {result.error}")
         return result.content
 
     @staticmethod
