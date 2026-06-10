@@ -18,18 +18,20 @@ class KnowledgeDocumentRepo:
 
     async def find_all(
         self, db: AsyncSession, offset: int = 0, limit: int = 20,
-        status: Optional[int] = None,
+        status: Optional[int] = None, deleted_only: bool = False,
     ) -> List[KnowledgeDocument]:
         filters = {}
         if status is not None:
             filters["status"] = status
-        return await self.mapper.find_all(db, filters=filters, offset=offset, limit=limit)
+        return await self.mapper.find_all(
+            db, filters=filters, offset=offset, limit=limit, deleted_only=deleted_only,
+        )
 
-    async def count(self, db: AsyncSession, status: Optional[int] = None) -> int:
+    async def count(self, db: AsyncSession, status: Optional[int] = None, deleted_only: bool = False) -> int:
         filters = {}
         if status is not None:
             filters["status"] = status
-        return await self.mapper.count(db, filters=filters)
+        return await self.mapper.count(db, filters=filters, deleted_only=deleted_only)
 
     async def create(self, db: AsyncSession, data: dict) -> KnowledgeDocument:
         return await self.mapper.create(db, data)
@@ -39,6 +41,9 @@ class KnowledgeDocumentRepo:
 
     async def soft_delete(self, db: AsyncSession, id: int) -> bool:
         return await self.mapper.soft_delete(db, id)
+
+    async def restore(self, db: AsyncSession, id: int) -> bool:
+        return await self.mapper.restore(db, id)
 
     async def set_status(self, db: AsyncSession, id: int, status: int, error_message: str = "") -> bool:
         """更新文档处理状态"""

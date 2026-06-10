@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from 'react'
-import { Typography } from 'antd'
-import { InboxOutlined } from '@ant-design/icons'
+import { useCallback, useState } from 'react'
+import { Button, Modal, Upload } from 'antd'
+import { UploadOutlined, InboxOutlined } from '@ant-design/icons'
+import type { UploadProps } from 'antd'
 import { SUPPORTED_EXTENSIONS, MAX_FILE_SIZE } from '../types/knowledge'
 import styles from './knowledge-panel.module.css'
 
-const { Text } = Typography
+const { Dragger } = Upload
 
 interface DocumentUploadProps {
   /** 上传回调 */
@@ -12,12 +13,12 @@ interface DocumentUploadProps {
 }
 
 /**
- * 文档上传区域
- * 支持拖拽 + 点击选择，有文件类型和大小限制提示
+ * 文档上传按钮 + 弹窗
+ * 点击按钮打开上传弹窗，弹窗内支持拖拽上传
  */
 export function DocumentUpload({ onUpload }: DocumentUploadProps) {
-  const [dragging, setDragging] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   const validateFile = useCallback((file: File): string | null => {
     const ext = '.' + file.name.split('.').pop()?.toLowerCase()
@@ -30,89 +31,65 @@ export function DocumentUpload({ onUpload }: DocumentUploadProps) {
     return null
   }, [])
 
-  const processFiles = useCallback(
-    async (files: FileList | File[]) => {
-      for (const file of Array.from(files)) {
-        const error = validateFile(file)
-        if (error) {
-          const { message } = await import('antd')
-          message.warning(error)
-          continue
-        }
-        await onUpload(file)
+  const handleUpload = useCallback(
+    async (file: File) => {
+      const error = validateFile(file)
+      if (error) {
+        const { message } = await import('antd')
+        message.warning(error)
+        return false
       }
+      setUploading(true)
+      try {
+        await onUpload(file)
+        setOpen(false) // 上传成功后关闭弹窗
+      } finally {
+        setUploading(false)
+      }
+      return false // 阻止 antd Upload 默认行为
     },
     [onUpload, validateFile]
   )
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragging(true)
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragging(false)
-  }, [])
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setDragging(false)
-      if (e.dataTransfer.files.length > 0) {
-        processFiles(e.dataTransfer.files)
-      }
+  const uploadProps: UploadProps = {
+    name: 'file',
+    multiple: true,
+    beforeUpload: (file) => {
+      handleUpload(file)
+      return false
     },
-    [processFiles]
-  )
-
-  const handleClick = useCallback(() => {
-    fileInputRef.current?.click()
-  }, [])
-
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files.length > 0) {
-        processFiles(e.target.files)
-        e.target.value = ''
-      }
-    },
-    [processFiles]
-  )
-
-  const accept = SUPPORTED_EXTENSIONS.join(',')
+    showUploadList: false,
+    accept: SUPPORTED_EXTENSIONS.join(','),
+  }
 
   return (
-    <div
-      className={`${styles.uploadZone} ${dragging ? styles.uploadZoneActive : ''}`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') handleClick()
-      }}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={accept}
-        multiple
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
-      <div className={styles.uploadIcon}>
-        <InboxOutlined />
-      </div>
-      <div className={styles.uploadTitle}>点击或拖拽文件到此区域上传</div>
-      <Text type="secondary" className={styles.uploadHint}>
-        支持 PDF、DOCX、MD、TXT、JSON、CSV、YAML、HTML、XML、ZIP，单文件最大 20MB
-      </Text>
-    </div>
+    <>
+      <Button
+        type="primary"
+        icon={<UploadOutlined />}
+        onClick={() => setOpen(true)}
+      >
+        上传文档
+      </Button>
+
+      <Modal
+        title="上传文档"
+        open={open}
+        onCancel={() => setOpen(false)}
+        footer={null}
+        width={480}
+        destroyOnClose
+      >
+        <Dragger {...uploadProps} className={styles.uploadDragger}>
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
+          <p className="ant-upload-hint">
+            支持 PDF、DOCX、MD、TXT 等格式，单文件最大 {MAX_FILE_SIZE / 1024 / 1024}MB
+          </p>
+        </Dragger>
+      </Modal>
+    </>
   )
 }

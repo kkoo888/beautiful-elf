@@ -16,7 +16,9 @@ export const CHAT_ENDPOINTS = {
 // ─── 知识库 ───
 export const KNOWLEDGE_ENDPOINTS = {
   DOCUMENTS: `/knowledge/documents`,
-  DOCUMENT: (id: string) => `/knowledge/documents/${id}`,
+  DOCUMENT: (id: string | number) => `/knowledge/documents/${id}`,
+  CHUNKS: (id: string | number) => `/knowledge/documents/${id}/chunks`,
+  RESTORE: (id: string | number) => `/knowledge/documents/${id}/restore`,
   SEARCH: `/knowledge/search`,
 } as const
 

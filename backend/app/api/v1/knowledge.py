@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import PaginationParams, get_pagination
 from app.services.knowledge_service import knowledge_service
-from app.schemas.knowledge import KnowledgeDocumentOut, KnowledgeSearchResponse
+from app.schemas.knowledge import KnowledgeDocumentOut, KnowledgeChunkOut, KnowledgeSearchResponse
 from app.schemas.response import ApiResult, ApiPageResult, api_error
 from app.core.logging import get_logger
 
@@ -19,18 +19,20 @@ router = APIRouter()
 
 # 支持的文件类型
 ALLOWED_TYPES = {".pdf", ".docx", ".txt", ".md"}
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB
 
 
 @router.get("/documents", response_model=ApiPageResult)
 async def list_documents(
     pagination: PaginationParams = Depends(get_pagination),
     status: int | None = Query(default=None, description="状态筛选 (0=待处理, 1=处理中, 2=完成, 3=失败)"),
+    deleted: bool = Query(default=False, description="是否查询已删除文档"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult:
     """获取知识库文档列表"""
     items, total = await knowledge_service.list_documents(
-        db, page=pagination.page, page_size=pagination.page_size, status=status,
+        db, page=pagination.page, page_size=pagination.page_size,
+        status=status, deleted_only=deleted,
     )
     return ApiPageResult(data=items, total=total)
 
@@ -70,7 +72,7 @@ async def upload_document(
         return api_error(
             "KNOWLEDGE_VALIDATION",
             f"文件过大: {len(content)} bytes",
-            "文件大小不能超过 50MB",
+            "文件大小不能超过 200MB",
         )
 
     try:
@@ -92,9 +94,37 @@ async def delete_document(
     """删除知识库文档"""
     try:
         await knowledge_service.delete_document(db, document_id)
+        await db.commit()
         return ApiResult(message="删除成功")
     except Exception as e:
         return api_error("KNOWLEDGE_NOT_FOUND", str(e), "请检查文档 ID")
+
+
+@router.get("/documents/{document_id}/chunks", response_model=ApiResult[list[KnowledgeChunkOut]])
+async def list_chunks(
+    document_id: int = Path(..., description="文档 ID"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[list[KnowledgeChunkOut]]:
+    """获取文档的分块列表"""
+    try:
+        chunks = await knowledge_service.list_chunks(db, document_id)
+        return ApiResult(data=chunks)
+    except Exception as e:
+        return api_error("KNOWLEDGE_NOT_FOUND", str(e), "获取分块失败")
+
+
+@router.post("/documents/{document_id}/restore", response_model=ApiResult)
+async def restore_document(
+    document_id: int = Path(..., description="文档 ID"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """恢复被软删除的文档"""
+    try:
+        await knowledge_service.restore_document(db, document_id)
+        await db.commit()
+        return ApiResult(message="恢复成功")
+    except Exception as e:
+        return api_error("KNOWLEDGE_NOT_FOUND", str(e), "文档不存在或已删除")
 
 
 @router.get("/search", response_model=ApiResult[KnowledgeSearchResponse])

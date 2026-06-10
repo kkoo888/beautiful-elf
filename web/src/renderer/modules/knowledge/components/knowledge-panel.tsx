@@ -1,5 +1,6 @@
+import { useMemo } from 'react'
 import { Input, Select, Segmented, Space } from 'antd'
-import { SearchOutlined } from '@ant-design/icons'
+import { DatabaseOutlined, FileTextOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { useKnowledge } from '../hooks/use-knowledge'
@@ -8,28 +9,10 @@ import { DocumentList } from './document-list'
 import { DocumentDetail } from './document-detail'
 import { RecycleBin } from './recycle-bin'
 import { ExportButton } from './export-button'
-import type { KnowledgeFileType } from '../types/knowledge'
 import styles from './knowledge-panel.module.css'
-
-const { Search } = Input
-
-const FILE_TYPE_OPTIONS = [
-  { label: '全部类型', value: '' },
-  { label: 'PDF', value: 'pdf' },
-  { label: 'DOCX', value: 'docx' },
-  { label: 'Markdown', value: 'md' },
-  { label: 'TXT', value: 'txt' },
-  { label: 'JSON', value: 'json' },
-  { label: 'CSV', value: 'csv' },
-  { label: 'YAML', value: 'yaml' },
-  { label: 'HTML', value: 'html' },
-  { label: 'XML', value: 'xml' },
-  { label: 'ZIP', value: 'zip' },
-]
 
 /**
  * 知识库主面板
- * 包含文档上传、文档列表、回收站、分块预览、导出
  */
 export function KnowledgePanel() {
   const {
@@ -38,16 +21,12 @@ export function KnowledgePanel() {
     total,
     page,
     pageSize,
-    keyword,
-    fileType,
     showRecycle,
     chunks,
     chunksLoading,
     activeDocId,
     setPage,
     setPageSize,
-    setKeyword,
-    setFileType,
     toggleRecycle,
     handleUpload,
     handleDelete,
@@ -56,6 +35,12 @@ export function KnowledgePanel() {
     handleCloseChunks,
     handleExport,
   } = useKnowledge()
+
+  const stats = useMemo(() => {
+    const totalChunks = documents.reduce((sum, doc) => sum + (doc.chunkCount || 0), 0)
+    const readyCount = documents.filter((doc) => doc.status === 2).length
+    return { total, totalChunks, readyCount }
+  }, [documents, total])
 
   const handlePageChange = (p: number, ps: number) => {
     setPage(p)
@@ -79,6 +64,7 @@ export function KnowledgePanel() {
                 if ((val === 'recycle') !== showRecycle) toggleRecycle()
               }}
             />
+            <DocumentUpload onUpload={handleUpload} />
             <ExportButton onExport={handleExport} />
           </Space>
         }
@@ -86,26 +72,34 @@ export function KnowledgePanel() {
 
       {!showRecycle && (
         <>
-          <DocumentUpload onUpload={handleUpload} />
-
-          <div className={styles.toolbar}>
-            <Search
-              className={styles.searchInput}
-              placeholder="搜索文档名称..."
-              allowClear
-              enterButton={<SearchOutlined />}
-              onSearch={setKeyword}
-              onChange={(e) => {
-                if (!e.target.value) setKeyword('')
-              }}
-            />
-            <Select
-              className={styles.typeSelect}
-              options={FILE_TYPE_OPTIONS}
-              value={fileType ?? ''}
-              onChange={(val) => setFileType(val ? (val as KnowledgeFileType) : undefined)}
-              placeholder="文件类型"
-            />
+          <div className={styles.statsBar}>
+            <div className={styles.statCard}>
+              <div className={`${styles.statIcon} ${styles.statIconPrimary}`}>
+                <DatabaseOutlined />
+              </div>
+              <div>
+                <div className={styles.statValue}>{stats.total}</div>
+                <div className={styles.statLabel}>文档总数</div>
+              </div>
+            </div>
+            <div className={styles.statCard}>
+              <div className={`${styles.statIcon} ${styles.statIconSuccess}`}>
+                <AppstoreOutlined />
+              </div>
+              <div>
+                <div className={styles.statValue}>{stats.totalChunks}</div>
+                <div className={styles.statLabel}>分块总数</div>
+              </div>
+            </div>
+            <div className={styles.statCard}>
+              <div className={`${styles.statIcon} ${styles.statIconWarning}`}>
+                <FileTextOutlined />
+              </div>
+              <div>
+                <div className={styles.statValue}>{stats.readyCount}</div>
+                <div className={styles.statLabel}>已就绪</div>
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -121,7 +115,9 @@ export function KnowledgePanel() {
           onRestore={handleRestore}
         />
       ) : !loading && documents.length === 0 ? (
-        <EmptyState icon="📚" description="导入文档，让 AI 学习你的知识" />
+        <div className={styles.emptyWrapper}>
+          <EmptyState icon="📚" description="导入文档，让 AI 学习你的知识" />
+        </div>
       ) : (
         <DocumentList
           documents={documents}

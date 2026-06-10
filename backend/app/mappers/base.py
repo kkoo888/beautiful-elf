@@ -33,10 +33,17 @@ class MySQLMapper(Generic[T]):
         offset: int = 0,
         limit: int = 20,
         order_by=None,
+        include_deleted: bool = False,
+        deleted_only: bool = False,
     ) -> List[T]:
-        """分页查询（排除软删除）"""
+        """分页查询（默认排除软删除）"""
         try:
-            stmt = select(self.model).where(self.model.is_deleted == 0)
+            if deleted_only:
+                stmt = select(self.model).where(self.model.is_deleted == 1)
+            elif include_deleted:
+                stmt = select(self.model)
+            else:
+                stmt = select(self.model).where(self.model.is_deleted == 0)
             if filters:
                 for key, value in filters.items():
                     if hasattr(self.model, key):
@@ -51,12 +58,13 @@ class MySQLMapper(Generic[T]):
         except Exception as e:
             raise StorageError(f"查询列表失败: {e}")
 
-    async def count(self, db: AsyncSession, filters: dict = None) -> int:
-        """统计数量（排除软删除）"""
+    async def count(self, db: AsyncSession, filters: dict = None, deleted_only: bool = False) -> int:
+        """统计数量（默认排除软删除）"""
         try:
-            stmt = select(func.count()).select_from(self.model).where(
-                self.model.is_deleted == 0
-            )
+            if deleted_only:
+                stmt = select(func.count()).select_from(self.model).where(self.model.is_deleted == 1)
+            else:
+                stmt = select(func.count()).select_from(self.model).where(self.model.is_deleted == 0)
             if filters:
                 for key, value in filters.items():
                     if hasattr(self.model, key):
@@ -104,6 +112,20 @@ class MySQLMapper(Generic[T]):
             return result.rowcount > 0
         except Exception as e:
             raise StorageError(f"删除失败: {e}")
+
+    async def restore(self, db: AsyncSession, id: int) -> bool:
+        """恢复软删除的记录"""
+        try:
+            stmt = (
+                update(self.model)
+                .where(self.model.id == id, self.model.is_deleted == 1)
+                .values(is_deleted=0)
+            )
+            result = await db.execute(stmt)
+            await db.flush()
+            return result.rowcount > 0
+        except Exception as e:
+            raise StorageError(f"恢复失败: {e}")
 
     async def bulk_create(self, db: AsyncSession, items: List[dict]) -> None:
         """批量创建"""

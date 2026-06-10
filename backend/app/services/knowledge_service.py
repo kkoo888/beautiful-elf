@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repository.knowledge_repo import KnowledgeDocumentRepo, KnowledgeChunkRepo
 from app.schemas.knowledge import (
     KnowledgeDocumentOut,
+    KnowledgeChunkOut,
     KnowledgeSearchResult,
     KnowledgeSearchResponse,
 )
@@ -52,12 +53,14 @@ class KnowledgeService:
 
     async def list_documents(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
-        status: Optional[int] = None,
+        status: Optional[int] = None, deleted_only: bool = False,
     ) -> Tuple[List[KnowledgeDocumentOut], int]:
         """获取文档列表"""
         offset = (page - 1) * page_size
-        items = await self.doc_repo.find_all(db, offset=offset, limit=page_size, status=status)
-        total = await self.doc_repo.count(db, status=status)
+        items = await self.doc_repo.find_all(
+            db, offset=offset, limit=page_size, status=status, deleted_only=deleted_only,
+        )
+        total = await self.doc_repo.count(db, status=status, deleted_only=deleted_only)
         return [self._to_out(i) for i in items], total
 
     async def get_document(self, db: AsyncSession, doc_id: int) -> KnowledgeDocumentOut:
@@ -128,6 +131,21 @@ class KnowledgeService:
         # 软删除文档记录
         return await self.doc_repo.soft_delete(db, doc_id)
 
+    async def list_chunks(self, db: AsyncSession, doc_id: int) -> list[KnowledgeChunkOut]:
+        """获取文档的分块列表"""
+        doc = await self.doc_repo.find_by_id(db, doc_id)
+        if not doc:
+            raise RecordNotFoundError("知识库文档不存在")
+        items = await self.chunk_repo.find_by_document(db, doc_id)
+        return [self._chunk_to_out(c) for c in items]
+
+    async def restore_document(self, db: AsyncSession, doc_id: int) -> bool:
+        """恢复被软删除的文档"""
+        item = await self.doc_repo.find_by_id(db, doc_id)
+        if not item:
+            raise RecordNotFoundError("知识库文档不存在")
+        return await self.doc_repo.restore(db, doc_id)
+
     # ── 语义搜索 ─────────────────────────────────────────
 
     async def search(
@@ -179,6 +197,11 @@ class KnowledgeService:
     def _to_out(item) -> KnowledgeDocumentOut:
         """ORM → Pydantic"""
         return KnowledgeDocumentOut.model_validate(item)
+
+    @staticmethod
+    def _chunk_to_out(item) -> KnowledgeChunkOut:
+        """ORM → Pydantic"""
+        return KnowledgeChunkOut.model_validate(item)
 
 
 # ── 全局单例 ──────────────────────────────────────────────

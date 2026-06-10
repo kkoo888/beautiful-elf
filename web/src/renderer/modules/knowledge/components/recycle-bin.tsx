@@ -1,31 +1,20 @@
 import { Table, Tag, Space, Button, Tooltip } from 'antd'
 import { UndoOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import type { KnowledgeDocument } from '../types/knowledge'
+import type { KnowledgeDocument } from '@/types'
 import { FILE_TYPE_ICONS } from '../types/knowledge'
 import { EmptyState } from '@/components/empty-state'
 
 interface RecycleBinProps {
-  /** 回收站文档列表 */
   documents: KnowledgeDocument[]
-  /** 加载中 */
   loading: boolean
-  /** 总数 */
   total: number
-  /** 当前页 */
   page: number
-  /** 每页条数 */
   pageSize: number
-  /** 页码变化 */
   onPageChange: (page: number, pageSize: number) => void
-  /** 恢复文档 */
-  onRestore: (id: string) => void
+  onRestore: (id: number) => void
 }
 
-/**
- * 回收站
- * 展示被软删除的文档，支持恢复
- */
 export function RecycleBin({
   documents,
   loading,
@@ -38,8 +27,8 @@ export function RecycleBin({
   const columns: ColumnsType<KnowledgeDocument> = [
     {
       title: '文件名',
-      dataIndex: 'fileName',
-      key: 'fileName',
+      dataIndex: 'filename',
+      key: 'filename',
       ellipsis: true,
       render: (name: string, record: KnowledgeDocument) => (
         <Space size={8}>

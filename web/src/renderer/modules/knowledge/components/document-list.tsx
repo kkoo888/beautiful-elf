@@ -1,41 +1,29 @@
 import { Table, Tag, Space, Button, Tooltip } from 'antd'
 import { EyeOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import type { KnowledgeDocument } from '../types/knowledge'
-import { FILE_TYPE_ICONS } from '../types/knowledge'
+import type { KnowledgeDocument } from '@/types'
+import { FILE_TYPE_ICONS, STATUS_MAP } from '../types/knowledge'
 import { confirmDanger } from '@/components/confirm-dialog'
 import styles from './knowledge-panel.module.css'
 
 interface DocumentListProps {
-  /** 文档列表 */
   documents: KnowledgeDocument[]
-  /** 加载中 */
   loading: boolean
-  /** 总数 */
   total: number
-  /** 当前页 */
   page: number
-  /** 每页条数 */
   pageSize: number
-  /** 页码变化 */
   onPageChange: (page: number, pageSize: number) => void
-  /** 查看分块 */
-  onViewChunks: (id: string) => void
-  /** 删除文档 */
-  onDelete: (id: string) => void
+  onViewChunks: (id: number) => void
+  onDelete: (id: number) => void
 }
 
-/** 状态标签颜色 */
-const STATUS_CONFIG: Record<KnowledgeDocument['status'], { color: string; label: string }> = {
-  ready: { color: 'success', label: '就绪' },
-  indexing: { color: 'processing', label: '索引中' },
-  error: { color: 'error', label: '错误' },
+function formatFileSize(bytes: number): string {
+  if (!bytes) return '-'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-/**
- * 文档列表
- * Ant Design Table 展示已导入文档
- */
 export function DocumentList({
   documents,
   loading,
@@ -49,7 +37,7 @@ export function DocumentList({
   const handleDelete = async (record: KnowledgeDocument) => {
     const confirmed = await confirmDanger(
       '移入回收站',
-      `确定将 "${record.fileName}" 移入回收站吗？`
+      `确定将 "${record.filename}" 移入回收站吗？`
     )
     if (confirmed) {
       onDelete(record.id)
@@ -59,44 +47,59 @@ export function DocumentList({
   const columns: ColumnsType<KnowledgeDocument> = [
     {
       title: '文件名',
-      dataIndex: 'fileName',
-      key: 'fileName',
+      dataIndex: 'filename',
+      key: 'filename',
       ellipsis: true,
       render: (name: string, record: KnowledgeDocument) => (
-        <Space size={8}>
-          <span>{FILE_TYPE_ICONS[record.fileType] ?? '📄'}</span>
-          <span>{name}</span>
-        </Space>
+        <div className={styles.fileName}>
+          <span className={styles.fileIcon}>
+            {FILE_TYPE_ICONS[record.fileType] ?? '📄'}
+          </span>
+          <span className={styles.fileNameText}>{name}</span>
+        </div>
       ),
     },
     {
       title: '类型',
       dataIndex: 'fileType',
       key: 'fileType',
-      width: 80,
-      render: (type: string) => <Tag>{type.toUpperCase()}</Tag>,
+      width: 90,
+      render: (type: string) => (
+        <Tag color="blue" style={{ borderRadius: 4 }}>
+          {type.toUpperCase()}
+        </Tag>
+      ),
+    },
+    {
+      title: '大小',
+      dataIndex: 'fileSize',
+      key: 'fileSize',
+      width: 100,
+      render: (size: number) => (
+        <span style={{ color: 'var(--ant-color-text-secondary)', fontSize: 13 }}>
+          {formatFileSize(size)}
+        </span>
+      ),
     },
     {
       title: '分块数',
       dataIndex: 'chunkCount',
       key: 'chunkCount',
-      width: 80,
+      width: 90,
       align: 'center',
+      render: (count: number) => <span style={{ fontWeight: 500 }}>{count}</span>,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
-      render: (status: KnowledgeDocument['status']) => {
-        const config = STATUS_CONFIG[status]
+      width: 110,
+      render: (status: number) => {
+        const config = STATUS_MAP[status] ?? { label: '未知', color: 'default' }
         return (
-          <span className={styles.statusTag}>
-            <span
-              className={`${styles.statusDot} ${styles[`statusDot${status.charAt(0).toUpperCase() + status.slice(1)}`]}`}
-            />
-            <Tag color={config.color}>{config.label}</Tag>
-          </span>
+          <Tag color={config.color} style={{ borderRadius: 4, margin: 0 }}>
+            {config.label}
+          </Tag>
         )
       },
     },
@@ -104,8 +107,12 @@ export function DocumentList({
       title: '导入时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 170,
-      render: (v: string) => new Date(v).toLocaleString('zh-CN'),
+      width: 160,
+      render: (v: string) => (
+        <span style={{ fontSize: 13, color: 'var(--ant-color-text-secondary)' }}>
+          {new Date(v).toLocaleString('zh-CN')}
+        </span>
+      ),
     },
     {
       title: '操作',
@@ -119,7 +126,7 @@ export function DocumentList({
               size="small"
               icon={<EyeOutlined />}
               onClick={() => onViewChunks(record.id)}
-              disabled={record.status !== 'ready'}
+              disabled={record.status !== 2}
             />
           </Tooltip>
           <Tooltip title="移入回收站">

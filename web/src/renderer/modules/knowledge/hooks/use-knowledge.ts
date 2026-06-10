@@ -1,11 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useMessage } from '@/hooks/use-message'
-import type {
-  KnowledgeDocument,
-  KnowledgeChunk,
-  DocumentListParams,
-  KnowledgeFileType,
-} from '../types/knowledge'
+import type { KnowledgeDocument } from '@/types'
+import type { KnowledgeChunk } from '../services/knowledge-api'
 import {
   fetchDocuments,
   uploadDocument,
@@ -16,52 +12,25 @@ import {
 } from '../services/knowledge-api'
 
 interface UseKnowledgeReturn {
-  /** 文档列表 */
   documents: KnowledgeDocument[]
-  /** 加载中 */
   loading: boolean
-  /** 总数 */
   total: number
-  /** 当前页 */
   page: number
-  /** 每页条数 */
   pageSize: number
-  /** 搜索关键词 */
-  keyword: string
-  /** 文件类型筛选 */
-  fileType: KnowledgeFileType | undefined
-  /** 是否显示回收站 */
   showRecycle: boolean
-  /** 分块数据 */
   chunks: KnowledgeChunk[]
-  /** 分块加载中 */
   chunksLoading: boolean
-  /** 当前查看分块的文档 */
-  activeDocId: string | null
+  activeDocId: number | null
 
-  /** 设置页码 */
   setPage: (page: number) => void
-  /** 设置每页条数 */
   setPageSize: (size: number) => void
-  /** 设置关键词 */
-  setKeyword: (keyword: string) => void
-  /** 设置文件类型筛选 */
-  setFileType: (type: KnowledgeFileType | undefined) => void
-  /** 切换回收站 */
   toggleRecycle: () => void
-  /** 刷新列表 */
   refresh: () => void
-  /** 上传文件 */
   handleUpload: (file: File) => Promise<void>
-  /** 删除文档 */
-  handleDelete: (id: string) => Promise<void>
-  /** 恢复文档 */
-  handleRestore: (id: string) => Promise<void>
-  /** 查看分块 */
-  handleViewChunks: (id: string) => Promise<void>
-  /** 关闭分块抽屉 */
+  handleDelete: (id: number) => Promise<void>
+  handleRestore: (id: number) => Promise<void>
+  handleViewChunks: (id: number) => Promise<void>
   handleCloseChunks: () => void
-  /** 导出知识库 */
   handleExport: () => Promise<void>
 }
 
@@ -72,32 +41,27 @@ export function useKnowledge(): UseKnowledgeReturn {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  const [keyword, setKeyword] = useState('')
-  const [fileType, setFileType] = useState<KnowledgeFileType | undefined>()
   const [showRecycle, setShowRecycle] = useState(false)
   const [chunks, setChunks] = useState<KnowledgeChunk[]>([])
   const [chunksLoading, setChunksLoading] = useState(false)
-  const [activeDocId, setActiveDocId] = useState<string | null>(null)
+  const [activeDocId, setActiveDocId] = useState<number | null>(null)
 
   const loadDocuments = useCallback(async () => {
     setLoading(true)
     try {
-      const params: DocumentListParams = {
+      const res = await fetchDocuments({
         page,
         pageSize,
-        keyword: keyword || undefined,
-        fileType,
         deleted: showRecycle,
-      }
-      const res = await fetchDocuments(params)
-      setDocuments(res.data)
+      })
+      setDocuments(res.items)
       setTotal(res.total)
     } catch {
       message.error('加载文档列表失败')
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, keyword, fileType, showRecycle])
+  }, [page, pageSize, showRecycle])
 
   useEffect(() => {
     loadDocuments()
@@ -121,7 +85,7 @@ export function useKnowledge(): UseKnowledgeReturn {
   )
 
   const handleDelete = useCallback(
-    async (id: string) => {
+    async (id: number) => {
       try {
         await deleteDocument(id)
         message.success('已移入回收站')
@@ -134,7 +98,7 @@ export function useKnowledge(): UseKnowledgeReturn {
   )
 
   const handleRestore = useCallback(
-    async (id: string) => {
+    async (id: number) => {
       try {
         await restoreDocument(id)
         message.success('文档已恢复')
@@ -146,7 +110,7 @@ export function useKnowledge(): UseKnowledgeReturn {
     [loadDocuments]
   )
 
-  const handleViewChunks = useCallback(async (id: string) => {
+  const handleViewChunks = useCallback(async (id: number) => {
     setActiveDocId(id)
     setChunksLoading(true)
     try {
@@ -190,16 +154,12 @@ export function useKnowledge(): UseKnowledgeReturn {
     total,
     page,
     pageSize,
-    keyword,
-    fileType,
     showRecycle,
     chunks,
     chunksLoading,
     activeDocId,
     setPage,
     setPageSize,
-    setKeyword,
-    setFileType,
     toggleRecycle,
     refresh,
     handleUpload,
