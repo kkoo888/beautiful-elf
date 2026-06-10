@@ -136,11 +136,9 @@ class SkillExecutor:
             if provider_id is None:
                 return "⚠️ 请先选择 AI 供应商"
 
-            # 构建 LangChain LLM + 绑定工具
-            lc_tools = tool_registry.get_langchain_tools()
+            # 构建 LangChain LLM（工具由 engine 动态绑定，不在此预绑定）
             llm = await llm_service.get_chat_llm(
                 db, provider_id=provider_id, model_name=model_name,
-                bind_tools=lc_tools,
             )
 
             # 构建 Agent 图

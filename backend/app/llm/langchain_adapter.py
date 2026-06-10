@@ -16,6 +16,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from pydantic import PrivateAttr
 
 from app.llm.protocol import LLMProvider
 from app.llm.types import (
@@ -117,14 +118,28 @@ class ChatLLMProvider(BaseChatModel):
         # 流式
         async for chunk in llm.astream([HumanMessage(content="你好")]):
             print(chunk.content, end="")
+
+        # 带工具
+        llm_with_tools = llm.bind_tools([my_tool])
+        result = await llm_with_tools.ainvoke([HumanMessage(content="...")])
     """
 
     provider: LLMProvider
     temperature: float = 0.7
     max_tokens: int = 4096
+    _bound_tools: list[Any] = PrivateAttr(default=[])  # 存储 bind_tools 绑定的工具
 
     class Config:
         arbitrary_types_allowed = True
+
+    def bind_tools(self, tools: list[Any], **kwargs: Any) -> "ChatLLMProvider":
+        """绑定工具 — 返回新实例，工具存储在 _bound_tools 中。
+
+        兼容 LangChain BaseChatModel 接口，engine.py 动态绑定工具时调用。
+        """
+        new = self.model_copy()
+        new._bound_tools = list(tools)
+        return new
 
     @property
     def _llm_type(self) -> str:
@@ -141,6 +156,8 @@ class ChatLLMProvider(BaseChatModel):
         system, llm_messages = _lc_messages_to_messages(messages)
         max_tokens = kwargs.get("max_tokens", self.max_tokens)
         temperature = kwargs.get("temperature", self.temperature)
+        tool_defs = _build_tool_definitions(self._bound_tools) if self._bound_tools else None
+
         config = ChatConfig(
             max_tokens=max_tokens,
             temperature=temperature,
@@ -148,26 +165,40 @@ class ChatLLMProvider(BaseChatModel):
             stop_sequences=stop or [],
         )
 
-        text_parts = []
+        text_parts: list[str] = []
+        accumulated_tool_calls: dict[str, dict] = {}
+
         async def _collect():
-            async for event in self.provider.chat(llm_messages, config=config):
+            async for event in self.provider.chat(llm_messages, tools=tool_defs, config=config):
                 if isinstance(event, TextDeltaEvent):
                     text_parts.append(event.text)
+                elif isinstance(event, ToolUseStartEvent):
+                    accumulated_tool_calls[event.tool_use_id] = {
+                        "id": event.tool_use_id,
+                        "name": event.tool_name,
+                        "args": {},
+                    }
+                elif isinstance(event, ToolUseEndEvent):
+                    tc = accumulated_tool_calls.get(event.tool_use_id)
+                    if tc:
+                        tc["args"] = event.arguments or {}
 
         # 在已有 event loop 中运行
         try:
             loop = asyncio.get_running_loop()
-            # 已在 async 上下文中，创建 task
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 future = pool.submit(asyncio.run, _collect())
                 future.result(timeout=120)
         except RuntimeError:
-            # 没有 running loop
             asyncio.run(_collect())
 
+        tool_calls = list(accumulated_tool_calls.values()) if accumulated_tool_calls else []
         return ChatResult(
-            generations=[ChatGeneration(message=AIMessage(content="".join(text_parts)))],
+            generations=[ChatGeneration(message=AIMessage(
+                content="".join(text_parts),
+                tool_calls=tool_calls,
+            ))],
         )
 
     def _stream(
@@ -195,12 +226,30 @@ class ChatLLMProvider(BaseChatModel):
         run_manager: Any | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        """异步生成 — 消费 StreamEvent"""
-        text_parts = []
+        """异步生成 — 消费 StreamEvent，正确累积文本和工具调用"""
+        text_parts: list[str] = []
+        # tool_calls 按 id 累积（同一个 tool_call 可能分多个 chunk 到达）
+        accumulated_tool_calls: dict[str, dict] = {}
+
         async for chunk in self._astream(messages, stop=stop, **kwargs):
-            text_parts.append(chunk.text)
+            msg = chunk.message
+            if msg.content:
+                text_parts.append(msg.content)
+            # 累积 tool_calls（AIMessageChunk.tool_calls 是 list[dict]）
+            for tc in (msg.tool_calls or []):
+                tc_id = tc.get("id", "")
+                if tc_id and tc_id in accumulated_tool_calls:
+                    # 后续 chunk：合并 args
+                    accumulated_tool_calls[tc_id]["args"].update(tc.get("args", {}))
+                elif tc_id:
+                    accumulated_tool_calls[tc_id] = dict(tc)
+
+        content = "".join(text_parts)
+        tool_calls = list(accumulated_tool_calls.values()) if accumulated_tool_calls else []
+
+        msg = AIMessage(content=content, tool_calls=tool_calls)
         return ChatResult(
-            generations=[ChatGeneration(message=AIMessage(content="".join(text_parts)))],
+            generations=[ChatGeneration(message=msg)],
         )
 
     async def _astream(
@@ -210,11 +259,17 @@ class ChatLLMProvider(BaseChatModel):
         run_manager: Any | None = None,
         **kwargs: Any,
     ):
-        """异步流式 — 转发到 LLMProvider.chat()（核心路径）"""
+        """异步流式 — 转发到 LLMProvider.chat()（核心路径）
+
+        支持工具调用：将 ToolUse 事件转为 LangChain AIMessageChunk(tool_calls=...)。
+        """
         system, llm_messages = _lc_messages_to_messages(messages)
 
         max_tokens = kwargs.get("max_tokens", self.max_tokens)
         temperature = kwargs.get("temperature", self.temperature)
+
+        # 将绑定的 LangChain tool 转为 LLMProvider ToolDefinition
+        tool_defs = _build_tool_definitions(self._bound_tools) if self._bound_tools else None
 
         config = ChatConfig(
             max_tokens=max_tokens,
@@ -223,7 +278,10 @@ class ChatLLMProvider(BaseChatModel):
             stop_sequences=stop or [],
         )
 
-        async for event in self.provider.chat(llm_messages, config=config):
+        # 累积工具调用状态（一个流式 tool_call 分多个事件到达）
+        _tool_calls: dict[str, dict] = {}  # tool_use_id → {id, name, args_str}
+
+        async for event in self.provider.chat(llm_messages, tools=tool_defs, config=config):
             if isinstance(event, TextDeltaEvent):
                 chunk = ChatGenerationChunk(
                     message=AIMessageChunk(content=event.text),
@@ -231,6 +289,49 @@ class ChatLLMProvider(BaseChatModel):
                 if run_manager:
                     await run_manager.on_llm_new_token(event.text, chunk=chunk)
                 yield chunk
+
+            elif isinstance(event, ToolUseStartEvent):
+                _tool_calls[event.tool_use_id] = {
+                    "id": event.tool_use_id,
+                    "name": event.tool_name,
+                    "args_str": "",
+                }
+                # 立即 yield 一个带 tool_call 头的 chunk（name 已知，args 待填充）
+                yield ChatGenerationChunk(
+                    message=AIMessageChunk(
+                        content="",
+                        tool_calls=[{
+                            "id": event.tool_use_id,
+                            "name": event.tool_name,
+                            "args": {},
+                        }],
+                    ),
+                )
+
+            elif isinstance(event, ToolUseDeltaEvent):
+                tc = _tool_calls.get(event.tool_use_id)
+                if tc:
+                    tc["args_str"] += event.json_fragment
+
+            elif isinstance(event, ToolUseEndEvent):
+                tc = _tool_calls.get(event.tool_use_id)
+                if tc:
+                    # 解析完整的 args JSON
+                    try:
+                        args = json.loads(tc["args_str"]) if tc["args_str"] else event.arguments or {}
+                    except json.JSONDecodeError:
+                        args = event.arguments or {}
+                    # yield 最终确认的 tool_call chunk
+                    yield ChatGenerationChunk(
+                        message=AIMessageChunk(
+                            content="",
+                            tool_calls=[{
+                                "id": tc["id"],
+                                "name": tc["name"],
+                                "args": args,
+                            }],
+                        ),
+                    )
 
             elif isinstance(event, ErrorEvent):
                 chunk = ChatGenerationChunk(
