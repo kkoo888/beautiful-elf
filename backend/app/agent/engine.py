@@ -139,11 +139,13 @@ def build_agent_graph(
     timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
 ) -> Any:
     """
-    构建 Agent 工作流图（v5.2 — 模型路由 + B+C 动态工具绑定）。
+    构建 Agent 工作流图。
 
-    v5.2 变更:
-      - 新增 model_selector 节点（借鉴 OpenSquilla SquillaRouter）
-      - 特征提取 + 分类 → 选择模型名 → 动态切换 provider
+    v5.3 变更:
+      - model_selector ML 模型路由
+        · 390维特征提取 + LightGBM 推理 + 6层后处理
+        · 输出: route_class/tier/thinking_mode/prompt_policy/prompt_hint
+        · 降级: ML 不可用时自动切规则引擎
 
     v5.0 变更:
       - 工具不再在初始化时全量 bind_tools
@@ -206,10 +208,10 @@ def build_agent_graph(
 # ── 节点工厂 ──────────────────────────────────────────────
 
 def _make_model_selector_node(model_selector):
-    """模型选择节点（借鉴 OpenSquilla SquillaRouter）
+    """模型选择节点（v5.3 — ML 模型路由）
 
-    在意图路由之前，根据用户消息特征选择最合适的模型。
-    输出 selected_model（模型名字符串），下游 llm_call 据此切换 provider。
+    流程：390维特征提取 → LightGBM 推理 → 6层后处理
+    输出：route_class/tier/selected_model/thinking_mode/prompt_policy/prompt_hint
     """
     async def model_selector_node(state: AgentState) -> dict:
         from langgraph.config import get_stream_writer
@@ -233,30 +235,42 @@ def _make_model_selector_node(model_selector):
             elif hasattr(msg, "role") and hasattr(msg, "content"):
                 history.append({"role": msg.role, "content": str(msg.content)})
 
-        # 路由分类
+        # 路由分类（ML 或规则降级）
         decision = model_selector.classify(query, history=history if history else None)
         elapsed = time.time() - t0
 
         writer({
             "step": "model_select",
             "status": "done",
-            "message": f"模型路由: {decision.model} ({decision.reason}, {elapsed*1000:.0f}ms)",
-            "selected_model": decision.model,
+            "message": f"模型路由: {decision.selected_model} ({decision.route_class}/{decision.tier}, {decision.reason}, {elapsed*1000:.0f}ms)",
+            "selected_model": decision.selected_model,
+            "route_class": decision.route_class,
             "tier": decision.tier,
+            "thinking_mode": decision.thinking_mode,
+            "prompt_policy": decision.prompt_policy,
             "confidence": decision.confidence,
             "reason": decision.reason,
             "elapsed_ms": int(elapsed * 1000),
         })
 
         logger.info(
-            f"[model_selector] model={decision.model} tier={decision.tier} "
+            f"[model_selector] model={decision.selected_model} route={decision.route_class} "
+            f"tier={decision.tier} thinking={decision.thinking_mode} policy={decision.prompt_policy} "
             f"confidence={decision.confidence:.2f} reason={decision.reason} elapsed={elapsed:.3f}s"
         )
 
         return {
-            "selected_model": decision.model,
+            "selected_model": decision.selected_model,
             "routing_confidence": decision.confidence,
             "routing_reason": decision.reason,
+            "route_class": decision.route_class,
+            "tier": decision.tier,
+            "thinking_mode": decision.thinking_mode,
+            "prompt_policy": decision.prompt_policy,
+            "prompt_hint": decision.prompt_hint,
+            "difficulty_score": decision.difficulty_score,
+            "routing_probabilities": decision.probabilities,
+            "routing_flags": decision.flags,
         }
 
     return model_selector_node
@@ -463,10 +477,22 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
         else:
             current_base_llm = llm
             model_label = state.get("model_name") or "default"
-        writer({"step": "llm", "status": "calling", "message": f"正在生成回答... (模型: {model_label})"})
+
+        # 路由信息
+        thinking_mode = state.get("thinking_mode", "")
+        prompt_policy = state.get("prompt_policy", "")
+        prompt_hint = state.get("prompt_hint", "")
+        route_class = state.get("route_class", "")
+        tier = state.get("tier", "")
+
+        writer({"step": "llm", "status": "calling", "message": f"正在生成回答... (模型: {model_label}, 路由: {route_class}/{tier}, 思考: {thinking_mode})"})
 
         system_prompt = state.get("system_prompt") or state.get("context") or \
             "你是一个智能助手，能够使用工具回答用户问题。请用中文回答。"
+
+        注入路由提示
+        if prompt_hint:
+            system_prompt = f"{system_prompt}\n\n【指令】{prompt_hint}"
 
         lc_messages = [SystemMessage(content=system_prompt)]
 

@@ -62,14 +62,15 @@ class AgentService:
                 db, provider_id=provider_id, model_name=model_name, bind_tools=None,
             )
 
-            # ── 模型路由（借鉴 OpenSquilla SquillaRouter）──
+            # ── 模型路由──
             from app.router.model_selector import ModelSelector
             model_selector = ModelSelector(default_model=model_name)
-            # 注册 tier → 模型映射（后续可从数据库读取）
-            # 默认全部走同一个模型，主人配置后可切换
-            model_selector.register_tier("c0", model_name)  # 轻量
-            model_selector.register_tier("c1", model_name)  # 标准
-            model_selector.register_tier("c2", model_name)  # 强力
+            # tier → 模型映射（对齐 router.runtime.yaml tier_mapping，后续从 DB 读取）
+            # 默认全部走同一个模型，主人在 DB 配置不同模型后可切换
+            model_selector.register_tier("S", model_name)  # R0 轻量（闲聊/简单问答）
+            model_selector.register_tier("M", model_name)  # R1 标准（一般对话和任务）
+            model_selector.register_tier("L", model_name)  # R2 强力（推理/调试/多步任务）
+            model_selector.register_tier("XL", model_name)  # R3 最强（架构/高风险决策）
             # 注册 LLM 实例（get_llm 时使用）
             model_selector.register_llm(model_name, llm)
 
@@ -113,7 +114,7 @@ class AgentService:
             self._model_name = model_name
             self._initialized = True
 
-            logger.info(f"Agent 引擎初始化完成 (provider={provider_id}, model={model_name}, 模型路由+B+C动态工具, interrupt={enable_interrupt})")
+            logger.info(f"Agent 引擎初始化完成 (provider={provider_id}, model={model_name}, ML路由={model_selector.is_ml_available}, B+C动态工具, interrupt={enable_interrupt})")
             return True
 
         except ImportError as e:

@@ -92,10 +92,18 @@ class AgentState(TypedDict, total=False):
     needs_approval: bool
     pending_tool_call: Optional[dict]
 
-    # ── 模型路由 ──────────────────────────────────────
+    # ── 模型路由──────
     selected_model: str       # 路由选择的模型名（如 "gpt-4o" / "deepseek-chat"）
     routing_confidence: float
     routing_reason: str
+    route_class: str          # R0/R1/R2/R3
+    tier: str                 # S/M/L/XL（模型 tier）
+    thinking_mode: str        # T0/T1/T2/T3（思维深度）
+    prompt_policy: str        # P0/P1/P2（提示策略）
+    prompt_hint: str          # 提示文本（压缩/标准/充分分析）
+    difficulty_score: float   # 难度分数
+    routing_probabilities: dict  # R0-R3 概率分布
+    routing_flags: dict       # 标志位（high_risk/debug/long_context...）
 
     # ── 意图路由 ──────────────────────────────────────
     intent: Optional[dict]
