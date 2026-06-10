@@ -134,17 +134,16 @@ def build_agent_graph(
     intent_router=None,
     skill_executor=None,
     rag_pipeline=None,
-    tier_selector=None,
+    model_selector=None,
     enable_interrupt: bool = False,
     timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
 ) -> Any:
     """
-    构建 Agent 工作流图（v5.1 — SquillaRouter + B+C 动态工具绑定）。
+    构建 Agent 工作流图（v5.2 — 模型路由 + B+C 动态工具绑定）。
 
-    v5.1 变更:
-      - 新增 model_router 节点（借鉴 OpenSquilla SquillaRouter）
-      - 本地规则判断输入复杂度 → 选择 c0/c1/c2 模型层级
-      - llm_call 按 tier 动态选择 LLM 实例
+    v5.2 变更:
+      - 新增 model_selector 节点（借鉴 OpenSquilla SquillaRouter）
+      - 特征提取 + 分类 → 选择模型名 → 动态切换 provider
 
     v5.0 变更:
       - 工具不再在初始化时全量 bind_tools
@@ -157,20 +156,20 @@ def build_agent_graph(
     """
     graph = StateGraph(AgentState)
 
-    # v5.1: 模型路由（入口节点，在意图路由之前）
-    graph.add_node("model_router", _make_model_router())
+    # 模型路由（入口节点，在意图路由之前）
+    graph.add_node("model_selector", _make_model_selector_node(model_selector))
     graph.add_node("intent_router", _make_intent_router(intent_router))
     graph.add_node("skill_executor", _make_skill_executor_node(skill_executor, context_engine, memory_manager))
     graph.add_node("context_builder", _make_context_builder(context_engine, memory_manager, tool_registry))
-    graph.add_node("llm_call", _make_llm_caller(llm, tool_registry, tier_selector))
+    graph.add_node("llm_call", _make_llm_caller(llm, tool_registry, model_selector))
     graph.add_node("tool_executor", _make_tool_executor(tool_registry))
     graph.add_node("approval_node", _make_approval_node(tool_registry))
     graph.add_node("evaluator", _make_evaluator_node(llm))
     graph.add_node("memory_saver", _make_memory_saver(memory_manager))
 
-    # v5.1: 入口改为 model_router
-    graph.set_entry_point("model_router")
-    graph.add_edge("model_router", "intent_router")
+    # 入口: model_selector → intent_router → ...
+    graph.set_entry_point("model_selector")
+    graph.add_edge("model_selector", "intent_router")
     graph.add_conditional_edges("intent_router", _route_after_intent, {
         "skill": "skill_executor",
         "agent": "context_builder",
@@ -206,17 +205,27 @@ def build_agent_graph(
 
 # ── 节点工厂 ──────────────────────────────────────────────
 
-def _make_model_router():
-    """模型路由节点（SquillaRouter）— 在意图路由之前，判断用哪个模型层级"""
-    async def model_router_node(state: AgentState) -> dict:
-        from langgraph.config import get_stream_writer
-        from app.agent.model_router import classify
+def _make_model_selector_node(model_selector):
+    """模型选择节点（借鉴 OpenSquilla SquillaRouter）
 
+    在意图路由之前，根据用户消息特征选择最合适的模型。
+    输出 selected_model（模型名字符串），下游 llm_call 据此切换 provider。
+    """
+    async def model_selector_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
         writer = get_stream_writer()
         t0 = time.time()
 
+        if not model_selector:
+            writer({"step": "model_select", "status": "skipped", "message": "模型路由未初始化"})
+            return {"selected_model": "", "routing_confidence": 0.0, "routing_reason": "no_selector"}
+
         query = _extract_last_message(state)
-        # 提取对话历史（最近 6 轮）
+        if not query or not query.strip():
+            writer({"step": "model_select", "status": "skipped", "message": "空消息，跳过路由"})
+            return {"selected_model": "", "routing_confidence": 0.0, "routing_reason": "empty"}
+
+        # 提取对话历史
         history = []
         for msg in (state.get("messages") or [])[-12:]:
             if isinstance(msg, dict):
@@ -224,34 +233,33 @@ def _make_model_router():
             elif hasattr(msg, "role") and hasattr(msg, "content"):
                 history.append({"role": msg.role, "content": str(msg.content)})
 
-        decision = classify(query, history=history if history else None)
+        # 路由分类
+        decision = model_selector.classify(query, history=history if history else None)
         elapsed = time.time() - t0
 
-        tier_labels = {"c0": "轻量", "c1": "标准", "c2": "强力"}
-        label = tier_labels.get(decision.tier, decision.tier)
         writer({
-            "step": "model_router",
+            "step": "model_select",
             "status": "done",
-            "message": f"模型路由: {label} ({decision.reason}, {elapsed*1000:.0f}ms)",
+            "message": f"模型路由: {decision.model} ({decision.reason}, {elapsed*1000:.0f}ms)",
+            "selected_model": decision.model,
             "tier": decision.tier,
             "confidence": decision.confidence,
             "reason": decision.reason,
-            "signals": decision.signals,
             "elapsed_ms": int(elapsed * 1000),
         })
 
         logger.info(
-            f"[model_router] tier={decision.tier} confidence={decision.confidence:.2f} "
-            f"reason={decision.reason} signals={decision.signals} elapsed={elapsed:.3f}s"
+            f"[model_selector] model={decision.model} tier={decision.tier} "
+            f"confidence={decision.confidence:.2f} reason={decision.reason} elapsed={elapsed:.3f}s"
         )
 
         return {
-            "model_tier": decision.tier,
-            "model_tier_confidence": decision.confidence,
-            "model_tier_reason": decision.reason,
+            "selected_model": decision.model,
+            "routing_confidence": decision.confidence,
+            "routing_reason": decision.reason,
         }
 
-    return model_router_node
+    return model_selector_node
 
 
 def _make_intent_router(intent_router):
@@ -440,21 +448,21 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
     return context_builder_node
 
 
-def _make_llm_caller(llm, tool_registry=None, tier_selector=None):
+def _make_llm_caller(llm, tool_registry=None, model_selector=None):
     async def llm_call_node(state: AgentState) -> dict:
         from langgraph.config import get_stream_writer
         writer = get_stream_writer()
 
         t0 = time.time()
 
-        # ── v5.1: 按 tier 动态选择 LLM ──
-        tier = state.get("model_tier") or "c1"
-        if tier_selector:
-            current_base_llm = tier_selector.get_llm(tier)
-            model_label = tier_selector.get_model_name(tier)
+        # ── 按路由结果动态选择 LLM ──
+        selected_model = state.get("selected_model") or ""
+        if model_selector and selected_model:
+            current_base_llm = model_selector.get_llm(selected_model)
+            model_label = selected_model
         else:
             current_base_llm = llm
-            model_label = "default"
+            model_label = state.get("model_name") or "default"
         writer({"step": "llm", "status": "calling", "message": f"正在生成回答... (模型: {model_label})"})
 
         system_prompt = state.get("system_prompt") or state.get("context") or \
@@ -495,18 +503,14 @@ def _make_llm_caller(llm, tool_registry=None, tier_selector=None):
             else:
                 lc_messages.append(HumanMessage(content=content))
 
-        # ── B+C: 动态绑定工具（从 registry 按名查找，state 中存的是工具名字符串）──
-        # v5.1: c0 层级不绑工具（纯对话，省 token）
+        # ── B+C: 动态绑定工具 ──
         selected_tool_names = state.get("selected_tools") or []
         current_llm = current_base_llm
-        if tier == "c0":
-            # c0: 轻量模式，不绑定工具，纯对话
-            logger.debug(f"[llm_call] tier=c0，跳过工具绑定（纯对话模式）")
-        elif selected_tool_names and tool_registry:
+        if selected_tool_names and tool_registry:
             tool_objects = tool_registry.get_langchain_tools(selected_tool_names)
             if tool_objects:
                 current_llm = current_base_llm.bind_tools(tool_objects)
-                logger.debug(f"[llm_call] 动态绑定 {len(tool_objects)} 个工具 (tier={tier})")
+                logger.debug(f"[llm_call] 动态绑定 {len(tool_objects)} 个工具 (model={model_label})")
         # selected_tools=[] → 不绑定任何工具（纯对话模式）
 
         try:

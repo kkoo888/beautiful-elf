@@ -62,15 +62,16 @@ class AgentService:
                 db, provider_id=provider_id, model_name=model_name, bind_tools=None,
             )
 
-            # ── v5.1: Tier Selector（模型路由）─────────────
-            from app.llm.tier_selector import TierSelector
-            tier_selector = TierSelector()
-            tier_selector.register("c0", llm, model_name=f"{model_name}(c0)")
-            tier_selector.register("c1", llm, model_name=f"{model_name}(c1)")
-            tier_selector.register("c2", llm, model_name=f"{model_name}(c2)")
-            # 后续可替换为不同模型:
-            # cheap_llm = await llm_service.get_chat_llm(db, provider_id=..., model_name="qwen3:7b")
-            # tier_selector.register("c0", cheap_llm, model_name="qwen3:7b")
+            # ── 模型路由（借鉴 OpenSquilla SquillaRouter）──
+            from app.router.model_selector import ModelSelector
+            model_selector = ModelSelector(default_model=model_name)
+            # 注册 tier → 模型映射（后续可从数据库读取）
+            # 默认全部走同一个模型，主人配置后可切换
+            model_selector.register_tier("c0", model_name)  # 轻量
+            model_selector.register_tier("c1", model_name)  # 标准
+            model_selector.register_tier("c2", model_name)  # 强力
+            # 注册 LLM 实例（get_llm 时使用）
+            model_selector.register_llm(model_name, llm)
 
             memory_manager = memory_service.memory_manager
             intent_router = intent_service.intent_router
@@ -105,14 +106,14 @@ class AgentService:
                 intent_router=intent_router,
                 skill_executor=skill_executor,
                 rag_pipeline=rag_pipeline,
-                tier_selector=tier_selector,
+                model_selector=model_selector,
                 enable_interrupt=enable_interrupt,
             )
             self._provider_id = provider_id
             self._model_name = model_name
             self._initialized = True
 
-            logger.info(f"Agent 引擎 v5.1 初始化完成 (provider={provider_id}, model={model_name}, SquillaRouter+B+C动态工具, interrupt={enable_interrupt})")
+            logger.info(f"Agent 引擎初始化完成 (provider={provider_id}, model={model_name}, 模型路由+B+C动态工具, interrupt={enable_interrupt})")
             return True
 
         except ImportError as e:
@@ -167,9 +168,9 @@ class AgentService:
             "provider_id": provider_id,
             "model_name": model_name,
             "evaluation": None,
-            "model_tier": "c1",
-            "model_tier_confidence": 0.0,
-            "model_tier_reason": "default",
+            "selected_model": "",
+            "routing_confidence": 0.0,
+            "routing_reason": "default",
             # selected_tools 由 engine 动态选择，不传则 default_factory=list 自动给 []
         }
 
@@ -407,9 +408,9 @@ class AgentService:
                 "model_name": model_name,
                 "evaluation": None,
                 "reasoning_depth": reasoning_depth,
-                "model_tier": "c1",
-                "model_tier_confidence": 0.0,
-                "model_tier_reason": "default",
+                "selected_model": "",
+                "routing_confidence": 0.0,
+                "routing_reason": "default",
                 # selected_tools 由 engine 动态选择，不传则 default_factory=list 自动给 []
             }
 
