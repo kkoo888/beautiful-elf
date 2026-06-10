@@ -92,6 +92,11 @@ class AgentState(TypedDict, total=False):
     needs_approval: bool
     pending_tool_call: Optional[dict]
 
+    # ── 模型路由（SquillaRouter）──────────────────────
+    model_tier: str           # "c0" | "c1" | "c2"
+    model_tier_confidence: float
+    model_tier_reason: str
+
     # ── 意图路由 ──────────────────────────────────────
     intent: Optional[dict]
     skill_answer: Optional[str]
