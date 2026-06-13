@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Button, Input, Form, Typography, Space, Avatar, Divider, App, Card, Tag } from 'antd'
+import { Button, Input, Form, Typography, Space, Avatar, Divider, App, Card, Tag, Checkbox } from 'antd'
 import {
   UserOutlined,
   LockOutlined,
@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons'
 import { apiClient } from '@/services/api-client'
 import { AUTH_ENDPOINTS } from '@/services/endpoints'
+import { saveCredentials, loadCredentials, clearCredentials } from '../utils/credential-storage'
 
 const { Text, Title } = Typography
 
@@ -58,8 +59,18 @@ export function LoginSettings() {
   const [auth, setAuth] = useState<AuthState>(loadAuth)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
+  const [remember, setRemember] = useState(false)
   const [form] = Form.useForm()
   const { message } = App.useApp()
+
+  // 启动时恢复记住的账号密码
+  useEffect(() => {
+    const saved = loadCredentials()
+    if (saved) {
+      form.setFieldsValue({ username: saved.username, password: saved.password })
+      setRemember(true)
+    }
+  }, [form])
 
   // 启动时用 token 拉取最新用户信息
   useEffect(() => {
@@ -87,14 +98,25 @@ export function LoginSettings() {
       setLoading(true)
       try {
         const res = await apiClient.post(AUTH_ENDPOINTS.LOGIN, values)
-        const data = res.data as { code: string; data: { accessToken: string; user: UserInfo }; message?: string }
+        const data = res.data as {
+          code: string
+          data: { accessToken: string; user: UserInfo }
+          message?: string
+          userTip?: string
+        }
         if (data.code === 'SUCCESS' && data.data) {
           saveAuth(data.data.accessToken, data.data.user)
           setAuth({ token: data.data.accessToken, user: data.data.user })
           message.success('登录成功')
+          // 记住密码
+          if (remember) {
+            saveCredentials(values.username, values.password)
+          } else {
+            clearCredentials()
+          }
           form.resetFields()
         } else {
-          message.error(data.message || '登录失败')
+          message.error(data.userTip || data.message || '登录失败')
         }
       } catch (err: unknown) {
         message.error(err instanceof Error ? err.message : '网络错误')
@@ -102,7 +124,7 @@ export function LoginSettings() {
         setLoading(false)
       }
     },
-    [form]
+    [form, remember]
   )
 
   const handleRegister = useCallback(
@@ -110,13 +132,13 @@ export function LoginSettings() {
       setLoading(true)
       try {
         const res = await apiClient.post(AUTH_ENDPOINTS.REGISTER, values)
-        const data = res.data as { code: string; message?: string }
+        const data = res.data as { code: string; message?: string; userTip?: string }
         if (data.code === 'SUCCESS') {
           message.success('注册成功，请登录')
           setMode('login')
           form.resetFields()
         } else {
-          message.error(data.message || '注册失败')
+          message.error(data.userTip || data.message || '注册失败')
         }
       } catch (err: unknown) {
         message.error(err instanceof Error ? err.message : '网络错误')
@@ -129,7 +151,9 @@ export function LoginSettings() {
 
   const handleLogout = useCallback(() => {
     clearAuth()
+    clearCredentials()
     setAuth({ token: null, user: null })
+    setRemember(false)
     message.info('已退出登录')
   }, [])
 
@@ -201,6 +225,14 @@ export function LoginSettings() {
         <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }, { min: 4, message: '密码至少 4 个字符' }]}>
           <Input.Password prefix={<LockOutlined />} placeholder="密码" size="large" />
         </Form.Item>
+
+        {mode === 'login' && (
+          <Form.Item>
+            <Checkbox checked={remember} onChange={(e) => setRemember(e.target.checked)}>
+              记住账号密码
+            </Checkbox>
+          </Form.Item>
+        )}
 
         <Form.Item>
           <Button type="primary" htmlType="submit" loading={loading} block size="large" icon={mode === 'login' ? <LoginOutlined /> : <UserAddOutlined />}>

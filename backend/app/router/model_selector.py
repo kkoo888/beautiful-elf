@@ -29,7 +29,7 @@ _DEFAULT_BUNDLE_DIR = Path(__file__).resolve().parent / "models" / "v4.2_phase3_
 class RoutingDecision:
     """路由决策结果。"""
     tier: str
-    model: str
+    selected_model: str
     route_class: str
     confidence: float
     reason: str
@@ -267,7 +267,7 @@ class ModelSelector:
     def classify(self, user_message, history=None):
         if not user_message or not user_message.strip():
             model = self._tier_models.get(DEFAULT_TEXT_TIER, self._default_model)
-            return RoutingDecision(tier=DEFAULT_TEXT_TIER, model=model, route_class="R1", confidence=1.0, reason="empty")
+            return RoutingDecision(tier=DEFAULT_TEXT_TIER, selected_model=model, route_class="R1", confidence=1.0, reason="empty")
 
         t0 = time.time()
 
@@ -283,7 +283,7 @@ class ModelSelector:
                 tier = ml["tier"]
                 model = self._tier_models.get(tier, self._default_model)
                 return RoutingDecision(
-                    tier=tier, model=model, route_class=ml["route_class"],
+                    tier=tier, selected_model=model, route_class=ml["route_class"],
                     confidence=ml["confidence"], reason=f"ml:{ml['route_class']}",
                     thinking_mode=ml["thinking_mode"], prompt_policy=ml["prompt_policy"],
                     prompt_hint=ml.get("prompt_hint", ""), difficulty_score=ml["difficulty_score"],
@@ -297,7 +297,7 @@ class ModelSelector:
         model = self._tier_models.get(tier, self._default_model)
         route_class = {v: k for k, v in ROUTE_CLASS_TO_TIER.items()}.get(tier, "R1")
         return RoutingDecision(
-            tier=tier, model=model, route_class=route_class,
+            tier=tier, selected_model=model, route_class=route_class,
             confidence=confidence, reason=reason, signals=signals,
             source="rules", elapsed_ms=int((time.time() - t0) * 1000),
         )
