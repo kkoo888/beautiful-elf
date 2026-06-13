@@ -8,7 +8,7 @@ v2.0 重构（Harrison Chase 视角优化）:
   - 代码量: ~180 行 → ~200 行（增加了评估能力）
 
 职责:
-  - 文档解析（PDF / DOCX / TXT / MD）
+  - 文档解析（PDF / DOCX / PPTX / XLSX / CSV / JSON / HTML / MD / TXT / EPUB / IPYNB）
   - 分块（SentenceSplitter）
   - Embedding + 存入 Qdrant
   - 混合检索 + 重排序（QueryPipeline DAG）

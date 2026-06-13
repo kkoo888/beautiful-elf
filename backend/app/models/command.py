@@ -1,4 +1,6 @@
 """命令模型"""
+from datetime import datetime
+
 from sqlalchemy import Column, BigInteger, Integer, String, DateTime, Index
 from app.models.base import BaseModel
 
@@ -25,7 +27,7 @@ class CommandUsage(BaseModel):
 
     command_id = Column(BigInteger, nullable=False, comment="命令 ID")
     use_count = Column(Integer, nullable=False, default=0, comment="使用次数")
-    last_used_at = Column(DateTime, default=None, comment="最后使用时间")
+    last_used_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="最后使用时间")
 
     __table_args__ = (
         Index("idx_command_usage_command_id", "command_id"),

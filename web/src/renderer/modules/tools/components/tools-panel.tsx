@@ -11,9 +11,13 @@ import { ToolFormModal } from './tool-form-modal'
 import type { ToolInfo, CreateToolInput, UpdateToolInput } from '../types/tools'
 import styles from './tools-panel.module.css'
 
+/** 每页条数 */
+const PAGE_SIZE = 5
+
 /** 工具管理面板 */
 export default function ToolsPanel() {
-  const { toolsWithStats, isLoading, summary, isSummaryLoading } = useTools()
+  const [page, setPage] = useState(1)
+  const { toolsWithStats, total, isLoading, summary, isSummaryLoading, refetch } = useTools({ page, pageSize: PAGE_SIZE })
   const createMut = useCreateTool()
   const updateMut = useUpdateTool()
   const deleteMut = useDeleteTool()
@@ -52,7 +56,7 @@ export default function ToolsPanel() {
         description="注册、配置和监控 Agent 工具"
         extra={
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={() => void 0}>
+            <Button icon={<ReloadOutlined />} loading={isLoading} onClick={refetch}>
               刷新
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
@@ -64,10 +68,14 @@ export default function ToolsPanel() {
       <ToolStats summary={summary} loading={isSummaryLoading} />
       <ToolList
         tools={toolsWithStats}
+        total={total}
+        page={page}
+        pageSize={PAGE_SIZE}
         loading={isLoading}
         onEdit={handleEdit}
         onDelete={(id) => deleteMut.mutate(id)}
         onToggle={(id, enable) => toggleMut.mutate({ id, enable })}
+        onPageChange={setPage}
       />
       <ToolFormModal
         open={modalOpen}

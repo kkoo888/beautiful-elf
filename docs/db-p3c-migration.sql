@@ -246,7 +246,6 @@ CREATE TABLE IF NOT EXISTS `llm_provider` (
   `provider_type` VARCHAR(64)      NOT NULL                COMMENT '供应商类型: openai/claude/deepseek/ollama/qwen/custom',
   `base_url`      VARCHAR(512)     NOT NULL                COMMENT 'API 基础地址',
   `api_key`       TEXT                                     COMMENT 'API Key (加密存储)',
-  `models`        JSON             NOT NULL DEFAULT (JSON_ARRAY()) COMMENT '可用模型列表 JSON',
   `is_enabled`    TINYINT UNSIGNED NOT NULL DEFAULT 1      COMMENT '是否启用: 1=启用 0=禁用',
   `is_default`    TINYINT UNSIGNED NOT NULL DEFAULT 0      COMMENT '是否默认供应商: 1=是 0=否',
   `description`   VARCHAR(512)     DEFAULT ''               COMMENT '备注说明',

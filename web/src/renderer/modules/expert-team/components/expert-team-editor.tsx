@@ -165,7 +165,7 @@ function MemberEditModal({
       width={600}
       okText="确定"
       cancelText="取消"
-      destroyOnClose
+      destroyOnHidden
     >
       {/* 头像区域 */}
       <div className={styles.modalAvatarWrap}>

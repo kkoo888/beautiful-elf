@@ -78,7 +78,7 @@ export function DocumentUpload({ onUpload }: DocumentUploadProps) {
         onCancel={() => setOpen(false)}
         footer={null}
         width={480}
-        destroyOnClose
+        destroyOnHidden
       >
         <Dragger {...uploadProps} className={styles.uploadDragger}>
           <p className="ant-upload-drag-icon">

@@ -82,6 +82,10 @@ export default function PetSettingsTab() {
     onSuccess: () => {
       message.success('模型已切换，宠物窗口将重新加载')
       queryClient.invalidateQueries({ queryKey: ['pet-models'] })
+      // 通知宠物窗口重新加载模型
+      if (isElectron) {
+        petApi.notifyModelChanged()
+      }
     },
     onError: () => {
       message.error('模型切换失败')
@@ -129,10 +133,10 @@ export default function PetSettingsTab() {
       message.warning('当前环境不支持宠物窗口')
       return
     }
-    await petApi.toggle()
+    const result = await petApi.toggle()
     setPetVisible((v) => !v)
-    message.info(petVisible ? '宠物窗口已隐藏' : '宠物窗口已显示')
-  }, [petVisible, petApi, isElectron])
+    message.info(result.visible ? '宠物窗口已显示' : '宠物窗口已隐藏')
+  }, [petApi, isElectron])
 
   const handleSelectModelDir = useCallback(async () => {
     const dir = await dialogApi.selectDirectory()

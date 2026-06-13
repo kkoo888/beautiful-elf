@@ -9,6 +9,8 @@ v3.0 变更:
   - https://gofastmcp.com/servers/tools (version, timeout, annotations 参数)
   - https://modelcontextprotocol.io/specification/2025-06-18/server/tools (annotations)
 """
+from datetime import datetime
+
 from sqlalchemy import Column, BigInteger, Integer, String, DateTime, JSON, Index
 from app.models.base import BaseModel
 
@@ -21,12 +23,12 @@ class Tool(BaseModel):
     description = Column(String(1024), nullable=False, comment="工具描述")
     module = Column(String(128), nullable=False, comment="功能类别")
     json_schema = Column(JSON, nullable=False, comment="参数 JSON Schema (MCP inputSchema)")
-    output_schema = Column(JSON, nullable=True, comment="输出 JSON Schema (MCP outputSchema, 可选)")
+    output_schema = Column(JSON, nullable=False, default=dict, comment="输出 JSON Schema (MCP outputSchema)")
     risk_level = Column(String(16), nullable=False, default="low", comment="风险等级: low/medium/high")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
     version = Column(String(32), nullable=False, default="1.0.0", comment="工具版本号（FastMCP v3 组件版本管理）")
     timeout_seconds = Column(Integer, nullable=False, default=60, comment="工具执行超时（秒），FastMCP v3 timeout")
-    annotations = Column(JSON, nullable=True, comment="MCP Tool Annotations (readOnlyHint/destructiveHint/idempotentHint/openWorldHint)")
+    annotations = Column(JSON, nullable=False, default=dict, comment="MCP Tool Annotations (readOnlyHint/destructiveHint/idempotentHint/openWorldHint)")
 
     __table_args__ = (
         Index("idx_tool_module", "module"),
@@ -42,7 +44,7 @@ class ToolStats(BaseModel):
     success_count = Column(Integer, nullable=False, default=0, comment="成功次数")
     fail_count = Column(Integer, nullable=False, default=0, comment="失败次数")
     avg_duration_ms = Column(Integer, nullable=False, default=0, comment="平均耗时")
-    last_called_at = Column(DateTime, nullable=False, server_default='2000-01-01 00:00:00', comment="最后调用时间")
+    last_called_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), server_default='2000-01-01 00:00:00', comment="最后调用时间")
 
     __table_args__ = (
         Index("idx_tool_stat_tool_id", "tool_id"),

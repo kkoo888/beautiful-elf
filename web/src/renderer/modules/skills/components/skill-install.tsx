@@ -148,10 +148,12 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
       message.warning('请输入 GitHub 仓库地址')
       return
     }
-    const repoName = githubUrl.trim().split('/').pop()?.replace('.git', '') || 'imported-skill'
+    const rawUrl = githubUrl.trim()
+    const decodedUrl = decodeURIComponent(rawUrl)
+    const repoName = decodeURIComponent(rawUrl.split('/').pop()?.replace('.git', '') || 'imported-skill')
     setFormName(repoName)
     setFormDisplayName(repoName)
-    setFormDescription(`从 GitHub 导入: ${githubUrl.trim()}`)
+    setFormDescription(`从 GitHub 导入: ${decodedUrl}`)
     setFormVersion('1.0.0')
     setFormTriggerWords('')
     setFormDependencies('')

@@ -68,6 +68,9 @@ from app.models.expert_team import (
 from app.models.llm_provider import LLMProvider
 from app.models.llm_model import LLMModel
 
+# 用户
+from app.models.user import User
+
 # Markdown 记忆文件
 from app.models.markdown_memory import MarkdownMemory
 
@@ -97,7 +100,8 @@ __all__ = [
     "ActionLog",
     "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
     "ExpertRoleSkill", "ExpertRoleRun",
-    "LLMProvider",
+    "LLMProvider", "LLMModel",
+    "User",
     "MarkdownMemory",
     "CostRecord",
 ]

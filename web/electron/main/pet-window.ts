@@ -4,6 +4,13 @@ import { is } from '@electron-toolkit/utils'
 
 let petWindow: BrowserWindow | null = null
 
+/** 外部注入的可见性变化回调（由 window-manager 设置，避免循环依赖） */
+let visibilityCallback: ((visible: boolean) => void) | null = null
+
+export function setPetVisibilityCallback(cb: (visible: boolean) => void): void {
+  visibilityCallback = cb
+}
+
 export function createPetWindow(): BrowserWindow {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
 
@@ -18,7 +25,7 @@ export function createPetWindow(): BrowserWindow {
     resizable: false,
     skipTaskbar: true,
     hasShadow: false,
-    show: false, // 默认隐藏，用户手动打开
+    show: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -38,11 +45,15 @@ export function createPetWindow(): BrowserWindow {
     if (petWindow && !petWindow.isDestroyed()) {
       petWindow.webContents.send('pet:visibility-change', false)
     }
+    // 通知外部：宠物窗口已隐藏（通过回调注入，避免循环依赖）
+    visibilityCallback?.(false)
   })
   petWindow.on('show', () => {
     if (petWindow && !petWindow.isDestroyed()) {
       petWindow.webContents.send('pet:visibility-change', true)
     }
+    // 通知外部：宠物窗口已显示（通过回调注入，避免循环依赖）
+    visibilityCallback?.(true)
   })
 
   // 窗口关闭处理
@@ -62,4 +73,43 @@ export function destroyPetWindow(): void {
     petWindow.destroy()
     petWindow = null
   }
+}
+
+/**
+ * 安全显示宠物窗口
+ * 如果窗口不存在或已销毁，自动创建
+ * @returns 操作是否成功
+ */
+export function showPetWindow(): boolean {
+  let win = getPetWindow()
+  if (!win || win.isDestroyed()) {
+    win = createPetWindow()
+  }
+  if (win && !win.isDestroyed()) {
+    win.show()
+    return true
+  }
+  return false
+}
+
+/**
+ * 安全隐藏宠物窗口
+ * @returns 操作是否成功
+ */
+export function hidePetWindow(): boolean {
+  const win = getPetWindow()
+  if (win && !win.isDestroyed()) {
+    win.hide()
+    return true
+  }
+  return false
+}
+
+/**
+ * 查询宠物窗口是否可见
+ * @returns 可见状态，窗口不存在时返回 false
+ */
+export function isPetWindowVisible(): boolean {
+  const win = getPetWindow()
+  return win ? win.isVisible() : false
 }

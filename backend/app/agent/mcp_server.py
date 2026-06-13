@@ -26,6 +26,8 @@ import json
 import time
 
 from fastmcp import FastMCP, Context
+from fastmcp.tools import FunctionTool as MCPFunctionTool
+from mcp.types import ToolAnnotations as MCPToolAnnotations
 
 from app.core.logging import get_logger
 
@@ -376,11 +378,7 @@ def _build_tool_wrapper(
     """为 DB 驱动的工具创建类型化包装函数"""
     from app.agent.tool_registry import tool_registry
 
-    # ① 签名生成
-    params = _build_params(input_schema)
-    sig = inspect.Signature(params, return_annotation=dict)
-
-    # ② 管道调度
+    # 管道调度
     async def tool_wrapper(**kwargs) -> dict:
         ctx = kwargs.pop("ctx", None)
 
@@ -405,11 +403,10 @@ def _build_tool_wrapper(
             output_schema=output_schema,
         ).build()
 
-    # ③ 函数元数据（FastMCP 从中读取 name/description/signature）
+    # ③ 函数元数据
     tool_wrapper.__name__ = name
     tool_wrapper.__qualname__ = name
     tool_wrapper.__doc__ = description
-    tool_wrapper.__signature__ = sig
 
     return tool_wrapper
 
@@ -481,24 +478,30 @@ def _register_mcp_tool(
         output_schema=output_schema,
     )
 
-    # 构建 add_tool 参数
-    add_kwargs: dict[str, Any] = {
-        "name": name,
-        "description": description,
-        "version": version,
-        "timeout": timeout,
-    }
-    if title:
-        add_kwargs["title"] = title
-    if output_schema:
-        add_kwargs["output_schema"] = output_schema
-
     # MCP 2025-06-18: Tool Annotations
     # DB 有精确值用精确值，没有则从 risk_level 推导兜底
     tool_annotations = ToolAnnotations.from_db(annotations, risk_level, title or name)
-    add_kwargs["annotations"] = tool_annotations.to_dict()
+    mcp_annotations = MCPToolAnnotations(
+        title=tool_annotations.title or None,
+        readOnlyHint=tool_annotations.readOnlyHint,
+        destructiveHint=tool_annotations.destructiveHint,
+        idempotentHint=tool_annotations.idempotentHint,
+        openWorldHint=tool_annotations.openWorldHint,
+    )
 
-    mcp_app.add_tool(tool_func, **add_kwargs)
+    # FastMCP 3.4.2: 用 FunctionTool 构造函数直接传 input_schema 作为 parameters
+    mcp_tool = MCPFunctionTool(
+        fn=tool_func,
+        name=name,
+        description=description,
+        parameters=input_schema,
+        output_schema=output_schema if output_schema else None,
+        annotations=mcp_annotations,
+        version=version,
+        timeout=float(timeout),
+        title=title,
+    )
+    mcp_app.add_tool(mcp_tool)
 
 
 # ══════════════════════════════════════════════════════════

@@ -23,7 +23,7 @@ class SoulConfig(BaseModel):
     avatar_url = Column(String(512), default="", comment="头像地址")
     personality = Column(JSON, nullable=False, comment="性格标签")
     speaking_style = Column(String(256), default="", comment="说话风格")
-    background = Column(Text, default=None, comment="背景故事")
+    background = Column(Text, nullable=False, default="", comment="背景故事")
     system_prompt = Column(Text, nullable=False, comment="系统提示词")
     is_active = Column(Integer, nullable=False, default=1, comment="是否激活")
 

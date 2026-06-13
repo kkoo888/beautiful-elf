@@ -1,6 +1,11 @@
 import * as THREE from 'three'
-import { MMDLoader } from 'three/examples/jsm/loaders/MMDLoader.js'
-import { MMDAnimationHelper } from 'three/examples/jsm/animation/MMDAnimationHelper.js'
+
+/** 加载超时时间 (ms) */
+const LOAD_TIMEOUT_MS = 10_000
+/** 可见时帧率 */
+const FPS_VISIBLE = 60
+/** 不可见时帧率 */
+const FPS_HIDDEN = 5
 
 /**
  * 宠物 3D 场景管理
@@ -17,11 +22,28 @@ export class PetScene {
   private animationId: number | null = null
   private visible = true
   private mesh: THREE.SkinnedMesh | null = null
-  private helper: MMDAnimationHelper | null = null
-  private loader: MMDLoader | null = null
+  private helper: any = null
+  private loader: any = null
+
+  /** 帧率控制 */
+  private lastFrameTime = 0
+  private fpsInterval = 1000 / FPS_VISIBLE
+
+  /** 模型是否已成功加载 */
+  private _isLoaded = false
+
+  /** WebGL context 丢失标记 */
+  private contextLost = false
+  private contextLostHandler: (() => void) | null = null
+  private contextRestoredHandler: (() => void) | null = null
 
   constructor(container: HTMLElement) {
     this.container = container
+  }
+
+  /** 模型是否已加载完成 */
+  get isLoaded(): boolean {
+    return this._isLoaded
   }
 
   /** 初始化 Three.js 场景 */
@@ -40,6 +62,9 @@ export class PetScene {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.0
     this.container.appendChild(this.renderer.domElement)
+
+    // WebGL context 丢失/恢复处理
+    this.setupContextLossHandlers()
 
     // 场景
     this.scene = new THREE.Scene()
@@ -64,12 +89,26 @@ export class PetScene {
     // 时钟
     this.clock = new THREE.Clock()
 
-    // MMD 官方 Loader + Helper
-    this.loader = new MMDLoader()
-    this.helper = new MMDAnimationHelper({
-      afterglow: 2.0,
-      resetPhysicsOnLoop: true,
-    })
+    // MMD 官方 Loader（动态 import）
+    try {
+      const mod = await import('three/examples/jsm/loaders/MMDLoader.js')
+      this.loader = new mod.MMDLoader()
+    } catch (e) {
+      console.warn('[PetScene] MMDLoader import failed:', e)
+      this.loader = null
+    }
+
+    // MMDAnimationHelper（动态 import），失败时降级（无 IK/物理模拟）
+    try {
+      const mod = await import('three/examples/jsm/animation/MMDAnimationHelper.js')
+      this.helper = new mod.MMDAnimationHelper({
+        afterglow: 2.0,
+        resetPhysicsOnLoop: true,
+      })
+    } catch (err) {
+      console.warn('[PetScene] MMDAnimationHelper init failed:', err)
+      this.helper = null
+    }
 
     // 响应窗口大小变化
     window.addEventListener('resize', this.handleResize)
@@ -78,59 +117,85 @@ export class PetScene {
     this.startRenderLoop()
   }
 
-  /** 加载 PMX 模型（纯模型，无动画） */
+  /** 加载 PMX 模型（纯模型，无动画），超时 10s */
   async loadModel(modelPath: string): Promise<void> {
     if (!this.scene) throw new Error('Scene not initialized')
-    if (!this.loader) throw new Error('Loader not initialized')
+    if (!this.loader) {
+      console.warn('[PetScene] loadModel skipped: MMDLoader not available')
+      return
+    }
 
     return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`模型加载超时 (${LOAD_TIMEOUT_MS / 1000}s): ${modelPath}`))
+      }, LOAD_TIMEOUT_MS)
+
       this.loader!.load(
         modelPath,
         (mesh) => {
+          clearTimeout(timeoutId)
           this.replaceMesh(mesh)
           this.scene!.add(mesh)
           this.fitCameraToModel(mesh)
+          this._isLoaded = true
           resolve()
         },
         undefined,
         (error) => {
-          reject(error)
+          clearTimeout(timeoutId)
+          reject(error instanceof Error ? error : new Error(String(error)))
         }
       )
     })
   }
 
-  /** 加载 PMX 模型 + VMD 动画（官方 loadWithAnimation） */
+  /** 加载 PMX 模型 + VMD 动画（官方 loadWithAnimation），超时 10s */
   async loadModelWithAnimation(
     modelPath: string,
     vmdPath: string
   ): Promise<void> {
     if (!this.scene) throw new Error('Scene not initialized')
-    if (!this.loader) throw new Error('Loader not initialized')
-    if (!this.helper) throw new Error('Helper not initialized')
+    if (!this.loader) {
+      console.warn('[PetScene] loadModelWithAnimation skipped: MMDLoader not available')
+      return
+    }
 
     return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`模型+动画加载超时 (${LOAD_TIMEOUT_MS / 1000}s): ${modelPath}`))
+      }, LOAD_TIMEOUT_MS)
+
       this.loader!.loadWithAnimation(
         modelPath,
         vmdPath,
         (result) => {
+          clearTimeout(timeoutId)
+
           const { mesh, animation } = result
 
           this.replaceMesh(mesh)
 
-          // 通过 MMDAnimationHelper 管理动画 + IK + 物理
-          this.helper!.add(mesh, {
-            animation,
-            physics: true,
-          })
+          // 通过 MMDAnimationHelper 管理动画 + IK + 物理（如果 helper 可用）
+          if (this.helper) {
+            try {
+              this.helper.add(mesh, {
+                animation,
+                physics: true,
+              })
+            } catch (err) {
+              console.warn('[PetScene] helper.add() failed, animation will play without IK/physics:', err)
+            }
+          }
 
           this.scene!.add(mesh)
           this.fitCameraToModel(mesh)
+          this._isLoaded = true
           resolve()
         },
         undefined,
         (error) => {
-          reject(error)
+          clearTimeout(timeoutId)
+          reject(error instanceof Error ? error : new Error(String(error)))
         }
       )
     })
@@ -141,10 +206,13 @@ export class PetScene {
     if (this.mesh) {
       this.scene!.remove(this.mesh)
       this.mesh.geometry.dispose()
-      if (this.mesh.material instanceof THREE.Material) {
+      if (Array.isArray(this.mesh.material)) {
+        this.mesh.material.forEach((m) => m.dispose())
+      } else if (this.mesh.material instanceof THREE.Material) {
         this.mesh.material.dispose()
       }
     }
+    this._isLoaded = false
     this.mesh = mesh
   }
 
@@ -155,48 +223,66 @@ export class PetScene {
     const box = new THREE.Box3().setFromObject(mesh)
     const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
-    const maxDim = Math.max(size.x, size.y, size.z)
+    const maxDim = Math.max(size.x, size.y, size.z, 0.1) // 防止除零
     const fov = this.camera.fov * (Math.PI / 180)
-    const distance = maxDim / (2 * Math.tan(fov / 2))
+    const distance = Math.max(maxDim / (2 * Math.tan(fov / 2)), 5) // 最小距离 5
 
     this.camera.position.set(center.x, center.y, center.z + distance * 1.5)
     this.camera.lookAt(center)
   }
 
-  /** 渲染循环 */
+  /** 渲染循环（基于时间戳的帧率控制） */
   private startRenderLoop(): void {
-    const animate = () => {
+    const animate = (timestamp: number): void => {
       this.animationId = requestAnimationFrame(animate)
 
-      if (!this.visible) return // 不可见时跳过渲染
+      // 帧率节流
+      const elapsed = timestamp - this.lastFrameTime
+      if (elapsed < this.fpsInterval) return
+      this.lastFrameTime = timestamp
+
+      // context 丢失时跳过渲染
+      if (this.contextLost) return
+
+      if (!this.renderer || !this.scene || !this.camera) return
 
       const delta = this.clock!.getDelta()
 
       // 更新 MMD 动画（IK、物理、morph 都由 helper 统一处理）
       if (this.helper) {
-        this.helper.update(delta)
+        try {
+          this.helper.update(delta)
+        } catch {
+          // helper 更新失败时静默忽略（例如模型被移除后残留的 helper 引用）
+        }
       }
 
-      this.renderer!.render(this.scene!, this.camera!)
+      // 检查 context 状态后再渲染
+      try {
+        this.renderer.render(this.scene, this.camera)
+      } catch {
+        // 渲染失败时静默忽略（context 恢复中可能会出现）
+      }
     }
 
-    animate()
+    // 用 0 时间戳启动，这样第一帧一定会渲染
+    this.animationId = requestAnimationFrame(animate)
   }
 
   /** 设置可见性（控制帧率节省资源） */
   setVisible(visible: boolean): void {
     this.visible = visible
+    this.fpsInterval = 1000 / (visible ? FPS_VISIBLE : FPS_HIDDEN)
+    // 立即重置 lastFrameTime，切换后尽快渲染一帧
+    this.lastFrameTime = 0
   }
 
-  /** 获取 canvas 元素（用于截图） */
-  getCanvas(): HTMLCanvasElement | null {
-    return this.renderer?.domElement ?? null
-  }
-
-  /** 窗口大小变化处理 */
-  private handleResize = (): void => {
+  /** 响应窗口大小变化（公开方法，外部可调用） */
+  resize(): void {
     const width = this.container.clientWidth
     const height = this.container.clientHeight
+
+    if (width <= 0 || height <= 0) return
 
     if (this.camera) {
       this.camera.aspect = width / height
@@ -206,18 +292,69 @@ export class PetScene {
     this.renderer?.setSize(width, height)
   }
 
+  /** 获取 canvas 元素（用于截图） */
+  getCanvas(): HTMLCanvasElement | null {
+    return this.renderer?.domElement ?? null
+  }
+
+  /** 窗口大小变化处理器（内部 resize 事件绑定用） */
+  private handleResize = (): void => {
+    this.resize()
+  }
+
+  /** WebGL context 丢失处理 */
+  private setupContextLossHandlers(): void {
+    if (!this.renderer) return
+
+    const canvas = this.renderer.domElement
+
+    this.contextLostHandler = (event: Event): void => {
+      event.preventDefault()
+      console.warn('[PetScene] WebGL context lost, pausing render')
+      this.contextLost = true
+    }
+
+    this.contextRestoredHandler = (): void => {
+      console.log('[PetScene] WebGL context restored, resuming render')
+      this.contextLost = false
+      this.lastFrameTime = 0
+    }
+
+    canvas.addEventListener('webglcontextlost', this.contextLostHandler)
+    canvas.addEventListener('webglcontextrestored', this.contextRestoredHandler)
+  }
+
+  /** 清理 WebGL context 事件监听器 */
+  private removeContextLossHandlers(): void {
+    if (!this.renderer) return
+    const canvas = this.renderer.domElement
+    if (this.contextLostHandler) {
+      canvas.removeEventListener('webglcontextlost', this.contextLostHandler)
+      this.contextLostHandler = null
+    }
+    if (this.contextRestoredHandler) {
+      canvas.removeEventListener('webglcontextrestored', this.contextRestoredHandler)
+      this.contextRestoredHandler = null
+    }
+  }
+
   /** 销毁资源 */
   dispose(): void {
     window.removeEventListener('resize', this.handleResize)
 
+    this.removeContextLossHandlers()
+
     if (this.animationId !== null) {
       cancelAnimationFrame(this.animationId)
+      this.animationId = null
     }
 
     if (this.mesh) {
       this.scene?.remove(this.mesh)
       this.mesh.geometry.dispose()
-      if (this.mesh.material instanceof THREE.Material) {
+      if (Array.isArray(this.mesh.material)) {
+        this.mesh.material.forEach((m) => m.dispose())
+      } else if (this.mesh.material instanceof THREE.Material) {
         this.mesh.material.dispose()
       }
     }
@@ -234,5 +371,6 @@ export class PetScene {
     this.mesh = null
     this.helper = null
     this.loader = null
+    this._isLoaded = false
   }
 }

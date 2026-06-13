@@ -24,6 +24,10 @@ interface PetApi {
   /** 监听可见性变化，返回清理函数 */
   onVisibilityChange: (callback: (visible: boolean) => void) => (() => void)
   sendScreenshot: (data: string) => void
+  /** 通知宠物窗口模型已切换，触发重新加载 */
+  notifyModelChanged: () => void
+  /** 监听模型切换通知，返回清理函数 */
+  onModelChanged: (callback: () => void) => (() => void)
 }
 
 interface DialogApi {

@@ -79,7 +79,7 @@ class KnowledgeService:
         Args:
             db: 数据库会话
             filename: 原始文件名
-            file_type: 文件类型 (pdf/docx/txt/md)
+            file_type: 文件类型 (pdf/docx/pptx/xlsx/csv/json/html/md/txt/epub/ipynb)
             file_size: 文件大小
             file_content: 文件内容（bytes）
 

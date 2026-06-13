@@ -21,7 +21,7 @@ class PetInteraction(BaseModel):
 
     pet_attribute_id = Column(BigInteger, nullable=False, comment="宠物属性 ID")
     interaction_type = Column(Integer, nullable=False, comment="互动类型")
-    effect_json = Column(JSON, default=None, comment="属性变化效果")
+    effect_json = Column(JSON, nullable=False, default=dict, comment="属性变化效果")
 
     __table_args__ = (
         Index("idx_pet_interaction_type", "interaction_type"),

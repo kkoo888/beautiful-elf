@@ -1,4 +1,6 @@
 """工作流模型"""
+from datetime import datetime
+
 from sqlalchemy import Column, BigInteger, Integer, String, DateTime, JSON, Index
 from app.models.base import BaseModel
 
@@ -27,12 +29,12 @@ class WorkflowRun(BaseModel):
     workflow_id = Column(BigInteger, nullable=False, comment="工作流 ID")
     status = Column(Integer, nullable=False, default=0, comment="状态")
     trigger_type = Column(Integer, nullable=False, default=0, comment="触发方式")
-    input_json = Column(JSON, default=None, comment="输入参数")
-    output_json = Column(JSON, default=None, comment="输出结果")
-    error_message = Column(String(2048), default="", comment="错误信息")
-    started_at = Column(DateTime, default=None, comment="开始时间")
-    finished_at = Column(DateTime, default=None, comment="完成时间")
-    duration_ms = Column(Integer, default=0, comment="执行耗时")
+    input_json = Column(JSON, nullable=False, default=dict, comment="输入参数")
+    output_json = Column(JSON, nullable=False, default=dict, comment="输出结果")
+    error_message = Column(String(2048), nullable=False, default="", comment="错误信息")
+    started_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="开始时间")
+    finished_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="完成时间")
+    duration_ms = Column(Integer, nullable=False, default=0, comment="执行耗时")
 
     __table_args__ = (
         Index("idx_workflow_run_workflow_status", "workflow_id", "status"),
@@ -48,12 +50,12 @@ class WorkflowStepRun(BaseModel):
     step_name = Column(String(128), nullable=False, comment="节点名称")
     step_type = Column(String(64), nullable=False, comment="节点类型")
     status = Column(Integer, nullable=False, default=0, comment="状态")
-    input_json = Column(JSON, default=None, comment="输入数据")
-    output_json = Column(JSON, default=None, comment="输出数据")
-    error_message = Column(String(2048), default="", comment="错误信息")
-    started_at = Column(DateTime, default=None, comment="开始时间")
-    finished_at = Column(DateTime, default=None, comment="完成时间")
-    duration_ms = Column(Integer, default=0, comment="执行耗时")
+    input_json = Column(JSON, nullable=False, default=dict, comment="输入数据")
+    output_json = Column(JSON, nullable=False, default=dict, comment="输出数据")
+    error_message = Column(String(2048), nullable=False, default="", comment="错误信息")
+    started_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="开始时间")
+    finished_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="完成时间")
+    duration_ms = Column(Integer, nullable=False, default=0, comment="执行耗时")
 
     __table_args__ = (
         Index("idx_workflow_step_run_run_name", "run_id", "step_name"),

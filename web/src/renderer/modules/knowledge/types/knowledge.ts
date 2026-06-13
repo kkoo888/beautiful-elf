@@ -11,22 +11,30 @@ export const STATUS_MAP: Record<number, { label: string; color: string }> = {
   3: { label: '失败', color: 'error' },
 }
 
-/** 文件类型图标 */
+/** 文件类型图标（对齐 SimpleDirectoryReader 内置支持格式） */
 export const FILE_TYPE_ICONS: Record<string, string> = {
   pdf: '📄',
   docx: '📝',
+  pptx: '📊',
+  xlsx: '📗',
+  xls: '📗',
+  csv: '📊',
+  json: '🔧',
+  html: '🌐',
   md: '📑',
   txt: '📃',
-  json: '🔧',
-  csv: '📊',
-  yaml: '⚙️',
-  html: '🌐',
-  xml: '📋',
-  zip: '📦',
+  epub: '📚',
+  ipynb: '📒',
 }
 
-/** 支持的文件扩展名 */
-export const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md']
+/** 支持的文件扩展名（对齐 SimpleDirectoryReader 内置 reader） */
+export const SUPPORTED_EXTENSIONS = [
+  '.pdf', '.docx', '.pptx',
+  '.xlsx', '.xls',
+  '.csv', '.json', '.html',
+  '.md', '.txt',
+  '.epub', '.ipynb',
+]
 
 /** 最大文件大小 (200MB) */
 export const MAX_FILE_SIZE = 200 * 1024 * 1024

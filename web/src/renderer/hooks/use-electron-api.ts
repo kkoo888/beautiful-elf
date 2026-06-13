@@ -45,7 +45,12 @@ export function useElectronApi() {
         if (isElectron) await window.electronAPI.pet.hide()
       },
       toggle: async () => {
-        if (isElectron) await window.electronAPI.pet.toggle()
+        if (isElectron) return window.electronAPI.pet.toggle()
+        return { success: false, visible: false }
+      },
+      isVisible: async (): Promise<{ success: boolean; visible: boolean }> => {
+        if (isElectron) return window.electronAPI.pet.isVisible()
+        return { success: false, visible: false }
       },
       getAttributes: async () => {
         if (isElectron) return window.electronAPI.pet.getAttributes()
@@ -61,6 +66,13 @@ export function useElectronApi() {
       },
       sendScreenshot: (data: string) => {
         if (isElectron) window.electronAPI.pet.sendScreenshot(data)
+      },
+      notifyModelChanged: () => {
+        if (isElectron) window.electronAPI.pet.notifyModelChanged()
+      },
+      onModelChanged: (callback: () => void): (() => void) => {
+        if (isElectron) return window.electronAPI.pet.onModelChanged(callback)
+        return () => {}
       },
     }),
     [isElectron]

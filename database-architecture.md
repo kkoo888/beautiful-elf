@@ -49,7 +49,9 @@
   - `intent.trigger_texts` → 允许（触发词列表，低频更新，不需单独查询）
   - `message.tool_calls` → 允许（工具调用记录，只读，不需索引）
   - `workflow.dag_json` → 允许（DAG 定义整体读写，不拆分查询）
-  - `tool.json_schema` → 允许（Schema 整体使用，不需索引内部字段）
+  - `tool.json_schema` → 允许（MCP inputSchema，整体使用，不拆分）
+  - `tool.output_schema` → 允许（MCP outputSchema，可选，整体使用）
+  - `tool.annotations` → 允许（MCP Tool Annotations，整体使用）
   - `soul_config.personality` → 允许（配置数据，低频读取）
   - `memory_entry.tags` → 允许（标签列表，低频更新，不需单独查询）
 
@@ -110,7 +112,7 @@ CREATE TABLE message (
     role            VARCHAR(32)     NOT NULL COMMENT '角色 (user/assistant/system/tool)',
     content         TEXT            NOT NULL COMMENT '消息内容 (应用层软上限 100KB)',
     tool_calls      JSON            DEFAULT NULL COMMENT '工具调用信息 (assistant 角色)',
-    tool_call_id    VARCHAR(128)    DEFAULT NULL COMMENT '工具调用响应 ID (tool 角色)',
+    tool_call_id    VARCHAR(128)    NOT NULL DEFAULT '' COMMENT '工具调用响应 ID (tool 角色)',
     token_count     INT UNSIGNED    DEFAULT 0 COMMENT 'Token 消耗量',
     is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -128,8 +130,8 @@ CREATE TABLE message (
 CREATE TABLE memory_entry (
     id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     conversation_id BIGINT UNSIGNED DEFAULT NULL COMMENT '来源会话 ID (应用层校验存在性)',
-    summary         VARCHAR(512)    NOT NULL COMMENT '记忆摘要 (简短描述)',
-    content         TEXT            NOT NULL COMMENT '记忆详细内容 (应用层软上限 10KB)',
+    summary         TEXT            NOT NULL COMMENT '记忆摘要',
+    content         TEXT            DEFAULT NULL COMMENT '原始对话内容 (可为空)',
     tags            JSON            DEFAULT NULL COMMENT '标签列表',
     importance      TINYINT UNSIGNED NOT NULL DEFAULT 5 COMMENT '重要度 (1-10)',
     qdrant_point_id VARCHAR(128)    DEFAULT NULL COMMENT 'Qdrant 中的向量 ID',
@@ -192,6 +194,7 @@ CREATE TABLE intent (
     description     VARCHAR(512)    DEFAULT '' COMMENT '意图描述',
     trigger_texts   JSON            NOT NULL COMMENT '触发词列表 (低频更新，不需单独查询)',
     target_module   VARCHAR(128)    NOT NULL COMMENT '目标模块/工具名',
+    tool_names      JSON            DEFAULT NULL COMMENT '关联工具列表: null=全量, []=无工具, ["web_search"]=指定工具',
     metadata        JSON            DEFAULT NULL COMMENT '扩展元数据',
     is_enabled      TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否启用: 1=是 0=否',
     qdrant_point_id VARCHAR(128)    DEFAULT NULL COMMENT 'Qdrant 中的向量 ID',
@@ -230,8 +233,8 @@ CREATE TABLE skill (
     description     VARCHAR(1024)   DEFAULT '' COMMENT '技能描述',
     version         VARCHAR(32)     DEFAULT '1.0.0' COMMENT '版本号',
     source          VARCHAR(256)    DEFAULT '' COMMENT '来源 (GitHub URL / local)',
-    trigger_words   JSON            DEFAULT NULL COMMENT '触发词列表',
-    dependencies    JSON            DEFAULT NULL COMMENT '依赖技能列表',
+    trigger_words   JSON            NOT NULL DEFAULT (JSON_ARRAY()) COMMENT '触发词列表',
+    dependencies    JSON            NOT NULL DEFAULT (JSON_ARRAY()) COMMENT '依赖技能列表',
     is_enabled      TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否启用: 1=是 0=否',
     config          JSON            DEFAULT NULL COMMENT '技能配置',
     is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
@@ -339,9 +342,13 @@ CREATE TABLE tool (
     display_name    VARCHAR(256)    DEFAULT '' COMMENT '显示名称',
     description     VARCHAR(1024)   NOT NULL COMMENT '工具描述',
     module          VARCHAR(128)    NOT NULL COMMENT '所属模块',
-    json_schema     JSON            NOT NULL COMMENT '参数 JSON Schema (Schema 整体使用，不拆分)',
+    json_schema     JSON            NOT NULL COMMENT '参数 JSON Schema (MCP inputSchema)',
+    output_schema   JSON            DEFAULT NULL COMMENT '输出 JSON Schema (MCP outputSchema, 可选)',
     risk_level      VARCHAR(16)     NOT NULL DEFAULT 'low' COMMENT '风险等级: low/medium/high',
     is_enabled      TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否启用: 1=是 0=否',
+    version         VARCHAR(32)     NOT NULL DEFAULT '1.0.0' COMMENT '工具版本号 (FastMCP v3 组件版本管理)',
+    timeout_seconds INT UNSIGNED    NOT NULL DEFAULT 60 COMMENT '工具执行超时 (秒, FastMCP v3 timeout)',
+    annotations     JSON            DEFAULT NULL COMMENT 'MCP Tool Annotations (readOnlyHint/destructiveHint/idempotentHint/openWorldHint)',
     is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -379,7 +386,6 @@ CREATE TABLE schedule (
     id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     title           VARCHAR(256)    NOT NULL COMMENT '日程标题',
     description     VARCHAR(2048)   DEFAULT '' COMMENT '日程描述',
-    location        VARCHAR(512)    DEFAULT '' COMMENT '地点',
     start_time      DATETIME        NOT NULL COMMENT '开始时间',
     end_time        DATETIME        DEFAULT NULL COMMENT '结束时间 (全天事件可为空)',
     is_all_day      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否全天事件: 1=是 0=否',
@@ -587,7 +593,6 @@ CREATE TABLE soul_config (
     avatar_url      VARCHAR(512)    DEFAULT '' COMMENT '头像地址',
     personality     JSON            NOT NULL COMMENT '性格标签 (配置数据，低频读取)',
     speaking_style  VARCHAR(256)    DEFAULT '' COMMENT '说话风格',
-    emotional_tendency TINYINT UNSIGNED NOT NULL DEFAULT 50 COMMENT '情感倾向 (0-100)',
     background      TEXT            DEFAULT NULL COMMENT '背景故事 (应用层软上限 5KB)',
     system_prompt   TEXT            NOT NULL COMMENT '系统提示词 (应用层软上限 10KB)',
     is_active       TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否激活: 1=是 0=否',
@@ -775,6 +780,81 @@ CREATE TABLE translate_history (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='翻译历史';
 ```
 
+### 35. t_user_account — 用户账号
+
+> 用户认证与权限管理，密码通过 bcrypt 哈希存储。
+
+```sql
+CREATE TABLE t_user_account (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username        VARCHAR(64)     NOT NULL COMMENT '用户名（登录账号）',
+    password_hash   VARCHAR(128)    NOT NULL COMMENT '密码哈希（bcrypt）',
+    nickname        VARCHAR(64)     NOT NULL DEFAULT '' COMMENT '昵称',
+    avatar_url      VARCHAR(512)    NOT NULL DEFAULT '' COMMENT '头像 URL',
+    user_role       SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '角色: 0=普通用户 1=管理员',
+    is_enabled      SMALLINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '是否启用: 1=是 0=否',
+    is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户账号表';
+```
+
+### 36. markdown_memory — Markdown 记忆文件
+
+> 存储可读的 Markdown 记忆，与 Qdrant 向量互补：Markdown 管可读性，向量管语义搜索。
+> 支持 daily log（memory/YYYY-MM-DD.md）和长期记忆（MEMORY.md）两种类型。
+
+```sql
+CREATE TABLE markdown_memory (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id         BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户 ID',
+    title           VARCHAR(256)    NOT NULL COMMENT '文件标题（如 2026-06-06 或 MEMORY）',
+    content         TEXT            NOT NULL COMMENT 'Markdown 内容',
+    memory_type     VARCHAR(32)     NOT NULL DEFAULT 'daily' COMMENT '类型: daily=每日日志, longterm=长期记忆, curated=精选记忆',
+    word_count      INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT '字数统计',
+    qdrant_synced   TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否已同步到 Qdrant: 0=否 1=是',
+    is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_md_memory_user_type (user_id, memory_type),
+    INDEX idx_md_memory_title (title),
+    INDEX idx_md_memory_is_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Markdown 记忆文件';
+```
+
+### 37. cost_record — LLM 调用成本追踪
+
+> 记录每次 LLM 调用的 token 用量和费用，支持按用户/会话/模型/日期维度统计。
+> 金额字段用 DECIMAL（不用 FLOAT/DOUBLE，避免精度损失）。
+
+```sql
+CREATE TABLE cost_record (
+    id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id           BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户 ID',
+    conversation_id   BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '会话 ID',
+    provider_id       INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT '供应商 ID',
+    model_name        VARCHAR(128)    NOT NULL DEFAULT '' COMMENT '模型名称',
+    prompt_tokens     INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT '输入 token 数',
+    completion_tokens INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT '输出 token 数',
+    total_tokens      INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT '总 token 数',
+    cost_usd          DECIMAL(12,6)   NOT NULL DEFAULT 0 COMMENT '费用（美元）',
+    cost_cny          DECIMAL(12,6)   NOT NULL DEFAULT 0 COMMENT '费用（人民币）',
+    call_type         VARCHAR(32)     NOT NULL DEFAULT 'chat' COMMENT '调用类型: chat/evaluator/compression/rewrite/summary',
+    duration_ms       INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT '耗时（毫秒）',
+    is_stream         TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否流式: 0=否 1=是',
+    is_deleted        TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+    created_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_cost_user (user_id),
+    INDEX idx_cost_conversation (conversation_id),
+    INDEX idx_cost_model (model_name),
+    INDEX idx_cost_call_type (call_type),
+    INDEX idx_cost_is_deleted (is_deleted),
+    INDEX idx_cost_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='LLM 调用成本追踪';
+```
+
 ---
 
 ## 🔗 表关系图
@@ -903,7 +983,7 @@ CREATE TABLE translate_history (
 
 ---
 
-### 35. expert_team — 专家团
+### 38. expert_team — 专家团
 
 > 多专家协作工作流，基于 LangGraph Orchestrator-Worker 模式。
 
@@ -928,7 +1008,7 @@ CREATE TABLE expert_team (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团';
 ```
 
-### 36. expert_team_member — 专家团成员
+### 39. expert_team_member — 专家团成员
 
 ```sql
 CREATE TABLE expert_team_member (
@@ -939,7 +1019,8 @@ CREATE TABLE expert_team_member (
     avatar          VARCHAR(64)     DEFAULT '🤖' COMMENT '头像 emoji',
     system_prompt   TEXT            NOT NULL COMMENT '专家系统提示词',
     model_name      VARCHAR(128)    DEFAULT '' COMMENT '使用的模型名称 (为空用默认)',
-    temperature     INT             DEFAULT 70 COMMENT '温度参数 (x100 存储, 70=0.7)',
+    provider_id     BIGINT UNSIGNED DEFAULT NULL COMMENT '供应商 ID (关联 llm_provider)',
+    temperature     DECIMAL(3,2)    NOT NULL DEFAULT 0.70 COMMENT '温度参数 (0-2)',
     max_tokens      INT             DEFAULT 2048 COMMENT '最大生成 token 数',
     tools_json      JSON            COMMENT '可用工具列表',
     sort_order      INT             DEFAULT 0 COMMENT '排序顺序',
@@ -951,7 +1032,7 @@ CREATE TABLE expert_team_member (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团成员';
 ```
 
-### 37. expert_team_run — 专家团运行记录
+### 40. expert_team_run — 专家团运行记录
 
 ```sql
 CREATE TABLE expert_team_run (
@@ -977,7 +1058,7 @@ CREATE TABLE expert_team_run (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='专家团运行记录';
 ```
 
-### 38. expert_role_skill — 角色技能绑定
+### 41. expert_role_skill — 角色技能绑定
 
 ```sql
 CREATE TABLE expert_role_skill (
@@ -995,7 +1076,7 @@ CREATE TABLE expert_role_skill (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色技能绑定';
 ```
 
-### 39. expert_role_run — 角色执行记录
+### 42. expert_role_run — 角色执行记录
 
 ```sql
 CREATE TABLE expert_role_run (
@@ -1035,7 +1116,7 @@ expert_team_member (1) ──── (N) expert_role_run
 ```
 
 **设计说明**:
-- `temperature` 用整数 x100 存储 (70 = 0.7)，避免浮点精度问题
+- `temperature` 用 DECIMAL(3,2) 存储，直接存小数（如 0.70）
 - `discussion_json` 存储完整的讨论过程，含轮次、专家名、角色、内容、时间戳
 - `config_json` 预留扩展字段（如共识阈值、超时配置等）
 - `expert_role_skills` 通过唯一索引 `uk_role_skill` 防止重复绑定
@@ -1043,7 +1124,7 @@ expert_team_member (1) ──── (N) expert_role_run
 - `expert_role_runs` 冗余存储 `role_name`，避免每次查运行记录都要 JOIN members 表
 - `expert_role_runs.skills_used` 记录每次执行实际调用了哪些技能及结果
 
-### 40. llm_provider — 大模型供应商配置
+### 43. llm_provider — 大模型供应商配置
 
 ```sql
 CREATE TABLE llm_provider (
@@ -1059,8 +1140,7 @@ CREATE TABLE llm_provider (
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
     INDEX idx_llm_provider_is_enabled (is_enabled),
-    INDEX idx_llm_provider_type (provider_type),
-    INDEX idx_llm_provider_is_deleted (is_deleted)
+    INDEX idx_llm_provider_type (provider_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='大模型供应商配置表';
 ```
 
@@ -1070,7 +1150,7 @@ CREATE TABLE llm_provider (
 - `is_default` 标记默认供应商，同一时间只有一个默认
 - 供应商仅负责 API 地址和密钥，模型信息独立存储在 `llm_model` 表
 
-### 41. llm_model — 大模型配置（方案 A: 从 llm_provider.models JSON 拆分）
+### 44. llm_model — 大模型配置（方案 A: 从 llm_provider.models JSON 拆分）
 
 ```sql
 CREATE TABLE llm_model (
@@ -1080,7 +1160,7 @@ CREATE TABLE llm_model (
     display_name    VARCHAR(128)    NOT NULL DEFAULT '' COMMENT '前端显示名，如 GPT-4o',
     context_length  INT UNSIGNED    NOT NULL DEFAULT 4096 COMMENT '上下文窗口长度',
     max_tokens      INT UNSIGNED    NOT NULL DEFAULT 4096 COMMENT '默认最大输出 token',
-    temperature     INT UNSIGNED    NOT NULL DEFAULT 70  COMMENT '默认温度 x100（70=0.7）',
+    temperature     DECIMAL(3,2)    NOT NULL DEFAULT 0.70 COMMENT '默认温度 (0-2)',
     capabilities    JSON            NOT NULL DEFAULT (JSON_OBJECT()) COMMENT '能力标签: {vision, tools, streaming}',
     is_enabled      TINYINT UNSIGNED NOT NULL DEFAULT 1  COMMENT '是否启用: 1=启用 0=禁用',
     sort_order      INT UNSIGNED    NOT NULL DEFAULT 0   COMMENT '排序权重，越小越靠前',
@@ -1090,8 +1170,7 @@ CREATE TABLE llm_model (
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
     INDEX idx_llm_model_provider_id (provider_id),
     INDEX idx_llm_model_model_name (model_name),
-    INDEX idx_llm_model_is_enabled (is_enabled),
-    INDEX idx_llm_model_is_deleted (is_deleted)
+    INDEX idx_llm_model_is_enabled (is_enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='大模型配置表';
 ```
 
@@ -1107,7 +1186,7 @@ CREATE TABLE llm_model (
 **设计说明**:
 - 模型独立管理，可单独启停、排序、配置参数（温度/最大 token/上下文长度）
 - `model_name` 为实际调用名（传给 LLM API 的 model 参数），`display_name` 为前端显示名
-- `temperature` 用整数存储（x100），避免浮点精度问题，读取时 /100
+- `temperature` 用 DECIMAL(3,2) 存储，直接存小数（如 0.70），读取时无需换算
 - 供应商删除时联动软删除其下所有模型
 - 与 `llm_provider` 通过 `provider_id` 关联，不冗余供应商信息
 
@@ -1132,7 +1211,6 @@ CREATE TABLE llm_model (
 | snippet_tag | (snippet_id, tag) | 唯一 | 按标签搜索代码片段 |
 | notification | (type, is_read) | 联合 | 按类型筛选已读/未读通知 |
 | notification | (created_at) | 单列 | 按时间查通知历史 |
-| pet_interaction | (pet_attribute_id) | 单列 | 查宠物互动记录 |
 | workflow_step_run | (run_id, step_name) | 联合 | 按运行记录查节点详情 |
 | workflow_run | (created_at) | 单列 | 按时间查运行历史 |
 | knowledge_chunk | (document_id, chunk_index) | 联合 | 按文档查分块 |
@@ -1153,11 +1231,16 @@ CREATE TABLE llm_model (
 | expert_role_run | (status) | 单列 | 按状态查角色执行 |
 | llm_provider | (is_enabled) | 单列 | 筛选启用的供应商 |
 | llm_provider | (provider_type) | 单列 | 按类型查供应商 |
-| llm_provider | (is_deleted) | 单列 | 软删除过滤 |
 | llm_model | (provider_id) | 单列 | 按供应商查模型 |
 | llm_model | (model_name) | 单列 | 按模型名查配置 |
 | llm_model | (is_enabled) | 单列 | 筛选启用的模型 |
-| llm_model | (is_deleted) | 单列 | 软删除过滤 |
+| t_user_account | (username) | 唯一 | 登录账号唯一性约束 |
+| markdown_memory | (user_id, memory_type) | 联合 | 按用户和类型查记忆文件 |
+| markdown_memory | (title) | 单列 | 按标题查记忆文件 |
+| cost_record | (user_id) | 单列 | 按用户查成本 |
+| cost_record | (conversation_id) | 单列 | 按会话查成本 |
+| cost_record | (model_name) | 单列 | 按模型查成本 |
+| cost_record | (call_type) | 单列 | 按调用类型查成本 |
 
 ---
 

@@ -17,13 +17,17 @@ const RISK_MAP: Record<string, { label: string; color: string }> = {
 
 interface ToolListProps {
   tools: ToolInfo[]
+  total: number
+  page: number
+  pageSize: number
   loading?: boolean
   onEdit?: (tool: ToolInfo) => void
   onDelete?: (id: number) => void
   onToggle?: (id: number, enable: boolean) => void
+  onPageChange?: (page: number) => void
 }
 
-export function ToolList({ tools, loading, onEdit, onDelete, onToggle }: ToolListProps) {
+export function ToolList({ tools, total, page, pageSize, loading, onEdit, onDelete, onToggle, onPageChange }: ToolListProps) {
   const columns: ColumnsType<ToolInfo> = [
     {
       title: '工具名称',
@@ -119,8 +123,15 @@ export function ToolList({ tools, loading, onEdit, onDelete, onToggle }: ToolLis
       dataSource={tools}
       rowKey="id"
       loading={loading}
-      pagination={false}
       size="middle"
+      pagination={{
+        current: page,
+        pageSize,
+        total,
+        showTotal: (t) => `共 ${t} 个工具`,
+        showSizeChanger: false,
+        onChange: (p) => onPageChange?.(p),
+      }}
     />
   )
 }

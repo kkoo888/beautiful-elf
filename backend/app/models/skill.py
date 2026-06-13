@@ -1,4 +1,6 @@
 """技能模型"""
+from datetime import datetime
+
 from sqlalchemy import Column, BigInteger, Integer, String, DateTime, JSON, Index
 from app.models.base import BaseModel
 
@@ -14,7 +16,7 @@ class Skill(BaseModel):
     trigger_words = Column(JSON, default=list, comment="触发词列表")
     dependencies = Column(JSON, default=list, comment="依赖技能列表")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
-    config = Column(JSON, default=None, comment="技能配置")
+    config = Column(JSON, nullable=False, default=dict, comment="技能配置")
 
     __table_args__ = (
         Index("idx_skill_is_deleted_enabled", "is_deleted", "is_enabled"),
@@ -29,7 +31,7 @@ class SkillStats(BaseModel):
     success_count = Column(Integer, nullable=False, default=0, comment="成功次数")
     fail_count = Column(Integer, nullable=False, default=0, comment="失败次数")
     avg_duration_ms = Column(Integer, nullable=False, default=0, comment="平均耗时")
-    last_called_at = Column(DateTime, nullable=False, server_default='2000-01-01 00:00:00', comment="最后调用时间")
+    last_called_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), server_default='2000-01-01 00:00:00', comment="最后调用时间")
 
     __table_args__ = (
         Index("idx_skill_stat_skill_id", "skill_id"),

@@ -4,16 +4,16 @@
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type {
-  ToolInfo, ToolStatsSummary, ToolQueryParams,
+  ToolInfo, ToolQueryParams,
   CreateToolInput, UpdateToolInput,
 } from '../types/tools'
 
-export async function fetchTools(params?: ToolQueryParams): Promise<ToolInfo[]> {
+export async function fetchTools(params?: ToolQueryParams): Promise<{ items: ToolInfo[]; total: number }> {
   const resp = await apiClient.get('/tools', {
     params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20, enabled: params?.isEnabled },
   })
-  const { items } = extractPaginated(resp as any)
-  return items
+  const { items, total } = extractPaginated(resp as any)
+  return { items, total }
 }
 
 export async function createTool(input: CreateToolInput): Promise<ToolInfo> {
@@ -44,13 +44,3 @@ export async function recordToolCall(id: number, success: boolean, durationMs: n
   await apiClient.post(`/tools/${id}/stats/record`, null, { params: { success, durationMs } })
 }
 
-/** 前端聚合统计汇总（后端无独立 summary 接口，从列表数据计算） */
-export async function fetchToolStatsSummary(): Promise<ToolStatsSummary> {
-  const tools = await fetchTools()
-  return {
-    totalTools: tools.length,
-    activeTools: tools.filter((t) => t.isEnabled === 1).length,
-    totalCalls: 0,
-    avgSuccessRate: 0,
-  }
-}

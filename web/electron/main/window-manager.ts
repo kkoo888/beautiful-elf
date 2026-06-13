@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { createPetWindow } from './pet-window'
+import { createPetWindow, setPetVisibilityCallback } from './pet-window'
 
 /**
  * 窗口管理器
@@ -30,6 +30,13 @@ export function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+
+  // 注入宠物窗口可见性回调（避免循环依赖）
+  setPetVisibilityCallback((visible: boolean) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('pet:visibility-change', visible)
+    }
   })
 
   mainWindow.on('ready-to-show', () => {

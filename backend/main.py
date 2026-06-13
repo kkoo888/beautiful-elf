@@ -1,5 +1,6 @@
 """FastAPI 入口"""
 import asyncio
+import threading
 import uuid
 from contextlib import asynccontextmanager
 
@@ -84,11 +85,9 @@ async def lifespan(app: FastAPI):
     from app.services.ollama_service import close_ollama_client
     await close_ollama_client()
 
-    # 取消 MCP Server 后台任务
-    for task in _mcp_tasks:
-        task.cancel()
-    if _mcp_tasks:
-        logger.info(f"MCP Server 已停止 ({len(_mcp_tasks)} 个任务)")
+    # daemon 线程随进程退出，无需显式 cancel
+    if _mcp_thread and _mcp_thread.is_alive():
+        logger.info("MCP Server 线程随进程退出")
 
     # 取消性能采集任务
     if _perf_task:
@@ -228,20 +227,16 @@ async def _start_mcp_server():
         host = settings.MCP_SERVER_HOST
         port = settings.MCP_SERVER_PORT
 
-        async def _run_mcp():
-            """后台运行 MCP Server（Streamable HTTP）"""
-            try:
-                mcp_app.run(transport="http", host=host, port=port)
-            except asyncio.CancelledError:
-                logger.info("MCP Server 正在停止...")
-            except Exception as e:
-                logger.error(f"MCP Server 运行异常: {e}")
-
-        # 后台任务启动，保存引用以便 shutdown 时取消
-        task = asyncio.create_task(_run_mcp())
-        # 存储到 app.state 供 lifespan cleanup 使用
-        _mcp_tasks.append(task)
-        logger.info(f"MCP Server 后台启动: {host}:{port} (Streamable HTTP)")
+        # 在独立线程中运行（mcp_app.run 内部会创建自己的事件循环）
+        global _mcp_thread
+        _mcp_thread = threading.Thread(
+            target=mcp_app.run,
+            kwargs={"transport": "http", "host": host, "port": port},
+            daemon=True,
+            name="mcp-server",
+        )
+        _mcp_thread.start()
+        logger.info(f"MCP Server 后台启动: {host}:{port} (Streamable HTTP, thread={_mcp_thread.ident})")
 
     except ImportError as e:
         logger.warning(f"fastmcp 未安装，MCP Server 跳过: {e}")
@@ -249,8 +244,8 @@ async def _start_mcp_server():
         logger.warning(f"MCP Server 启动失败: {e}")
 
 
-# MCP 后台任务引用（shutdown 时取消）
-_mcp_tasks: list = []
+# MCP Server 线程引用
+_mcp_thread: threading.Thread | None = None
 
 # 性能采集后台任务（shutdown 时取消）
 _perf_task: asyncio.Task | None = None

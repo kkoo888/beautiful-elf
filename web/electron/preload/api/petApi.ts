@@ -5,6 +5,7 @@ export const petApi = {
   show: () => ipcRenderer.invoke('pet:show'),
   hide: () => ipcRenderer.invoke('pet:hide'),
   toggle: () => ipcRenderer.invoke('pet:toggle'),
+  isVisible: () => ipcRenderer.invoke('pet:isVisible'),
   getAttributes: () => ipcRenderer.invoke('pet:getAttributes'),
   /** 监听截图更新，返回清理函数 */
   onScreenshotUpdate: (callback: (data: string) => void): (() => void) => {
@@ -20,5 +21,15 @@ export const petApi = {
   },
   sendScreenshot: (data: string) => {
     ipcRenderer.send('pet:screenshot', data)
+  },
+  /** 通知宠物窗口模型已切换，触发重新加载 */
+  notifyModelChanged: () => {
+    ipcRenderer.send('pet:model-changed')
+  },
+  /** 监听模型切换通知，返回清理函数 */
+  onModelChanged: (callback: () => void): (() => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('pet:model-reload', handler)
+    return () => ipcRenderer.removeListener('pet:model-reload', handler)
   },
 }

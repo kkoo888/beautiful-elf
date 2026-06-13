@@ -14,6 +14,12 @@ app.whenReady().then(() => {
   })
 
   const mainWindow = createMainWindow()
+  // 确保宠物窗口一定会被创建（即使 ready-to-show 不触发）
+  import('./pet-window').then(({ createPetWindow, getPetWindow }) => {
+    if (!getPetWindow()) {
+      createPetWindow()
+    }
+  })
   createChineseMenu(mainWindow)
   createTray(mainWindow)
   registerIpcHandlers()

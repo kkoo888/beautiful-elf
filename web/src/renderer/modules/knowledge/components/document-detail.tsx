@@ -31,7 +31,7 @@ export function DocumentDetail({
       open={open}
       onClose={onClose}
       width={520}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: 'center', padding: '64px 0' }}>

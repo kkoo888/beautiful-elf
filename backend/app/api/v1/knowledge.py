@@ -17,8 +17,14 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-# 支持的文件类型
-ALLOWED_TYPES = {".pdf", ".docx", ".txt", ".md"}
+# SimpleDirectoryReader 内置支持的文件格式
+ALLOWED_TYPES = {
+    ".pdf", ".docx", ".pptx",
+    ".xlsx", ".xls",
+    ".csv", ".json", ".html",
+    ".md", ".txt",
+    ".epub", ".ipynb",
+}
 MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB
 
 
@@ -52,7 +58,7 @@ async def get_document(
 
 @router.post("/documents", response_model=ApiResult[KnowledgeDocumentOut])
 async def upload_document(
-    file: UploadFile = File(..., description="上传文件 (PDF/DOCX/TXT/MD)"),
+    file: UploadFile = File(..., description="上传文件 (PDF/DOCX/PPTX/XLSX/CSV/JSON/HTML/MD/TXT/EPUB/IPYNB)"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[KnowledgeDocumentOut]:
     """上传知识库文档"""

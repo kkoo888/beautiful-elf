@@ -1,26 +1,48 @@
 import { ipcMain } from 'electron'
-import { getPetWindow } from '../pet-window'
+import { getPetWindow, showPetWindow, hidePetWindow, isPetWindowVisible } from '../pet-window'
 import { getMainWindow } from '../window-manager'
+
+/** 转发模型切换通知到宠物窗口 */
+function notifyPetWindowModelChanged(): void {
+  const petWin = getPetWindow()
+  if (petWin && !petWin.isDestroyed()) {
+    petWin.webContents.send('pet:model-reload')
+  }
+}
 
 /** 宠物窗口 IPC handlers */
 export function registerPetHandlers(): void {
+  // 显示宠物窗口 - 防御性创建 + 返回状态
   ipcMain.handle('pet:show', () => {
-    getPetWindow()?.show()
+    const success = showPetWindow()
+    return { success, visible: success ? true : isPetWindowVisible() }
   })
 
+  // 隐藏宠物窗口 - 返回状态
   ipcMain.handle('pet:hide', () => {
-    getPetWindow()?.hide()
+    const success = hidePetWindow()
+    return { success, visible: success ? false : isPetWindowVisible() }
   })
 
+  // 切换宠物窗口 - 防御性创建 + 返回状态
   ipcMain.handle('pet:toggle', () => {
     const win = getPetWindow()
-    if (win && !win.isDestroyed()) {
-      if (win.isVisible()) {
-        win.hide()
-      } else {
-        win.show()
-      }
+    if (!win || win.isDestroyed()) {
+      // 窗口不存在或已销毁，创建并显示
+      const success = showPetWindow()
+      return { success, visible: true }
     }
+    if (win.isVisible()) {
+      hidePetWindow()
+    } else {
+      showPetWindow()
+    }
+    return { success: true, visible: win.isVisible() }
+  })
+
+  // 查询宠物窗口可见性
+  ipcMain.handle('pet:isVisible', () => {
+    return { success: true, visible: isPetWindowVisible() }
   })
 
   // 宠物属性查询 (超时5s)
@@ -55,5 +77,10 @@ export function registerPetHandlers(): void {
     if (mainWin && !mainWin.isDestroyed()) {
       mainWin.webContents.send('pet:screenshot-update', data)
     }
+  })
+
+  // 模型切换通知 (主窗口 → 宠物窗口)
+  ipcMain.on('pet:model-changed', () => {
+    notifyPetWindowModelChanged()
   })
 }

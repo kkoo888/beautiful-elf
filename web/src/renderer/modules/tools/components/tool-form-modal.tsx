@@ -82,7 +82,7 @@ export function ToolFormModal({ open, tool, onOk, onCancel, confirmLoading }: To
       onCancel={onCancel}
       confirmLoading={confirmLoading}
       width={640}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={form} layout="vertical" autoComplete="off">
         <Form.Item

@@ -1,4 +1,6 @@
 """专家团工作流模型"""
+from datetime import datetime
+
 from sqlalchemy import Column, BigInteger, Integer, Float, String, DateTime, JSON, Text, Index
 from app.models.base import BaseModel
 
@@ -16,7 +18,7 @@ class ExpertTeam(BaseModel):
     max_rounds = Column(Integer, default=3, comment="最大讨论轮次")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
     version = Column(Integer, nullable=False, default=1, comment="版本号")
-    config_json = Column(JSON, default=None, comment="扩展配置")
+    config_json = Column(JSON, nullable=False, default=dict, comment="扩展配置")
 
     __table_args__ = (
         Index("idx_expert_team_is_deleted_enabled", "is_deleted", "is_enabled"),
@@ -34,10 +36,10 @@ class ExpertTeamMember(BaseModel):
     avatar = Column(String(64), default="🤖", comment="头像 emoji")
     system_prompt = Column(Text, nullable=False, comment="专家系统提示词")
     model_name = Column(String(128), default="", comment="使用的模型名称")
-    provider_id = Column(BigInteger, default=None, nullable=True, comment="供应商 ID (关联 llm_model)")
+    provider_id = Column(BigInteger, nullable=False, default=0, comment="供应商 ID (0=默认, 关联 llm_provider)")
     temperature = Column(Float, nullable=False, default=0.7, comment="温度 0-2")
     max_tokens = Column(Integer, default=2048, comment="最大生成 token 数")
-    tools_json = Column(JSON, default=None, comment="可用工具列表")
+    tools_json = Column(JSON, nullable=False, default=list, comment="可用工具列表")
     sort_order = Column(Integer, default=0, comment="排序顺序")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
 
@@ -55,12 +57,12 @@ class ExpertTeamRun(BaseModel):
     trigger_type = Column(Integer, nullable=False, default=0, comment="触发方式: 0=手动 1=定时 2=事件")
     input_text = Column(Text, default="", comment="用户输入")
     output_text = Column(Text, default="", comment="最终输出")
-    discussion_json = Column(JSON, default=None, comment="讨论过程记录")
+    discussion_json = Column(JSON, nullable=False, default=list, comment="讨论过程记录")
     error_message = Column(String(2048), default="", comment="错误信息")
     round_count = Column(Integer, default=0, comment="实际讨论轮次")
     token_usage = Column(Integer, default=0, comment="总 token 消耗")
-    started_at = Column(DateTime, default=None, comment="开始时间")
-    finished_at = Column(DateTime, default=None, comment="完成时间")
+    started_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="开始时间")
+    finished_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="完成时间")
     duration_ms = Column(Integer, default=0, comment="执行耗时")
 
     __table_args__ = (
@@ -77,7 +79,7 @@ class ExpertRoleSkill(BaseModel):
     role_id = Column(BigInteger, nullable=False, comment="成员 ID (关联 expert_team_member.id)")
     skill_id = Column(BigInteger, nullable=False, comment="技能 ID (关联 skill.id)")
     priority = Column(Integer, default=0, comment="调用优先级 (数值越大越优先)")
-    config_override = Column(JSON, default=None, comment="角色级别的技能配置覆盖")
+    config_override = Column(JSON, nullable=False, default=dict, comment="角色级别的技能配置覆盖")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
 
     __table_args__ = (
@@ -95,12 +97,12 @@ class ExpertRoleRun(BaseModel):
     role_name = Column(String(128), nullable=False, comment="成员名称 (冗余)")
     run_status = Column(Integer, nullable=False, default=0, comment="状态: 0=待运行 1=运行中 2=成功 3=失败 4=跳过")
     round_num = Column(Integer, default=0, comment="所在讨论轮次")
-    input_json = Column(JSON, default=None, comment="角色输入 (子任务 + 上下文)")
-    output_json = Column(JSON, default=None, comment="角色输出 (分析结果)")
-    skills_used = Column(JSON, default=None, comment="实际调用的技能列表")
+    input_json = Column(JSON, nullable=False, default=dict, comment="角色输入 (子任务 + 上下文)")
+    output_json = Column(JSON, nullable=False, default=dict, comment="角色输出 (分析结果)")
+    skills_used = Column(JSON, nullable=False, default=list, comment="实际调用的技能列表")
     error_message = Column(String(2048), default="", comment="错误信息")
-    started_at = Column(DateTime, default=None, comment="开始时间")
-    finished_at = Column(DateTime, default=None, comment="完成时间")
+    started_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="开始时间")
+    finished_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="完成时间")
     duration_ms = Column(Integer, default=0, comment="执行耗时 (毫秒)")
     token_usage = Column(Integer, default=0, comment="token 消耗")
 
