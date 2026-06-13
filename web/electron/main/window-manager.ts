@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { createPetWindow, setPetVisibilityCallback } from './pet-window'
+import { setPetVisibilityCallback } from './pet-window'
 
 /**
  * 窗口管理器
@@ -41,8 +41,6 @@ export function createMainWindow(): BrowserWindow {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
-    // 主窗口就绪后创建宠物窗口
-    createPetWindow()
   })
 
   mainWindow.on('closed', () => {
