@@ -110,16 +110,10 @@ async def _init_rag():
     try:
         from app.agent.rag_pipeline import RAGPipeline
 
-        # 获取 Embedding 模型（从 agent 模块复用）
-        try:
-            from llama_index.embeddings.ollama import OllamaEmbedding
-            embedding = OllamaEmbedding(
-                model_name="dengcao/Qwen3-Embedding-0.6B:Q8_0",
-                base_url=settings.OLLAMA_HOST,
-            )
-        except ImportError:
-            logger.warning("缺少 llama-index-embeddings-ollama，RAG 管道跳过初始化")
-            return
+        # 获取 Embedding 模型（ONNX 本地推理）
+        from app.services.onnx_embedding_service import get_onnx_embedding_service, OnnxLlamaIndexEmbedding
+        onnx_svc = await get_onnx_embedding_service()
+        embedding = OnnxLlamaIndexEmbedding(onnx_svc)
 
         pipeline = RAGPipeline(
             qdrant_url=qdrant_url,
@@ -144,18 +138,11 @@ async def _init_memory():
     try:
         from app.agent.memory_manager import MemoryManager
 
-        # 获取 Embedding 函数
-        try:
-            from llama_index.embeddings.ollama import OllamaEmbedding
-            embedding_model = OllamaEmbedding(
-                model_name="dengcao/Qwen3-Embedding-0.6B:Q8_0",
-                base_url=settings.OLLAMA_HOST,
-            )
-            async def embedding_func(text: str):
-                return await embedding_model.aget_text_embedding(text)
-        except ImportError:
-            logger.warning("缺少 llama-index-embeddings-ollama，记忆管理器跳过初始化")
-            return
+        # 获取 Embedding 函数（ONNX 本地推理）
+        from app.services.onnx_embedding_service import get_onnx_embedding_service
+        onnx_svc = await get_onnx_embedding_service()
+        async def embedding_func(text: str):
+            return await onnx_svc.get_embedding(text)
 
         qdrant_mapper = QdrantMapper()
         manager = MemoryManager(
@@ -183,17 +170,11 @@ async def _init_intent():
     try:
         from app.agent.intent_router import IntentRouter
 
-        try:
-            from llama_index.embeddings.ollama import OllamaEmbedding
-            embedding_model = OllamaEmbedding(
-                model_name="dengcao/Qwen3-Embedding-0.6B:Q8_0",
-                base_url=settings.OLLAMA_HOST,
-            )
-            async def embedding_func(text: str):
-                return await embedding_model.aget_text_embedding(text)
-        except ImportError:
-            logger.warning("缺少 llama-index-embeddings-ollama，意图路由跳过初始化")
-            return
+        # 获取 Embedding 函数（ONNX 本地推理）
+        from app.services.onnx_embedding_service import get_onnx_embedding_service
+        onnx_svc = await get_onnx_embedding_service()
+        async def embedding_func(text: str):
+            return await onnx_svc.get_embedding(text)
 
         qdrant_mapper = QdrantMapper()
         router = IntentRouter(

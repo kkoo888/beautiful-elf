@@ -45,3 +45,6 @@ USER.md
 .codegraph/
 # SQL 运维脚本（不入库）
 backend/sql/
+
+# ONNX 模型文件（体积太大，不入库）
+backend/app/router/models/

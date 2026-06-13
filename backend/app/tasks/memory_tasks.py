@@ -36,16 +36,11 @@ async def _hourly_detail_save():
     qdrant_mapper = QdrantMapper()
 
     try:
-        from llama_index.embeddings.ollama import OllamaEmbedding
-        from app.core.config import get_settings
-        settings = get_settings()
-        embedding_model = OllamaEmbedding(
-            model_name="dengcao/Qwen3-Embedding-0.6B:Q8_0",
-            base_url=settings.OLLAMA_HOST,
-        )
+        from app.services.onnx_embedding_service import get_onnx_embedding_service
+        onnx_svc = await get_onnx_embedding_service()
         async def embedding_func(text: str):
-            return await embedding_model.aget_text_embedding(text)
-    except ImportError:
+            return await onnx_svc.get_embedding(text)
+    except Exception:
         logger.warning("hourly_detail_save: 缺少 embedding 依赖，跳过")
         return
 
@@ -112,16 +107,11 @@ async def _check_idle_summaries():
     qdrant_mapper = QdrantMapper()
 
     try:
-        from llama_index.embeddings.ollama import OllamaEmbedding
-        from app.core.config import get_settings
-        settings = get_settings()
-        embedding_model = OllamaEmbedding(
-            model_name="dengcao/Qwen3-Embedding-0.6B:Q8_0",
-            base_url=settings.OLLAMA_HOST,
-        )
+        from app.services.onnx_embedding_service import get_onnx_embedding_service
+        onnx_svc = await get_onnx_embedding_service()
         async def embedding_func(text: str):
-            return await embedding_model.aget_text_embedding(text)
-    except ImportError:
+            return await onnx_svc.get_embedding(text)
+    except Exception:
         logger.warning("check_idle_summaries: 缺少 embedding 依赖，跳过")
         return
 
