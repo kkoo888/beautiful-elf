@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from opensquilla.router_tiers import TEXT_TIERS
+from app.router.router_tiers import (  # noqa: F401 — re-exported for model_selector
+    DEFAULT_TEXT_TIER,
+    HIGHEST_TEXT_TIER,
+    ROUTE_CLASS_TO_TIER,
+    TEXT_TIERS,
+    TIER_TO_ROUTE_CLASS,
+    normalize_text_tier,
+)
 
 TIER_ORDER: list[str] = list(TEXT_TIERS)
 
