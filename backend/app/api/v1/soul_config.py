@@ -7,9 +7,21 @@ from app.core.database import get_db
 from app.services.soul_config_service import SoulConfigService
 from app.schemas.soul_config import SoulConfigCreate, SoulConfigUpdate, SoulConfigOut
 from app.schemas.response import ApiResult, ApiPageResult
+from app.core.logging import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter()
 _service = SoulConfigService()
+
+
+async def _refresh_soul_cache(db: AsyncSession) -> None:
+    """刷新 ContextEngine 的人格 prompt 缓存"""
+    try:
+        from app.services.agent_service import agent_service
+        if agent_service.is_ready:
+            await agent_service.refresh_soul_prompt(db)
+    except Exception as e:
+        logger.debug(f"人格缓存刷新跳过: {e}")
 
 
 @router.get("", response_model=ApiPageResult[SoulConfigOut])
@@ -37,16 +49,19 @@ async def get_soul_config(config_id: int, db: AsyncSession = Depends(get_db)) ->
 @router.post("", response_model=ApiResult[SoulConfigOut])
 async def create_soul_config(data: SoulConfigCreate, db: AsyncSession = Depends(get_db)) -> ApiResult[SoulConfigOut]:
     item = await _service.create_soul_config(db, data)
+    await _refresh_soul_cache(db)
     return ApiResult(data=item)
 
 
 @router.put("/{config_id}", response_model=ApiResult[SoulConfigOut])
 async def update_soul_config(config_id: int, data: SoulConfigUpdate, db: AsyncSession = Depends(get_db)) -> ApiResult[SoulConfigOut]:
     item = await _service.update_soul_config(db, config_id, data)
+    await _refresh_soul_cache(db)
     return ApiResult(data=item)
 
 
 @router.delete("/{config_id}", response_model=ApiResult)
 async def delete_soul_config(config_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
     await _service.delete_soul_config(db, config_id)
+    await _refresh_soul_cache(db)
     return ApiResult(message="删除成功")

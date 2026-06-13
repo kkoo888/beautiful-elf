@@ -23,6 +23,7 @@ class AgentService:
 
     def __init__(self):
         self._graph = None
+        self._context_engine = None  # 供外部刷新人格缓存
         self._provider_id: Optional[int] = None
         self._model_name: str = ""
         self._initialized = False
@@ -33,6 +34,12 @@ class AgentService:
     @property
     def is_ready(self) -> bool:
         return self._graph is not None
+
+    async def refresh_soul_prompt(self, db) -> None:
+        """刷新人格 prompt 缓存（用户更新 soul_config 时调用）"""
+        if self._context_engine:
+            await self._context_engine.load_soul_prompt(db)
+            logger.info("[agent_service] 人格 prompt 已刷新")
 
     async def initialize(
         self,
@@ -97,6 +104,16 @@ class AgentService:
                 rag_pipeline=rag_pipeline,
                 tool_registry=tool_registry,
             )
+
+            # 加载用户配置的人格
+            try:
+                from app.core.database import AsyncSessionLocal
+                async with AsyncSessionLocal() as soul_db:
+                    await context_engine.load_soul_prompt(soul_db)
+            except Exception as e:
+                logger.warning(f"人格配置加载跳过: {e}")
+
+            self._context_engine = context_engine
 
             self._enable_interrupt = enable_interrupt
             self._graph = build_agent_graph(

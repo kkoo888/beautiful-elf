@@ -67,12 +67,53 @@ class ContextEngine:
         self.rag_pipeline = rag_pipeline
         self.tool_registry = tool_registry
         self.llm_client = llm_client  # 用于压缩和 query rewriting
+        self._soul_prompt_cache: Optional[str] = None  # 用户配置的人格 prompt
 
     def get_tool_summaries(self) -> List[dict]:
         """返回工具摘要列表（供 engine.py 使用）"""
         if self.tool_registry:
             return self.tool_registry.list_tool_summaries()
         return []
+
+    def set_soul_prompt(self, prompt: str) -> None:
+        """设置人格 prompt（用户配置变更时调用）"""
+        self._soul_prompt_cache = prompt
+        logger.info(f"[context_engine] 人格 prompt 已更新 ({len(prompt)} 字)")
+
+    async def load_soul_prompt(self, db) -> None:
+        """从数据库加载活跃的人格配置（启动时调用）"""
+        try:
+            from app.services.soul_config_service import SoulConfigService
+            service = SoulConfigService()
+            config = await service.get_active_soul_config(db)
+            if config:
+                self._soul_prompt_cache = self._compose_soul_prompt(config)
+                logger.info(f"[context_engine] 已加载人格配置: {config.name}")
+            else:
+                logger.info("[context_engine] 无人格配置，使用默认")
+        except Exception as e:
+            logger.warning(f"[context_engine] 加载人格配置失败: {e}")
+
+    @staticmethod
+    def _compose_soul_prompt(config) -> str:
+        """从 SoulConfig 结构化字段组装 prompt"""
+        # 优先使用自定义 system_prompt
+        if config.system_prompt and config.system_prompt.strip():
+            return config.system_prompt.strip()
+
+        # 否则从结构化字段组装
+        parts = []
+        if config.name:
+            parts.append(f"你是{config.name}。")
+        if config.personality:
+            traits = config.personality if isinstance(config.personality, list) else []
+            if traits:
+                parts.append(f"你的性格{'又'.join(traits)}。")
+        if config.speaking_style:
+            parts.append(f"说话风格：{config.speaking_style}。")
+        if config.background:
+            parts.append(config.background)
+        return "".join(parts) if parts else ""
 
     async def assemble(
         self,
@@ -174,10 +215,18 @@ class ContextEngine:
             return ""
 
     def _build_soul_prompt(self, intent: Optional[dict] = None) -> str:
-        base = (
-            "你是 Beautiful-Elf 智能助手，能够使用工具回答用户问题。\n"
-            "请用中文回答，保持友好、专业的语气。\n\n"
-            "## 工具使用规则\n"
+        # 优先使用用户配置的人格
+        if self._soul_prompt_cache:
+            base = self._soul_prompt_cache
+        else:
+            base = (
+                "你是 Beautiful-Elf 智能助手，能够使用工具回答用户问题。\n"
+                "请用中文回答，保持友好、专业的语气。"
+            )
+
+        # 工具使用规则（始终追加）
+        base += (
+            "\n\n## 工具使用规则\n"
             "你有一组可用工具，但不是每个问题都需要用工具。请严格遵守以下规则：\n\n"
             "**必须使用工具的情况：**\n"
             "- 用户明确要求搜索、查询、计算、执行代码、读写文件\n"
