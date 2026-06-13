@@ -100,7 +100,7 @@ class ToolAnnotations:
     def from_risk_level(cls, risk_level: str, display_name: str = "") -> ToolAnnotations:
         """从 risk_level 推导默认注解（兜底用）"""
         mapping = {
-            "low": cls(title=display_name, readOnlyHint=True, idempotent=True, openWorldHint=False),
+            "low": cls(title=display_name, readOnlyHint=True, idempotentHint=True, openWorldHint=False),
             "medium": cls(title=display_name, readOnlyHint=False, destructiveHint=False, openWorldHint=True),
             "high": cls(title=display_name, readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True),
         }
