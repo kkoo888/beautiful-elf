@@ -41,9 +41,8 @@ export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
   } = chat
 
   const handleSend = useCallback(
-    (content: string, _options?: { expertTeamId?: number; skillId?: number }) => {
-      // TODO: 后端暂不支持 expertTeamId/skillId，后续对接时传入
-      sendMessage(content)
+    (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual' }) => {
+      sendMessage(content, options)
     },
     [sendMessage],
   )

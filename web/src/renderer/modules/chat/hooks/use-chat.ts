@@ -50,7 +50,7 @@ export interface UseChatReturn {
   /** Agent 执行进展 */
   progressSteps: ProgressStep[]
   /** 发送消息（流式） */
-  sendMessage: (content: string) => void
+  sendMessage: (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual' }) => void
 
   /** 设置推理深度 */
   setReasoningDepth: (depth: ReasoningDepth) => void
@@ -169,7 +169,7 @@ export function useChat(): UseChatReturn {
 
   /** 发送消息（流式） */
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual' }) => {
       if (isLoading || !content.trim()) return
 
       const convId = await ensureConversationId()
@@ -222,6 +222,8 @@ export function useChat(): UseChatReturn {
           providerId: selectedProviderId,
           providerType,
           modelName: selectedModelName,
+          teamMode: options?.teamMode,
+          teamId: options?.expertTeamId,
         },
         (token: StreamToken) => {
           if (token.done) {

@@ -23,6 +23,7 @@ import styles from './chat-panel.module.css'
 interface SendOptions {
   expertTeamId?: number
   skillId?: number
+  teamMode?: 'off' | 'auto' | 'manual'
 }
 
 interface MessageInputProps {
@@ -51,6 +52,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   // 当前选中
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
+  const [teamMode, setTeamMode] = useState<'off' | 'auto' | 'manual'>('off')
   const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null)
 
   // 加载专家团列表
@@ -76,9 +78,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   }, [])
 
   // 派生：选中项名称
-  const selectedTeamName = selectedTeamId
-    ? expertTeams.find((t) => t.id === selectedTeamId)?.teamName
-    : undefined
+  const selectedTeamName = teamMode === 'auto'
+    ? 'Auto'
+    : selectedTeamId
+      ? expertTeams.find((t) => t.id === selectedTeamId)?.teamName
+      : undefined
   const selectedSkillName = selectedSkillId
     ? skills.find((s) => s.id === selectedSkillId)?.displayName
     : undefined
@@ -97,7 +101,12 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (!trimmed || disabled) return
 
     const options: SendOptions = {}
-    if (selectedTeamId != null) options.expertTeamId = selectedTeamId
+    if (teamMode === 'auto') {
+      options.teamMode = 'auto'
+    } else if (teamMode === 'manual' && selectedTeamId != null) {
+      options.teamMode = 'manual'
+      options.expertTeamId = selectedTeamId
+    }
     if (selectedSkillId != null) options.skillId = selectedSkillId
 
     onSend(trimmed, options)
@@ -109,7 +118,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         textareaRef.current.style.height = 'auto'
       }
     })
-  }, [value, disabled, onSend, selectedTeamId, selectedSkillId])
+  }, [value, disabled, onSend, teamMode, selectedTeamId, selectedSkillId])
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = useCallback(
@@ -133,6 +142,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   // ─── 专家团下拉菜单 ────────────────────────────────
   const expertTeamMenuItems: MenuProps['items'] = [
+    {
+      key: 'auto',
+      label: (
+        <div className={styles.menuItemInner}>
+          <span className={styles.menuItemLabel}>🧠 Auto (自动匹配)</span>
+          <span className={styles.menuItemDesc}>根据消息内容自动选择合适的专家团</span>
+        </div>
+      ),
+    },
+    { type: 'divider' as const },
     ...expertTeams.map((team) => ({
       key: String(team.id),
       label: (
@@ -147,14 +166,19 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     { type: 'divider' as const },
     {
       key: 'clear',
-      label: '默认（不指定专家团）',
+      label: '关闭（不使用专家团）',
     },
   ]
 
   const handleExpertTeamSelect: NonNullable<MenuProps['onClick']> = (info) => {
     if (info.key === 'clear') {
+      setTeamMode('off')
+      setSelectedTeamId(null)
+    } else if (info.key === 'auto') {
+      setTeamMode('auto')
       setSelectedTeamId(null)
     } else {
+      setTeamMode('manual')
       setSelectedTeamId(Number(info.key))
     }
   }
@@ -210,25 +234,25 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           <div className={styles.toolbarLeft}>
             {/* 专家团选择 */}
             <Dropdown
-              menu={{ items: expertTeamMenuItems, onClick: handleExpertTeamSelect, selectedKeys: selectedTeamId ? [String(selectedTeamId)] : [] }}
+              menu={{ items: expertTeamMenuItems, onClick: handleExpertTeamSelect, selectedKeys: teamMode === 'auto' ? ['auto'] : selectedTeamId ? [String(selectedTeamId)] : [] }}
               trigger={['click']}
               placement="topLeft"
             >
               <button
                 type="button"
-                className={`${styles.toolButton} ${selectedTeamId != null ? styles.toolButtonActive : ''}`}
+                className={`${styles.toolButton} ${teamMode !== 'off' ? styles.toolButtonActive : ''}`}
               >
                 <RobotOutlined />
                 <span className={styles.toolButtonLabel}>
                   {selectedTeamName ?? '专家团'}
                 </span>
-                {selectedTeamId != null && (
+                {teamMode !== 'off' && (
                   <span
                     className={styles.toolButtonClear}
                     role="button"
                     tabIndex={0}
-                    onClick={(e) => { e.stopPropagation(); setSelectedTeamId(null) }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setSelectedTeamId(null) } }}
+                    onClick={(e) => { e.stopPropagation(); setTeamMode('off'); setSelectedTeamId(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setTeamMode('off'); setSelectedTeamId(null) } }}
                   >
                     <CloseOutlined />
                   </span>

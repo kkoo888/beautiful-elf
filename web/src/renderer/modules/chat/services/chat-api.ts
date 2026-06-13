@@ -155,6 +155,8 @@ export function chatStream(
           messages: [{ role: 'user', content: request.message }],
           temperature: 0.7, max_tokens: 2048, stream: true,
           reasoning_depth: request.reasoningDepth ?? 'balanced',
+          team_mode: request.teamMode ?? 'off',
+          team_id: request.teamId ?? null,
         }),
         signal: controller.signal,
       })

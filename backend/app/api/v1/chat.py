@@ -64,9 +64,18 @@ async def chat(
     model_name = data.model_name or ""
     user_id = getattr(data, "user_id", 0) or 0
     reasoning_depth = getattr(data, "reasoning_depth", "balanced") or "balanced"
+    team_mode = data.team_mode or "off"
+    team_id = data.team_id
+
+    # manual 模式：直接执行专家团，不走 Agent 流程
+    if team_mode == "manual" and team_id:
+        return StreamingResponse(
+            _stream_expert_team(conversation_id, team_id, messages, db),
+            media_type="text/event-stream",
+        )
 
     return StreamingResponse(
-        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth),
+        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth, team_mode, team_id),
         media_type="text/event-stream",
     )
 
@@ -194,9 +203,82 @@ async def tool_stats() -> ApiResult[dict]:
 SSE_HEARTBEAT_INTERVAL = 15  # 心跳间隔（秒），小于 nginx 默认 60s proxy_read_timeout
 
 
+async def _stream_expert_team(conversation_id: int, team_id: int, messages: list, db: AsyncSession):
+    """手动专家团模式 — 直接执行专家团工作流，流式返回讨论过程"""
+    from app.services.expert_team_service import ExpertTeamService
+    from app.schemas.expert_team import ExpertTeamExecuteRequest
+
+    _queue: asyncio.Queue = asyncio.Queue()
+    _stream_done = asyncio.Event()
+
+    user_content = messages[-1]["content"] if messages else ""
+
+    async def _heartbeat():
+        try:
+            while not _stream_done.is_set():
+                await asyncio.sleep(SSE_HEARTBEAT_INTERVAL)
+                if not _stream_done.is_set():
+                    await _queue.put(": heartbeat\n\n")
+        except asyncio.CancelledError:
+            pass
+
+    async def _produce():
+        try:
+            service = ExpertTeamService()
+            request = ExpertTeamExecuteRequest(input_text=user_content)
+
+            # 推送开始事件
+            await _queue.put(f"data: {json.dumps({'progress': {'step': 'expert_team', 'status': 'running', 'message': '正在执行专家团...'}, 'done': False})}\n\n")
+
+            result = await service.execute_team(db, team_id, request)
+
+            # 推送讨论过程（每个专家的观点）
+            for msg in result.get("discussion", []):
+                expert_name = msg.get("expertName", "")
+                expert_role = msg.get("expertRole", "")
+                content = msg.get("content", "")
+                round_num = msg.get("round", 0)
+                # 作为 token 流式推送给前端
+                header = f"**{expert_name}** ({expert_role}) 第{round_num}轮:\n"
+                await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}\n\n")
+                await _queue.put(f"data: {json.dumps({'content': content + '\n\n', 'done': False})}\n\n")
+
+            # 推送最终汇总
+            final = result.get("output", "")
+            if final:
+                await _queue.put(f"data: {json.dumps({'content': '---\n**📋 最终报告:**\n\n' + final, 'done': False})}\n\n")
+
+            elapsed = result.get("durationMs", 0)
+            await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'duration_ms': elapsed})}\n\n")
+
+        except Exception as e:
+            logger.error(f"专家团执行失败: {e}", exc_info=True)
+            await _queue.put(f"data: {json.dumps({'error': f'专家团执行失败: {e}', 'done': True})}\n\n")
+        finally:
+            _stream_done.set()
+            await _queue.put(None)
+
+    heartbeat_task = asyncio.create_task(_heartbeat())
+    producer_task = asyncio.create_task(_produce())
+
+    async def _sse_generator():
+        try:
+            while True:
+                item = await _queue.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            heartbeat_task.cancel()
+            producer_task.cancel()
+
+    return _sse_generator()
+
+
 async def _stream_response(
     conversation_id: int, user_id: int, messages: list,
     provider_id: int, model_name: str, reasoning_depth: str = "balanced",
+    team_mode: str = "off", team_id: int | None = None,
 ):
     """SSE 流式响应 — 带心跳保活 + 消息持久化
 
@@ -267,6 +349,8 @@ async def _stream_response(
                 provider_id=provider_id,
                 model_name=model_name,
                 reasoning_depth=reasoning_depth,
+                team_mode=team_mode,
+                team_id=team_id,
             ):
                 event_type = event.get("type", "")
                 if event_type == "token":

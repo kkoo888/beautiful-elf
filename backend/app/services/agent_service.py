@@ -375,8 +375,10 @@ class AgentService:
         provider_id: int = 0,
         model_name: str = "",
         reasoning_depth: str = "balanced",
+        team_mode: str = "off",
+        team_id: int | None = None,
     ) -> AsyncIterator[Dict[str, Any]]:
-        """Agent 流式对话（v4.1 — 新增审批/工具进度/上下文引用/成本事件）"""
+        """Agent 流式对话（v4.3 — 新增专家团自动路由）"""
         if not self.is_ready:
             success = await self._lazy_init(provider_id, model_name)
             if not success:
@@ -387,6 +389,19 @@ class AgentService:
         tools_used = []
         total_prompt_tokens = 0
         total_completion_tokens = 0
+
+        # ── 专家团 auto 模式：先尝试匹配意图 → 命中则执行专家团 ──
+        if team_mode == "auto":
+            user_msg = messages[-1].get("content", "") if messages else ""
+            matched_team = await self._try_match_expert_team(user_msg)
+            if matched_team:
+                logger.info(f"[chat_stream] auto 模式命中专家团: {matched_team['team_name']} (id={matched_team['team_id']})")
+                yield {"type": "progress", "step": "expert_team", "status": "matched",
+                       "message": f"自动匹配到专家团「{matched_team['team_name']}」"}
+                async for event in self._execute_expert_team_stream(matched_team["team_id"], user_msg):
+                    yield event
+                return
+            logger.info("[chat_stream] auto 模式未命中专家团，走常规 Agent")
 
         try:
             initial_state = {
@@ -602,6 +617,100 @@ class AgentService:
     def get_tool_stats(self) -> Dict[str, Dict]:
         """获取工具使用统计"""
         return dict(self._tool_stats)
+
+    # ── 专家团自动匹配 ────────────────────────────────────
+
+    async def _try_match_expert_team(self, user_msg: str) -> dict | None:
+        """尝试匹配专家团 — 基于意图路由 + 专家团关键词/描述匹配
+
+        匹配策略（优先级从高到低）:
+          1. 意图表中 target_module = "expert_team:{team_id}" 的精确匹配
+          2. 专家团 description 与用户消息的语义相似度（简单关键词匹配）
+
+        Returns:
+            {"team_id": int, "team_name": str} 或 None
+        """
+        if not user_msg or not user_msg.strip():
+            return None
+
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.services.expert_team_service import ExpertTeamService
+
+            async with AsyncSessionLocal() as db:
+                service = ExpertTeamService()
+                teams, _ = await service.list_teams(db, page=1, page_size=100, enabled=1)
+                if not teams:
+                    return None
+
+                # 简单关键词匹配（后续可升级为向量相似度）
+                user_lower = user_msg.lower()
+                best_match = None
+                best_score = 0
+
+                for team in teams:
+                    score = 0
+                    # 检查团队名称
+                    if team.teamName and team.teamName.lower() in user_lower:
+                        score += 3
+                    # 检查描述关键词
+                    if team.description:
+                        desc_words = team.description.lower().split()
+                        for word in desc_words:
+                            if len(word) >= 2 and word in user_lower:
+                                score += 1
+                    # 检查分类
+                    if team.category and team.category.lower() in user_lower:
+                        score += 2
+
+                    if score > best_score:
+                        best_score = score
+                        best_match = team
+
+                # 阈值：至少要命中 2 分才认为是有效匹配
+                if best_match and best_score >= 2:
+                    return {"team_id": best_match.id, "team_name": best_match.teamName}
+
+        except Exception as e:
+            logger.warning(f"[_try_match_expert_team] 匹配失败: {e}")
+
+        return None
+
+    async def _execute_expert_team_stream(self, team_id: int, user_msg: str) -> AsyncIterator[Dict[str, Any]]:
+        """执行专家团并以流式事件返回"""
+        from app.services.expert_team_service import ExpertTeamService
+        from app.schemas.expert_team import ExpertTeamExecuteRequest
+
+        t0 = time.time()
+        try:
+            from app.core.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                service = ExpertTeamService()
+                request = ExpertTeamExecuteRequest(input_text=user_msg)
+                result = await service.execute_team(db, team_id, request)
+
+                # 把讨论过程转为 token 流
+                for msg in result.get("discussion", []):
+                    expert_name = msg.get("expertName", "")
+                    expert_role = msg.get("expertRole", "")
+                    content = msg.get("content", "")
+                    round_num = msg.get("round", 0)
+                    header = f"**{expert_name}** ({expert_role}) 第{round_num}轮:\n"
+                    yield {"type": "token", "content": header}
+                    yield {"type": "token", "content": content + "\n\n"}
+
+                # 最终汇总
+                final = result.get("output", "")
+                if final:
+                    yield {"type": "token", "content": "---\n**📋 最终报告:**\n\n" + final}
+
+                elapsed = int((time.time() - t0) * 1000)
+                yield {"type": "done", "tools_used": [], "duration_ms": elapsed,
+                       "prompt_tokens": 0, "completion_tokens": 0}
+
+        except Exception as e:
+            logger.error(f"专家团流式执行失败: {e}", exc_info=True)
+            yield {"type": "error", "message": f"专家团执行失败: {e}"}
 
     async def _lazy_init(self, provider_id: int, model_name: str) -> bool:
         """懒初始化 — 双重检查锁 + provider 变更检测

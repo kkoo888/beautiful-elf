@@ -18,6 +18,8 @@ class ChatRequest(CamelModel):
     temperature: float = Field(default=0.7, ge=0, le=2, description="温度")
     max_tokens: int = Field(default=2048, ge=1, le=32768, description="最大 token", alias="maxTokens")
     stream: bool = Field(default=True, description="是否流式返回")
+    team_mode: str = Field(default="off", description="专家团模式: off/auto/manual", alias="teamMode")
+    team_id: Optional[int] = Field(default=None, description="手动指定的专家团 ID", alias="teamId")
 
 
 class ChatResponse(CamelModel):

@@ -162,6 +162,10 @@ export interface ChatRequest {
   providerType?: string
   /** 模型名称 */
   modelName?: string
+  /** 专家团模式: off=关闭 auto=自动匹配 manual=手动指定 */
+  teamMode?: 'off' | 'auto' | 'manual'
+  /** 手动指定的专家团 ID（teamMode=manual 时必填） */
+  teamId?: number
 }
 
 /** 聊天响应 */
