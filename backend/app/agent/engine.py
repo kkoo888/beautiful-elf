@@ -490,7 +490,7 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
         system_prompt = state.get("system_prompt") or state.get("context") or \
             "你是一个智能助手，能够使用工具回答用户问题。请用中文回答。"
 
-        注入路由提示
+        # 注入路由提示
         if prompt_hint:
             system_prompt = f"{system_prompt}\n\n【指令】{prompt_hint}"
 
