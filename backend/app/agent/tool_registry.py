@@ -502,11 +502,467 @@ async def query_database(sql: str) -> dict:
 
 # ── 执行函数注册表（DB 工具自动关联执行函数）──────────────
 # 工具元数据全部由 DB 管理，这里只做 name → 执行函数的映射
+
+# ── 文件系统工具 ─────────────────────────────────────────
+
+async def write_file(path: str, content: str, encoding: str = "utf-8") -> dict:
+    """写入文件到工作空间"""
+    from app.core.config import get_settings
+    from pathlib import Path
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    target = (workspace / path).resolve()
+    if not str(target).startswith(str(workspace)):
+        return {"error": "路径穿越攻击已拦截"}
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding=encoding)
+        return {"success": True, "bytes_written": len(content.encode(encoding)), "path": path}
+    except Exception as e:
+        return {"error": f"写入失败: {e}"}
+
+
+async def list_files(path: str = ".", pattern: str = None, recursive: bool = False) -> dict:
+    """列出工作空间目录下的文件"""
+    from app.core.config import get_settings
+    from pathlib import Path
+    import fnmatch
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    target = (workspace / path).resolve()
+    if not str(target).startswith(str(workspace)):
+        return {"error": "路径穿越攻击已拦截"}
+    if not target.exists():
+        return {"error": f"目录不存在: {path}"}
+    try:
+        entries = []
+        if recursive:
+            items = target.rglob(pattern or "*")
+        else:
+            items = target.glob(pattern or "*")
+        for item in sorted(items):
+            entries.append({
+                "name": item.name,
+                "path": str(item.relative_to(workspace)),
+                "is_dir": item.is_dir(),
+                "size": item.stat().st_size if item.is_file() else 0,
+            })
+        return {"files": entries[:500]}
+    except Exception as e:
+        return {"error": f"列出文件失败: {e}"}
+
+
+async def apply_patch(path: str, edits: list) -> dict:
+    """对文件进行精确文本替换"""
+    from app.core.config import get_settings
+    from pathlib import Path
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    target = (workspace / path).resolve()
+    if not str(target).startswith(str(workspace)):
+        return {"error": "路径穿越攻击已拦截"}
+    if not target.exists():
+        return {"error": f"文件不存在: {path}"}
+    try:
+        content = target.read_text(encoding="utf-8")
+        replacements = 0
+        for edit in edits:
+            old_text = edit.get("oldText", "")
+            new_text = edit.get("newText", "")
+            if old_text and old_text in content:
+                content = content.replace(old_text, new_text, 1)
+                replacements += 1
+        target.write_text(content, encoding="utf-8")
+        return {"success": True, "replacements": replacements}
+    except Exception as e:
+        return {"error": f"补丁失败: {e}"}
+
+
+# ── Git 工具 ────────────────────────────────────────────
+
+async def _run_git(*args, repo_path: str = ".") -> tuple:
+    """执行 git 命令的内部辅助函数"""
+    import asyncio
+    from app.core.config import get_settings
+    from pathlib import Path
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    target = (workspace / repo_path).resolve()
+    if not str(target).startswith(str(workspace)):
+        return 1, "", "路径穿越攻击已拦截"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", *args,
+            cwd=str(target),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+        return proc.returncode, stdout.decode("utf-8", errors="ignore").strip(), stderr.decode("utf-8", errors="ignore").strip()
+    except asyncio.TimeoutError:
+        return 1, "", "Git 命令超时"
+    except Exception as e:
+        return 1, "", str(e)
+
+
+async def git_status(repo_path: str = ".") -> dict:
+    """查看 Git 仓库状态"""
+    code, out, err = await _run_git("status", "--porcelain=v1", repo_path=repo_path)
+    if code != 0:
+        return {"error": err}
+    modified, added, deleted, untracked = [], [], [], []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        status = line[:2].strip()
+        filepath = line[3:].strip()
+        if status == "M":
+            modified.append(filepath)
+        elif status == "A":
+            added.append(filepath)
+        elif status == "D":
+            deleted.append(filepath)
+        elif status == "??":
+            untracked.append(filepath)
+    _, branch_out, _ = await _run_git("rev-parse", "--abbrev-ref", "HEAD", repo_path=repo_path)
+    return {"branch": branch_out, "modified": modified, "added": added, "deleted": deleted, "untracked": untracked}
+
+
+async def git_diff(repo_path: str = ".", staged: bool = False, commit: str = None, file_path: str = None) -> dict:
+    """查看 Git 差异"""
+    args = ["diff"]
+    if staged:
+        args.append("--staged")
+    if commit:
+        args.append(commit)
+    if file_path:
+        args.append(file_path)
+    code, out, err = await _run_git(*args, repo_path=repo_path)
+    if code != 0:
+        return {"error": err}
+    files_changed = out.count("diff --git")
+    return {"diff": out[:10000], "files_changed": files_changed}
+
+
+async def git_commit(repo_path: str = ".", message: str = "", files: list = None) -> dict:
+    """Git 提交"""
+    if files:
+        for f in files:
+            code, _, err = await _run_git("add", f, repo_path=repo_path)
+            if code != 0:
+                return {"error": f"git add {f} 失败: {err}"}
+    else:
+        code, _, err = await _run_git("add", "-A", repo_path=repo_path)
+        if code != 0:
+            return {"error": f"git add 失败: {err}"}
+    code, out, err = await _run_git("commit", "-m", message, repo_path=repo_path)
+    if code != 0:
+        return {"error": f"git commit 失败: {err}"}
+    _, hash_out, _ = await _run_git("rev-parse", "HEAD", repo_path=repo_path)
+    return {"success": True, "commit_hash": hash_out}
+
+
+async def git_log(repo_path: str = ".", limit: int = 10, file_path: str = None) -> dict:
+    """查看 Git 日志"""
+    args = ["log", f"--max-count={limit}", "--pretty=format:%H|%an|%ai|%s"]
+    if file_path:
+        args.extend(["--", file_path])
+    code, out, err = await _run_git(*args, repo_path=repo_path)
+    if code != 0:
+        return {"error": err}
+    commits = []
+    for line in out.splitlines():
+        parts = line.split("|", 3)
+        if len(parts) == 4:
+            commits.append({"hash": parts[0][:8], "author": parts[1], "date": parts[2], "message": parts[3]})
+    return {"commits": commits}
+
+
+# ── Shell 工具 ──────────────────────────────────────────
+
+async def exec_command(command: str, workdir: str = None, timeout: int = 10) -> dict:
+    """在沙箱中执行 Shell 命令"""
+    import asyncio
+    from app.core.config import get_settings
+    from pathlib import Path
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    cwd = str(workspace)
+    if workdir:
+        target = (workspace / workdir).resolve()
+        if not str(target).startswith(str(workspace)):
+            return {"error": "路径穿越攻击已拦截"}
+        cwd = str(target)
+    # 危险命令拦截
+    dangerous = ["rm -rf /", "mkfs", "dd if=", "wget ", "curl ", "> /dev/"]
+    for d in dangerous:
+        if d in command:
+            return {"error": f"危险命令已拦截: 包含 '{d}'"}
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            command,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        return {
+            "stdout": stdout.decode("utf-8", errors="ignore")[:5000],
+            "stderr": stderr.decode("utf-8", errors="ignore")[:2000],
+            "exit_code": proc.returncode,
+        }
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        return {"error": f"命令超时（{timeout}秒）"}
+
+
+# ── 网页抓取 ────────────────────────────────────────────
+
+async def web_fetch(url: str, extract_mode: str = "markdown", max_chars: int = 10000) -> dict:
+    """抓取 URL 内容并提取为可读文本"""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "")
+            if "text/html" in content_type:
+                # 简单 HTML 转文本
+                text = resp.text
+                import re
+                text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL)
+                text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
+                text = re.sub(r"<[^>]+>", " ", text)
+                text = re.sub(r"\s+", " ", text).strip()
+            else:
+                text = resp.text
+            return {"content": text[:max_chars], "title": "", "url": str(resp.url)}
+    except Exception as e:
+        return {"error": f"抓取失败: {e}"}
+
+
+# ── 记忆工具 ────────────────────────────────────────────
+
+async def memory_save(content: str, category: str = "fact", tags: list = None) -> dict:
+    """保存到长期记忆"""
+    from datetime import datetime
+    from pathlib import Path
+    from app.core.config import get_settings
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    memory_dir = workspace / "memory"
+    memory_dir.mkdir(exist_ok=True)
+    today = datetime.now().strftime("%Y-%m-%d")
+    memory_file = memory_dir / f"{today}.md"
+    tag_str = f" [{', '.join(tags)}]" if tags else ""
+    entry = f"\n\n### {category.upper()}{tag_str} — {datetime.now().strftime('%H:%M')}\n{content}\n"
+    try:
+        with open(memory_file, "a", encoding="utf-8") as f:
+            f.write(entry)
+        return {"success": True, "path": str(memory_file.relative_to(workspace))}
+    except Exception as e:
+        return {"error": f"保存记忆失败: {e}"}
+
+
+async def memory_search(query: str, max_results: int = 5) -> dict:
+    """搜索长期记忆（简单关键词匹配）"""
+    from pathlib import Path
+    from app.core.config import get_settings
+    import re
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    memory_dir = workspace / "memory"
+    if not memory_dir.exists():
+        return {"results": []}
+    results = []
+    query_lower = query.lower()
+    for md_file in sorted(memory_dir.glob("*.md"), reverse=True):
+        try:
+            content = md_file.read_text(encoding="utf-8")
+            # 按段落分割
+            sections = re.split(r"\n### ", content)
+            for section in sections:
+                if query_lower in section.lower():
+                    results.append({
+                        "content": section[:500],
+                        "path": str(md_file.relative_to(workspace)),
+                        "score": section.lower().count(query_lower),
+                    })
+                    if len(results) >= max_results:
+                        return {"results": results}
+        except Exception:
+            continue
+    return {"results": results}
+
+
+# ── 会话工具 ────────────────────────────────────────────
+
+async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: int = 300) -> dict:
+    """生成子 Agent 执行子任务"""
+    # 预留接口，实际需对接 sessions_spawn
+    return {"error": "子 Agent 功能待对接 sessions_spawn 接口", "task": task, "label": label}
+
+
+async def list_sessions(limit: int = 20, active_minutes: int = None) -> dict:
+    """列出活跃会话"""
+    # 预留接口
+    return {"error": "会话列表功能待对接 sessions_list 接口"}
+
+
+async def session_search(query: str, limit: int = 10, session_key: str = None) -> dict:
+    """搜索会话记录"""
+    return {"error": "会话搜索功能待对接 session_search 接口"}
+
+
+# ── 消息工具 ────────────────────────────────────────────
+
+async def send_message(channel: str = None, target: str = None, message: str = "") -> dict:
+    """发送消息到指定渠道"""
+    return {"error": "消息发送功能待对接 message 接口", "channel": channel, "target": target}
+
+
+# ── 媒体工具 ────────────────────────────────────────────
+
+async def image_generate(prompt: str, size: str = "1024x1024", style: str = None) -> dict:
+    """生成图片"""
+    return {"error": "图片生成功能待对接 DALL-E/Midjourney 接口"}
+
+
+async def text_to_speech(text: str, voice: str = "alloy", speed: float = 1.0) -> dict:
+    """文本转语音"""
+    return {"error": "TTS 功能待对接语音合成接口"}
+
+
+async def parse_pdf(path: str, pages: str = None) -> dict:
+    """解析 PDF 文件"""
+    from app.core.config import get_settings
+    from pathlib import Path
+    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    target = (workspace / path).resolve()
+    if not str(target).startswith(str(workspace)):
+        return {"error": "路径穿越攻击已拦截"}
+    if not target.exists():
+        return {"error": f"文件不存在: {path}"}
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["python3", "-c", f"""
+import sys
+try:
+    import fitz
+    doc = fitz.open("{target}")
+    for page in doc:
+        print(page.get_text())
+except ImportError:
+    print("ERROR: pip install PyMuPDF")
+"""],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode != 0:
+            return {"error": result.stderr or "PDF 解析失败"}
+        return {"content": result.stdout[:50000]}
+    except Exception as e:
+        return {"error": f"PDF 解析失败: {e}"}
+
+
+# ── 定时任务工具 ────────────────────────────────────────
+
+async def cron_create(name: str = "", schedule: dict = None, message: str = "", enabled: bool = True) -> dict:
+    """创建定时任务"""
+    return {"error": "定时任务功能待对接 cron 接口", "name": name, "schedule": schedule}
+
+
+async def cron_list(include_disabled: bool = False) -> dict:
+    """列出定时任务"""
+    return {"error": "定时任务列表功能待对接 cron 接口"}
+
+
+# ── 技能工具 ────────────────────────────────────────────
+
+async def skill_search(query: str, limit: int = 5) -> dict:
+    """搜索可用技能"""
+    from pathlib import Path
+    import json
+    skills_dir = Path.home() / ".openclaw" / "skills"
+    if not skills_dir.exists():
+        return {"skills": []}
+    results = []
+    query_lower = query.lower()
+    for skill_dir in skills_dir.iterdir():
+        if not skill_dir.is_dir():
+            continue
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.exists():
+            continue
+        try:
+            content = skill_md.read_text(encoding="utf-8")[:300]
+            name = skill_dir.name
+            # 从 SKILL.md 提取描述
+            desc = ""
+            for line in content.splitlines():
+                if line.startswith("description:") or line.startswith("name:"):
+                    desc = line.split(":", 1)[1].strip().strip("|").strip()
+                    break
+            if query_lower in name.lower() or query_lower in content.lower():
+                results.append({"name": name, "description": desc[:200], "version": "1.0.0"})
+                if len(results) >= limit:
+                    break
+        except Exception:
+            continue
+    return {"skills": results}
+
+
+# ── 路由控制 ────────────────────────────────────────────
+
+async def router_control(action: str = "status", model: str = None, reason: str = None) -> dict:
+    """查看或调整路由器"""
+    if action == "status":
+        from pathlib import Path
+        version_file = Path(__file__).parent.parent / "router" / "models" / "v4.2_phase3_inference" / "version.json"
+        if version_file.exists():
+            import json
+            meta = json.loads(version_file.read_text())
+            return {"route_class": "auto", "selected_model": "ML router", "version": meta.get("version", "unknown")}
+        return {"route_class": "auto", "selected_model": "ML router", "version": "not loaded"}
+    return {"error": f"不支持的操作: {action}"}
+
+
+
 _EXEC_FUNC_MAP = {
+    # 已有
     "web_search": web_search,
     "execute_code": execute_code,
     "read_file": read_file,
     "query_database": query_database,
+    # 文件系统
+    "write_file": write_file,
+    "list_files": list_files,
+    "apply_patch": apply_patch,
+    # Git
+    "git_status": git_status,
+    "git_diff": git_diff,
+    "git_commit": git_commit,
+    "git_log": git_log,
+    # Shell
+    "exec_command": exec_command,
+    # 网页
+    "web_fetch": web_fetch,
+    # 记忆
+    "memory_save": memory_save,
+    "memory_search": memory_search,
+    # 会话
+    "spawn_agent": spawn_agent,
+    "list_sessions": list_sessions,
+    "session_search": session_search,
+    # 消息
+    "send_message": send_message,
+    # 媒体
+    "image_generate": image_generate,
+    "text_to_speech": text_to_speech,
+    "parse_pdf": parse_pdf,
+    # 定时任务
+    "cron_create": cron_create,
+    "cron_list": cron_list,
+    # 技能
+    "skill_search": skill_search,
+    # 路由
+    "router_control": router_control,
 }
 
 
@@ -517,4 +973,3 @@ _EXEC_FUNC_MAP = {
 # ─── 全局单例 ────────────────────────────────────────────
 
 tool_registry = ToolRegistry()
-
