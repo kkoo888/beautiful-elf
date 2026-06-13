@@ -241,12 +241,14 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
                 # 作为 token 流式推送给前端
                 header = f"**{expert_name}** ({expert_role}) 第{round_num}轮:\n"
                 await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}\n\n")
-                await _queue.put(f"data: {json.dumps({'content': content + '\n\n', 'done': False})}\n\n")
+                payload = json.dumps({'content': content + '\n\n', 'done': False})
+                await _queue.put(f"data: {payload}\n\n")
 
             # 推送最终汇总
             final = result.get("output", "")
             if final:
-                await _queue.put(f"data: {json.dumps({'content': '---\n**📋 最终报告:**\n\n' + final, 'done': False})}\n\n")
+                final_payload = json.dumps({'content': '---\n**📋 最终报告:**\n\n' + final, 'done': False})
+                await _queue.put(f"data: {final_payload}\n\n")
 
             elapsed = result.get("durationMs", 0)
             await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'duration_ms': elapsed})}\n\n")
