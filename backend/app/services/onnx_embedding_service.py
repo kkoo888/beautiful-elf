@@ -19,7 +19,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # 模型路径（相对于 backend/ 目录）
-_MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "router" / "models" / "Qwen3-Embedding-0.6B-ONNX"
+_MODEL_DIR = Path(__file__).resolve().parent.parent / "router" / "models" / "Qwen3-Embedding-0.6B-ONNX"
 _DEFAULT_DIMENSION = 1024
 _DEFAULT_MAX_LENGTH = 32768
 
