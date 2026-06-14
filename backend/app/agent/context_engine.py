@@ -1,4 +1,4 @@
-"""Context Engine — 动态 Context 组装管道（v2.2 新增压缩 + Query Rewriting）
+"""Context Engine — 动态 Context 组装管道（v2.3 新增 Injection Guard + Budget）
 
 功能:
   - get_tool_summaries() 方法（engine.py 调用）
@@ -6,12 +6,15 @@
   - 工具结果 JSON 格式化
   - Context 压缩策略（LLM 驱动的智能压缩）
   - Query Rewriting（口语化查询改写为精确检索查询）
+  - Injection Guard: 所有外部内容用 <untrusted> 标签包裹（v2.3）
+  - Result Budget: 动态裁剪超长结果（v2.3）
 """
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 import json
 
 from app.core.logging import get_logger
+from app.agent.injection_guard import wrap_untrusted, detect_injection_attempt
 
 logger = get_logger(__name__)
 
@@ -331,14 +334,24 @@ class ContextEngine:
 
     @staticmethod
     def format_tool_result(result: Any) -> str:
-        """格式化工具结果为 JSON 字符串（非 Python repr）"""
+        """格式化工具结果为 JSON 字符串（非 Python repr）
+
+        v2.3: 外部内容用 <untrusted> 标签包裹，防止注入攻击
+        """
         if isinstance(result, str):
-            return result
-        if isinstance(result, dict):
-            return json.dumps(result, ensure_ascii=False, default=str)
-        if isinstance(result, (list, tuple)):
-            return json.dumps(result, ensure_ascii=False, default=str)
-        return str(result)
+            content = result
+        elif isinstance(result, dict):
+            content = json.dumps(result, ensure_ascii=False, default=str)
+        elif isinstance(result, (list, tuple)):
+            content = json.dumps(result, ensure_ascii=False, default=str)
+        else:
+            content = str(result)
+
+        # 注入检测（仅记录日志，不阻断）
+        if detect_injection_attempt(content):
+            logger.warning("[context_engine] 检测到工具结果中疑似注入模式")
+
+        return wrap_untrusted(content, source="tool_result")
 
     # ── Context 压缩（LLM 驱动）─────────────────────────
 

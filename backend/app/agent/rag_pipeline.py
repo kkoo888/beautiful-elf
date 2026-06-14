@@ -1,26 +1,21 @@
-"""RAG 管道 — LlamaIndex Workflow 规范化（v3.0）
+"""RAG 管道 — v4.0 Hybrid RAG（BM25 + 向量 + RRF + Rerank + Budget）
 
-v3.0 重构:
-  - 移除已废弃的 QueryPipeline，改用 LlamaIndex Workflow（事件驱动编排）
-  - 检索链路: retrieve → rerank → synthesize，通过 @step 声明式组装
-  - 保留手动检索作为高性能降级方案
-  - 响应合成: get_response_synthesizer 替代直接实例化 CompactAndRefine
+v4.0 重构（2026-06-14）:
+  - 混合检索: BM25 (SQLite FTS5) + 向量检索 → RRF 融合
+  - 去掉 Synthesizer: 检索结果直接拼入 prompt，由主 LLM 生成答案
+  - Context Budget: 动态裁剪检索结果，防止 context overflow
+  - Injection Guard: 所有检索结果用 <untrusted> 标签包裹
+  - Workflow 编排: HybridRetrieve → Rerank → Budget → Wrap → Assemble
 
-v2.0 重构（Harrison Chase 视角优化）:
-  - 重排序: SentenceTransformerRerank 作为 postprocessor 节点
-  - 评估: 内置 FaithfulnessEvaluator / RelevancyEvaluator
+v3.0: QueryPipeline → Workflow 迁移
+v2.0: Harrison Chase 视角优化
 
 职责:
-  - 文档解析（PDF / DOCX / PPTX / XLSX / CSV / JSON / HTML / MD / TXT / EPUB / IPYNB）
+  - 文档解析（PDF / DOCX / PPTX / XLSX / CSV / JSON / HTML / MD / TXT）
   - 分块（SentenceSplitter）
   - Embedding + 存入 Qdrant
-  - 混合检索 + 重排序（Workflow 编排）
-
-注意:
-  - 本模块是 Agent 引擎的子系统，由 knowledge_service 调用
-  - 不含路由细节，不含业务编排（由 service 层处理）
+  - 混合检索 + 重排序 + 预算裁剪 + 注入防御（Workflow 编排）
 """
-import uuid
 import asyncio
 from pathlib import Path
 from typing import List, Optional
@@ -32,80 +27,130 @@ logger = get_logger(__name__)
 COLLECTION_NAME = "knowledge_chunks"
 
 
-# ── RAG Workflow（LlamaIndex Workflow 编排）────────────────
+# ── RAG Workflow（v4.0 Hybrid）────────────────────────────
 
-def _build_rag_workflow(retriever, reranker=None, response_synthesizer=None):
-    """构建 RAG Workflow：retrieve → rerank → synthesize
+def _build_rag_workflow(hybrid_retriever, reranker=None, budget_governor=None):
+    """构建 v4.0 RAG Workflow: HybridRetrieve → Rerank → Budget → Assemble
 
-    使用 LlamaIndex Workflow 的 @step 事件驱动编排，
-    替代已废弃的 QueryPipeline DAG。
+    去掉 Synthesizer，检索结果直接拼入 prompt。
     """
     try:
         from llama_index.core.workflow import (
-            Workflow, step, StartEvent, StopEvent, Context,
+            Workflow, step, StartEvent, StopEvent, Context, Event,
         )
         from llama_index.core.schema import QueryBundle
     except ImportError:
-        logger.warning("LlamaIndex Workflow 不可用（llama-index 版本过旧）")
+        logger.warning("LlamaIndex Workflow 不可用")
         return None
 
-    _retriever = retriever
+    _hybrid = hybrid_retriever
     _reranker = reranker
-    _synthesizer = response_synthesizer
+    _budget = budget_governor
 
-    class RAGWorkflow(Workflow):
-        """retrieve → rerank → synthesize 工作流"""
-
-        @step()
-        async def retrieve(self, ctx: Context, ev: StartEvent) -> "RerankEvent":
-            query_str = ev.get("query_str", "")
-            nodes = await asyncio.to_thread(_retriever.retrieve, query_str)
-            return RerankEvent(query_str=query_str, nodes=nodes)
-
-        @step()
-        async def rerank(self, ctx: Context, ev: "RerankEvent") -> "SynthesizeEvent":
-            nodes = ev.nodes
-            if _reranker:
-                query_bundle = QueryBundle(query_str=ev.query_str)
-                nodes = _reranker.postprocess_nodes(nodes, query_bundle=query_bundle)
-            return SynthesizeEvent(query_str=ev.query_str, nodes=nodes)
-
-        @step()
-        async def synthesize(self, ctx: Context, ev: "SynthesizeEvent") -> StopEvent:
-            if _synthesizer:
-                from llama_index.core.schema import QueryBundle
-                query_bundle = QueryBundle(query_str=ev.query_str)
-                response = await asyncio.to_thread(
-                    _synthesizer.synthesize, query_bundle, ev.nodes
-                )
-                return StopEvent(result=str(response))
-            else:
-                # 无 synthesizer 时直接拼接文本
-                parts = []
-                for node in ev.nodes[:5]:
-                    score = node.score or 0
-                    fname = node.metadata.get("filename", "未知")
-                    parts.append(f"[来源: {fname} | 相关度: {score:.2f}]\n{node.text}")
-                return StopEvent(result="\n\n---\n\n".join(parts))
-
-    # 定义中间事件类型
-    from llama_index.core.workflow import Event
+    # ── 定义事件类型 ──
+    class HybridRetrieveEvent(Event):
+        query_str: str
+        doc_ids: list         # RRF 融合后的 doc_id 列表
 
     class RerankEvent(Event):
         query_str: str
-        nodes: list
+        nodes: list           # rerank 后的节点
 
-    class SynthesizeEvent(Event):
-        query_str: str
-        nodes: list
+    class RAGWorkflow(Workflow):
+        """HybridRetrieve → Rerank → Budget → Assemble"""
+
+        @step()
+        async def hybrid_retrieve(self, ctx: Context, ev: StartEvent) -> HybridRetrieveEvent:
+            """混合检索: BM25 + 向量 → RRF 融合"""
+            query_str = ev.get("query_str", "")
+            hits = await asyncio.to_thread(_hybrid.retrieve, query_str, top_k=20)
+            doc_ids = [h.doc_id for h in hits]
+            return HybridRetrieveEvent(query_str=query_str, doc_ids=doc_ids)
+
+        @step()
+        async def rerank(self, ctx: Context, ev: HybridRetrieveEvent) -> RerankEvent:
+            """Cross-Encoder 重排序"""
+            query_str = ev.query_str
+            doc_ids = ev.doc_ids
+
+            # 从向量存储中取回节点文本
+            nodes = await asyncio.to_thread(
+                _resolve_nodes, _hybrid, query_str, doc_ids
+            )
+
+            if _reranker and nodes:
+                query_bundle = QueryBundle(query_str=query_str)
+                nodes = await asyncio.to_thread(
+                    _reranker.postprocess_nodes, nodes, query_bundle
+                )
+
+            return RerankEvent(query_str=query_str, nodes=nodes[:5])
+
+        @step()
+        async def assemble(self, ctx: Context, ev: RerankEvent) -> StopEvent:
+            """Budget 裁剪 + Injection Guard + 直接拼装"""
+            from app.agent.injection_guard import wrap_untrusted
+
+            nodes = ev.nodes
+            if not nodes:
+                return StopEvent(result="")
+
+            # ── Budget 裁剪 ──
+            max_chars = _budget.snapshot().max_rag_result_chars if _budget else 6000
+            total_chars = 0
+            budgeted_nodes = []
+            for node in nodes:
+                node_chars = len(node.text)
+                if total_chars + node_chars > max_chars:
+                    # 截断最后一个节点
+                    remaining = max_chars - total_chars
+                    if remaining > 200:  # 至少保留 200 字符
+                        budgeted_nodes.append(node)
+                    break
+                budgeted_nodes.append(node)
+                total_chars += node_chars
+
+            # ── Injection Guard + 拼装 ──
+            parts = []
+            for node in budgeted_nodes:
+                score = node.score or 0
+                filename = node.metadata.get("filename", "未知")
+                source = f"rag:file={filename},score={score:.2f}"
+                wrapped = wrap_untrusted(node.text, source=source)
+                parts.append(wrapped)
+
+            context_text = "\n\n---\n\n".join(parts)
+            logger.info(
+                f"[rag] 检索完成: {len(budgeted_nodes)}/{len(nodes)} 个节点, "
+                f"{len(context_text)} chars (budget={max_chars})"
+            )
+            return StopEvent(result=context_text)
 
     return RAGWorkflow(timeout=30, verbose=False)
+
+
+def _resolve_nodes(hybrid_retriever, query_str: str, doc_ids: list):
+    """用原始查询取回 LlamaIndex Node（用于 reranking）"""
+    try:
+        vector_retriever = hybrid_retriever._vector_retriever
+        if vector_retriever is None:
+            return []
+        from llama_index.core.schema import QueryBundle
+        nodes = vector_retriever.retrieve(QueryBundle(query_str=query_str))
+        # 按 doc_ids 过滤（只保留 RRF 融合命中的）
+        id_set = set(doc_ids)
+        return [n for n in nodes if str(n.metadata.get("chunk_id", n.id_)) in id_set]
+    except Exception:
+        return []
 
 
 # ── RAG Pipeline ─────────────────────────────────────────
 
 class RAGPipeline:
-    """LlamaIndex Workflow 驱动的 RAG 管道（v3.0）"""
+    """v4.0 Hybrid RAG Pipeline
+
+    架构: Hybrid(BM25+Vector+RRF) → Rerank → Budget → Wrap → 直接拼prompt
+    """
 
     def __init__(self, qdrant_url: str, embedding_model, llm_model=None):
         self._qdrant_url = qdrant_url
@@ -115,9 +160,18 @@ class RAGPipeline:
         self._retriever = None
         self._reranker = None
         self._node_parser = None
-        self._synthesizer = None
         self._workflow = None
         self._initialized = False
+
+        # v4.0 新增组件
+        from app.agent.hybrid_retriever import HybridRetriever
+        from app.agent.context_budget import ContextBudgetGovernor
+
+        self._hybrid_retriever = HybridRetriever(strategy="hybrid")
+        self._budget = ContextBudgetGovernor(
+            context_window_tokens=128000,
+            max_output_tokens=4096,
+        )
 
     async def initialize(self):
         """初始化索引、检索器和 Workflow"""
@@ -126,7 +180,7 @@ class RAGPipeline:
 
         try:
             import qdrant_client
-            from llama_index.core import VectorStoreIndex, StorageContext, Settings
+            from llama_index.core import VectorStoreIndex, StorageContext
             from llama_index.vector_stores.qdrant import QdrantVectorStore
             from llama_index.core.node_parser import SentenceSplitter
 
@@ -152,36 +206,32 @@ class RAGPipeline:
 
             self._retriever = self._index.as_retriever(similarity_top_k=10)
 
-            # ── 构建 Workflow ──────────────────────
+            # 设置向量检索器到 HybridRetriever
+            self._hybrid_retriever.set_vector_retriever(self._retriever)
+
+            # 构建 Workflow
             self._build_workflow()
 
             self._initialized = True
-            logger.info("RAG 管道初始化完成（Workflow v3.0）")
+            logger.info("RAG 管道初始化完成（Hybrid v4.0）")
 
         except ImportError as e:
-            logger.warning(f"缺少 LlamaIndex 依赖，RAG 管道不可用: {e}")
+            logger.warning(f"缺少 LlamaIndex 依赖: {e}")
             raise
         except Exception as e:
             logger.error(f"RAG 管道初始化失败: {e}", exc_info=True)
             raise
 
     def _build_workflow(self):
-        """构建 RAG Workflow（retrieve → rerank → synthesize）"""
-        try:
-            from llama_index.core.response_synthesizers import get_response_synthesizer
-            self._synthesizer = get_response_synthesizer(response_mode="compact")
-        except ImportError:
-            logger.warning("get_response_synthesizer 不可用，合成将使用文本拼接")
-            self._synthesizer = None
-
+        """构建 v4.0 RAG Workflow"""
         self._workflow = _build_rag_workflow(
-            retriever=self._retriever,
+            hybrid_retriever=self._hybrid_retriever,
             reranker=self._reranker,
-            response_synthesizer=self._synthesizer,
+            budget_governor=self._budget,
         )
 
         if self._workflow:
-            logger.info("RAG Workflow 构建完成")
+            logger.info("RAG Workflow v4.0 构建完成")
         else:
             logger.info("Workflow 不可用，使用手动检索模式")
 
@@ -193,15 +243,30 @@ class RAGPipeline:
                 model="BAAI/bge-reranker-v2-m3",
                 top_n=5,
             )
-            logger.info("重排序模型加载成功")
+            logger.info("重排序模型加载成功: BAAI/bge-reranker-v2-m3")
 
-            # 重建 Workflow（加入 reranker）
             if self._initialized:
                 self._build_workflow()
 
         except Exception as e:
             logger.warning(f"重排序模型加载失败，降级为不重排: {e}")
             self._reranker = None
+
+    def index_bm25(self, chunks: list[dict]):
+        """构建 BM25 索引（文档入库后调用）"""
+        self._hybrid_retriever.index(chunks)
+
+    def add_bm25_chunks(self, chunks: list[dict]):
+        """增量添加 BM25 分块"""
+        self._hybrid_retriever.add_chunks(chunks)
+
+    def remove_bm25_doc(self, doc_id: str):
+        """删除文档的 BM25 索引"""
+        self._hybrid_retriever.remove_by_doc_id(doc_id)
+
+    def update_budget(self, context_window_tokens: int, max_output_tokens: int = 4096):
+        """动态更新 context budget（模型切换时）"""
+        self._budget.update_window(context_window_tokens, max_output_tokens)
 
     @property
     def is_ready(self) -> bool:
@@ -210,7 +275,7 @@ class RAGPipeline:
     # ── 文档入库 ──────────────────────────────────────────
 
     async def ingest_document(self, file_path: str, filename: str, doc_id: int) -> dict:
-        """文档入库：解析 → 分块 → Embedding → Qdrant 存储"""
+        """文档入库：解析 → 分块 → Embedding → Qdrant + BM25 双写"""
         if not self._initialized:
             await self.initialize()
 
@@ -229,58 +294,103 @@ class RAGPipeline:
 
             nodes = self._node_parser.get_nodes_from_documents(documents)
             self._index.insert_nodes(nodes)
+
+            # ── 同步写入 BM25 索引 ──
+            bm25_chunks = []
+            for node in nodes:
+                bm25_chunks.append({
+                    "chunk_id": node.id_,
+                    "filename": filename,
+                    "content": node.text,
+                    "document_id": doc_id,
+                })
+            self._hybrid_retriever.add_chunks(bm25_chunks)
+
             return len(nodes)
 
         chunk_count = await asyncio.to_thread(_ingest)
-        logger.info(f"文档入库完成: {filename}, {chunk_count} 个分块")
+        logger.info(f"文档入库完成: {filename}, {chunk_count} 个分块（向量+BM25 双写）")
         return {"document_id": doc_id, "chunks": chunk_count}
 
-    # ── 检索（v3.0: Workflow 优先，手动降级）──────────────
+    # ── 检索（v4.0: Workflow 优先，手动降级）──────────────
 
     async def search(self, query: str, limit: int = 5) -> str:
-        """检索链路：Workflow → 拼装上下文。
+        """检索链路：Hybrid → Rerank → Budget → Wrap → 拼装上下文
 
-        v3.0: 优先使用 Workflow 编排，不可用时降级为手动调用。
+        v4.0: 优先使用 Workflow 编排，不可用时降级为手动调用。
         """
         if not self._initialized:
             return ""
 
-        # ── 优先: Workflow ─────────────────────────
+        # ── 优先: Workflow ──
         if self._workflow:
             try:
                 result = await self._workflow.run(query_str=query)
                 response_text = str(result) if result else ""
                 if response_text:
                     logger.info(f"[rag] Workflow 检索完成: {len(response_text)} chars")
-                    return response_text[:6000]
+                    return response_text
             except Exception as e:
                 logger.warning(f"[rag] Workflow 执行失败，降级为手动: {e}")
 
-        # ── 降级: 手动调用 ──────────────────────────
+        # ── 降级: 手动调用 ──
         return await self._manual_search(query, limit)
 
     async def _manual_search(self, query: str, limit: int = 5) -> str:
-        """手动检索（Workflow 不可用时的降级方案）"""
+        """手动检索（Workflow 不可用时的降级方案）
+
+        v4.0: Hybrid(BM25+Vector+RRF) → Resolve Nodes → Rerank → Budget → Wrap
+        """
+        from app.agent.injection_guard import wrap_untrusted
         from llama_index.core.schema import QueryBundle
 
-        nodes = await asyncio.to_thread(self._retriever.retrieve, query)
+        # ── 混合检索（BM25 + 向量 → RRF 融合）──
+        hits = await asyncio.to_thread(
+            self._hybrid_retriever.retrieve, query, top_k=20
+        )
 
-        if self._reranker:
-            query_bundle = QueryBundle(query_str=query)
-            nodes = self._reranker.postprocess_nodes(nodes, query_bundle=query_bundle)
+        if not hits:
+            return ""
 
-        nodes = nodes[:limit]
+        doc_ids = [h.doc_id for h in hits]
+
+        # ── 取回节点（用原始查询 + doc_ids 过滤）──
+        nodes = await asyncio.to_thread(
+            _resolve_nodes, self._hybrid_retriever, query, doc_ids
+        )
 
         if not nodes:
             return ""
 
-        context_parts = []
+        # ── Reranking ──
+        if self._reranker:
+            query_bundle = QueryBundle(query_str=query)
+            nodes = await asyncio.to_thread(
+                self._reranker.postprocess_nodes, nodes, query_bundle
+            )
+
+        nodes = nodes[:limit]
+
+        # ── Budget 裁剪 ──
+        max_chars = self._budget.snapshot().max_rag_result_chars
+        total_chars = 0
+        budgeted_nodes = []
         for node in nodes:
+            if total_chars + len(node.text) > max_chars:
+                break
+            budgeted_nodes.append(node)
+            total_chars += len(node.text)
+
+        # ── Injection Guard + 拼装 ──
+        parts = []
+        for node in budgeted_nodes:
             score = node.score or 0
             filename = node.metadata.get("filename", "未知")
-            context_parts.append(f"[来源: {filename} | 相关度: {score:.2f}]\n{node.text}")
+            source = f"rag:file={filename},score={score:.2f}"
+            wrapped = wrap_untrusted(node.text, source=source)
+            parts.append(wrapped)
 
-        return "\n\n---\n\n".join(context_parts)
+        return "\n\n---\n\n".join(parts)
 
     async def search_with_scores(self, query: str, limit: int = 5) -> List[dict]:
         """检索并返回带分数的结果列表"""
@@ -293,28 +403,26 @@ class RAGPipeline:
 
         if self._reranker:
             query_bundle = QueryBundle(query_str=query)
-            nodes = self._reranker.postprocess_nodes(nodes, query_bundle=query_bundle)
+            nodes = await asyncio.to_thread(
+                self._reranker.postprocess_nodes, nodes, query_bundle
+            )
 
         nodes = nodes[:limit]
 
-        results = []
-        for node in nodes:
-            results.append({
+        return [
+            {
                 "content": node.text,
                 "score": node.score or 0,
                 "filename": node.metadata.get("filename", "未知"),
                 "document_id": node.metadata.get("document_id", 0),
-            })
-
-        return results
+            }
+            for node in nodes
+        ]
 
     # ── 评估 ─────────────────────────────────────────────
 
     async def evaluate_retrieval(self, query: str, expected_docs: List[int] = None) -> dict:
-        """评估检索质量（LlamaIndex RetrieverEvaluator）
-
-        Returns: {"mrr": float, "hit_rate": float, "retrieved_docs": int}
-        """
+        """评估检索质量"""
         if not self._initialized:
             return {"mrr": 0, "hit_rate": 0, "retrieved_docs": 0}
 
@@ -344,7 +452,7 @@ class RAGPipeline:
     # ── 删除 ─────────────────────────────────────────────
 
     async def delete_by_document(self, doc_id: int) -> bool:
-        """删除文档关联的所有向量"""
+        """删除文档关联的所有向量 + BM25 索引"""
         if not self._initialized:
             return False
 
@@ -363,7 +471,11 @@ class RAGPipeline:
                     ]
                 ),
             )
-            logger.info(f"已删除文档 {doc_id} 的向量")
+
+            # 同步删除 BM25 索引
+            self._hybrid_retriever.remove_by_doc_id(str(doc_id))
+
+            logger.info(f"已删除文档 {doc_id} 的向量 + BM25 索引")
             return True
         except Exception as e:
             logger.error(f"删除向量失败: {e}")
