@@ -18,7 +18,7 @@ v2.0: Harrison Chase 视角优化
 """
 import asyncio
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from app.core.logging import get_logger
 
