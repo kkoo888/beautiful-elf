@@ -102,12 +102,13 @@ class _V4Phase3MLStrategy:
     def available(self) -> bool:
         return self._available
 
-    def predict(self, message, history=None, history_user_texts=None):
+    def predict(self, message, history=None, history_user_texts=None, prev_assistant_text=None, prev_assistant_usage=None):
         if not self._available or self._core is None:
             return None
         try:
             t0 = time.time()
-            request = self._build_request(message, history or [], history_user_texts=history_user_texts)
+            request = self._build_request(message, history or [], history_user_texts=history_user_texts,
+                                          prev_assistant_text=prev_assistant_text, prev_assistant_usage=prev_assistant_usage)
             result = self._core.predict(request)
             elapsed_ms = int((time.time() - t0) * 1000)
 
@@ -137,14 +138,18 @@ class _V4Phase3MLStrategy:
             logger.warning(f"[ml_strategy] ML 推理失败: {exc}", exc_info=True)
             return None
 
-    def _build_request(self, message, routing_history, *, history_user_texts=None):
+    def _build_request(self, message, routing_history, *, history_user_texts=None,
+                       prev_assistant_text=None, prev_assistant_usage=None):
         from types import SimpleNamespace
         if history_user_texts is None:
             history_texts = [str(e["text"]) for e in routing_history if e.get("text")]
         else:
             history_texts = [str(t) for t in history_user_texts if t]
 
-        context_tokens_est = max(0, (len(message) + sum(len(t) for t in history_texts)) // 4)
+        context_tokens_est = max(
+            0,
+            (len(message) + sum(len(t) for t in history_texts) + len(prev_assistant_text or "")) // 4,
+        )
         decisions = []
         for entry in routing_history:
             rc = entry.get("final_route_class") or entry.get("route_class")
@@ -158,12 +163,15 @@ class _V4Phase3MLStrategy:
         return self._request_type(
             current_user_text=message,
             history_user_texts=history_texts,
+            prev_assistant_text=prev_assistant_text,
+            prev_assistant_usage=prev_assistant_usage,
             prev_route_decisions=decisions,
             context_metadata={
                 "turn_index": len(routing_history),
                 "history_user_turn_count": len(history_texts),
                 "context_tokens_est": context_tokens_est,
                 "has_code_block": "```" in message,
+                "has_prev_assistant": bool(prev_assistant_text),
             },
         )
 
@@ -276,9 +284,20 @@ class ModelSelector:
             history_user_texts = [m.get("content", "") for m in history[-8:]
                                   if isinstance(m, dict) and m.get("role") == "user" and m.get("content")]
 
+        # 从历史中提取上一条助手消息和用量
+        prev_assistant_text = None
+        prev_assistant_usage = None
+        if history:
+            for msg in reversed(history):
+                if isinstance(msg, dict) and msg.get("role") == "assistant" and msg.get("content"):
+                    prev_assistant_text = msg["content"]
+                    prev_assistant_usage = msg.get("usage") or msg.get("metadata", {}).get("usage")
+                    break
+
         # ML 推理
         if self._ml_strategy and self._ml_strategy.available:
-            ml = self._ml_strategy.predict(user_message, history=history, history_user_texts=history_user_texts)
+            ml = self._ml_strategy.predict(user_message, history=history, history_user_texts=history_user_texts,
+                                           prev_assistant_text=prev_assistant_text, prev_assistant_usage=prev_assistant_usage)
             if ml:
                 tier = ml["tier"]
                 model = self._tier_models.get(tier, self._default_model)
