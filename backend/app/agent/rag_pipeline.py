@@ -1,17 +1,20 @@
-"""RAG 管道 — LlamaIndex QueryPipeline 规范化（v2.0）
+"""RAG 管道 — LlamaIndex Workflow 规范化（v3.0）
+
+v3.0 重构:
+  - 移除已废弃的 QueryPipeline，改用 LlamaIndex Workflow（事件驱动编排）
+  - 检索链路: retrieve → rerank → synthesize，通过 @step 声明式组装
+  - 保留手动检索作为高性能降级方案
+  - 响应合成: get_response_synthesizer 替代直接实例化 CompactAndRefine
 
 v2.0 重构（Harrison Chase 视角优化）:
-  - 检索链路: QueryPipeline DAG 声明式组装（替代手动调用）
   - 重排序: SentenceTransformerRerank 作为 postprocessor 节点
   - 评估: 内置 FaithfulnessEvaluator / RelevancyEvaluator
-  - 可视化: pipeline.show() 一键查看 DAG
-  - 代码量: ~180 行 → ~200 行（增加了评估能力）
 
 职责:
   - 文档解析（PDF / DOCX / PPTX / XLSX / CSV / JSON / HTML / MD / TXT / EPUB / IPYNB）
   - 分块（SentenceSplitter）
   - Embedding + 存入 Qdrant
-  - 混合检索 + 重排序（QueryPipeline DAG）
+  - 混合检索 + 重排序（Workflow 编排）
 
 注意:
   - 本模块是 Agent 引擎的子系统，由 knowledge_service 调用
@@ -29,16 +32,82 @@ logger = get_logger(__name__)
 COLLECTION_NAME = "knowledge_chunks"
 
 
+# ── RAG Workflow（LlamaIndex Workflow 编排）────────────────
+
+def _build_rag_workflow(retriever, reranker=None, response_synthesizer=None):
+    """构建 RAG Workflow：retrieve → rerank → synthesize
+
+    使用 LlamaIndex Workflow 的 @step 事件驱动编排，
+    替代已废弃的 QueryPipeline DAG。
+    """
+    try:
+        from llama_index.core.workflow import (
+            Workflow, step, StartEvent, StopEvent, Context,
+        )
+        from llama_index.core.schema import QueryBundle
+    except ImportError:
+        logger.warning("LlamaIndex Workflow 不可用（llama-index 版本过旧）")
+        return None
+
+    _retriever = retriever
+    _reranker = reranker
+    _synthesizer = response_synthesizer
+
+    class RAGWorkflow(Workflow):
+        """retrieve → rerank → synthesize 工作流"""
+
+        @step()
+        async def retrieve(self, ctx: Context, ev: StartEvent) -> "RerankEvent":
+            query_str = ev.get("query_str", "")
+            nodes = await asyncio.to_thread(_retriever.retrieve, query_str)
+            return RerankEvent(query_str=query_str, nodes=nodes)
+
+        @step()
+        async def rerank(self, ctx: Context, ev: "RerankEvent") -> "SynthesizeEvent":
+            nodes = ev.nodes
+            if _reranker:
+                query_bundle = QueryBundle(query_str=ev.query_str)
+                nodes = _reranker.postprocess_nodes(nodes, query_bundle=query_bundle)
+            return SynthesizeEvent(query_str=ev.query_str, nodes=nodes)
+
+        @step()
+        async def synthesize(self, ctx: Context, ev: "SynthesizeEvent") -> StopEvent:
+            if _synthesizer:
+                from llama_index.core.schema import QueryBundle
+                query_bundle = QueryBundle(query_str=ev.query_str)
+                response = await asyncio.to_thread(
+                    _synthesizer.synthesize, query_bundle, ev.nodes
+                )
+                return StopEvent(result=str(response))
+            else:
+                # 无 synthesizer 时直接拼接文本
+                parts = []
+                for node in ev.nodes[:5]:
+                    score = node.score or 0
+                    fname = node.metadata.get("filename", "未知")
+                    parts.append(f"[来源: {fname} | 相关度: {score:.2f}]\n{node.text}")
+                return StopEvent(result="\n\n---\n\n".join(parts))
+
+    # 定义中间事件类型
+    from llama_index.core.workflow import Event
+
+    class RerankEvent(Event):
+        query_str: str
+        nodes: list
+
+    class SynthesizeEvent(Event):
+        query_str: str
+        nodes: list
+
+    return RAGWorkflow(timeout=30, verbose=False)
+
+
+# ── RAG Pipeline ─────────────────────────────────────────
+
 class RAGPipeline:
-    """LlamaIndex QueryPipeline 驱动的 RAG 管道（v2.0）"""
+    """LlamaIndex Workflow 驱动的 RAG 管道（v3.0）"""
 
     def __init__(self, qdrant_url: str, embedding_model, llm_model=None):
-        """
-        Args:
-            qdrant_url: Qdrant 连接地址
-            embedding_model: LlamaIndex 兼容的 Embedding 实例
-            llm_model: LlamaIndex 兼容的 LLM 实例（用于查询改写，可选）
-        """
         self._qdrant_url = qdrant_url
         self._embed_model = embedding_model
         self._llm = llm_model
@@ -46,11 +115,12 @@ class RAGPipeline:
         self._retriever = None
         self._reranker = None
         self._node_parser = None
-        self._pipeline = None  # QueryPipeline DAG
+        self._synthesizer = None
+        self._workflow = None
         self._initialized = False
 
     async def initialize(self):
-        """初始化索引、检索器和 QueryPipeline DAG"""
+        """初始化索引、检索器和 Workflow"""
         if self._initialized:
             return
 
@@ -82,11 +152,11 @@ class RAGPipeline:
 
             self._retriever = self._index.as_retriever(similarity_top_k=10)
 
-            # ── 构建 QueryPipeline DAG ──────────────
-            self._build_query_pipeline()
+            # ── 构建 Workflow ──────────────────────
+            self._build_workflow()
 
             self._initialized = True
-            logger.info("RAG 管道初始化完成（QueryPipeline DAG）")
+            logger.info("RAG 管道初始化完成（Workflow v3.0）")
 
         except ImportError as e:
             logger.warning(f"缺少 LlamaIndex 依赖，RAG 管道不可用: {e}")
@@ -95,52 +165,25 @@ class RAGPipeline:
             logger.error(f"RAG 管道初始化失败: {e}", exc_info=True)
             raise
 
-    def _build_query_pipeline(self):
-        """构建 QueryPipeline DAG（声明式组装）
-
-        DAG: retriever → reranker → response_synthesizer
-        """
+    def _build_workflow(self):
+        """构建 RAG Workflow（retrieve → rerank → synthesize）"""
         try:
-            from llama_index.core.query_pipeline import (
-                QueryPipeline, InputComponent, ArgPackModule,
-            )
-            from llama_index.core.response_synthesizers import CompactAndRefine
-
-            modules = {
-                "input": InputComponent(),
-                "retriever": self._retriever,
-                "synthesizer": CompactAndRefine(),
-            }
-
-            if self._reranker:
-                modules["reranker"] = self._reranker
-
-                self._pipeline = QueryPipeline(
-                    modules=modules,
-                    verbose=False,
-                )
-                # DAG: input → retriever → reranker → synthesizer
-                self._pipeline.add_link("input", "retriever", dest_key="query_str")
-                self._pipeline.add_link("input", "reranker", dest_key="query_str")
-                self._pipeline.add_link("retriever", "reranker", dest_key="nodes")
-                self._pipeline.add_link("reranker", "synthesizer", dest_key="nodes")
-                self._pipeline.add_link("input", "synthesizer", dest_key="query_str")
-            else:
-                # 无 reranker 时简化 DAG
-                modules.pop("reranker", None)
-                self._pipeline = QueryPipeline(
-                    modules=modules,
-                    verbose=False,
-                )
-                self._pipeline.add_link("input", "retriever", dest_key="query_str")
-                self._pipeline.add_link("retriever", "synthesizer", dest_key="nodes")
-                self._pipeline.add_link("input", "synthesizer", dest_key="query_str")
-
-            logger.info("QueryPipeline DAG 构建完成")
-
+            from llama_index.core.response_synthesizers import get_response_synthesizer
+            self._synthesizer = get_response_synthesizer(response_mode="compact")
         except ImportError:
-            logger.warning("QueryPipeline 不可用，降级为手动调用模式")
-            self._pipeline = None
+            logger.warning("get_response_synthesizer 不可用，合成将使用文本拼接")
+            self._synthesizer = None
+
+        self._workflow = _build_rag_workflow(
+            retriever=self._retriever,
+            reranker=self._reranker,
+            response_synthesizer=self._synthesizer,
+        )
+
+        if self._workflow:
+            logger.info("RAG Workflow 构建完成")
+        else:
+            logger.info("Workflow 不可用，使用手动检索模式")
 
     def init_reranker(self):
         """启动时调用一次，加载重排序模型"""
@@ -152,9 +195,9 @@ class RAGPipeline:
             )
             logger.info("重排序模型加载成功")
 
-            # 重建 QueryPipeline（加入 reranker）
+            # 重建 Workflow（加入 reranker）
             if self._initialized:
-                self._build_query_pipeline()
+                self._build_workflow()
 
         except Exception as e:
             logger.warning(f"重排序模型加载失败，降级为不重排: {e}")
@@ -164,20 +207,10 @@ class RAGPipeline:
     def is_ready(self) -> bool:
         return self._initialized
 
-    def show_pipeline(self):
-        """可视化 QueryPipeline DAG（调试用）"""
-        if self._pipeline:
-            try:
-                self._pipeline.show()
-            except Exception:
-                logger.info("DAG 可视化需要 Jupyter 环境")
-
     # ── 文档入库 ──────────────────────────────────────────
 
     async def ingest_document(self, file_path: str, filename: str, doc_id: int) -> dict:
-        """
-        文档入库：解析 → 分块 → Embedding → Qdrant 存储。
-        """
+        """文档入库：解析 → 分块 → Embedding → Qdrant 存储"""
         if not self._initialized:
             await self.initialize()
 
@@ -202,37 +235,32 @@ class RAGPipeline:
         logger.info(f"文档入库完成: {filename}, {chunk_count} 个分块")
         return {"document_id": doc_id, "chunks": chunk_count}
 
-    # ── 检索（v2.0: 优先用 QueryPipeline，降级为手动）──
+    # ── 检索（v3.0: Workflow 优先，手动降级）──────────────
 
     async def search(self, query: str, limit: int = 5) -> str:
-        """
-        检索链路：QueryPipeline DAG → 拼装上下文。
+        """检索链路：Workflow → 拼装上下文。
 
-        v2.0: 优先使用 QueryPipeline DAG，不可用时降级为手动调用。
+        v3.0: 优先使用 Workflow 编排，不可用时降级为手动调用。
         """
         if not self._initialized:
             return ""
 
-        # ── 优先: QueryPipeline DAG ──────────────────
-        if self._pipeline:
+        # ── 优先: Workflow ─────────────────────────
+        if self._workflow:
             try:
-                result = await asyncio.to_thread(
-                    self._pipeline.run,
-                    query_str=query,
-                )
-                # QueryPipeline 返回 Response 对象
+                result = await self._workflow.run(query_str=query)
                 response_text = str(result) if result else ""
                 if response_text:
-                    logger.info(f"[rag] QueryPipeline 检索完成: {len(response_text)} chars")
+                    logger.info(f"[rag] Workflow 检索完成: {len(response_text)} chars")
                     return response_text[:6000]
             except Exception as e:
-                logger.warning(f"[rag] QueryPipeline 执行失败，降级为手动: {e}")
+                logger.warning(f"[rag] Workflow 执行失败，降级为手动: {e}")
 
         # ── 降级: 手动调用 ──────────────────────────
         return await self._manual_search(query, limit)
 
     async def _manual_search(self, query: str, limit: int = 5) -> str:
-        """手动检索（QueryPipeline 不可用时的降级方案）"""
+        """手动检索（Workflow 不可用时的降级方案）"""
         from llama_index.core.schema import QueryBundle
 
         nodes = await asyncio.to_thread(self._retriever.retrieve, query)
@@ -255,7 +283,7 @@ class RAGPipeline:
         return "\n\n---\n\n".join(context_parts)
 
     async def search_with_scores(self, query: str, limit: int = 5) -> List[dict]:
-        """检索并返回带分数的结果列表。"""
+        """检索并返回带分数的结果列表"""
         if not self._initialized:
             return []
 
@@ -280,17 +308,12 @@ class RAGPipeline:
 
         return results
 
-    # ── 评估（v2.0 新增: LlamaIndex Eval）──
+    # ── 评估 ─────────────────────────────────────────────
 
     async def evaluate_retrieval(self, query: str, expected_docs: List[int] = None) -> dict:
         """评估检索质量（LlamaIndex RetrieverEvaluator）
 
-        Args:
-            query: 查询文本
-            expected_docs: 期望命中的文档 ID 列表
-
-        Returns:
-            {"mrr": float, "hit_rate": float, "retrieved_docs": int}
+        Returns: {"mrr": float, "hit_rate": float, "retrieved_docs": int}
         """
         if not self._initialized:
             return {"mrr": 0, "hit_rate": 0, "retrieved_docs": 0}
