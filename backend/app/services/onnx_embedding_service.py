@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
+from llama_index.core.embeddings import BaseEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -167,26 +168,31 @@ class OnnxEmbeddingService:
 
 # ── LlamaIndex 适配器（RAG 管道需要） ────────────────────
 
-class OnnxLlamaIndexEmbedding:
+class OnnxLlamaIndexEmbedding(BaseEmbedding):
     """LlamaIndex 兼容的 ONNX Embedding 适配器
 
-    实现 VectorStoreIndex 所需的 embed_model 接口。
+    继承 BaseEmbedding 以通过 resolve_embed_model 的 isinstance 检查。
     """
 
-    def __init__(self, service: OnnxEmbeddingService):
-        self._service = service
-        self.model_name = service.model_dir
+    _service: OnnxEmbeddingService = None
 
-    async def aget_text_embedding(self, text: str) -> List[float]:
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(self, service: OnnxEmbeddingService, **kwargs):
+        super().__init__(model_name=service.model_dir, **kwargs)
+        object.__setattr__(self, "_service", service)
+
+    async def _aget_text_embedding(self, text: str) -> List[float]:
         return await self._service.get_embedding(text)
 
-    async def aget_text_embedding_batch(self, texts: List[str], **kwargs) -> List[List[float]]:
+    async def _aget_text_embedding_batch(self, texts: List[str], **kwargs) -> List[List[float]]:
         return await self._service.get_embeddings(texts)
 
-    async def aget_query_embedding(self, query: str) -> List[float]:
+    async def _aget_query_embedding(self, query: str) -> List[float]:
         return await self._service.get_embedding(query)
 
-    def get_text_embedding(self, text: str) -> List[float]:
+    def _get_text_embedding(self, text: str) -> List[float]:
         import asyncio
         try:
             loop = asyncio.get_running_loop()
@@ -198,8 +204,8 @@ class OnnxLlamaIndexEmbedding:
                 return pool.submit(asyncio.run, self._service.get_embedding(text)).result()
         return asyncio.run(self._service.get_embedding(text))
 
-    def get_query_embedding(self, query: str) -> List[float]:
-        return self.get_text_embedding(query)
+    def _get_query_embedding(self, query: str) -> List[float]:
+        return self._get_text_embedding(query)
 
 
 # ── 全局单例 ──────────────────────────────────────────────
