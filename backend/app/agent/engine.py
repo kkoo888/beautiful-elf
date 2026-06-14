@@ -697,6 +697,7 @@ def _make_tool_executor(tool_registry):
                     results.append({
                         "role": "tool",
                         "tool_call_id": tool_call_id,
+                        "name": tool_name,
                         "content": content,
                     })
 
@@ -718,13 +719,13 @@ def _make_tool_executor(tool_registry):
                         except Exception:
                             pass
                         results.append({
-                            "role": "tool", "tool_call_id": tid,
+                            "role": "tool", "tool_call_id": tid, "name": name,
                             "content": _format_tool_result_json(result, name),
                         })
                     except Exception as tool_err:
                         _circuit_breaker.record_failure(name)
                         results.append({
-                            "role": "tool", "tool_call_id": tid,
+                            "role": "tool", "tool_call_id": tid, "name": name,
                             "content": _format_tool_result_json(None, name, str(tool_err)),
                         })
 
