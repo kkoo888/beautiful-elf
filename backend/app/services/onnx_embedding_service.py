@@ -97,6 +97,41 @@ class OnnxEmbeddingService:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._encode_batch_sync, texts)
 
+    def _build_inputs(self, input_ids: np.ndarray, attention_mask: np.ndarray) -> dict:
+        """构建完整的 ONNX 输入（含 position_ids + past_key_values 空缓存）
+
+        首次前向推理时 KV Cache 为空，shape: [batch, num_heads, 0, head_dim]
+        """
+        inputs = {}
+        batch_size = input_ids.shape[0]
+        seq_len = input_ids.shape[1]
+        for inp in self._session.get_inputs():
+            name = inp.name
+            if name == "input_ids":
+                inputs[name] = input_ids
+            elif name == "attention_mask":
+                inputs[name] = attention_mask
+            elif name == "position_ids":
+                # position_ids: [batch, seq_len]，值为 0, 1, 2, ...
+                inputs[name] = np.arange(seq_len, dtype=np.int64).reshape(1, -1).repeat(batch_size, axis=0)
+            elif name.startswith("past_key_values"):
+                # KV Cache 空 tensor: [batch, num_heads, 0, head_dim]
+                shape = inp.shape
+                # 动态维度替换: batch_size 和 seq_len 用实际值，其余保留
+                resolved = []
+                for s in shape:
+                    if isinstance(s, str) or s <= 0:
+                        # 动态轴 → batch 用实际值，seq 用 0（空缓存）
+                        resolved.append(batch_size if len(resolved) == 0 else 0)
+                    else:
+                        resolved.append(s)
+                # 至少保证 [batch, heads, 0, head_dim]
+                if len(resolved) >= 3:
+                    resolved[2] = 0  # seq_len 维度为 0（空缓存）
+                inputs[name] = np.zeros(resolved, dtype=np.float32)
+            # 其他未知输入跳过
+        return inputs
+
     def _encode_sync(self, text: str) -> List[float]:
         """同步编码单条文本"""
         if self._use_tokenizers_lib:
@@ -108,10 +143,7 @@ class OnnxEmbeddingService:
             input_ids = encoded["input_ids"].astype(np.int64)
             attention_mask = encoded["attention_mask"].astype(np.int64)
 
-        inputs = {
-            self._session.get_inputs()[0].name: input_ids,
-            self._session.get_inputs()[1].name: attention_mask,
-        }
+        inputs = self._build_inputs(input_ids, attention_mask)
         outputs = self._session.run(None, inputs)
         token_embeddings = outputs[0]
 
@@ -141,10 +173,7 @@ class OnnxEmbeddingService:
             input_ids = encoded["input_ids"].astype(np.int64)
             attention_mask = encoded["attention_mask"].astype(np.int64)
 
-        inputs = {
-            self._session.get_inputs()[0].name: input_ids,
-            self._session.get_inputs()[1].name: attention_mask,
-        }
+        inputs = self._build_inputs(input_ids, attention_mask)
         outputs = self._session.run(None, inputs)
         token_embeddings = outputs[0]
 

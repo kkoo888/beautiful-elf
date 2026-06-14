@@ -133,6 +133,7 @@ export function chatStream(
   callbacks?: {
     onToolStart?: (tool: string, args: Record<string, unknown>) => void
     onToolEnd?: (tool: string, outputPreview: string) => void
+    onToolError?: (tool: string, outputPreview: string) => void
     onApproval?: (req: ApprovalRequest) => void
     onCostUpdate?: (promptTokens: number, completionTokens: number) => void
     onIntentHit?: (name: string, score: number) => void
@@ -192,6 +193,11 @@ export function chatStream(
             // 工具结束事件
             if (data.tool_end) {
               callbacks?.onToolEnd?.(data.tool_end, data.output_preview ?? '')
+              continue
+            }
+            // 工具失败事件
+            if (data.tool_error) {
+              callbacks?.onToolError?.(data.tool_error, data.output_preview ?? '')
               continue
             }
             // 审批事件（v4.2 新增 — interrupt/resume 支持）

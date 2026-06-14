@@ -341,7 +341,13 @@ class AgentService:
                                 for msg in node_output.get("messages", []):
                                     if isinstance(msg, dict) and msg.get("role") == "tool":
                                         tn = msg.get("name", "unknown")
-                                        yield {"type": "tool_end", "tool": tn, "output_preview": str(msg.get("content", ""))[:200]}
+                                        _c = str(msg.get("content", ""))
+                                        _preview = _c[:200]
+                                        _is_err = '"success": false' in _c.lower() or '"error"' in _c.lower() or "失败" in _c or "不可用" in _c
+                                        if _is_err:
+                                            yield {"type": "tool_error", "tool": tn, "output_preview": _preview}
+                                        else:
+                                            yield {"type": "tool_end", "tool": tn, "output_preview": _preview}
                             if node_name == "llm_call" and node_output.get("tool_calls"):
                                 for tc in node_output["tool_calls"]:
                                     tn = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
@@ -520,8 +526,14 @@ class AgentService:
                                 for msg in node_output.get("messages", []):
                                     if isinstance(msg, dict) and msg.get("role") == "tool":
                                         tool_name = msg.get("name", "unknown")
-                                        output_preview = str(msg.get("content", ""))[:200]
-                                        yield {"type": "tool_end", "tool": tool_name, "output_preview": output_preview}
+                                        content_str = str(msg.get("content", ""))
+                                        output_preview = content_str[:200]
+                                        # 检测工具是否失败
+                                        _is_error = '"success": false' in content_str.lower() or '"error"' in content_str.lower() or "失败" in content_str or "不可用" in content_str
+                                        if _is_error:
+                                            yield {"type": "tool_error", "tool": tool_name, "output_preview": output_preview}
+                                        else:
+                                            yield {"type": "tool_end", "tool": tool_name, "output_preview": output_preview}
                             # 工具调用事件（从 llm_call 的 tool_calls 字段）
                             if node_name == "llm_call" and node_output.get("tool_calls"):
                                 for tc in node_output["tool_calls"]:

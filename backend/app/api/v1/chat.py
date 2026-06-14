@@ -160,6 +160,8 @@ async def chat_resume(
                     await _queue.put(f"data: {json.dumps({'tool_start': event['tool'], 'tool_args': event.get('args', {}), 'done': False})}\n\n")
                 elif event_type == "tool_end":
                     await _queue.put(f"data: {json.dumps({'tool_end': event['tool'], 'output_preview': event.get('output_preview', ''), 'done': False})}\n\n")
+                elif event_type == "tool_error":
+                    await _queue.put(f"data: {json.dumps({'tool_error': event['tool'], 'output_preview': event.get('output_preview', ''), 'done': False})}\n\n")
                 elif event_type == "progress":
                     progress = {k: v for k, v in event.items() if k != "type"}
                     await _queue.put(f"data: {json.dumps({'progress': progress, 'done': False})}\n\n")
@@ -362,6 +364,8 @@ async def _stream_response(
                     await _queue.put(f"data: {json.dumps({'tool_start': event['tool'], 'tool_args': event.get('args', {}), 'done': False})}\n\n")
                 elif event_type == "tool_end":
                     await _queue.put(f"data: {json.dumps({'tool_end': event['tool'], 'output_preview': event.get('output_preview', ''), 'done': False})}\n\n")
+                elif event_type == "tool_error":
+                    await _queue.put(f"data: {json.dumps({'tool_error': event['tool'], 'output_preview': event.get('output_preview', ''), 'done': False})}\n\n")
                 elif event_type == "intent_hit":
                     await _queue.put(f"data: {json.dumps({'intent_hit': event['intent'], 'intent_score': event.get('score', 0), 'done': False})}\n\n")
                 elif event_type == "cost_update":

@@ -408,7 +408,7 @@ async def web_search(query: str, max_results: int = 5) -> dict:
             "error": {
                 "code": "SEARCH_ERROR",
                 "message": f"搜索服务异常: {e}",
-                "retryable": True,
+                "retryable": False,  # 不重试，直接往下走
                 "user_facing": True,
                 "user_tip": "搜索服务暂时不可用，请稍后再试",
             },

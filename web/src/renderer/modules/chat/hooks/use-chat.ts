@@ -271,6 +271,11 @@ export function useChat(): UseChatReturn {
               prev.map((t) => t.tool === tool && t.status === 'running' ? { ...t, status: 'done', outputPreview } : t)
             )
           },
+          onToolError: (tool, outputPreview) => {
+            setToolProgress((prev) =>
+              prev.map((t) => t.tool === tool && t.status === 'running' ? { ...t, status: 'error', outputPreview } : t)
+            )
+          },
           onApproval: (req) => {
             setApprovalRequest(req)
             setIsLoading(false)
@@ -458,6 +463,11 @@ export function useChat(): UseChatReturn {
         onToolEnd: (tool, outputPreview) => {
           setToolProgress((prev) =>
             prev.map((t) => t.tool === tool && t.status === 'running' ? { ...t, status: 'done', outputPreview } : t)
+          )
+        },
+        onToolError: (tool, outputPreview) => {
+          setToolProgress((prev) =>
+            prev.map((t) => t.tool === tool && t.status === 'running' ? { ...t, status: 'error', outputPreview } : t)
           )
         },
       }

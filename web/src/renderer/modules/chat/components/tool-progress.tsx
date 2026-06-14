@@ -1,8 +1,8 @@
 /**
  * 工具执行进度指示器 — 展示 Agent 正在调用哪些工具
  */
-import { Tag, Spin, Space, Typography, Collapse } from 'antd'
-import { CheckCircleOutlined, LoadingOutlined, ToolOutlined } from '@ant-design/icons'
+import { Tag, Spin, Space, Typography, Collapse, Tooltip } from 'antd'
+import { CheckCircleOutlined, LoadingOutlined, CloseCircleOutlined, ToolOutlined } from '@ant-design/icons'
 import type { ToolProgress } from '../../types/chat'
 
 const { Text } = Typography
@@ -39,20 +39,27 @@ export function ToolProgressIndicator({ tools }: ToolProgressIndicatorProps) {
         {tools.map((tool, index) => {
           const label = TOOL_LABELS[tool.tool] ?? tool.tool
           const isRunning = tool.status === 'running'
+          const isError = tool.status === 'error'
           const duration = tool.startTime ? Date.now() - tool.startTime : 0
 
           return (
             <div key={`${tool.tool}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {isRunning ? (
                 <Spin indicator={<LoadingOutlined style={{ fontSize: 14 }} />} size="small" />
+              ) : isError ? (
+                <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 14 }} />
               ) : (
                 <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 14 }} />
               )}
-              <Text style={{ fontSize: 13, flex: 1 }}>
+              <Text style={{ fontSize: 13, flex: 1, color: isError ? '#ff4d4f' : undefined }}>
                 {label}
               </Text>
               {isRunning ? (
                 <Tag color="processing">执行中…</Tag>
+              ) : isError ? (
+                <Tooltip title={tool.outputPreview ? tool.outputPreview.slice(0, 200) : '执行失败'}>
+                  <Tag color="error">失败</Tag>
+                </Tooltip>
               ) : (
                 <Tag color="success">完成 {duration > 0 ? `${(duration / 1000).toFixed(1)}s` : ''}</Tag>
               )}
@@ -61,27 +68,32 @@ export function ToolProgressIndicator({ tools }: ToolProgressIndicatorProps) {
         })}
       </Space>
 
-      {/* 已完成工具的输出预览（可折叠） */}
-      {tools.some((t) => t.status === 'done' && t.outputPreview) && (
+      {/* 已完成/失败工具的输出预览（可折叠） */}
+      {tools.some((t) => (t.status === 'done' || t.status === 'error') && t.outputPreview) && (
         <Collapse
           size="small"
           ghost
           items={tools
-            .filter((t) => t.status === 'done' && t.outputPreview)
+            .filter((t) => (t.status === 'done' || t.status === 'error') && t.outputPreview)
             .map((t) => ({
               key: t.tool,
-              label: <Text style={{ fontSize: 12 }}>{TOOL_LABELS[t.tool] ?? t.tool} 输出</Text>,
+              label: (
+                <Text style={{ fontSize: 12, color: t.status === 'error' ? '#ff4d4f' : undefined }}>
+                  {TOOL_LABELS[t.tool] ?? t.tool} {t.status === 'error' ? '错误信息' : '输出'}
+                </Text>
+              ),
               children: (
                 <pre style={{
                   margin: 0,
                   padding: '6px 10px',
-                  background: '#f6f8fa',
+                  background: t.status === 'error' ? '#fff2f0' : '#f6f8fa',
                   borderRadius: 6,
                   fontSize: 11,
                   maxHeight: 150,
                   overflow: 'auto',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-all',
+                  color: t.status === 'error' ? '#cf1322' : undefined,
                 }}>
                   {t.outputPreview}
                 </pre>

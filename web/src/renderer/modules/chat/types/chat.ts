@@ -66,8 +66,8 @@ export interface ContextSource {
 export interface ToolProgress {
   /** 工具名称 */
   tool: string
-  /** 状态：running / done */
-  status: 'running' | 'done'
+  /** 状态：running / done / error */
+  status: 'running' | 'done' | 'error'
   /** 工具参数 */
   args?: Record<string, unknown>
   /** 输出预览 */
