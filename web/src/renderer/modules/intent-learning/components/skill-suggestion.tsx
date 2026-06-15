@@ -20,7 +20,7 @@ export default function SkillSuggestion() {
           key={suggestion.id}
           type="info"
           showIcon
-          message={suggestion.name}
+          title={suggestion.name}
           description={
             <div>
               <p style={{ margin: '8px 0' }}>{suggestion.description}</p>

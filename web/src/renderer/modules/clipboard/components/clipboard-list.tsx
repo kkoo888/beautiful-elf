@@ -60,7 +60,7 @@ export function ClipboardList({
     <div className={styles.listContainer}>
       {loading && items.length === 0 ? (
         <div className={styles.loadingState}>
-          <Spin tip="加载中..." />
+          <Spin description="加载中..." />
         </div>
       ) : (
         <VirtualList

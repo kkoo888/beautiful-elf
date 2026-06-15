@@ -64,7 +64,7 @@ export const GreetingBubble: React.FC<GreetingBubbleProps> = ({ weather }) => {
 
   return (
     <Alert
-      message={greeting}
+      title={greeting}
       type="info"
       showIcon={false}
       banner

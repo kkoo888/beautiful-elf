@@ -160,7 +160,7 @@ export default function PetSettingsTab() {
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 40 }}>
-        <Spin tip="加载设置中..." />
+        <Spin description="加载设置中..." />
       </div>
     )
   }

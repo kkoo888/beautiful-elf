@@ -17,7 +17,7 @@ export function NetworkBanner() {
   if (!isOnline) {
     return (
       <Alert
-        message="网络已断开"
+        title="网络已断开"
         description="消息将在网络恢复后自动发送"
         type="warning"
         showIcon

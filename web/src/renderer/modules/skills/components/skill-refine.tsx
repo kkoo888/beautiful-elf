@@ -57,7 +57,7 @@ export function SkillRefine({ open, skill, onClose, onRefine, isRefining }: Skil
       title={`✨ 炼化 - ${skill.name}`}
       open={open}
       onClose={handleClose}
-      width={520}
+      size={520}
       destroyOnHidden
     >
       <div className={styles.refineContent}>
@@ -87,7 +87,7 @@ export function SkillRefine({ open, skill, onClose, onRefine, isRefining }: Skil
         {/* 加载中 */}
         {isRefining && !result && (
           <div className={styles.loading}>
-            <Spin tip="AI 正在分析技能并生成优化建议..." />
+            <Spin description="AI 正在分析技能并生成优化建议..." />
           </div>
         )}
 

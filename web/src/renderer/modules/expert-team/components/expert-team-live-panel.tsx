@@ -372,7 +372,7 @@ export function ExpertTeamLivePanel({
                 <Timeline
                   items={state.thinkingLog.map((event) => ({
                     color: getRoleColor(event.expertRole),
-                    children: (
+                    content: (
                       <div>
                         <Space>
                           <Avatar

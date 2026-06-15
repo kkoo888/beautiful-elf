@@ -126,7 +126,7 @@ export const EventForm = memo<EventFormProps>(function EventForm({
       title={editingEvent ? '编辑日程' : '新建日程'}
       open={open}
       onClose={onClose}
-      width={420}
+      size={420}
       destroyOnHidden
       footer={
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

@@ -61,7 +61,7 @@ export function NodeConfigDrawer({
         </Space>
       }
       placement="right"
-      width={320}
+      size={320}
       open={open}
       onClose={onClose}
       extra={

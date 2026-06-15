@@ -315,7 +315,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
           type={verdictCfg.color as 'success' | 'warning' | 'error'}
           showIcon
           icon={verdictCfg.icon}
-          message={<strong>{verdictCfg.text}</strong>}
+          title={<strong>{verdictCfg.text}</strong>}
           description={`扫描 ${fileCount} 个文件，发现 ${issues.length} 个问题`}
           style={{ marginBottom: 16 }}
         />
@@ -371,7 +371,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
       title="📦 安装技能"
       open={open}
       onClose={handleClose}
-      width={480}
+      size={480}
       destroyOnHidden
       footer={
         step === 'scan' ? (
@@ -643,7 +643,7 @@ export function SkillInstall({ open, onClose, onInstall, isLoading }: SkillInsta
             type="warning"
             showIcon
             icon={<WarningOutlined />}
-            message={<strong>后端安全扫描发现问题</strong>}
+            title={<strong>后端安全扫描发现问题</strong>}
             description="以下问题由后端全面扫描发现，请确认是否忽略风险继续安装。"
             style={{ marginBottom: 16 }}
           />

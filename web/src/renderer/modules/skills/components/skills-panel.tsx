@@ -196,7 +196,7 @@ export default function SkillsPanel() {
         title="🔗 技能链式配置"
         open={chainOpen}
         onClose={() => setChainOpen(false)}
-        width={480}
+        size={480}
         destroyOnHidden
       >
         <SkillChain skills={skills} chainNodes={chainNodes} onChange={handleChainChange} />

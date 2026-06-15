@@ -61,7 +61,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           type="dashboard"
           percent={Math.min(value, 100)}
           strokeColor={color}
-          trailColor="var(--ant-color-fill-secondary)"
+          railColor="var(--ant-color-fill-secondary)"
           size={100}
           format={() => (
             <span className={styles.metricValue} style={{ color }}>

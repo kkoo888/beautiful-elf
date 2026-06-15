@@ -34,7 +34,7 @@ export function ToolList({ tools, total, page, pageSize, loading, onEdit, onDele
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Text code strong>
             {record.displayName || name}
           </Text>

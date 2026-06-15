@@ -85,7 +85,7 @@ export const EventDetail = memo<EventDetailProps>(function EventDetail({
           </Button>
         </Space>
       }
-      width={480}
+      size={480}
     >
       <div className={styles.detailContent}>
         {/* 时间 */}

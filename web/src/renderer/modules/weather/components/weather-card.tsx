@@ -19,7 +19,7 @@ export const WeatherCard: React.FC<WeatherCardProps> = ({ data, loading }) => {
   if (loading || !data) {
     return (
       <Card style={{ textAlign: 'center', padding: '40px 0' }}>
-        <Spin tip="加载天气数据中..." />
+        <Spin description="加载天气数据中..." />
       </Card>
     )
   }

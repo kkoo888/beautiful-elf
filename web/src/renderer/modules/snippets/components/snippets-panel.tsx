@@ -156,7 +156,7 @@ export function SnippetsPanel() {
         title={editingSnippet ? '编辑片段' : '新建片段'}
         open={drawerOpen}
         onClose={handleCloseDrawer}
-        width={680}
+        size={680}
         destroyOnHidden
         extra={
           <Space>

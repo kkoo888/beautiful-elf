@@ -33,7 +33,7 @@ export function MemoryDetail({ memory, open, onClose, onDelete }: MemoryDetailPr
       title="记忆详情"
       open={open}
       onClose={onClose}
-      width={480}
+      size={480}
       destroyOnHidden
       extra={
         <Popconfirm

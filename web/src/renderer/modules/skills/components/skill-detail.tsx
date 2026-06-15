@@ -141,7 +141,7 @@ export function SkillDetail({ open, skill, onClose, onRefine, onUpdate, onDelete
         setEditing(false)
         onClose()
       }}
-      width={500}
+      size={500}
       destroyOnHidden
       footer={
         editing ? (

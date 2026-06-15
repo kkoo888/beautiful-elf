@@ -25,7 +25,7 @@ export default function WeatherPanel() {
 
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
-          <Spin size="large" tip="加载天气数据中..." />
+          <Spin size="large" description="加载天气数据中..." />
         </div>
       ) : (
         <div className={styles.weatherMain}>

@@ -30,12 +30,12 @@ export function DocumentDetail({
       }
       open={open}
       onClose={onClose}
-      width={520}
+      size={520}
       destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: 'center', padding: '64px 0' }}>
-          <Spin tip="加载分块中..." size="large" />
+          <Spin description="加载分块中..." size="large" />
         </div>
       ) : chunks.length === 0 ? (
         <div className={styles.emptyWrapper}>

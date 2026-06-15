@@ -143,7 +143,7 @@ export function ExpertTeamMonitor({ runs, loading, onRefresh }: ExpertTeamMonito
             <Timeline
               items={messages.map((msg) => ({
                 color: msg.expertRole === 'Orchestrator' ? 'blue' : 'green',
-                children: (
+                content: (
                   <div>
                     <Space>
                       <Text strong>{msg.expertName}</Text>

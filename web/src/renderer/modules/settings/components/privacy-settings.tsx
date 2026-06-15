@@ -25,7 +25,7 @@ export function PrivacySettings({ settings, onChange }: PrivacySettingsProps) {
   return (
     <div>
       <Alert
-        message="所有数据均存储在本地，不会上传到云端。"
+        title="所有数据均存储在本地，不会上传到云端。"
         type="info"
         showIcon
         style={{ marginBottom: 20 }}

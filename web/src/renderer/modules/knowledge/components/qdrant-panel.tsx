@@ -256,7 +256,7 @@ export function QdrantPanel() {
         }
         open={activeDocId !== null}
         onClose={handleCloseVectors}
-        width={900}
+        size={900}
         destroyOnHidden
       >
         <Table<QdrantVectorRecord>

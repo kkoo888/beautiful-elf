@@ -110,9 +110,9 @@ export function WorkflowMonitor({ runs, loading }: WorkflowMonitorProps) {
         </Text>
         <Timeline
           items={selectedRun.nodeRuns.map((node: NodeRun) => ({
-            dot: NODE_STATUS_ICON[node.status],
+            icon: NODE_STATUS_ICON[node.status],
             color: NODE_STATUS_COLOR[node.status],
-            children: (
+            content: (
               <div>
                 <Text strong>{node.nodeName}</Text>
                 <Tag color={NODE_STATUS_COLOR[node.status]} style={{ marginLeft: 8 }}>

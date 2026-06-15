@@ -33,7 +33,7 @@ export const PerformancePanel: React.FC = () => {
     return (
       <div className={styles.panel}>
         <div style={{ textAlign: 'center', padding: '80px 0' }}>
-          <Spin size="large" tip="加载性能数据中..." />
+          <Spin size="large" description="加载性能数据中..." />
         </div>
       </div>
     )
@@ -58,7 +58,7 @@ export const PerformancePanel: React.FC = () => {
               type="warning"
               showIcon
               banner
-              message={`${ALERT_LABELS[alert.type]} 使用率过高: ${alert.value.toFixed(1)}%（阈值 ${alert.threshold}%）`}
+              title={`${ALERT_LABELS[alert.type]} 使用率过高: ${alert.value.toFixed(1)}%（阈值 ${alert.threshold}%）`}
             />
           ))}
         </div>

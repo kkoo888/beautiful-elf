@@ -44,7 +44,7 @@ export function ClipboardDetail({
       }
       open={!!item}
       onClose={onClose}
-      width={480}
+      size={480}
       className={styles.detailDrawer}
       extra={
         <Space>

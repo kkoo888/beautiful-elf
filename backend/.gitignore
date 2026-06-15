@@ -18,7 +18,8 @@ env/
 *.swp
 *.swo
 
-# Environment（仅忽略本地覆盖）
+# Environment
+.env
 .env.local
 .env.*.local
 

@@ -46,7 +46,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ result, loading, o
       <div className="analysis-panel-content">
         {loading ? (
           <div className="analysis-panel-loading">
-            <Spin tip="分析中..." />
+            <Spin description="分析中..." />
           </div>
         ) : result ? (
           <>

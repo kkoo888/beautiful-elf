@@ -151,7 +151,7 @@ export default function SettingsPanel() {
       {restartHint && (
         <Alert
           className={styles.restartAlert}
-          message="需要重启"
+          title="需要重启"
           description={restartHint}
           type="warning"
           showIcon

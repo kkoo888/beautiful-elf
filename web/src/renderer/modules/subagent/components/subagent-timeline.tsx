@@ -71,9 +71,9 @@ export function SubagentTimeline({ run }: SubagentTimelineProps) {
       </div>
       <Timeline
         items={run.steps.map((step: SubagentStep) => ({
-          dot: STEP_STATUS_ICON[step.status],
+          icon: STEP_STATUS_ICON[step.status],
           color: STEP_STATUS_COLOR[step.status],
-          children: (
+          content: (
             <div>
               <Text strong>{step.name}</Text>
               {step.duration !== undefined && (

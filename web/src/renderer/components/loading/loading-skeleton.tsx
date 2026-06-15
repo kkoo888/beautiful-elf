@@ -39,7 +39,7 @@ interface LoadingSpinProps {
  */
 export function LoadingSpin({ tip = '加载中...', children }: LoadingSpinProps) {
   return (
-    <Spin tip={tip} size="small">
+    <Spin description={tip} size="small">
       {children}
     </Spin>
   )

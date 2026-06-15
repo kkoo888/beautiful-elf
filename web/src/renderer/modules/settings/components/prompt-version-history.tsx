@@ -55,7 +55,7 @@ export function PromptVersionHistory({
         <Timeline
           items={sortedVersions.map((version) => ({
             color: version.isActive ? 'green' : 'gray',
-            children: (
+            content: (
               <div key={version.id}>
                 <Space align="center" style={{ marginBottom: 8 }}>
                   <Text strong>v{version.version}</Text>

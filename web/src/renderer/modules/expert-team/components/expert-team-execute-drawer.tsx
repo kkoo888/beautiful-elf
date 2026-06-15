@@ -56,7 +56,7 @@ export function ExpertTeamExecuteDrawer({
       }
       open={open}
       onClose={onClose}
-      width={520}
+      size={520}
       extra={
         <Button
           type="primary"

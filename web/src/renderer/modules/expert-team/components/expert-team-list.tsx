@@ -33,7 +33,7 @@ export function ExpertTeamList({
   if (loading && teams.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 0' }}>
-        <Spin size="large" tip="加载中..." />
+        <Spin size="large" description="加载中..." />
       </div>
     )
   }
