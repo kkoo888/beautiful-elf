@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import PaginationParams, get_pagination
 from app.services.knowledge_service import knowledge_service
-from app.schemas.knowledge import KnowledgeDocumentOut, KnowledgeChunkOut, KnowledgeSearchResponse
+from app.schemas.knowledge import (
+    KnowledgeDocumentOut, KnowledgeChunkOut, KnowledgeSearchResponse,
+    QdrantCollectionStats, DocumentVectorCount, QdrantVectorRecord,
+)
 from app.schemas.response import ApiResult, ApiPageResult, api_error
 from app.core.logging import get_logger
 
@@ -145,3 +148,74 @@ async def search(
 
     result = await knowledge_service.search(db, query=q, limit=limit)
     return ApiResult(data=result)
+
+
+# ── Qdrant 向量库管理 ────────────────────────────────────
+
+
+@router.get("/qdrant/stats", response_model=ApiResult[QdrantCollectionStats])
+async def get_qdrant_stats() -> ApiResult[QdrantCollectionStats]:
+    """获取 Qdrant 集合状态"""
+    try:
+        stats = knowledge_service.get_qdrant_stats()
+        return ApiResult(data=stats)
+    except Exception as e:
+        logger.error(f"获取 Qdrant 状态失败: {e}", exc_info=True)
+        return api_error("KNOWLEDGE_QDRANT_ERROR", str(e), "Qdrant 服务异常")
+
+
+@router.get("/qdrant/documents", response_model=ApiResult[list[DocumentVectorCount]])
+async def get_document_vector_counts(
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[list[DocumentVectorCount]]:
+    """按文档聚合 Qdrant 向量计数"""
+    try:
+        items = await knowledge_service.get_document_vector_summary(db)
+        return ApiResult(data=items)
+    except Exception as e:
+        logger.error(f"获取向量计数失败: {e}", exc_info=True)
+        return api_error("KNOWLEDGE_QDRANT_ERROR", str(e), "Qdrant 查询失败")
+
+
+@router.get("/qdrant/vectors/{document_id}", response_model=ApiResult)
+async def list_vectors(
+    document_id: int = Path(..., description="文档 ID"),
+    offset: str | None = Query(default=None, description="分页游标"),
+    limit: int = Query(default=20, ge=1, le=100, description="每页数量"),
+) -> ApiResult:
+    """列出文档的 Qdrant 向量"""
+    try:
+        records, next_offset = knowledge_service.list_vectors(document_id, offset=offset, limit=limit)
+        return ApiResult(data={"items": [r.model_dump() for r in records], "next_offset": next_offset})
+    except Exception as e:
+        logger.error(f"获取向量列表失败: {e}", exc_info=True)
+        return api_error("KNOWLEDGE_QDRANT_ERROR", str(e), "Qdrant 查询失败")
+
+
+@router.delete("/qdrant/vectors/{document_id}", response_model=ApiResult)
+async def delete_document_vectors(
+    document_id: int = Path(..., description="文档 ID"),
+) -> ApiResult:
+    """删除文档的所有 Qdrant 向量"""
+    try:
+        count = knowledge_service.delete_vectors(document_id)
+        return ApiResult(data={"deleted": count}, message=f"已删除 {count} 个向量")
+    except Exception as e:
+        logger.error(f"删除向量失败: {e}", exc_info=True)
+        return api_error("KNOWLEDGE_QDRANT_ERROR", str(e), "Qdrant 删除失败")
+
+
+@router.delete("/qdrant/vectors/{document_id}/{point_id}", response_model=ApiResult)
+async def delete_vector(
+    document_id: int = Path(..., description="文档 ID"),
+    point_id: str = Path(..., description="向量 ID"),
+) -> ApiResult:
+    """删除单个 Qdrant 向量"""
+    try:
+        ok = knowledge_service.delete_vector(point_id)
+        if ok:
+            return ApiResult(message="向量已删除")
+        return api_error("KNOWLEDGE_QDRANT_ERROR", "向量不存在或删除失败", "请检查向量 ID")
+    except Exception as e:
+        logger.error(f"删除向量失败: {e}", exc_info=True)
+        return api_error("KNOWLEDGE_QDRANT_ERROR", str(e), "Qdrant 删除失败")

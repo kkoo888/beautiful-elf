@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useMessage } from '@/hooks/use-message'
 import type { KnowledgeDocument } from '@/types'
 import type { KnowledgeChunk } from '../services/knowledge-api'
 import {
   fetchDocuments,
+  fetchDocument,
   uploadDocument,
   deleteDocument,
   restoreDocument,
@@ -45,6 +46,7 @@ export function useKnowledge(): UseKnowledgeReturn {
   const [chunks, setChunks] = useState<KnowledgeChunk[]>([])
   const [chunksLoading, setChunksLoading] = useState(false)
   const [activeDocId, setActiveDocId] = useState<number | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const loadDocuments = useCallback(async () => {
     setLoading(true)
@@ -67,21 +69,57 @@ export function useKnowledge(): UseKnowledgeReturn {
     loadDocuments()
   }, [loadDocuments])
 
+  // 组件卸载时清理轮询定时器
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
+
   const refresh = useCallback(() => {
     loadDocuments()
   }, [loadDocuments])
 
+  const startPolling = useCallback(
+    (docId: number) => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      pollRef.current = setInterval(async () => {
+        try {
+          const doc = await fetchDocument(docId)
+          if (doc.status >= 2) {
+            // status 2=就绪, 3=失败 — 统一清理定时器
+            clearInterval(pollRef.current!)
+            pollRef.current = null
+            if (doc.status === 2) {
+              message.success(`"${doc.filename}" 处理完成`)
+            } else {
+              message.error(`"${doc.filename}" 处理失败`)
+            }
+            loadDocuments()
+          }
+          // status 0/1 → 继续轮询
+        } catch {
+          // 网络异常不停止轮询，继续重试
+        }
+      }, 3000)
+    },
+    [loadDocuments]
+  )
+
   const handleUpload = useCallback(
     async (file: File) => {
       try {
-        await uploadDocument(file)
+        const doc = await uploadDocument(file)
         message.success(`文档 "${file.name}" 上传成功`)
         loadDocuments()
+        if (doc.status < 2) {
+          startPolling(doc.id)
+        }
       } catch {
         message.error('上传失败')
       }
     },
-    [loadDocuments]
+    [loadDocuments, startPolling]
   )
 
   const handleDelete = useCallback(

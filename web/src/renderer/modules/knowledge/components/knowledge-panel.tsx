@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Input, Select, Segmented, Space } from 'antd'
-import { DatabaseOutlined, FileTextOutlined, AppstoreOutlined } from '@ant-design/icons'
+import { DatabaseOutlined, FileTextOutlined, AppstoreOutlined, ClusterOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { useKnowledge } from '../hooks/use-knowledge'
@@ -9,12 +9,15 @@ import { DocumentList } from './document-list'
 import { DocumentDetail } from './document-detail'
 import { RecycleBin } from './recycle-bin'
 import { ExportButton } from './export-button'
+import { QdrantPanel } from './qdrant-panel'
 import styles from './knowledge-panel.module.css'
 
 /**
  * 知识库主面板
  */
 export function KnowledgePanel() {
+  const [activeTab, setActiveTab] = useState<'docs' | 'recycle' | 'qdrant'>('docs')
+
   const {
     documents,
     loading,
@@ -35,6 +38,13 @@ export function KnowledgePanel() {
     handleCloseChunks,
     handleExport,
   } = useKnowledge()
+
+  const handleTabChange = (val: string | number) => {
+    const tab = val as 'docs' | 'recycle' | 'qdrant'
+    setActiveTab(tab)
+    if (tab === 'recycle' && !showRecycle) toggleRecycle()
+    if (tab !== 'recycle' && showRecycle) toggleRecycle()
+  }
 
   const stats = useMemo(() => {
     const totalChunks = documents.reduce((sum, doc) => sum + (doc.chunkCount || 0), 0)
@@ -58,11 +68,10 @@ export function KnowledgePanel() {
               options={[
                 { label: '文档', value: 'docs' },
                 { label: '回收站', value: 'recycle' },
+                { label: '向量库', value: 'qdrant' },
               ]}
-              value={showRecycle ? 'recycle' : 'docs'}
-              onChange={(val) => {
-                if ((val === 'recycle') !== showRecycle) toggleRecycle()
-              }}
+              value={activeTab}
+              onChange={handleTabChange}
             />
             <DocumentUpload onUpload={handleUpload} />
             <ExportButton onExport={handleExport} />
@@ -70,65 +79,70 @@ export function KnowledgePanel() {
         }
       />
 
-      {!showRecycle && (
-        <>
-          <div className={styles.statsBar}>
-            <div className={styles.statCard}>
-              <div className={`${styles.statIcon} ${styles.statIconPrimary}`}>
-                <DatabaseOutlined />
-              </div>
-              <div>
-                <div className={styles.statValue}>{stats.total}</div>
-                <div className={styles.statLabel}>文档总数</div>
-              </div>
-            </div>
-            <div className={styles.statCard}>
-              <div className={`${styles.statIcon} ${styles.statIconSuccess}`}>
-                <AppstoreOutlined />
-              </div>
-              <div>
-                <div className={styles.statValue}>{stats.totalChunks}</div>
-                <div className={styles.statLabel}>分块总数</div>
-              </div>
-            </div>
-            <div className={styles.statCard}>
-              <div className={`${styles.statIcon} ${styles.statIconWarning}`}>
-                <FileTextOutlined />
-              </div>
-              <div>
-                <div className={styles.statValue}>{stats.readyCount}</div>
-                <div className={styles.statLabel}>已就绪</div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {showRecycle ? (
-        <RecycleBin
-          documents={documents}
-          loading={loading}
-          total={total}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={handlePageChange}
-          onRestore={handleRestore}
-        />
-      ) : !loading && documents.length === 0 ? (
-        <div className={styles.emptyWrapper}>
-          <EmptyState icon="📚" description="导入文档，让 AI 学习你的知识" />
-        </div>
+      {/* Qdrant 向量库标签页 */}
+      {activeTab === 'qdrant' ? (
+        <QdrantPanel />
       ) : (
-        <DocumentList
-          documents={documents}
-          loading={loading}
-          total={total}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={handlePageChange}
-          onViewChunks={handleViewChunks}
-          onDelete={handleDelete}
-        />
+        <>
+          {!showRecycle && (
+            <div className={styles.statsBar}>
+              <div className={styles.statCard}>
+                <div className={`${styles.statIcon} ${styles.statIconPrimary}`}>
+                  <DatabaseOutlined />
+                </div>
+                <div>
+                  <div className={styles.statValue}>{stats.total}</div>
+                  <div className={styles.statLabel}>文档总数</div>
+                </div>
+              </div>
+              <div className={styles.statCard}>
+                <div className={`${styles.statIcon} ${styles.statIconSuccess}`}>
+                  <AppstoreOutlined />
+                </div>
+                <div>
+                  <div className={styles.statValue}>{stats.totalChunks}</div>
+                  <div className={styles.statLabel}>分块总数</div>
+                </div>
+              </div>
+              <div className={styles.statCard}>
+                <div className={`${styles.statIcon} ${styles.statIconWarning}`}>
+                  <FileTextOutlined />
+                </div>
+                <div>
+                  <div className={styles.statValue}>{stats.readyCount}</div>
+                  <div className={styles.statLabel}>已就绪</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showRecycle ? (
+            <RecycleBin
+              documents={documents}
+              loading={loading}
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onRestore={handleRestore}
+            />
+          ) : !loading && documents.length === 0 ? (
+            <div className={styles.emptyWrapper}>
+              <EmptyState icon="📚" description="导入文档，让 AI 学习你的知识" />
+            </div>
+          ) : (
+            <DocumentList
+              documents={documents}
+              loading={loading}
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onViewChunks={handleViewChunks}
+              onDelete={handleDelete}
+            />
+          )}
+        </>
       )}
 
       <DocumentDetail

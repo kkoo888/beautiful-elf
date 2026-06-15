@@ -101,11 +101,7 @@ async def lifespan(app: FastAPI):
 
 async def _init_rag():
     """初始化 RAG 管道（知识库向量检索）"""
-    from app.core.config import get_settings
     from app.services.knowledge_service import knowledge_service
-
-    settings = get_settings()
-    qdrant_url = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
 
     try:
         from app.agent.rag_pipeline import RAGPipeline
@@ -116,7 +112,6 @@ async def _init_rag():
         embedding = OnnxLlamaIndexEmbedding(onnx_svc)
 
         pipeline = RAGPipeline(
-            qdrant_url=qdrant_url,
             embedding_model=embedding,
         )
         await pipeline.initialize()

@@ -200,3 +200,66 @@ class QdrantMapper:
         except Exception as e:
             logger.error(f"Qdrant count 失败: {collection}, error={e}")
             return 0
+
+    def scroll(
+        self,
+        collection: str,
+        filter_payload: dict = None,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[dict], str | None]:
+        """分页遍历向量（不返回向量本身，节省带宽）
+
+        Returns:
+            (points, next_offset) — points 为 list[{id, payload}]，next_offset 为 None 表示无更多数据
+        """
+        try:
+            scroll_filter = None
+            if filter_payload:
+                scroll_filter = Filter(
+                    must=[
+                        FieldCondition(key=k, match=MatchValue(value=v))
+                        for k, v in filter_payload.items()
+                    ]
+                )
+
+            from qdrant_client.models import PointIdsList
+            scroll_offset = None
+            if offset:
+                scroll_offset = offset
+
+            points, next_offset = self._client.scroll(
+                collection_name=collection,
+                scroll_filter=scroll_filter,
+                limit=limit,
+                offset=scroll_offset,
+                with_vectors=False,
+            )
+
+            result = [
+                {"id": str(p.id), "payload": p.payload or {}}
+                for p in points
+            ]
+            return result, str(next_offset) if next_offset is not None else None
+        except Exception as e:
+            logger.error(f"Qdrant scroll 失败: {collection}, error={e}")
+            return [], None
+
+    def collection_info(self, collection: str) -> dict | None:
+        """获取集合元信息（points_count, status, vectors_count 等）
+
+        Returns:
+            {"name": str, "status": str, "points_count": int, "vectors_count": int}
+            连接失败或集合不存在时返回 None
+        """
+        try:
+            info = self._client.get_collection(collection_name=collection)
+            return {
+                "name": collection,
+                "status": str(info.status),
+                "points_count": info.points_count or 0,
+                "vectors_count": info.vectors_count or 0,
+            }
+        except Exception as e:
+            logger.warning(f"Qdrant collection_info 失败（集合可能不存在）: {collection}, error={e}")
+            return None

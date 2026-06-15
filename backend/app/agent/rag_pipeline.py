@@ -152,8 +152,7 @@ class RAGPipeline:
     架构: Hybrid(BM25+Vector+RRF) → Rerank → Budget → Wrap → 直接拼prompt
     """
 
-    def __init__(self, qdrant_url: str, embedding_model, llm_model=None):
-        self._qdrant_url = qdrant_url
+    def __init__(self, embedding_model, llm_model=None):
         self._embed_model = embedding_model
         self._llm = llm_model
         self._index = None
@@ -179,12 +178,12 @@ class RAGPipeline:
             return
 
         try:
-            import qdrant_client
             from llama_index.core import VectorStoreIndex, StorageContext
             from llama_index.vector_stores.qdrant import QdrantVectorStore
             from llama_index.core.node_parser import SentenceSplitter
 
-            client = qdrant_client.QdrantClient(url=self._qdrant_url)
+            from app.core.qdrant_client import get_qdrant
+            client = get_qdrant()
 
             vector_store = QdrantVectorStore(
                 client=client,

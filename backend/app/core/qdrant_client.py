@@ -5,8 +5,7 @@ from app.core.config import get_settings
 settings = get_settings()
 
 qdrant_client = QdrantClient(
-    host=settings.QDRANT_HOST,
-    port=settings.QDRANT_PORT,
+    url=settings.QDRANT_URL,
     timeout=30,
 )
 

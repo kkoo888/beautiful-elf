@@ -22,7 +22,11 @@ from app.schemas.knowledge import (
     KnowledgeChunkOut,
     KnowledgeSearchResult,
     KnowledgeSearchResponse,
+    QdrantCollectionStats,
+    DocumentVectorCount,
+    QdrantVectorRecord,
 )
+from app.mappers.qdrant_mapper import QdrantMapper
 from app.core.exceptions import RecordNotFoundError, StorageError
 from app.core.logging import get_logger
 
@@ -30,6 +34,9 @@ logger = get_logger(__name__)
 
 # 上传文件临时存储目录
 UPLOAD_DIR = "/tmp/beautiful-elf-uploads"
+
+# Qdrant 集合名（与 rag_pipeline.py 保持一致）
+COLLECTION_NAME = "knowledge_chunks"
 
 
 class KnowledgeService:
@@ -39,6 +46,7 @@ class KnowledgeService:
         self.doc_repo = KnowledgeDocumentRepo()
         self.chunk_repo = KnowledgeChunkRepo()
         self._rag_pipeline = None
+        self._qdrant = QdrantMapper()
 
     @property
     def rag_pipeline(self):
@@ -145,6 +153,85 @@ class KnowledgeService:
         if not item:
             raise RecordNotFoundError("知识库文档不存在")
         return await self.doc_repo.restore(db, doc_id)
+
+    # ── Qdrant 向量库管理 ────────────────────────────────
+
+    def get_qdrant_stats(self) -> QdrantCollectionStats:
+        """获取 Qdrant 集合状态"""
+        info = self._qdrant.collection_info(COLLECTION_NAME)
+        if info is None:
+            return QdrantCollectionStats(
+                collection_name=COLLECTION_NAME,
+                vector_count=0,
+                status="red",
+                is_connected=False,
+            )
+        status_str = str(info.get("status", "unknown")).lower()
+        return QdrantCollectionStats(
+            collection_name=info["name"],
+            vector_count=info.get("points_count", 0),
+            status=status_str,
+            is_connected=True,
+        )
+
+    async def get_document_vector_summary(self, db: AsyncSession) -> list[DocumentVectorCount]:
+        """按文档聚合 Qdrant 中的向量计数（同时从 MySQL 取文件名）"""
+        points, _ = self._qdrant.scroll(COLLECTION_NAME, limit=10000)
+        # 按 document_id 聚合
+        counts: dict[int, int] = {}
+        for p in points:
+            doc_id = p.get("payload", {}).get("document_id")
+            if doc_id is not None:
+                counts[doc_id] = counts.get(doc_id, 0) + 1
+
+        # 从 MySQL 取文件名
+        result = []
+        for doc_id, cnt in counts.items():
+            doc = await self.doc_repo.find_by_id(db, int(doc_id))
+            filename = doc.filename if doc else f"(ID={doc_id} 已删除)"
+            result.append(DocumentVectorCount(
+                document_id=int(doc_id), filename=filename, vector_count=cnt,
+            ))
+
+        result.sort(key=lambda x: x.vector_count, reverse=True)
+        return result
+
+    def list_vectors(
+        self, document_id: int, offset: str | None = None, limit: int = 20,
+    ) -> tuple[list[QdrantVectorRecord], str | None]:
+        """列出指定文档的 Qdrant 向量"""
+        points, next_offset = self._qdrant.scroll(
+            COLLECTION_NAME,
+            filter_payload={"document_id": document_id},
+            limit=limit,
+            offset=offset,
+        )
+        records = []
+        for p in points:
+            payload = p.get("payload", {})
+            # LlamaIndex 的 _node_content 包含完整文本，取前 200 字符作为预览
+            content = str(payload.get("_node_content", ""))[:200]
+            records.append(QdrantVectorRecord(
+                point_id=p["id"],
+                chunk_id=str(payload.get("chunk_id", "")),
+                filename=str(payload.get("filename", "")),
+                content_preview=content,
+            ))
+        return records, next_offset
+
+    def delete_vectors(self, document_id: int) -> int:
+        """删除指定文档的所有向量，返回删除数量"""
+        before = self._qdrant.count(COLLECTION_NAME, filter_payload={"document_id": document_id})
+        self._qdrant.delete_by_filter(COLLECTION_NAME, filter_payload={"document_id": document_id})
+        return before
+
+    def delete_vector(self, point_id: str) -> bool:
+        """删除单个向量"""
+        try:
+            self._qdrant.delete_by_filter(COLLECTION_NAME, filter_payload={"point_id": point_id})
+            return True
+        except Exception:
+            return False
 
     # ── 语义搜索 ─────────────────────────────────────────
 

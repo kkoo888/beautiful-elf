@@ -35,3 +35,29 @@ class KnowledgeSearchResponse(CamelModel):
     """语义搜索响应"""
     items: List[KnowledgeSearchResult] = Field(default_factory=list, description="搜索结果")
     total: int = Field(default=0, description="结果总数")
+
+
+# ── Qdrant 管理响应 ───────────────────────────────────────
+
+
+class QdrantCollectionStats(CamelModel):
+    """Qdrant 集合状态"""
+    collection_name: str = Field(default="", description="集合名称")
+    vector_count: int = Field(default=0, description="向量总数")
+    status: str = Field(default="unknown", description="集合状态 (green/yellow/red)")
+    is_connected: bool = Field(default=False, description="是否连接正常")
+
+
+class DocumentVectorCount(CamelModel):
+    """按文档聚合的向量计数"""
+    document_id: int = Field(..., description="文档 ID")
+    filename: str = Field(default="", description="文件名")
+    vector_count: int = Field(default=0, description="Qdrant 中的向量数")
+
+
+class QdrantVectorRecord(CamelModel):
+    """Qdrant 单条向量记录"""
+    point_id: str = Field(..., description="向量 ID")
+    chunk_id: str = Field(default="", description="分块 ID")
+    filename: str = Field(default="", description="来源文件名")
+    content_preview: str = Field(default="", description="内容预览")

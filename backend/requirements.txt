@@ -24,6 +24,7 @@ jsonschema==4.26.0
 duckduckgo-search==8.1.1
 llama-index==0.14.22
 llama-index-vector-stores-qdrant==0.10.1
+llama-index-readers-file>=0.4.0
 # llama-index-embeddings-ollama 已移除（embedding 改用 ONNX 本地推理）
 llama-index-llms-ollama==0.10.1
 # SimpleDirectoryReader 文档解析依赖

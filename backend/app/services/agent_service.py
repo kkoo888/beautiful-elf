@@ -88,14 +88,10 @@ class AgentService:
             rag_pipeline = None
             try:
                 from app.agent.rag_pipeline import RAGPipeline
-                from app.core.config import get_settings
-                _settings = get_settings()
-                qdrant_url = f"http://{_settings.QDRANT_HOST}:{_settings.QDRANT_PORT}"
                 rag_pipeline = RAGPipeline(
-                    qdrant_url=qdrant_url,
                     embedding_model=None,  # 由 RAGPipeline 内部初始化
                 )
-                logger.info(f"RAG pipeline 已注入 ContextEngine (qdrant={qdrant_url})")
+                logger.info("RAG pipeline 已注入 ContextEngine")
             except Exception as e:
                 logger.warning(f"RAG pipeline 初始化跳过: {e}")
 

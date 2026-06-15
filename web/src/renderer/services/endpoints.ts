@@ -20,6 +20,9 @@ export const KNOWLEDGE_ENDPOINTS = {
   CHUNKS: (id: string | number) => `/knowledge/documents/${id}/chunks`,
   RESTORE: (id: string | number) => `/knowledge/documents/${id}/restore`,
   SEARCH: `/knowledge/search`,
+  QDRANT_STATS: `/knowledge/qdrant/stats`,
+  QDRANT_DOCUMENTS: `/knowledge/qdrant/documents`,
+  QDRANT_VECTORS: (docId: string | number) => `/knowledge/qdrant/vectors/${docId}`,
 } as const
 
 // ─── 记忆 ───
