@@ -1,7 +1,9 @@
 """Agent 业务服务 — v4.3 完整版
 
 v4.3 变更:
-  1. [P0] 流式对话改用 astream + stream_mode=["messages","updates"]，替代已废弃的 astream_events v3
+  1. [P0] 流式对话改用 astream_events(version="v3") — LangGraph 官方 Event Streaming API
+     · typed projection，messages/values/output 独立消费，天然去重
+     · 文档: https://docs.langchain.com/oss/python/langgraph/event-streaming
   2. [P0] AgentState 从 Pydantic BaseModel 迁移到 TypedDict（LangGraph 官方推荐）
 v4.2 变更:
   1. [P0] 初始化加 asyncio.Lock 防竞态
@@ -281,11 +283,7 @@ class AgentService:
         tool_args: Optional[dict] = None,
         user_response: str = "",
     ) -> AsyncIterator[Dict[str, Any]]:
-        """流式 resume — 按 LangGraph 官方规范使用 astream(Command(resume=...))
-
-        官方文档: https://docs.langchain.com/oss/python/langgraph/interrupts
-        推荐模式: graph.astream(Command(resume=...), stream_mode=["messages","updates"], version="v2")
-        """
+        """流式 resume — LangGraph v3 Event Streaming"""
         if not self.is_ready:
             yield {"type": "error", "message": "Agent 引擎未初始化"}
             return
@@ -305,56 +303,60 @@ class AgentService:
         tools_used = []
 
         try:
-            stream = self._graph.astream(
+            stream = self._graph.astream_events(
                 Command(resume=resume_data),
                 config=config,
-                stream_mode=["messages", "updates", "custom"],
-                version="v2",
+                version="v3",
             )
 
             _final_answer = None
             _got_llm_tokens = False
 
-            async for chunk in stream:
-                chunk_type = chunk.get("type", "")
-                chunk_data = chunk.get("data", None)
+            async for event in stream:
+                method = event.get("method", "")
+                params = event.get("params", {})
+                data = params.get("data", {}) if isinstance(params, dict) else {}
 
-                if chunk_type == "messages":
-                    msg_chunk, metadata = chunk_data
-                    if hasattr(msg_chunk, "content") and msg_chunk.content:
-                        _got_llm_tokens = True
-                        token = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
-                        yield {"type": "token", "content": token}
+                if method == "messages":
+                    if not isinstance(data, (list, tuple)) or len(data) < 2:
+                        continue
+                    msg_chunk, metadata = data[0], data[1] if len(data) > 1 else {}
+                    if isinstance(data, dict) and data.get("event") == "content-block-delta":
+                        block = (data.get("delta") or {})
+                        if block.get("type") == "text-delta":
+                            token_text = block.get("text", "")
+                            if token_text:
+                                _got_llm_tokens = True
+                                yield {"type": "token", "content": token_text}
+                    elif hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
+                        if getattr(msg_chunk, "type", "") == "AIMessageChunk":
+                            _got_llm_tokens = True
+                            token_text = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
+                            yield {"type": "token", "content": token_text}
 
-                elif chunk_type == "updates":
-                    if isinstance(chunk_data, dict):
-                        for node_name, node_output in chunk_data.items():
-                            if not isinstance(node_output, dict):
-                                continue
-                            if node_output.get("final_answer"):
+                elif method == "tools":
+                    event_type = event.get("event", "")
+                    tn = data.get("name", "") if isinstance(data, dict) else ""
+                    if event_type == "on_tool_start" and tn:
+                        tools_used.append(tn)
+                        yield {"type": "tool_start", "tool": tn, "args": data.get("input", {}) if isinstance(data, dict) else {}}
+                    elif event_type in ("on_tool_end", "on_tool_error"):
+                        output_str = str(data.get("output", "")) if isinstance(data, dict) else ""
+                        is_err = event_type == "on_tool_error" or '"success": false' in output_str.lower() or '"error"' in output_str.lower()
+                        if is_err:
+                            yield {"type": "tool_error", "tool": tn, "output_preview": output_str[:200]}
+                        else:
+                            yield {"type": "tool_end", "tool": tn, "output_preview": output_str[:200]}
+
+                elif method == "custom":
+                    if isinstance(data, dict):
+                        yield {"type": "progress", **data}
+
+                elif method == "updates":
+                    if isinstance(data, dict):
+                        for node_output in data.values():
+                            if isinstance(node_output, dict) and node_output.get("final_answer"):
                                 _final_answer = node_output["final_answer"]
-                            if node_name == "tool_executor":
-                                for msg in node_output.get("messages", []):
-                                    if isinstance(msg, dict) and msg.get("role") == "tool":
-                                        tn = msg.get("name", "unknown")
-                                        _c = str(msg.get("content", ""))
-                                        _preview = _c[:200]
-                                        _is_err = '"success": false' in _c.lower() or '"error"' in _c.lower() or "失败" in _c or "不可用" in _c
-                                        if _is_err:
-                                            yield {"type": "tool_error", "tool": tn, "output_preview": _preview}
-                                        else:
-                                            yield {"type": "tool_end", "tool": tn, "output_preview": _preview}
-                            if node_name == "llm_call" and node_output.get("tool_calls"):
-                                for tc in node_output["tool_calls"]:
-                                    tn = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
-                                    ta = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
-                                    tools_used.append(tn)
-                                    yield {"type": "tool_start", "tool": tn, "args": ta if isinstance(ta, dict) else {}}
-
-                elif chunk_type == "custom":
-                    # 自定义进展事件 — 从 get_stream_writer() 发射
-                    if isinstance(chunk_data, dict):
-                        yield {"type": "progress", **chunk_data}
 
             # 缓存答案 fallback
             if not _got_llm_tokens and not _final_answer:
@@ -451,9 +453,7 @@ class AgentService:
 
             config = self._get_config(conversation_id)
 
-            # ── 快速路径：闲聊/缓存命中用 ainvoke，避免 v3 流式挂起 ──
-            # LangGraph v1.x 的 MemorySaver + astream_events 在图快速完成时
-            # （如闲聊直接到 END）可能流不关闭。用 ainvoke 绕过。
+            # ── 快速路径：闲聊用 ainvoke，避免流式挂起 ──
             from app.agent.intent_router import _detect_chitchat
             user_msg = messages[-1].get("content", "") if messages else ""
             if _detect_chitchat(user_msg):
@@ -472,31 +472,45 @@ class AgentService:
                 yield {"type": "done", "tools_used": [], "duration_ms": elapsed, "prompt_tokens": 0, "completion_tokens": 0}
                 return
 
-            # [P0] 使用 LangGraph 原生 astream（v2 stream_mode）
-            # 旧代码用 astream_events(version="v3") 但用 v2 方式迭代 —— v3 API 已改为
-            # typed projections（stream.messages），直接迭代收不到任何事件。
-            # 改用 astream + stream_mode=["messages", "updates", "custom"]，官方推荐方案。
-            stream = self._graph.astream(
+            # [P0] LangGraph v3 Event Streaming — 官方推荐的 typed projection API
+            # 文档: https://docs.langchain.com/oss/python/langgraph/event-streaming
+            # v3 核心优势: 每个 projection（messages/values/output）独立消费，天然去重
+            stream = self._graph.astream_events(
                 initial_state,
                 config=config,
-                stream_mode=["messages", "updates", "custom"],
-                version="v2",
+                version="v3",
             )
 
             _final_answer = None
             _got_llm_tokens = False
 
-            async for chunk in stream:
-                chunk_type = chunk.get("type", "")
-                chunk_data = chunk.get("data", None)
+            async for event in stream:
+                method = event.get("method", "")
+                params = event.get("params", {})
+                data = params.get("data", {}) if isinstance(params, dict) else {}
 
-                if chunk_type == "messages":
-                    # LLM token 流式输出 — (message_chunk, metadata) 元组
-                    msg_chunk, metadata = chunk_data
-                    if hasattr(msg_chunk, "content") and msg_chunk.content:
-                        _got_llm_tokens = True
-                        token = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
-                        yield {"type": "token", "content": token}
+                # ── messages 通道: LLM token 流式输出 ──
+                if method == "messages":
+                    if not isinstance(data, (list, tuple)) or len(data) < 2:
+                        continue
+                    msg_chunk, metadata = data[0], data[1] if len(data) > 1 else {}
+                    node_name = metadata.get("langgraph_node", "") if isinstance(metadata, dict) else ""
+
+                    # 只处理 text-delta（LLM 生成的文本 token）
+                    if isinstance(data, dict) and data.get("event") == "content-block-delta":
+                        block = (data.get("delta") or {})
+                        if block.get("type") == "text-delta":
+                            token_text = block.get("text", "")
+                            if token_text:
+                                _got_llm_tokens = True
+                                yield {"type": "token", "content": token_text}
+                    # 兼容: message_chunk 有 content（LangChain 模型返回的 AIMessageChunk）
+                    elif hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
+                        if getattr(msg_chunk, "type", "") == "AIMessageChunk":
+                            _got_llm_tokens = True
+                            token_text = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
+                            yield {"type": "token", "content": token_text}
+
                     # 提取 usage
                     if hasattr(msg_chunk, "usage_metadata") and msg_chunk.usage_metadata:
                         usage = msg_chunk.usage_metadata
@@ -507,53 +521,54 @@ class AgentService:
                             total_completion_tokens += ct
                             yield {"type": "cost_update", "prompt_tokens": total_prompt_tokens, "completion_tokens": total_completion_tokens}
 
-                elif chunk_type == "updates":
-                    # 节点状态更新 — {node_name: state_delta} 或 {node_name: state_delta, ...}
-                    if isinstance(chunk_data, dict):
-                        for node_name, node_output in chunk_data.items():
-                            if not isinstance(node_output, dict):
-                                continue
-                            # 捕获 final_answer
-                            if node_output.get("final_answer"):
+                # ── tools 通道: 工具调用事件 ──
+                elif method == "tools":
+                    event_type = event.get("event", "")
+                    tool_name = data.get("name", "") if isinstance(data, dict) else ""
+
+                    if event_type == "on_tool_start":
+                        if tool_name:
+                            tools_used.append(tool_name)
+                            yield {"type": "tool_start", "tool": tool_name, "args": data.get("input", {}) if isinstance(data, dict) else {}}
+
+                    elif event_type in ("on_tool_end", "on_tool_error"):
+                        output_str = str(data.get("output", "")) if isinstance(data, dict) else ""
+                        is_error = event_type == "on_tool_error" or '"success": false' in output_str.lower() or '"error"' in output_str.lower()
+                        if is_error:
+                            yield {"type": "tool_error", "tool": tool_name, "output_preview": output_str[:200]}
+                        else:
+                            yield {"type": "tool_end", "tool": tool_name, "output_preview": output_str[:200]}
+
+                # ── custom 通道: get_stream_writer() 发射的进展事件 ──
+                elif method == "custom":
+                    if isinstance(data, dict):
+                        yield {"type": "progress", **data}
+
+                # ── updates 通道: 节点状态更新 ──
+                elif method == "updates":
+                    if isinstance(data, dict):
+                        for node_output in data.values():
+                            if isinstance(node_output, dict) and node_output.get("final_answer"):
                                 _final_answer = node_output["final_answer"]
-                            # 工具执行事件
-                            if node_name == "tool_executor":
-                                # 工具结果在 messages 里
-                                for msg in node_output.get("messages", []):
-                                    if isinstance(msg, dict) and msg.get("role") == "tool":
-                                        tool_name = msg.get("name", "unknown")
-                                        content_str = str(msg.get("content", ""))
-                                        output_preview = content_str[:200]
-                                        # 检测工具是否失败
-                                        _is_error = '"success": false' in content_str.lower() or '"error"' in content_str.lower() or "失败" in content_str or "不可用" in content_str
-                                        if _is_error:
-                                            yield {"type": "tool_error", "tool": tool_name, "output_preview": output_preview}
-                                        else:
-                                            yield {"type": "tool_end", "tool": tool_name, "output_preview": output_preview}
-                            # 工具调用事件（从 llm_call 的 tool_calls 字段）
-                            if node_name == "llm_call" and node_output.get("tool_calls"):
-                                for tc in node_output["tool_calls"]:
-                                    tool_name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
-                                    tool_args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
-                                    tools_used.append(tool_name)
-                                    yield {"type": "tool_start", "tool": tool_name, "args": tool_args if isinstance(tool_args, dict) else {}}
 
-                elif chunk_type == "custom":
-                    # 自定义进展事件 — 从 get_stream_writer() 发射
-                    if isinstance(chunk_data, dict):
-                        yield {"type": "progress", **chunk_data}
+            # 获取最终状态（stream.output 等价于 get_state）
+            final_state = None
+            try:
+                if self._graph and hasattr(self._graph, 'get_state'):
+                    state_snapshot = self._graph.get_state(config)
+                    if state_snapshot and state_snapshot.values:
+                        final_state = state_snapshot.values
+            except Exception:
+                pass
 
-            # 检查 interrupt（审批暂停）— 通过 get_state 检查
+            # interrupt 检测（审批暂停）
             try:
                 if self._graph and hasattr(self._graph, 'get_state'):
                     state_snapshot = self._graph.get_state(config)
                     if state_snapshot and hasattr(state_snapshot, 'next') and state_snapshot.next:
-                        # 有 pending node = interrupt 状态
                         for pending_node in state_snapshot.next:
                             if pending_node == "approval_node":
-                                # 从 state 读取 pending_tool_call
-                                values = state_snapshot.values or {}
-                                pending = values.get("pending_tool_call")
+                                pending = (final_state or {}).get("pending_tool_call")
                                 if pending:
                                     yield {
                                         "type": "approval_required",
@@ -561,46 +576,32 @@ class AgentService:
                                         "args": pending.get("args", {}),
                                         "message": pending.get("message", "需要用户确认"),
                                     }
-                                    return  # 审批模式下不发 done
+                                    return
             except Exception:
                 pass
 
-            # 发送缓存答案（chitchat/语义缓存命中，LLM 未被调用）
+            # 缓存答案 fallback（chitchat/语义缓存命中，LLM 未被调用）
             logger.info(f"[chat_stream] 流结束: final_answer={'set' if _final_answer else 'None'} llm_tokens={_got_llm_tokens}")
-            if not _final_answer:
-                try:
-                    if self._graph and hasattr(self._graph, 'get_state'):
-                        state_snapshot = self._graph.get_state(config)
-                        if state_snapshot and state_snapshot.values:
-                            _final_answer = state_snapshot.values.get("final_answer") or ""
-                            if not _final_answer:
-                                for msg in reversed(state_snapshot.values.get("messages", [])):
-                                    content = getattr(msg, "content", "") if not isinstance(msg, dict) else msg.get("content", "")
-                                    if content:
-                                        _final_answer = content
-                                        break
-                except Exception as e:
-                    logger.warning(f"[chat_stream] 读取 graph state 失败: {e}")
-
+            if not _final_answer and final_state:
+                _final_answer = final_state.get("final_answer") or ""
+                if not _final_answer:
+                    for msg in reversed(final_state.get("messages", [])):
+                        content = getattr(msg, "content", "") if not isinstance(msg, dict) else msg.get("content", "")
+                        if content:
+                            _final_answer = content
+                            break
                 if _final_answer:
                     yield {"type": "token", "content": _final_answer}
-                else:
-                    logger.warning("[chat_stream] 无法提取 final_answer")
 
-            # 发送上下文引用
-            try:
-                if self._graph and hasattr(self._graph, 'get_state'):
-                    state = self._graph.get_state(config)
-                    if state and state.values:
-                        intent = state.values.get("intent")
-                        if intent:
-                            yield {"type": "intent_hit", "intent": intent.get("intent_name", ""), "score": intent.get("score", 0)}
-            except Exception:
-                pass
+            # 意图引用
+            if final_state:
+                intent = final_state.get("intent")
+                if intent:
+                    yield {"type": "intent_hit", "intent": intent.get("intent_name", ""), "score": intent.get("score", 0)}
 
             elapsed = int((time.time() - t0) * 1000)
 
-            # 追踪（流式路径）
+            # 追踪
             try:
                 from app.agent.tracing import trace_agent_run, AgentTrace
                 trace_agent_run(AgentTrace(
@@ -642,6 +643,53 @@ class AgentService:
     def get_tool_stats(self) -> Dict[str, Dict]:
         """获取工具使用统计"""
         return dict(self._tool_stats)
+
+    # ── P2: Time Travel（状态历史查询）────────────────────
+
+    async def get_state_history(self, conversation_id: int, limit: int = 10) -> list:
+        """获取图状态历史（Time Travel）。
+
+        返回最近 N 个 checkpoint 快照，用于调试和状态回溯。
+        """
+        if not self.is_ready or not self._graph:
+            return []
+        config = self._get_config(conversation_id)
+        try:
+            history = []
+            async for state_snapshot in self._graph.aget_state_history(config, limit=limit):
+                history.append({
+                    "checkpoint_id": getattr(state_snapshot, 'config', {}).get('configurable', {}).get('checkpoint_id', ''),
+                    "values": {
+                        k: v for k, v in (state_snapshot.values or {}).items()
+                        if k in ('final_answer', 'intent', 'tools_used', 'evaluation', 'error', 'iterations')
+                    },
+                    "next": list(state_snapshot.next) if hasattr(state_snapshot, 'next') and state_snapshot.next else [],
+                    "created_at": str(getattr(state_snapshot, 'created_at', '')),
+                })
+            return history
+        except Exception as e:
+            logger.warning(f"[time_travel] 状态历史查询失败: {e}")
+            return []
+
+    async def fork_state(self, conversation_id: int, checkpoint_id: str) -> bool:
+        """从指定 checkpoint 分叉状态（Time Travel fork）。
+
+        将图状态回滚到指定 checkpoint，后续操作从该点继续。
+        """
+        if not self.is_ready or not self._graph:
+            return False
+        config = self._get_config(conversation_id)
+        config["configurable"] = config.get("configurable", {})
+        config["configurable"]["checkpoint_id"] = checkpoint_id
+        try:
+            state_snapshot = await self._graph.aget_state(config)
+            if state_snapshot and state_snapshot.values:
+                logger.info(f"[time_travel] 状态已回滚到 checkpoint: {checkpoint_id}")
+                return True
+            return False
+        except Exception as e:
+            logger.warning(f"[time_travel] 状态回滚失败: {e}")
+            return False
 
     # ── 专家团自动匹配 ────────────────────────────────────
 

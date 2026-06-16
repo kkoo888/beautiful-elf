@@ -21,11 +21,12 @@ import os
 
 from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt, Command
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 from app.core.logging import get_logger
 from app.agent.context_engine import MAX_CONTEXT_CHARS
-from app.agent.state import AgentState, _content_blocks_to_str
+from app.agent.state import AgentState, InputState, OutputState, Context, _content_blocks_to_str
 
 logger = get_logger(__name__)
 
@@ -98,7 +99,6 @@ def _create_checkpointer():
         return AsyncSqliteSaver.from_conn_string(db_path)
     except ImportError:
         logger.warning("[checkpointer] sqlite 模块不可用，降级为内存版（重启丢失状态）")
-        from langgraph.checkpoint.memory import MemorySaver
         return MemorySaver()
 
 
@@ -126,6 +126,20 @@ class ErrorContract:
 
 # ── 构建图 ────────────────────────────────────────────────
 
+def _create_store():
+    """创建跨线程记忆 Store（P0: RedisStore）"""
+    import os
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    try:
+        from langgraph.store.redis import RedisStore
+        store = RedisStore.from_conn_string(redis_url)
+        logger.info(f"[store] 使用 RedisStore: {redis_url}")
+        return store
+    except Exception as e:
+        logger.warning(f"[store] RedisStore 初始化失败: {e}，跨线程记忆不可用")
+        return None
+
+
 def build_agent_graph(
     llm,
     tool_registry,
@@ -137,26 +151,30 @@ def build_agent_graph(
     model_selector=None,
     enable_interrupt: bool = False,
     timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
+    store=None,
 ) -> Any:
     """
     构建 Agent 工作流图。
 
+    v6.0 变更（P0-P3 升级）:
+      - P0: Store (RedisStore) — 跨线程长期记忆
+      - P1: context_schema (Context) — 运行时数据与状态解耦
+      - P1: InputState / OutputState — 输入输出约束
+      - P2: Checkpointer 持久化 — time travel + fault tolerance
+
     v5.3 变更:
       - model_selector ML 模型路由
-        · 390维特征提取 + LightGBM 推理 + 6层后处理
-        · 输出: route_class/tier/thinking_mode/prompt_policy/prompt_hint
-        · 降级: ML 不可用时自动切规则引擎
-
-    v5.0 变更:
-      - 工具不再在初始化时全量 bind_tools
-      - context_builder 根据 intent 动态选择工具
-      - llm_caller 每次请求动态绑定工具
 
     Args:
         enable_interrupt: 是否启用 interrupt/resume（需要 checkpointer）
         timeout_seconds: 全局超时（秒），超时后 Agent 强制结束
+        store: 跨线程记忆 Store（默认自动创建 RedisStore）
     """
-    graph = StateGraph(AgentState)
+    # Store: 跨线程长期记忆（P0）
+    if store is None:
+        store = _create_store()
+
+    graph = StateGraph(AgentState, input=InputState, output=OutputState, context_schema=Context)
 
     # 模型路由（入口节点，在意图路由之前）
     graph.add_node("model_selector", _make_model_selector_node(model_selector))
@@ -197,12 +215,13 @@ def build_agent_graph(
     })
     graph.add_edge("memory_saver", END)
 
+    checkpointer = _create_checkpointer() if enable_interrupt else MemorySaver()
+    compile_kwargs = {"checkpointer": checkpointer}
+    if store:
+        compile_kwargs["store"] = store
     if enable_interrupt:
-        checkpointer = _create_checkpointer()
-        return graph.compile(checkpointer=checkpointer, interrupt_before=["approval_node"])
-    # [FIX] 始终使用 MemorySaver，确保 get_state() 可用于流式场景的 fallback
-    from langgraph.checkpoint.memory import MemorySaver
-    return graph.compile(checkpointer=MemorySaver())
+        compile_kwargs["interrupt_before"] = ["approval_node"]
+    return graph.compile(**compile_kwargs)
 
 
 # ── 节点工厂 ──────────────────────────────────────────────
@@ -451,6 +470,27 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
                         system_prompt += f"\n\n【相关记忆】\n{memory_context}"
                 except Exception as e:
                     logger.warning(f"[context_builder] 记忆检索失败（降级跳过）: {e}")
+
+        # ── P0: Store 跨线程记忆检索（补充上下文）──
+        try:
+            from langgraph.config import get_runtime
+            runtime = get_runtime()
+            store = getattr(runtime, 'store', None)
+            if store and query:
+                user_id = str(state.get("user_id", 0))
+                namespace = (user_id, "conversations")
+                store_items = store.search(namespace, query=query[:100], limit=3)
+                if store_items:
+                    store_context = "\n".join(
+                        f"- {item.value.get('query', '')[:80]}: {item.value.get('answer', '')[:120]}"
+                        for item in store_items
+                        if item.value.get('answer')
+                    )
+                    if store_context:
+                        system_prompt += f"\n\n【历史对话参考】\n{store_context}"
+                        logger.info(f"[context_builder] Store 跨线程记忆命中: {len(store_items)} 条")
+        except Exception as e:
+            logger.debug(f"[context_builder] Store 检索跳过: {e}")
 
         return {
             "system_prompt": system_prompt,
@@ -1058,6 +1098,33 @@ def _make_memory_saver(memory_manager):
 
             except Exception as e:
                 logger.warning(f"[memory_saver] Markdown daily log 失败: {e}")
+
+        # ── P0: Store 跨线程长期记忆（RedisStore）──
+        try:
+            from langgraph.config import get_runtime
+            runtime = get_runtime()
+            store = getattr(runtime, 'store', None)
+            if store and state.get("final_answer"):
+                import uuid
+                user_id = str(state.get("user_id", 0))
+                namespace = (user_id, "conversations")
+                # 提取用户问题摘要
+                user_query = ""
+                for m in messages:
+                    if m.get("role") == "user":
+                        user_query = _content_to_str(m.get("content", ""))[:200]
+                        break
+                memory_entry = {
+                    "query": user_query,
+                    "answer": (state.get("final_answer") or "")[:500],
+                    "tools": state.get("tools_used", []),
+                    "importance": importance or 0,
+                    "conversation_id": state.get("conversation_id", 0),
+                }
+                store.put(namespace, str(uuid.uuid4()), memory_entry)
+                logger.info(f"[memory_saver] Store 跨线程记忆已保存: namespace={namespace}")
+        except Exception as e:
+            logger.debug(f"[memory_saver] Store 保存跳过: {e}")
 
         writer({"step": "memory_save", "status": "done", "message": "记忆保存完成"})
         return {"conversation_importance": importance}

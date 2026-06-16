@@ -36,6 +36,11 @@ LANGSMITH_ENABLED = (
     and os.getenv("LANGCHAIN_API_KEY") is not None
 )
 
+# LangSmith Engine（自动问题检测）— 需要 LANGCHAIN_PROJECT 指定项目名
+# Engine 在 LangSmith 后台自动分析 trace，检测问题并提 PR 修复建议
+# 代码层面只需确保 project 名正确，Engine 在 LangSmith 平台侧启用
+LANGSMITH_PROJECT = os.getenv("LANGCHAIN_PROJECT", "beautiful-elf")
+
 LANGFUSE_ENABLED = os.getenv("LANGFUSE_PUBLIC_KEY") is not None
 
 _langfuse_client = None

@@ -75,8 +75,8 @@ export function ToolProgressIndicator({ tools }: ToolProgressIndicatorProps) {
           ghost
           items={tools
             .filter((t) => (t.status === 'done' || t.status === 'error') && t.outputPreview)
-            .map((t) => ({
-              key: t.tool,
+            .map((t, idx) => ({
+              key: `${t.tool}-${idx}`,
               label: (
                 <Text style={{ fontSize: 12, color: t.status === 'error' ? '#ff4d4f' : undefined }}>
                   {TOOL_LABELS[t.tool] ?? t.tool} {t.status === 'error' ? '错误信息' : '输出'}

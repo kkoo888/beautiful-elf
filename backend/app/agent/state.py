@@ -12,6 +12,7 @@
 """
 from typing import Annotated, Optional, Any
 import operator
+from dataclasses import dataclass
 
 from typing_extensions import TypedDict
 
@@ -124,3 +125,73 @@ class AgentState(TypedDict, total=False):
 
     # ── 推理深度（前端传入，引擎内部暂未使用）─────────
     reasoning_depth: str
+
+
+# ── Runtime Context（P1: context_schema）────────────────────
+
+@dataclass
+class Context:
+    """运行时上下文 — 请求级常量，不参与图状态流转。
+
+    通过 StateGraph(..., context_schema=Context) 注入。
+    节点内通过 config["configurable"]["user_id"] 访问。
+
+    设计意图：
+      - user_id / provider_id / conversation_id 是请求级常量
+      - 不应参与图状态的 reducer/merge 逻辑
+      - 未来可逐步从 AgentState 中迁移至此
+    """
+    user_id: int = 0
+    provider_id: int = 0
+    conversation_id: int = 0
+    model_name: str = ""
+
+
+# ── Input / Output State（P1: 输入输出约束）────────────────
+
+class InputState(TypedDict, total=False):
+    """图输入 schema — 只包含外部传入的字段。"""
+    conversation_id: int
+    user_id: int
+    provider_id: int
+    model_name: str
+    messages: Annotated[list, operator.add]
+    reasoning_depth: str
+
+
+class OutputState(TypedDict, total=False):
+    """图输出 schema — 只包含对外暴露的字段。"""
+    final_answer: Optional[str]
+    messages: Annotated[list, operator.add]
+    tools_used: Annotated[list, operator.add]
+    intent: Optional[dict]
+    evaluation: Optional[dict]
+    error: Optional[str]
+
+
+class _PrivateState(TypedDict, total=False):
+    """内部状态通道 — 节点间私有通信，不暴露给外部。
+
+    用途：
+      - 模型路由元数据（route_class / tier / thinking_mode 等）
+      - 内部追踪信息（trace_metadata）
+      - 调试/评估中间数据
+
+    注意：
+      - input_schema / output_schema 只约束 invoke 的输入输出
+      - stream_mode="values" 仍会暴露所有通道（含 private）
+      - 真正的安全隔离需要在节点层面控制
+    """
+    selected_model: str
+    routing_confidence: float
+    routing_reason: str
+    route_class: str
+    tier: str
+    thinking_mode: str
+    prompt_policy: str
+    prompt_hint: str
+    difficulty_score: float
+    routing_probabilities: dict
+    routing_flags: dict
+    trace_metadata: dict
+    conversation_importance: Optional[int]

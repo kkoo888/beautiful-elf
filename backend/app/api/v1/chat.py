@@ -202,6 +202,22 @@ async def tool_stats() -> ApiResult[dict]:
     return ApiResult(data=stats)
 
 
+# ── P2: Time Travel API ─────────────────────────────────
+
+@router.get("/conversations/{conversation_id}/state-history")
+async def state_history(conversation_id: int, limit: int = 10) -> ApiResult[list]:
+    """获取图状态历史（Time Travel 调试）"""
+    history = await agent_service.get_state_history(conversation_id, limit=limit)
+    return ApiResult(data=history)
+
+
+@router.post("/conversations/{conversation_id}/fork-state")
+async def fork_state(conversation_id: int, checkpoint_id: str) -> ApiResult[bool]:
+    """从指定 checkpoint 分叉状态（Time Travel fork）"""
+    result = await agent_service.fork_state(conversation_id, checkpoint_id)
+    return ApiResult(data=result)
+
+
 SSE_HEARTBEAT_INTERVAL = 15  # 心跳间隔（秒），小于 nginx 默认 60s proxy_read_timeout
 
 
