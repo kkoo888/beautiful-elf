@@ -49,3 +49,6 @@ backend/sql/
 
 # ONNX 模型文件（体积太大，不入库）
 backend/app/router/models/
+
+# 技能安装目录（运行时生成，不入库）
+backend/data/
