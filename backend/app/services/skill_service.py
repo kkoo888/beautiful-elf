@@ -200,7 +200,7 @@ class SkillService:
             config=config,
         )
         item = await self.repo.create(db, create_data.model_dump())
-        result = self._to_out(item)
+        result = self._to_out(item).model_dump()
         result["installed"] = True
         result["scanResult"] = config["scanResult"]
         return result
@@ -241,7 +241,7 @@ class SkillService:
             config=config,
         )
         item = await self.repo.create(db, create_data.model_dump())
-        result = self._to_out(item)
+        result = self._to_out(item).model_dump()
         result["installed"] = True
         result["scanResult"] = config["scanResult"]
         return result
