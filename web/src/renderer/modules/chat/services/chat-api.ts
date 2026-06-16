@@ -158,6 +158,7 @@ export function chatStream(
           reasoning_depth: request.reasoningDepth ?? 'balanced',
           team_mode: request.teamMode ?? 'off',
           team_id: request.teamId ?? null,
+          skill_id: request.skillId ?? null,
         }),
         signal: controller.signal,
       })

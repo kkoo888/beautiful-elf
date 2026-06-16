@@ -224,6 +224,7 @@ export function useChat(): UseChatReturn {
           modelName: selectedModelName,
           teamMode: options?.teamMode,
           teamId: options?.expertTeamId,
+          skillId: options?.skillId,
         },
         (token: StreamToken) => {
           if (token.done) {

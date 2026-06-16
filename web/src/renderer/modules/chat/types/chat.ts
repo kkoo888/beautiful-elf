@@ -166,6 +166,8 @@ export interface ChatRequest {
   teamMode?: 'off' | 'auto' | 'manual'
   /** 手动指定的专家团 ID（teamMode=manual 时必填） */
   teamId?: number
+  /** 手动指定的技能 ID */
+  skillId?: number
 }
 
 /** 聊天响应 */

@@ -44,8 +44,9 @@ class ResumeRequest(BaseModel):
 
 
 class ChatRequestExtended(ChatRequest):
-    """扩展聊天请求 — 新增 reasoning_depth"""
+    """扩展聊天请求 — 新增 reasoning_depth / skill_id"""
     reasoning_depth: Optional[str] = "balanced"
+    skill_id: Optional[int] = Field(default=None, description="手动指定的技能 ID", alias="skillId")
 
 
 @router.post("/conversations/{conversation_id}/chat")
@@ -66,6 +67,7 @@ async def chat(
     reasoning_depth = getattr(data, "reasoning_depth", "balanced") or "balanced"
     team_mode = data.team_mode or "off"
     team_id = data.team_id
+    skill_id = data.skill_id
 
     # manual 模式：直接执行专家团，不走 Agent 流程
     if team_mode == "manual" and team_id:
@@ -75,7 +77,7 @@ async def chat(
         )
 
     return StreamingResponse(
-        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth, team_mode, team_id),
+        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth, team_mode, team_id, skill_id),
         media_type="text/event-stream",
     )
 
@@ -298,7 +300,7 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
 async def _stream_response(
     conversation_id: int, user_id: int, messages: list,
     provider_id: int, model_name: str, reasoning_depth: str = "balanced",
-    team_mode: str = "off", team_id: int | None = None,
+    team_mode: str = "off", team_id: int | None = None, skill_id: int | None = None,
 ):
     """SSE 流式响应 — 带心跳保活 + 消息持久化
 
@@ -371,6 +373,7 @@ async def _stream_response(
                 reasoning_depth=reasoning_depth,
                 team_mode=team_mode,
                 team_id=team_id,
+                skill_id=skill_id,
             ):
                 event_type = event.get("type", "")
                 if event_type == "token":

@@ -398,8 +398,9 @@ class AgentService:
         reasoning_depth: str = "balanced",
         team_mode: str = "off",
         team_id: int | None = None,
+        skill_id: int | None = None,
     ) -> AsyncIterator[Dict[str, Any]]:
-        """Agent 流式对话（v4.3 — 新增专家团自动路由）"""
+        """Agent 流式对话（v4.3 — 新增专家团/技能手动指定）"""
         if not self.is_ready:
             success = await self._lazy_init(provider_id, model_name)
             if not success:
@@ -410,6 +411,36 @@ class AgentService:
         tools_used = []
         total_prompt_tokens = 0
         total_completion_tokens = 0
+
+        # ── 手动指定技能：直接执行，不走 Agent 流程 ──
+        if skill_id:
+            yield {"type": "progress", "step": "skill", "status": "executing", "message": "正在执行指定技能..."}
+            try:
+                from app.core.database import AsyncSessionLocal
+                from app.services.skill_service import SkillService
+                from app.agent.skill_executor import skill_executor
+                async with AsyncSessionLocal() as skill_db:
+                    svc = SkillService()
+                    skill = await svc.get_skill_by_id(skill_db, skill_id)
+                    if skill:
+                        answer = await skill_executor.execute(
+                            db=skill_db,
+                            skill_name=skill.name,
+                            user_message=messages[-1].get("content", ""),
+                            messages=messages,
+                            provider_id=provider_id,
+                            model_name=model_name,
+                        )
+                        if answer:
+                            yield {"type": "token", "content": answer}
+                            elapsed = int((time.time() - t0) * 1000)
+                            yield {"type": "done", "tools_used": [], "duration_ms": elapsed, "prompt_tokens": 0, "completion_tokens": 0}
+                            return
+                    yield {"type": "error", "message": f"技能 ID {skill_id} 不存在"}
+            except Exception as e:
+                logger.error(f"[chat_stream] 技能执行失败: {e}", exc_info=True)
+                yield {"type": "error", "message": f"技能执行失败: {e}"}
+            return
 
         # ── 专家团 auto 模式：先尝试匹配意图 → 命中则执行专家团 ──
         if team_mode == "auto":
