@@ -382,38 +382,24 @@ async def web_search(query: str, max_results: int = 5) -> dict:
             },
         }
 
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                f"{searxng_url.rstrip('/')}/search",
-                params={"q": query, "format": "json", "count": max_results},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            results = data.get("results", [])[:max_results]
-            if results:
-                return {"results": [
-                    {
-                        "title": r.get("title", ""),
-                        "url": r.get("url", ""),
-                        "snippet": r.get("content", ""),
-                    }
-                    for r in results
-                ]}
-            return {"results": []}
-    except Exception as e:
-        logger.warning(f"[web_search] SearXNG 请求失败: {e}")
-        return {
-            "success": False,
-            "error": {
-                "code": "SEARCH_ERROR",
-                "message": f"搜索服务异常: {e}",
-                "retryable": False,  # 不重试，直接往下走
-                "user_facing": True,
-                "user_tip": "搜索服务暂时不可用，请稍后再试",
-                "suggestion": "搜索服务异常，直接跳过",
-            },
-        }
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{searxng_url.rstrip('/')}/search",
+            params={"q": query, "format": "json", "count": max_results},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("results", [])[:max_results]
+        if results:
+            return {"results": [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "snippet": r.get("content", ""),
+                }
+                for r in results
+            ]}
+        return {"results": []}
 
 
 async def execute_code(language: str, code: str) -> dict:
