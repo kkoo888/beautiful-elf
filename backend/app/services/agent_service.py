@@ -20,25 +20,6 @@ from app.agent.state import _content_blocks_to_str
 logger = get_logger(__name__)
 
 
-def _is_tool_error(output_str: str, event_type: str = "") -> bool:
-    """检测工具执行是否失败（覆盖 JSON + 纯文本两种格式）。
-
-    检测策略（任一命中即判定为失败）：
-      1. LangGraph 事件类型：on_tool_error
-      2. JSON 格式："success": false / "error": ...
-      3. 纯文本错误模式：ERROR: / Exception / Traceback / rate limit / 失败 / 不可用
-    """
-    if event_type == "on_tool_error":
-        return True
-    lower = output_str.lower()
-    # JSON 格式错误
-    if '"success": false' in lower or '"error"' in lower:
-        return True
-    # 纯文本错误模式（覆盖 Python 异常、HTTP 错误、业务错误）
-    error_patterns = ['error:', 'exception', 'traceback', 'rate limit', '失败', '不可用', 'timeout', 'timed out', 'connection refused', 'permission denied']
-    return any(p in lower for p in error_patterns)
-
-
 class AgentService:
     """Agent 业务服务（v4.2）"""
 
@@ -361,7 +342,8 @@ class AgentService:
                         yield {"type": "tool_start", "tool": tn, "args": data.get("input", {}) if isinstance(data, dict) else {}}
                     elif event_type in ("on_tool_end", "on_tool_error"):
                         output_str = str(data.get("output", "")) if isinstance(data, dict) else ""
-                        if _is_tool_error(output_str, event_type):
+                        is_err = event_type == "on_tool_error" or '"success": false' in output_str.lower() or '"error"' in output_str.lower()
+                        if is_err:
                             yield {"type": "tool_error", "tool": tn, "output_preview": output_str[:200]}
                         else:
                             yield {"type": "tool_end", "tool": tn, "output_preview": output_str[:200]}
@@ -551,7 +533,8 @@ class AgentService:
 
                     elif event_type in ("on_tool_end", "on_tool_error"):
                         output_str = str(data.get("output", "")) if isinstance(data, dict) else ""
-                        if _is_tool_error(output_str, event_type):
+                        is_error = event_type == "on_tool_error" or '"success": false' in output_str.lower() or '"error"' in output_str.lower()
+                        if is_error:
                             yield {"type": "tool_error", "tool": tool_name, "output_preview": output_str[:200]}
                         else:
                             yield {"type": "tool_end", "tool": tool_name, "output_preview": output_str[:200]}
