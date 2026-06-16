@@ -478,13 +478,10 @@ async def query_database(sql: str) -> dict:
 
     from app.core.database import AsyncSessionLocal
     async with AsyncSessionLocal() as session:
-        try:
-            result = await session.execute(text(sql_stripped))
-            columns = list(result.keys())
-            rows = [dict(zip(columns, row)) for row in result.fetchall()]
-            return {"columns": columns, "rows": rows, "count": len(rows)}
-        except Exception as e:
-            return {"error": f"查询执行失败: {str(e)}"}
+        result = await session.execute(text(sql_stripped))
+        columns = list(result.keys())
+        rows = [dict(zip(columns, row)) for row in result.fetchall()]
+        return {"columns": columns, "rows": rows, "count": len(rows)}
 
 
 # ── 执行函数注册表（DB 工具自动关联执行函数）──────────────
@@ -500,12 +497,9 @@ async def write_file(path: str, content: str, encoding: str = "utf-8") -> dict:
     target = (workspace / path).resolve()
     if not str(target).startswith(str(workspace)):
         return {"error": "路径穿越攻击已拦截"}
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding=encoding)
-        return {"success": True, "bytes_written": len(content.encode(encoding)), "path": path}
-    except Exception as e:
-        return {"error": f"写入失败: {e}"}
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding=encoding)
+    return {"success": True, "bytes_written": len(content.encode(encoding)), "path": path}
 
 
 async def list_files(path: str = ".", pattern: str = None, recursive: bool = False) -> dict:
@@ -519,22 +513,19 @@ async def list_files(path: str = ".", pattern: str = None, recursive: bool = Fal
         return {"error": "路径穿越攻击已拦截"}
     if not target.exists():
         return {"error": f"目录不存在: {path}"}
-    try:
-        entries = []
-        if recursive:
-            items = target.rglob(pattern or "*")
-        else:
-            items = target.glob(pattern or "*")
-        for item in sorted(items):
-            entries.append({
-                "name": item.name,
-                "path": str(item.relative_to(workspace)),
-                "is_dir": item.is_dir(),
-                "size": item.stat().st_size if item.is_file() else 0,
-            })
-        return {"files": entries[:500]}
-    except Exception as e:
-        return {"error": f"列出文件失败: {e}"}
+    entries = []
+    if recursive:
+        items = target.rglob(pattern or "*")
+    else:
+        items = target.glob(pattern or "*")
+    for item in sorted(items):
+        entries.append({
+            "name": item.name,
+            "path": str(item.relative_to(workspace)),
+            "is_dir": item.is_dir(),
+            "size": item.stat().st_size if item.is_file() else 0,
+        })
+    return {"files": entries[:500]}
 
 
 async def apply_patch(path: str, edits: list) -> dict:
