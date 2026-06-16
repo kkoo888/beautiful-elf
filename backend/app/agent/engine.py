@@ -126,20 +126,6 @@ class ErrorContract:
 
 # ── 构建图 ────────────────────────────────────────────────
 
-def _create_store():
-    """创建跨线程记忆 Store（P0: RedisStore）"""
-    import os
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    try:
-        from langgraph.store.redis import RedisStore
-        store = RedisStore.from_conn_string(redis_url)
-        logger.info(f"[store] 使用 RedisStore: {redis_url}")
-        return store
-    except Exception as e:
-        logger.warning(f"[store] RedisStore 初始化失败: {e}，跨线程记忆不可用")
-        return None
-
-
 def build_agent_graph(
     llm,
     tool_registry,
@@ -151,13 +137,12 @@ def build_agent_graph(
     model_selector=None,
     enable_interrupt: bool = False,
     timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
-    store=None,
 ) -> Any:
     """
     构建 Agent 工作流图。
 
     v6.0 变更（P0-P3 升级）:
-      - P0: Store (RedisStore) — 跨线程长期记忆
+      - P0: 跨线程长期记忆（MySQL CrossThreadMemory）
       - P1: context_schema (Context) — 运行时数据与状态解耦
       - P1: InputState / OutputState — 输入输出约束
       - P2: Checkpointer 持久化 — time travel + fault tolerance
@@ -168,12 +153,7 @@ def build_agent_graph(
     Args:
         enable_interrupt: 是否启用 interrupt/resume（需要 checkpointer）
         timeout_seconds: 全局超时（秒），超时后 Agent 强制结束
-        store: 跨线程记忆 Store（默认自动创建 RedisStore）
     """
-    # Store: 跨线程长期记忆（P0）
-    if store is None:
-        store = _create_store()
-
     graph = StateGraph(AgentState, input=InputState, output=OutputState, context_schema=Context)
 
     # 模型路由（入口节点，在意图路由之前）
@@ -217,8 +197,6 @@ def build_agent_graph(
 
     checkpointer = _create_checkpointer() if enable_interrupt else MemorySaver()
     compile_kwargs = {"checkpointer": checkpointer}
-    if store:
-        compile_kwargs["store"] = store
     if enable_interrupt:
         compile_kwargs["interrupt_before"] = ["approval_node"]
     return graph.compile(**compile_kwargs)
@@ -471,26 +449,26 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
                 except Exception as e:
                     logger.warning(f"[context_builder] 记忆检索失败（降级跳过）: {e}")
 
-        # ── P0: Store 跨线程记忆检索（补充上下文）──
+        # ── P0: 跨线程记忆检索（MySQL CrossThreadMemory）──
         try:
-            from langgraph.config import get_runtime
-            runtime = get_runtime()
-            store = getattr(runtime, 'store', None)
-            if store and query:
-                user_id = str(state.get("user_id", 0))
-                namespace = (user_id, "conversations")
-                store_items = store.search(namespace, query=query[:100], limit=3)
-                if store_items:
+            from app.core.database import AsyncSessionLocal
+            from app.repository.cross_thread_memory_repo import CrossThreadMemoryRepository
+            async with AsyncSessionLocal() as mem_db:
+                repo = CrossThreadMemoryRepository()
+                items = await repo.find_by_user(
+                    mem_db, user_id=state.get("user_id", 0),
+                    namespace="conversations", limit=3,
+                )
+                if items:
                     store_context = "\n".join(
-                        f"- {item.value.get('query', '')[:80]}: {item.value.get('answer', '')[:120]}"
-                        for item in store_items
-                        if item.value.get('answer')
+                        f"- {m.content.get('query', '')[:80]}: {m.content.get('answer', '')[:120]}"
+                        for m in items if m.content.get('answer')
                     )
                     if store_context:
                         system_prompt += f"\n\n【历史对话参考】\n{store_context}"
-                        logger.info(f"[context_builder] Store 跨线程记忆命中: {len(store_items)} 条")
+                        logger.info(f"[context_builder] 跨线程记忆命中: {len(items)} 条")
         except Exception as e:
-            logger.debug(f"[context_builder] Store 检索跳过: {e}")
+            logger.debug(f"[context_builder] 跨线程记忆检索跳过: {e}")
 
         return {
             "system_prompt": system_prompt,
@@ -1099,16 +1077,12 @@ def _make_memory_saver(memory_manager):
             except Exception as e:
                 logger.warning(f"[memory_saver] Markdown daily log 失败: {e}")
 
-        # ── P0: Store 跨线程长期记忆（RedisStore）──
-        try:
-            from langgraph.config import get_runtime
-            runtime = get_runtime()
-            store = getattr(runtime, 'store', None)
-            if store and state.get("final_answer"):
+        # ── P0: 跨线程长期记忆（MySQL CrossThreadMemory）──
+        if state.get("final_answer"):
+            try:
                 import uuid
-                user_id = str(state.get("user_id", 0))
-                namespace = (user_id, "conversations")
-                # 提取用户问题摘要
+                from app.core.database import AsyncSessionLocal
+                from app.repository.cross_thread_memory_repo import CrossThreadMemoryRepository
                 user_query = ""
                 for m in messages:
                     if m.get("role") == "user":
@@ -1121,10 +1095,18 @@ def _make_memory_saver(memory_manager):
                     "importance": importance or 0,
                     "conversation_id": state.get("conversation_id", 0),
                 }
-                store.put(namespace, str(uuid.uuid4()), memory_entry)
-                logger.info(f"[memory_saver] Store 跨线程记忆已保存: namespace={namespace}")
-        except Exception as e:
-            logger.debug(f"[memory_saver] Store 保存跳过: {e}")
+                async with AsyncSessionLocal() as mem_db:
+                    repo = CrossThreadMemoryRepository()
+                    await repo.create(mem_db, {
+                        "user_id": state.get("user_id", 0),
+                        "namespace": "conversations",
+                        "memory_key": str(uuid.uuid4()),
+                        "content": memory_entry,
+                    })
+                    await mem_db.commit()
+                    logger.info(f"[memory_saver] 跨线程记忆已保存: user_id={state.get('user_id', 0)}")
+            except Exception as e:
+                logger.debug(f"[memory_saver] 跨线程记忆保存跳过: {e}")
 
         writer({"step": "memory_save", "status": "done", "message": "记忆保存完成"})
         return {"conversation_importance": importance}
