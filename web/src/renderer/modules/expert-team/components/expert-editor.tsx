@@ -209,6 +209,7 @@ export function ExpertEditorModal({
   }, [expert?.id, boundSkills])
 
   return (
+    <>
     <Modal
       open={open}
       title={isNew ? '新建专家' : '编辑专家'}
