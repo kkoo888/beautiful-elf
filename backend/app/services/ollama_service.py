@@ -35,7 +35,7 @@ async def load_ollama_config(db) -> None:
             # 使用默认值
             defaults = {
                 "ollama.host": "http://localhost:11434",
-                "ollama.chat_model": "qwen3.5:7b",
+                "ollama.chat_model": "qwen3.5:0.8b",
                 "ollama.embed_model": "qwen3-embedding:latest",
                 "ollama.temperature": 0.7,
                 "ollama.max_tokens": 2048,
@@ -52,7 +52,7 @@ def get_host() -> str:
 
 def get_chat_model() -> str:
     """获取对话模型名称"""
-    return _config_cache.get("ollama.chat_model", "qwen3.5:7b")
+    return _config_cache.get("ollama.chat_model", "qwen3.5:0.8b")
 
 
 def get_embed_model() -> str:
