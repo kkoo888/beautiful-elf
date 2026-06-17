@@ -55,6 +55,8 @@ export function ExpertAvatar({
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           alt="avatar"
         />
+      ) : avatar ? (
+        avatar
       ) : (
         <UserOutlined style={{ fontSize: size * 0.45 }} />
       )}
