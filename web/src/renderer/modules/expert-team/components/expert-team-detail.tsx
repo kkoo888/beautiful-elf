@@ -18,6 +18,7 @@ import {
   ThunderboltOutlined,
   FileTextOutlined,
   CrownOutlined,
+  TeamOutlined,
 } from '@ant-design/icons'
 import { useCallback } from 'react'
 import type { ExpertTeam } from '../types'
@@ -133,7 +134,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
       </div>
 
       {/* 绑定的专家列表 */}
-      <Card title="👥 绑定专家" styles={{ body: { padding: '12px 16px' } }}>
+      <Card title={<Space><TeamOutlined /><span>绑定专家</span></Space>} styles={{ body: { padding: '12px 16px' } }}>
         {team.experts.map((member) => {
           const roleColor = getExpertRoleColor(member.memberRole)
           return (
