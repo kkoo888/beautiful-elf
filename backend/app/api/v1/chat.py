@@ -257,31 +257,35 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
                 if event_type == "pm_done":
                     name = event.get("expertName", "PM")
                     content = event.get("content", "")
-                    header = f"**🧠 {name}** 分析完成:{NL}"
+                    header = f"**◆ {name}** 分析完成:{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
                 elif event_type == "expert_start":
                     name = event.get("expertName", "")
                     role = event.get("expertRole", "")
+                    avatar = event.get("avatar", "")
                     subtask = event.get("subtask", "")
-                    msg = f"**▶️ {name}** ({role}) 开始执行:{NL}{subtask}{NL}{NL}"
+                    prefix = f"{avatar} " if avatar else ""
+                    msg = f"**{prefix}{name}** ({role}){NL}{subtask}{NL}{NL}"
                     await _queue.put(f"data: {json.dumps({'content': msg, 'done': False})}{NL}{NL}")
                 elif event_type == "expert_done":
                     name = event.get("expertName", "")
                     role = event.get("expertRole", "")
+                    avatar = event.get("avatar", "")
                     content = event.get("content", "")
                     duration = event.get("durationMs", 0)
-                    header = f"**✅ {name}** ({role}) 完成 ({duration}ms):{NL}"
+                    prefix = f"{avatar} " if avatar else ""
+                    header = f"**{prefix}{name}** ({role}) · {duration}ms{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
                 elif event_type == "pm_eval":
                     content = event.get("content", "")
-                    header = f"**📊 PM 评估:**{NL}"
+                    header = f"**◆ PM 评估:**{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
                 elif event_type == "pm_report":
                     content = event.get("content", "")
-                    header = f"---{NL}**📋 最终报告:**{NL}{NL}"
+                    header = f"---{NL}**◆ 最终报告:**{NL}{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content, 'done': False})}{NL}{NL}")
 
