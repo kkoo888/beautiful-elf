@@ -855,6 +855,61 @@ CREATE TABLE cost_record (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='LLM 调用成本追踪';
 ```
 
+### 45. memory_observation — 提炼记忆
+
+> 借鉴 Hindsight Observations 架构，存储从 daily log 中提炼出的结构化长期记忆。
+> 每条 observation 对应一条提炼出的知识，通过 memory_observation_source 关联到多条源日志。
+
+```sql
+CREATE TABLE memory_observation (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id         BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户 ID',
+    content         TEXT            NOT NULL COMMENT '提炼内容（Markdown）',
+    category        VARCHAR(32)     NOT NULL DEFAULT 'decisions' COMMENT '分类: decisions/pitfalls/preferences/status',
+    freshness       VARCHAR(16)     NOT NULL DEFAULT 'new' COMMENT '新鲜度: new/stable/strengthening/weakening/stale',
+    source_days     INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT '来源日志天数',
+    is_deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_obs_user (user_id),
+    INDEX idx_obs_category (user_id, category),
+    INDEX idx_obs_freshness (user_id, freshness),
+    INDEX idx_obs_is_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提炼记忆表（借鉴 Hindsight Observations）';
+```
+
+**字段说明**:
+- `category`: 事实分类，与 Hindsight 的 fact type 对齐
+- `freshness`: 新鲜度趋势，由 LLM 提炼时一次性标注
+- `source_days`: 来源日志天数，用于快速判断覆盖范围
+- `content`: Markdown 格式，保留关键细节，不过度抽象
+
+### 46. memory_observation_source — 提炼记忆关联表
+
+> 多对多关联表，连接 observation 与源 daily log（markdown_memory）。
+> 借鉴 Hindsight 的 Evidence Grounding 设计，每条关联记录包含关键引用（evidence_quote）。
+
+```sql
+CREATE TABLE memory_observation_source (
+    id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    observation_id   BIGINT UNSIGNED NOT NULL COMMENT '→ memory_observation.id',
+    source_memory_id BIGINT UNSIGNED NOT NULL COMMENT '→ markdown_memory.id（daily log）',
+    evidence_quote   VARCHAR(500)    NOT NULL DEFAULT '' COMMENT '从源日志中提取的关键引用',
+    is_deleted       TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除: 1=是 0=否',
+    created_at       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_obs_src_obs (observation_id),
+    INDEX idx_obs_src_memory (source_memory_id),
+    INDEX idx_obs_src_is_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提炼记忆关联表（证据溯源）';
+```
+
+**字段说明**:
+- `observation_id`: 关联到 memory_observation.id
+- `source_memory_id`: 关联到 markdown_memory.id（daily log 类型）
+- `evidence_quote`: 从源日志中提取的关键引用（最多 500 字），支持精确溯源
+- proof_count 通过 `COUNT(*)` 实时查询，不冗余存储
+
 ---
 
 ## 🔗 表关系图
@@ -977,6 +1032,16 @@ CREATE TABLE cost_record (
 │    pet_interaction.pet_attribute_id → 同步更新 pet_attribute 对应属性     │
 │    workflow.dag_json 中的节点 → 引用 tool.name 或 skill.name            │
 │    snippet_tag → snippet 软删除时级联清理                                │
+│                                                                         │
+│  ┌────────────────────┐    ┌────────────────────────┐                   │
+│  │ memory_observation  │    │ memory_observation_    │                   │
+│  │                    │    │ source                 │                   │
+│  │  id                │◄───│                        │                   │
+│  │  content (MD)      │1:N │  observation_id ───────│──→ memory_observation│
+│  │  category          │    │  source_memory_id ─────│──→ markdown_memory   │
+│  │  freshness         │    │  evidence_quote        │                   │
+│  │  source_days       │    └────────────────────────┘                   │
+│  └────────────────────┘                                                │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1232,6 +1297,11 @@ CREATE TABLE llm_model (
 | llm_provider | (is_enabled) | 单列 | 筛选启用的供应商 |
 | llm_provider | (provider_type) | 单列 | 按类型查供应商 |
 | llm_model | (provider_id) | 单列 | 按供应商查模型 |
+| memory_observation | (user_id) | 单列 | 按用户查提炼记忆 |
+| memory_observation | (user_id, category) | 联合 | 按分类筛选提炼记忆 |
+| memory_observation | (user_id, freshness) | 联合 | 按新鲜度筛选提炼记忆 |
+| memory_observation_source | (observation_id) | 单列 | 按提炼记忆查关联源 |
+| memory_observation_source | (source_memory_id) | 单列 | 按源日志查关联提炼 |
 | llm_model | (model_name) | 单列 | 按模型名查配置 |
 | llm_model | (is_enabled) | 单列 | 筛选启用的模型 |
 | t_user_account | (username) | 唯一 | 登录账号唯一性约束 |
@@ -1257,3 +1327,5 @@ CREATE TABLE llm_model (
 | | Qdrant: 不单独备份，丢失后从 MySQL 重新 embedding |
 | 性能采样清理 | Celery Beat 每 5 分钟清理，保留最新 360 条 |
 | 通知清理 | Celery Beat 每天凌晨清理 30 天前的已读通知 |
+| 提炼记忆关联 | memory_observation_source.observation_id → memory_observation.id，应用层保证引用完整性 |
+| 提炼记忆删除 | observation 软删除时，级联软删除所有关联 source 记录 |
