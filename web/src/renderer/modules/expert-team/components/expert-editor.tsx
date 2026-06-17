@@ -15,9 +15,12 @@ import {
 import { ThunderboltOutlined, PictureOutlined } from '@ant-design/icons'
 import { CompactModelSelect } from '@/modules/shared/components/model-selector'
 import { ImageCropModal } from '@/modules/image-gallery/components/image-crop-modal'
-import type { ExpertFormInput } from '../types'
+import type { ExpertFormInput, ExpertSkill } from '../types'
 import { getExpertRoleColor } from '../types'
-import { polishPrompt } from '../services/expert-team-api'
+import { polishPrompt, fetchExpertSkills, bindExpertSkill, unbindExpertSkill } from '../services/expert-team-api'
+import { fetchSkills } from '@/modules/skills/services/skills-api'
+import type { Skill } from '@/modules/skills/types/skills'
+import { ExpertBindSkillsModal } from './expert-bind-skills-modal'
 import styles from './expert-team.module.css'
 
 const { TextArea } = Input
@@ -85,6 +88,12 @@ export function ExpertEditorModal({
   const [isCustomRole, setIsCustomRole] = useState(false)
   const [polishing, setPolishing] = useState(false)
 
+  // 技能绑定状态
+  const [allSkills, setAllSkills] = useState<Skill[]>([])
+  const [boundSkills, setBoundSkills] = useState<ExpertSkill[]>([])
+  const [skillsLoading, setSkillsLoading] = useState(false)
+  const [bindModalOpen, setBindModalOpen] = useState(false)
+
   useEffect(() => {
     if (open && expert) {
       setAvatar(expert.avatar ?? '🤖')
@@ -102,6 +111,7 @@ export function ExpertEditorModal({
       })
     } else if (open && isNew) {
       setIsCustomRole(false)
+      setBoundSkills([])
       form.setFieldsValue({
         memberName: '',
         memberRole: undefined,
@@ -153,6 +163,50 @@ export function ExpertEditorModal({
   const roleColor = expert ? getExpertRoleColor(expert.memberRole) : '#d9d9d9'
 
   const isImageAvatar = avatar && avatar.startsWith('data:image')
+
+  // 加载技能列表（编辑已有专家时）
+  useEffect(() => {
+    if (!open) return
+    const load = async () => {
+      setSkillsLoading(true)
+      try {
+        const [skillsRes, boundRes] = await Promise.all([
+          fetchSkills({ isEnabled: 1, pageSize: 200 }),
+          expert?.id ? fetchExpertSkills(expert.id) : Promise.resolve([]),
+        ])
+        setAllSkills(skillsRes.data || [])
+        setBoundSkills(boundRes || [])
+      } catch {
+        // 静默失败
+      } finally {
+        setSkillsLoading(false)
+      }
+    }
+    load()
+  }, [open, expert?.id])
+
+  // 技能绑定确认
+  const handleBindSkills = useCallback(async (skillIds: number[]) => {
+    if (!expert?.id) return
+    try {
+      // 计算需要新增和删除的
+      const currentIds = new Set(boundSkills.map((s) => s.skillId))
+      const newIds = skillIds.filter((id) => !currentIds.has(id))
+      const removeBinds = boundSkills.filter((s) => !skillIds.includes(s.skillId))
+
+      await Promise.all([
+        ...newIds.map((skillId) => bindExpertSkill(expert.id, { skillId })),
+        ...removeBinds.map((bind) => unbindExpertSkill(bind.id)),
+      ])
+
+      // 重新加载
+      const updated = await fetchExpertSkills(expert.id)
+      setBoundSkills(updated || [])
+      setBindModalOpen(false)
+    } catch {
+      // 失败静默
+    }
+  }, [expert?.id, boundSkills])
 
   return (
     <Modal
@@ -317,6 +371,54 @@ export function ExpertEditorModal({
           <Switch checkedChildren="启用" unCheckedChildren="禁用" />
         </Form.Item>
       </Form>
+
+      {/* 绑定技能（仅编辑已有专家时显示）*/}
+      {expert?.id && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text strong style={{ fontSize: 13 }}><ThunderboltOutlined style={{ marginRight: 4 }} />绑定技能</Text>
+            <Button size="small" onClick={() => setBindModalOpen(true)}>
+              {boundSkills.length > 0 ? '管理技能' : '添加技能'}
+            </Button>
+          </div>
+          {boundSkills.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {boundSkills.map((bind) => {
+                const skill = allSkills.find((s) => s.id === bind.skillId)
+                return (
+                  <Tag
+                    key={bind.id}
+                    closable
+                    color="blue"
+                    onClose={async () => {
+                      await unbindExpertSkill(bind.id)
+                      setBoundSkills((prev) => prev.filter((b) => b.id !== bind.id))
+                    }}
+                  >
+                    <ThunderboltOutlined style={{ fontSize: 11, marginRight: 2 }} />
+                    {bind.skillDisplayName || skill?.displayName || skill?.name || `技能#${bind.skillId}`}
+                  </Tag>
+                )
+              })}
+            </div>
+          ) : (
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              暂未绑定技能，点击上方按钮添加
+            </Text>
+          )}
+        </div>
+      )}
     </Modal>
+
+    {/* 技能绑定弹窗 */}
+    <ExpertBindSkillsModal
+      open={bindModalOpen}
+      skills={allSkills}
+      boundSkills={boundSkills}
+      loading={skillsLoading}
+      onOk={handleBindSkills}
+      onCancel={() => setBindModalOpen(false)}
+    />
+    </>
   )
 }
