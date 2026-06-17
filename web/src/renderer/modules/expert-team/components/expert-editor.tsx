@@ -411,7 +411,6 @@ export function ExpertEditorModal({
       )}
     </Modal>
 
-    {/* 技能绑定弹窗 */}
     <ExpertBindSkillsModal
       open={bindModalOpen}
       skills={allSkills}
