@@ -349,6 +349,7 @@ class ExpertTeamService:
 
     async def execute_team(
         self, db: AsyncSession, team_id: int, request: ExpertTeamExecuteRequest,
+        on_progress: Any = None,
     ) -> dict:
         """执行专家团工作流 — PM 委派模式
 
@@ -357,6 +358,10 @@ class ExpertTeamService:
           2. 逐个执行被指派的专家
           3. PM 评估打分
           4. 不达标则返工（带改进建议），达标则 PM 汇总报告
+
+        Args:
+            on_progress: 可选回调 async def on_progress(event: dict)
+                         实时推送 SSE 事件（expert_start / expert_done / pm_thinking / pm_done）
         """
         team = await self.repo.find_team_by_id(db, team_id)
         if not team:
@@ -498,6 +503,10 @@ class ExpertTeamService:
                 "runId": run.id,
             })
 
+            # 回调：PM 分析完成
+            if on_progress:
+                await on_progress({"type": "pm_done", "expertName": leader.member_name, "content": plan_content})
+
             # 解析分配计划
             assignments = self._parse_assignments(plan_content, experts_data)
 
@@ -523,6 +532,16 @@ class ExpertTeamService:
                     "round": 1,
                     "runId": run.id,
                 })
+
+                # 回调：专家开始
+                if on_progress:
+                    await on_progress({
+                        "type": "expert_start",
+                        "expertName": member["member_name"],
+                        "expertRole": member["member_role"],
+                        "avatar": member.get("avatar", "🤖"),
+                        "subtask": subtask,
+                    })
 
                 # 创建角色执行记录
                 role_run = await self._create_role_run(db, run.id, member["id"], member["member_name"], 1)
@@ -605,6 +624,17 @@ class ExpertTeamService:
                     "durationMs": duration_ms,
                 })
 
+                # 回调：专家完成
+                if on_progress:
+                    await on_progress({
+                        "type": "expert_done",
+                        "expertName": member["member_name"],
+                        "expertRole": member["member_role"],
+                        "avatar": member.get("avatar", "🤖"),
+                        "content": content,
+                        "durationMs": duration_ms,
+                    })
+
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             # Step 3: PM 评估打分
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -654,6 +684,10 @@ class ExpertTeamService:
                 "runId": run.id,
             })
 
+            # 回调：PM 评估完成
+            if on_progress:
+                await on_progress({"type": "pm_eval", "expertName": leader.member_name, "content": eval_content})
+
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             # Step 4: PM 汇总最终报告
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -694,6 +728,10 @@ class ExpertTeamService:
                 "runId": run.id,
                 "output": report_content[:500],
             })
+
+            # 回调：PM 报告完成
+            if on_progress:
+                await on_progress({"type": "pm_report", "content": report_content})
 
             # ── 汇总结果 ──
             end_time = datetime.now()

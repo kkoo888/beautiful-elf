@@ -250,25 +250,36 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
             # 推送开始事件
             await _queue.put(f"data: {json.dumps({'progress': {'step': 'expert_team', 'status': 'running', 'message': '正在执行专家团...'}, 'done': False})}\n\n")
 
-            result = await service.execute_team(db, team_id, request)
+            # 进度回调 — 实时推送每个阶段的 SSE 事件
+            async def on_progress(event: dict):
+                event_type = event.get("type", "")
+                if event_type == "pm_done":
+                    name = event.get("expertName", "PM")
+                    content = event.get("content", "")
+                    await _queue.put(f"data: {json.dumps({'content': f'**🧠 {name}** 分析完成:\n', 'done': False})}\n\n")
+                    await _queue.put(f"data: {json.dumps({'content': content + '\n\n', 'done': False})}\n\n")
+                elif event_type == "expert_start":
+                    name = event.get("expertName", "")
+                    role = event.get("expertRole", "")
+                    subtask = event.get("subtask", "")
+                    await _queue.put(f"data: {json.dumps({'content': f'**▶️ {name}** ({role}) 开始执行:\n{subtask}\n\n', 'done': False})}\n\n")
+                elif event_type == "expert_done":
+                    name = event.get("expertName", "")
+                    role = event.get("expertRole", "")
+                    content = event.get("content", "")
+                    duration = event.get("durationMs", 0)
+                    await _queue.put(f"data: {json.dumps({'content': f'**✅ {name}** ({role}) 完成 ({duration}ms):\n', 'done': False})}\n\n")
+                    await _queue.put(f"data: {json.dumps({'content': content + '\n\n', 'done': False})}\n\n")
+                elif event_type == "pm_eval":
+                    content = event.get("content", "")
+                    await _queue.put(f"data: {json.dumps({'content': '**📊 PM 评估:**\n', 'done': False})}\n\n")
+                    await _queue.put(f"data: {json.dumps({'content': content + '\n\n', 'done': False})}\n\n")
+                elif event_type == "pm_report":
+                    content = event.get("content", "")
+                    await _queue.put(f"data: {json.dumps({'content': '---\n**📋 最终报告:**\n\n', 'done': False})}\n\n")
+                    await _queue.put(f"data: {json.dumps({'content': content, 'done': False})}\n\n")
 
-            # 推送讨论过程（每个专家的观点）
-            for msg in result.get("discussion", []):
-                expert_name = msg.get("expertName", "")
-                expert_role = msg.get("expertRole", "")
-                content = msg.get("content", "")
-                round_num = msg.get("round", 0)
-                # 作为 token 流式推送给前端
-                header = f"**{expert_name}** ({expert_role}) 第{round_num}轮:\n"
-                await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}\n\n")
-                payload = json.dumps({'content': content + '\n\n', 'done': False})
-                await _queue.put(f"data: {payload}\n\n")
-
-            # 推送最终汇总
-            final = result.get("output", "")
-            if final:
-                final_payload = json.dumps({'content': '---\n**📋 最终报告:**\n\n' + final, 'done': False})
-                await _queue.put(f"data: {final_payload}\n\n")
+            result = await service.execute_team(db, team_id, request, on_progress=on_progress)
 
             elapsed = result.get("durationMs", 0)
             await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'duration_ms': elapsed})}\n\n")
