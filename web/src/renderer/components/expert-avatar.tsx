@@ -1,5 +1,7 @@
 /** 公共头像组件 — 统一处理 emoji 和 base64 图片头像 */
 
+import { UserOutlined } from '@ant-design/icons'
+
 interface ExpertAvatarProps {
   /** 头像值：emoji 字符串 或 base64 data URI */
   avatar?: string | null
@@ -54,7 +56,7 @@ export function ExpertAvatar({
           alt="avatar"
         />
       ) : (
-        avatar || '🤖'
+        <UserOutlined style={{ fontSize: size * 0.45 }} />
       )}
     </div>
   )

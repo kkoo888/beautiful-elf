@@ -17,6 +17,7 @@ import {
   UserOutlined,
   ThunderboltOutlined,
   FileTextOutlined,
+  CrownOutlined,
 } from '@ant-design/icons'
 import { useCallback } from 'react'
 import type { ExpertTeam } from '../types'
@@ -83,7 +84,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
               {team.leader && (
                 <div style={{ marginTop: 6 }}>
                   <Tag color="gold">
-                    👑 组长: {team.leader.avatar} {team.leader.memberName}（{team.leader.memberRole}）
+                    <CrownOutlined style={{ marginRight: 4 }} /> 组长: {team.leader.memberName}（{team.leader.memberRole}）
                   </Tag>
                 </div>
               )}

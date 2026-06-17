@@ -21,6 +21,7 @@ import {
   UserAddOutlined,
   TeamOutlined,
   PictureOutlined,
+  CrownOutlined,
 } from '@ant-design/icons'
 import type { ExpertTeam, ExpertTeamFormInput, Expert } from '../types'
 import { getExpertRoleColor } from '../types'
@@ -255,7 +256,7 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
         >
           {/* 组长选择器 */}
           <div style={{ marginBottom: 16 }}>
-            <Text strong style={{ display: 'block', marginBottom: 8 }}>👑 组长（PM）</Text>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}><CrownOutlined style={{ color: '#faad14', marginRight: 6 }} />组长（PM）</Text>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
               组长负责分析任务、分配给专家、评估完成质量。从已绑定的专家中选择。
             </Text>
