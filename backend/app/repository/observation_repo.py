@@ -28,8 +28,10 @@ class ObservationRepository:
         filters = {"user_id": user_id}
         if category and category != "all":
             filters["category"] = category
-        return await self.mapper.find_all(db, filters=filters, offset=offset, limit=limit,
-                                           order_by="created_at", order_desc=True)
+        return await self.mapper.find_all(
+            db, filters=filters, offset=offset, limit=limit,
+            order_by=MemoryObservation.created_at.desc(),
+        )
 
     async def count(
         self, db: AsyncSession, user_id: int = 0,
