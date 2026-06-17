@@ -246,3 +246,19 @@ export async function getObservationStats(): Promise<Record<string, number>> {
     await apiClient.get('/markdown_memories/observations/stats') as any
   ) as Record<string, number>
 }
+
+/** 创建 observation 与 daily log 的关联 */
+export async function createObservationSource(
+  observationId: number, sourceMemoryId: number, evidenceQuote = ''
+): Promise<{ id: number }> {
+  return extractData(
+    await apiClient.post(
+      `/markdown_memories/observations/${observationId}/sources?sourceMemoryId=${sourceMemoryId}&evidenceQuote=${encodeURIComponent(evidenceQuote)}`
+    ) as any
+  ) as { id: number }
+}
+
+/** 删除关联记录 */
+export async function deleteObservationSource(sourceId: number): Promise<void> {
+  await apiClient.delete(`/markdown_memories/sources/${sourceId}`)
+}

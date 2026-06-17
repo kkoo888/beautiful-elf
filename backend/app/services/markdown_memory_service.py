@@ -475,6 +475,21 @@ class MarkdownMemoryService:
         """软删除单条提炼记忆"""
         return await self.obs_repo.soft_delete(db, obs_id)
 
+    async def create_observation_source(
+        self, db: AsyncSession, observation_id: int, source_memory_id: int, evidence_quote: str = "",
+    ) -> dict:
+        """创建 observation 与 daily log 的关联"""
+        src = await self.obs_repo.create_source(db, {
+            "observation_id": observation_id,
+            "source_memory_id": source_memory_id,
+            "evidence_quote": evidence_quote[:500],
+        })
+        return {"id": src.id, "observation_id": observation_id, "source_memory_id": source_memory_id}
+
+    async def delete_observation_source(self, db: AsyncSession, source_id: int) -> bool:
+        """删除关联记录"""
+        return await self.obs_repo.delete_source(db, source_id)
+
     async def get_category_stats(self, db: AsyncSession, user_id: int) -> dict:
         """获取分类统计"""
         return await self.obs_repo.count_by_category(db, user_id)

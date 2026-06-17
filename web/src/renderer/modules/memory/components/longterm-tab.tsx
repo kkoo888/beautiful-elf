@@ -29,6 +29,7 @@ import {
 import type {
   MarkdownMemoryEntry, DistillRequest, Observation,
 } from '../services/memory-api'
+import { MemoryGraphTab } from './memory-graph-tab'
 
 const { Text } = Typography
 const { TextArea } = Input
@@ -81,7 +82,7 @@ export function LongTermTab() {
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [viewMode, setViewMode] = useState<'observations' | 'memory'>('observations')
+  const [viewMode, setViewMode] = useState<'observations' | 'memory' | 'graph'>('observations')
   const [observations, setObservations] = useState<Observation[]>([])
   const [obsLoading, setObsLoading] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
@@ -236,6 +237,7 @@ export function LongTermTab() {
           onChange={v => setViewMode(v as typeof viewMode)}
           options={[
             { label: '提炼记忆', value: 'observations' },
+            { label: '关系图', value: 'graph' },
             { label: 'MEMORY.md', value: 'memory' },
           ]}
         />
@@ -292,6 +294,13 @@ export function LongTermTab() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── 关系图视图 ── */}
+      {viewMode === 'graph' && (
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <MemoryGraphTab />
         </div>
       )}
 

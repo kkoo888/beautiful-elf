@@ -111,6 +111,11 @@ class ObservationRepository:
             await self.create_source(db, item)
         return len(items)
 
+    async def delete_source(self, db: AsyncSession, source_id: int) -> bool:
+        """软删除关联记录"""
+        mapper = MySQLMapper(MemoryObservationSource)
+        return await mapper.soft_delete(db, source_id)
+
     async def find_by_content_similarity(
         self, db: AsyncSession, user_id: int, content_prefix: str
     ) -> Optional[MemoryObservation]:

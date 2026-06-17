@@ -204,6 +204,36 @@ async def delete_observation(
         return api_error("MEMORY_OBSERVATION_DELETE_FAILED", str(e), "删除失败")
 
 
+@router.post("/observations/{obs_id}/sources", response_model=ApiResult)
+async def create_observation_source(
+    obs_id: int = Path(..., description="提炼记忆 ID"),
+    source_memory_id: int = Query(..., alias="sourceMemoryId", description="源日志 ID"),
+    evidence_quote: str = Query(default="", alias="evidenceQuote", description="关键引用"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """创建 observation 与 daily log 的关联"""
+    try:
+        result = await markdown_memory_service.create_observation_source(
+            db, obs_id, source_memory_id, evidence_quote,
+        )
+        return ApiResult(data=result, message="关联创建成功")
+    except Exception as e:
+        return api_error("MEMORY_SOURCE_CREATE_FAILED", str(e), "关联失败")
+
+
+@router.delete("/sources/{source_id}", response_model=ApiResult)
+async def delete_observation_source(
+    source_id: int = Path(..., description="关联记录 ID"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """删除关联记录"""
+    try:
+        await markdown_memory_service.delete_observation_source(db, source_id)
+        return ApiResult(message="关联已删除")
+    except Exception as e:
+        return api_error("MEMORY_SOURCE_DELETE_FAILED", str(e), "删除失败")
+
+
 # ── 通用路由（放在最后）────────────────────────────────
 
 @router.get("/{memory_id}", response_model=ApiResult[MarkdownMemoryOut])
