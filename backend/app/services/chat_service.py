@@ -49,3 +49,15 @@ class ChatService:
                 ))
             except Exception as e:
                 logger.warning(f"保存助手消息失败: {e}")
+
+        # 统一：首条消息自动生成标题（所有对话流程共用）
+        if user_content:
+            try:
+                conv = await self._msg.conv_repo.find_by_id(db, conversation_id)
+                if conv and (not conv.title or conv.title == "新会话"):
+                    auto_title = user_content[:20].replace("\n", " ").strip()
+                    if len(user_content) > 20:
+                        auto_title += "..."
+                    await self._msg.conv_repo.update(db, conversation_id, {"title": auto_title})
+            except Exception as e:
+                logger.warning(f"会话标题更新失败: {e}")

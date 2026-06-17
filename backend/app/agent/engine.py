@@ -1065,12 +1065,7 @@ def _make_memory_saver(memory_manager):
                             conv_repo = ConversationRepository()
                             conv = await conv_repo.find_by_id(md_db, conv_id)
                             if conv and (not conv.title or conv.title == "新会话"):
-                                auto_title = user_content[:20].replace("\n", " ").strip()
-                                if len(user_content) > 20:
-                                    auto_title += "..."
-                                await conv_repo.update(md_db, conv_id, {"title": auto_title})
-                                await md_db.commit()
-                                logger.info(f"[memory_saver] 会话标题已更新: {auto_title}")
+                                pass  # 标题已移到 ChatService.save_skill_messages 统一处理
                         except Exception as e:
                             logger.warning(f"[memory_saver] 会话标题更新失败: {e}")
 
