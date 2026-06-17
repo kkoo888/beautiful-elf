@@ -1,11 +1,10 @@
-"""Ollama LLM 服务 — 从 MySQL settings 表读取配置，调用 Ollama API
+"""Ollama LLM 服务 — 从 llm_provider / llm_model 表读取配置，调用 Ollama API
 
-settings 表中的配置键:
-  - ollama.host        → Ollama 服务地址 (如 http://localhost:11434)
-  - ollama.chat_model  → 对话模型名称 (如 qwen3.5:7b)
-  - ollama.embed_model → 嵌入模型名称 (如 qwen3-embedding:latest)
-  - ollama.temperature → 全局温度 (可选, 默认 0.7)
-  - ollama.max_tokens  → 全局最大 token (可选, 默认 2048)
+配置来源（统一从供应商表读取）:
+  - llm_provider.base_url  → Ollama 服务地址
+  - llm_model.model_name   → 对话/嵌入模型名称
+  - llm_model.temperature  → 温度
+  - llm_model.max_tokens   → 最大 token
 """
 import json
 import logging
@@ -19,28 +18,42 @@ _config_cache: dict = {}
 
 
 async def load_ollama_config(db) -> None:
-    """从 settings 表加载 Ollama 配置到内存缓存（启动时调用）"""
-    from app.repository.config_repo import ConfigRepository
+    """从 llm_provider / llm_model 表加载 Ollama 配置到内存缓存（启动时调用）"""
+    from app.repository.llm_provider_repo import LLMProviderRepository
+    from app.repository.llm_model_repo import LLMModelRepository
 
-    repo = ConfigRepository()
-    keys = ["ollama.host", "ollama.chat_model", "ollama.embed_model", "ollama.temperature", "ollama.max_tokens"]
-    for key in keys:
-        setting = await repo.find_by_key(db, key)
-        if setting:
-            try:
-                _config_cache[key] = json.loads(setting.key_value)
-            except (json.JSONDecodeError, TypeError):
-                _config_cache[key] = setting.key_value
-        else:
-            # 使用默认值
-            defaults = {
-                "ollama.host": "http://localhost:11434",
-                "ollama.chat_model": "qwen3.5:0.8b",
-                "ollama.embed_model": "qwen3-embedding:latest",
-                "ollama.temperature": 0.7,
-                "ollama.max_tokens": 2048,
-            }
-            _config_cache[key] = defaults.get(key)
+    provider_repo = LLMProviderRepository()
+    model_repo = LLMModelRepository()
+
+    # 查找 Ollama 供应商
+    provider = await provider_repo.find_by_type(db, "ollama")
+    if provider:
+        _config_cache["ollama.host"] = provider.base_url.rstrip("/")
+    else:
+        _config_cache["ollama.host"] = "http://localhost:11434"
+
+    # 查找 Ollama 下的模型
+    if provider:
+        models = await model_repo.find_by_provider(db, provider.id)
+        enabled_models = [m for m in models if m.is_enabled == 1]
+
+        # 对话模型：优先取非 embedding 模型
+        chat_models = [m for m in enabled_models if "embed" not in m.model_name.lower()]
+        if chat_models:
+            _config_cache["ollama.chat_model"] = chat_models[0].model_name
+            _config_cache["ollama.temperature"] = chat_models[0].temperature
+            _config_cache["ollama.max_tokens"] = chat_models[0].max_tokens
+
+        # 嵌入模型
+        embed_models = [m for m in enabled_models if "embed" in m.model_name.lower()]
+        if embed_models:
+            _config_cache["ollama.embed_model"] = embed_models[0].model_name
+
+    # 兜底默认值
+    _config_cache.setdefault("ollama.chat_model", "qwen3.5:0.8b")
+    _config_cache.setdefault("ollama.embed_model", "qwen3-embedding:latest")
+    _config_cache.setdefault("ollama.temperature", 0.7)
+    _config_cache.setdefault("ollama.max_tokens", 2048)
 
     logger.info(f"Ollama 配置已加载: host={get_host()}, chat_model={get_chat_model()}")
 
