@@ -32,6 +32,59 @@ class MarkdownMemoryListOut(CamelModel):
     updated_at: Optional[str] = Field(default=None, alias="updatedAt")
 
 
+class DistillRequest(CamelModel):
+    """提炼记忆请求（Hindsight Mission + Directives 模型）"""
+    days: int = Field(default=7, ge=1, le=30, description="提取天数")
+    mission: str = Field(
+        default="提取技术决策、架构选型、踩坑经验、主人偏好。忽略寒暄和临时调试信息。",
+        description="提炼指令（Mission — 告诉 LLM 提取什么、忽略什么）",
+    )
+    directives: List[str] = Field(
+        default_factory=list,
+        description="硬规则（Directives — 提炼时必须遵守的约束）",
+    )
+    categories: List[str] = Field(
+        default_factory=lambda: ["decisions", "pitfalls", "preferences", "status"],
+        description="提炼分类: decisions/pitfalls/preferences/status",
+    )
+
+
+class ObservationSourceOut(CamelModel):
+    """提炼记忆关联源输出"""
+    source_id: int = Field(default=0, alias="sourceId", description="关联记录 ID")
+    log_id: int = Field(default=0, alias="logId", description="源日志 ID")
+    log_title: str = Field(default="", alias="logTitle", description="源日志标题（日期）")
+    evidence_quote: str = Field(default="", alias="evidenceQuote", description="关键引用")
+
+
+class ObservationOut(CamelModel):
+    """提炼记忆输出"""
+    id: int = Field(default=0, description="ID")
+    content: str = Field(default="", description="提炼内容（Markdown）")
+    category: str = Field(default="decisions", description="分类")
+    freshness: str = Field(default="new", description="新鲜度")
+    source_days: int = Field(default=0, alias="sourceDays", description="来源日志天数")
+    proof_count: int = Field(default=0, alias="proofCount", description="证据条数")
+    sources: List[ObservationSourceOut] = Field(default_factory=list, description="关联源列表")
+    created_at: Optional[str] = Field(default=None, alias="createdAt")
+    updated_at: Optional[str] = Field(default=None, alias="updatedAt")
+
+
+class DistillResult(CamelModel):
+    """提炼结果"""
+    observations: List[ObservationOut] = Field(default_factory=list, description="提炼出的记忆列表")
+    source_days: int = Field(default=0, alias="sourceDays", description="实际读取的日志天数")
+    source_logs: List[str] = Field(default_factory=list, alias="sourceLogs", description="读取的日志标题列表")
+    total_count: int = Field(default=0, alias="totalCount", description="提炼出的记忆条数")
+
+
+class ObservationUpdate(CamelModel):
+    """更新提炼记忆"""
+    content: Optional[str] = Field(default=None, description="内容")
+    category: Optional[str] = Field(default=None, description="分类")
+    freshness: Optional[str] = Field(default=None, description="新鲜度")
+
+
 class CostRecordOut(CamelModel):
     """成本记录响应"""
     id: int = Field(default=0)
