@@ -1,6 +1,6 @@
 /** 专家团列表组件 — 卡片网格 */
 
-import { Card, Tag, Space, Button, Popconfirm, Typography, Avatar, Tooltip, Spin } from 'antd'
+import { Card, Tag, Space, Button, Popconfirm, Typography, Tooltip, Spin } from 'antd'
 import {
   PlayCircleOutlined,
   EditOutlined,
@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons'
 import type { ExpertTeam } from '../types'
 import { EmptyState } from '@/components/empty-state'
+import { ExpertAvatar } from '@/components/expert-avatar'
 import styles from './expert-team.module.css'
 
 const { Text } = Typography
@@ -95,12 +96,11 @@ export function ExpertTeamList({
             <Space size={0}>
               {team.experts.slice(0, 6).map((m) => (
                 <Tooltip key={m.id} title={`${m.memberName} (${m.memberRole})`}>
-                  <Avatar
+                  <ExpertAvatar
+                    avatar={m.avatar}
                     size={28}
-                    style={{ fontSize: 14, backgroundColor: '#e6f7ff', marginRight: -4 }}
-                  >
-                    {m.avatar}
-                  </Avatar>
+                    style={{ marginRight: -4 }}
+                  />
                 </Tooltip>
               ))}
               {team.experts.length > 6 && (

@@ -26,6 +26,7 @@ import type { ExpertTeam, ExpertTeamFormInput, Expert } from '../types'
 import { getExpertRoleColor } from '../types'
 import { TeamBindExpertsModal } from './team-bind-experts-modal'
 import { ImageCropModal } from '@/modules/image-gallery/components/image-crop-modal'
+import { ExpertAvatar } from '@/components/expert-avatar'
 import styles from './expert-team.module.css'
 
 const { TextArea } = Input
@@ -265,7 +266,12 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
               allowClear
               style={{ width: '100%' }}
               options={boundExperts.map((e) => ({
-                label: `${e.avatar ?? '🤖'} ${e.memberName}（${e.memberRole}）`,
+                label: (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ExpertAvatar avatar={e.avatar} size={22} bgColor={getExpertRoleColor(e.memberRole) + '18'} color={getExpertRoleColor(e.memberRole)} />
+                    <span>{e.memberName}（{e.memberRole}）</span>
+                  </span>
+                ),
                 value: e.id,
               }))}
             />
@@ -284,20 +290,13 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
                   style={{ borderLeft: `3px solid ${roleColor}` }}
                 >
                   <div className={styles.memberListCardHeader}>
-                    <div
+                    <ExpertAvatar
+                      avatar={expert.avatar}
+                      size={40}
+                      bgColor={roleColor + '18'}
+                      color={roleColor}
                       className={styles.memberAvatar}
-                      style={{
-                        backgroundColor: expert.avatar?.startsWith('data:image') ? 'transparent' : roleColor + '18',
-                        color: expert.avatar?.startsWith('data:image') ? 'transparent' : roleColor,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {expert.avatar?.startsWith('data:image') ? (
-                        <img src={expert.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        expert.avatar || '🤖'
-                      )}
-                    </div>
+                    />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <Space>
                         <Text strong>{expert.memberName}</Text>

@@ -12,6 +12,7 @@ import {
 } from 'antd'
 import type { Expert } from '../types'
 import { getExpertRoleColor } from '../types'
+import { ExpertAvatar } from '@/components/expert-avatar'
 import styles from './expert-team.module.css'
 
 const { Text } = Typography
@@ -106,21 +107,14 @@ export function TeamBindExpertsModal({
               >
                 <div className={styles.memberListCardHeader}>
                   <Checkbox checked={checked} />
-                  <div
+                  <ExpertAvatar
+                    avatar={expert.avatar}
+                    size={40}
+                    bgColor={roleColor + '18'}
+                    color={roleColor}
                     className={styles.memberAvatar}
-                    style={{
-                      backgroundColor: expert.avatar?.startsWith('data:image') ? 'transparent' : roleColor + '18',
-                      color: expert.avatar?.startsWith('data:image') ? 'transparent' : roleColor,
-                      marginLeft: 8,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {expert.avatar?.startsWith('data:image') ? (
-                      <img src={expert.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      expert.avatar
-                    )}
-                  </div>
+                    style={{ marginLeft: 8 }}
+                  />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Space>
                       <Text strong>{expert.memberName}</Text>

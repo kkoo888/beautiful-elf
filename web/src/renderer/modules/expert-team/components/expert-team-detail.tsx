@@ -22,6 +22,7 @@ import { useCallback } from 'react'
 import type { ExpertTeam } from '../types'
 import { getExpertRoleColor } from '../types'
 import { updateExpertTeam } from '../services/expert-team-api'
+import { ExpertAvatar } from '@/components/expert-avatar'
 import styles from './expert-team.module.css'
 
 const { Text, Paragraph } = Typography
@@ -141,20 +142,13 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
               style={{ borderLeft: `3px solid ${roleColor}` }}
             >
               <div className={styles.memberListCardHeader}>
-                <div
+                <ExpertAvatar
+                  avatar={member.avatar}
+                  size={40}
+                  bgColor={roleColor + '18'}
+                  color={roleColor}
                   className={styles.memberAvatar}
-                  style={{
-                    backgroundColor: member.avatar?.startsWith('data:image') ? 'transparent' : roleColor + '18',
-                    color: member.avatar?.startsWith('data:image') ? 'transparent' : roleColor,
-                    overflow: 'hidden',
-                  }}
-                >
-                  {member.avatar?.startsWith('data:image') ? (
-                    <img src={member.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    member.avatar || '🤖'
-                  )}
-                </div>
+                />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Space>
                     <Text strong>{member.memberName}</Text>
