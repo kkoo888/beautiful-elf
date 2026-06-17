@@ -269,6 +269,7 @@ export function ExpertList({
       <ExpertEditorModal
         open={modalOpen}
         expert={editingExpert.expert}
+        expertId={editingExpert.id}
         isNew={!editingExpert.id}
         onOk={handleModalOk}
         onCancel={handleModalCancel}
