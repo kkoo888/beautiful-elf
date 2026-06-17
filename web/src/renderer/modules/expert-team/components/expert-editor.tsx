@@ -152,7 +152,7 @@ export function ExpertEditorModal({
       setSkillsLoading(true)
       try {
         const [skillsRes, boundRes] = await Promise.all([
-          fetchSkills({ isEnabled: 1, pageSize: 200 }),
+          fetchSkills({ isEnabled: 1, pageSize: 500 }),
           expertId ? fetchExpertSkills(expertId) : Promise.resolve([]),
         ])
         setAllSkills(skillsRes.data || [])
@@ -353,10 +353,10 @@ export function ExpertEditorModal({
         title={isNew ? '新建专家' : '编辑专家'}
         onOk={handleOk}
         onCancel={onCancel}
-        width={760}
+        width="80vw"
         okText="确定"
         cancelText="取消"
-        styles={{ body: { padding: '20px 24px', display: 'flex', gap: 0, minHeight: 420 } }}
+        styles={{ body: { padding: '20px 24px', display: 'flex', gap: 0, minHeight: 460, maxHeight: '70vh' } }}
       >
         {leftPanel}
         {rightPanel}
