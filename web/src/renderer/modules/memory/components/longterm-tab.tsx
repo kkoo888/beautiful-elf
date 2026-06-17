@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Typography, Button, Spin, message, Space, Empty, Tag, Tooltip,
+  Typography, Button, Spin, App, Space, Empty, Tag, Tooltip,
   Drawer, Form, InputNumber, Checkbox, Input, Popconfirm,
   Segmented, Steps,
 } from 'antd'
@@ -74,6 +74,7 @@ const DEFAULT_MISSION = '提取技术决策、架构选型、踩坑经验、主�
 // ── 主组件 ────────────────────────────────────────────────
 
 export function LongTermTab() {
+  const { message } = App.useApp()
   const [memory, setMemory] = useState<MarkdownMemoryEntry | null>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -364,13 +365,13 @@ export function LongTermTab() {
           <div style={{ padding: '24px 0' }}>
             <Steps
               current={distillStep}
-              direction="vertical"
+              orientation="vertical"
               size="small"
               items={[
-                { title: '读取日志', description: `最近 ${distillDays} 天的 daily log` },
-                { title: 'AI 提炼', description: '调用 LLM 结构化提取' },
-                { title: '写入记忆', description: '保存到提炼记忆列表' },
-                { title: '完成', description: '提炼成功！' },
+                { title: '读取日志', content: `最近 ${distillDays} 天的 daily log` },
+                { title: 'AI 提炼', content: '调用 LLM 结构化提取' },
+                { title: '写入记忆', content: '保存到提炼记忆列表' },
+                { title: '完成', content: '提炼成功！' },
               ]}
             />
           </div>
