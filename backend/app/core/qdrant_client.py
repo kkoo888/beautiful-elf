@@ -7,6 +7,7 @@ settings = get_settings()
 qdrant_client = QdrantClient(
     url=settings.QDRANT_URL,
     timeout=30,
+    trust_env=False,
 )
 
 

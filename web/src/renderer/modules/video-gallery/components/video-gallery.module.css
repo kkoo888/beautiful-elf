@@ -1,6 +1,19 @@
-/* 图片画廊 — Pinterest 风格瀑布流 */
+/* 视频画廊 — 复用图片画廊样式 */
 
-.galleryContainer {
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinIcon {
+  display: inline-block;
+  animation: spin 3s linear infinite;
+  font-size: 32px;
+  color: inherit;
+  margin-bottom: 8px;
+}
+
+.videoGalleryContainer {
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -37,14 +50,13 @@
 }
 
 .masonryInner {
-  column-count: 5;
+  column-count: 4;
   column-gap: 12px;
 }
 
-@media (max-width: 1600px) { .masonryInner { column-count: 4; } }
-@media (max-width: 1200px) { .masonryInner { column-count: 3; } }
-@media (max-width: 800px)  { .masonryInner { column-count: 2; } }
-@media (max-width: 500px)  { .masonryInner { column-count: 1; } }
+@media (max-width: 1600px) { .masonryInner { column-count: 3; } }
+@media (max-width: 1200px) { .masonryInner { column-count: 2; } }
+@media (max-width: 800px)  { .masonryInner { column-count: 1; } }
 
 /* ── 卡片 ──────────────────────────────────── */
 
@@ -65,10 +77,10 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
-.masonryItem img {
+.masonryItemVideo {
   width: 100%;
   display: block;
-  object-fit: cover;
+  background: #000;
 }
 
 .masonryItemInfo {
@@ -126,17 +138,17 @@
   padding-top: 8px;
 }
 
-/* ── 详情弹窗 ──────────────────────────────── */
+/* ── 三栏布局（新增/详情弹窗） ────────────── */
 
-.detailLayout {
+.createLayout {
   display: flex;
-  gap: 24px;
+  gap: 20px;
   min-height: 400px;
   max-height: 70vh;
 }
 
-.detailImageWrap {
-  flex: 1;
+.previewWrap {
+  flex: 0 0 380px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -147,26 +159,10 @@
   position: relative;
 }
 
-.detailImageWrap img {
+.previewWrap video {
   max-width: 100%;
   max-height: 65vh;
   object-fit: contain;
-}
-
-.detailSidebar {
-  width: 320px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  overflow-y: auto;
-}
-
-.createLayout {
-  display: flex;
-  gap: 20px;
-  min-height: 400px;
-  max-height: 70vh;
 }
 
 .createCenter {
@@ -188,36 +184,12 @@
 }
 
 @media (max-width: 800px) {
-  .detailLayout {
-    flex-direction: column;
-    max-height: none;
-  }
-  .detailSidebar { width: 100%; }
-  .detailImageWrap img { max-height: 40vh; }
   .createLayout {
     flex-direction: column;
     max-height: none;
   }
+  .previewWrap { flex: none; width: 100%; }
+  .previewWrap video { max-height: 40vh; }
   .createCenter { min-height: 200px; }
   .createRight { width: 100%; }
-}
-
-/* ── 生成弹窗 ──────────────────────────────── */
-
-.generatePreview {
-  text-align: center;
-  padding: 20px;
-  background: var(--ant-color-fill-secondary);
-  border-radius: 8px;
-  min-height: 180px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.generatePreview img {
-  max-width: 100%;
-  max-height: 280px;
-  object-fit: contain;
-  border-radius: 6px;
 }

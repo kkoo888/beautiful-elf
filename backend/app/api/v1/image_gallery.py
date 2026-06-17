@@ -1,7 +1,8 @@
 """图片画廊 API"""
 import os
+import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +11,7 @@ from app.core.dependencies import PaginationParams, get_pagination
 from app.services.image_gallery_service import ImageGalleryService, IMAGE_DIR
 from app.schemas.image_gallery import (
     ImageGalleryCreate, ImageGalleryUpdate, ImageGalleryOut,
-    ImageGenerateRequest,
+    ImageGenerateRequest, ImageImg2ImgRequest, DescribeImageRequest,
 )
 from app.schemas.expert_team import PolishPromptRequest
 from app.schemas.response import ApiResult, ApiPageResult
@@ -92,6 +93,16 @@ async def generate_image(
     return ApiResult(data=result)
 
 
+@router.post("/generate-img2img", response_model=ApiResult[dict])
+async def generate_image_img2img(
+    data: ImageImg2ImgRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[dict]:
+    """图生图 — 基于原图生成新图片"""
+    result = await service.generate_image_img2img(db, data)
+    return ApiResult(data=result)
+
+
 @router.post("/generate-prompt", response_model=ApiResult[str])
 async def generate_prompt(
     data: PolishPromptRequest,
@@ -99,6 +110,16 @@ async def generate_prompt(
 ) -> ApiResult[str]:
     """根据描述生成图片提示词"""
     result = await service.generate_prompt(db, data)
+    return ApiResult(data=result)
+
+
+@router.post("/describe-image", response_model=ApiResult[str])
+async def describe_image(
+    data: DescribeImageRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[str]:
+    """解析图片生成中文提示词（使用视觉模型）"""
+    result = await service.describe_image(db, data)
     return ApiResult(data=result)
 
 
@@ -113,3 +134,17 @@ async def serve_image(filename: str):
     resp = FileResponse(file_path)
     resp.headers["Access-Control-Allow-Origin"] = "*"
     return resp
+
+
+@router.post("/upload-temp")
+async def upload_temp_image(file: UploadFile = File(...)):
+    """上传临时图片（用于图生图的原图上传）"""
+    from app.services.image_gallery_service import IMAGE_DIR, _ensure_image_dir
+    _ensure_image_dir()
+    ext = os.path.splitext(file.filename or "")[1] or ".png"
+    file_name = f"temp_{uuid.uuid4().hex[:12]}{ext}"
+    file_path = os.path.join(IMAGE_DIR, file_name)
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+    return ApiResult(data={"filePath": file_path, "fileName": file_name})

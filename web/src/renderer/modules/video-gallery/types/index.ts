@@ -1,6 +1,6 @@
-/** 图片画廊类型定义 */
+/** 视频画廊类型定义 */
 
-export interface ImageGallery {
+export interface VideoGallery {
   id: number
   name: string
   prompt: string
@@ -12,12 +12,15 @@ export interface ImageGallery {
   tags: string
   width: number
   height: number
+  numFrames: number
+  frameRate: number
+  duration: number
   isEnabled: number
   createdAt: string | null
   updatedAt: string | null
 }
 
-export interface ImageGalleryFormInput {
+export interface VideoGalleryFormInput {
   name?: string
   prompt: string
   negativePrompt?: string
@@ -28,9 +31,12 @@ export interface ImageGalleryFormInput {
   tags?: string
   width?: number
   height?: number
+  numFrames?: number
+  frameRate?: number
+  duration?: number
 }
 
-export interface ImageGalleryUpdateInput {
+export interface VideoGalleryUpdateInput {
   name?: string
   prompt?: string
   negativePrompt?: string
@@ -38,27 +44,29 @@ export interface ImageGalleryUpdateInput {
   isEnabled?: number
 }
 
-export interface ImageGenerateInput {
+export interface VideoGenerateInput {
   prompt: string
   negativePrompt?: string
   modelName?: string
   providerId?: number
+  image?: string
+  images?: string[]
+  mode?: string
   width?: number
   height?: number
+  numFrames?: number
+  frameRate?: number
+  numInferenceSteps?: number
+  seed?: number
 }
 
-export interface ImageGenerateResult {
+export interface VideoGenerateResult {
   name: string
   filePath: string
   thumbnailPath: string
   width: number
   height: number
-}
-
-export interface ImageImg2ImgInput {
-  prompt: string
-  negativePrompt?: string
-  modelName?: string
-  providerId?: number
-  image: string
+  numFrames: number
+  frameRate: number
+  duration: number
 }

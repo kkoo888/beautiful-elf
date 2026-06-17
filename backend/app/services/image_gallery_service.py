@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repository.image_gallery_repo import ImageGalleryRepository
 from app.schemas.image_gallery import (
     ImageGalleryCreate, ImageGalleryUpdate, ImageGalleryOut,
-    ImageGenerateRequest,
+    ImageGenerateRequest, ImageImg2ImgRequest,
 )
 from app.schemas.expert_team import PolishPromptRequest
 from app.services.expert_team_service import _call_llm
@@ -174,17 +174,89 @@ class ImageGalleryService:
             logger.warning(f"联网搜索失败（不影响生成）: {e}")
 
         polish_system = (
-            "你是 AI 绘图提示词专家。根据用户简短描述和联网搜索到的参考资料，生成高质量的中文图片生成提示词。\n"
+            "你是 AI 绘图提示词专家（Agnes Image 2.1 Flash）。根据用户简短描述和联网搜索到的参考资料，生成高质量的中文图片生成提示词。\n"
             "要求：\n"
             "- 用中文输出\n"
             "- 包含主体特征、环境背景、光影氛围、镜头语言、画质修饰等细节描述\n"
             "- 描述要具体、生动、有画面感\n"
             "- 不要输出任何标题、解释或前缀，直接返回提示词正文\n"
-            "- 200-400 字为宜"
+            "- 200-400 字为宜\n\n"
+            "【图生图场景 — 如果用户描述涉及修改/转换现有图片，请使用以下结构】\n"
+            "推荐结构：[修改要求] + [新风格/新场景] + [需要添加或移除的元素] + [需要保留的元素]\n"
+            "示例：将白天街景转换为电影级赛博朋克夜景，添加霓虹灯和湿漉漉的路面倒影，同时保留原始街道布局、拍摄角度和主要建筑形状。\n\n"
+            "【高信息密度图片 — 复杂画面建议包含以下要素】\n"
+            "主体 | 背景环境 | 重要次要元素 | 风格和光照 | 构图约束 | 需要保留的元素\n"
+            "示例：一座建在悬崖上的大型幻想港口城市，数百艘小船，层叠的石桥，发光的窗户，远处的山脉，多云的日落天空，电影级幻想写实风格，广角构图，丰富的建筑细节，高视觉密度"
         )
         search_block = f"\n\n联网搜索参考资料：\n{search_context}" if search_context else ""
         prompt = f"{polish_system}\n\n用户描述：\n{data.content}{search_block}"
         content, _ = await _call_llm(db, provider.id, model_name, prompt, temperature=0.5)
+        return content.strip()
+
+    async def describe_image(self, db: AsyncSession, data) -> str:
+        """解析图片生成中文提示词（调用视觉模型）"""
+        import base64 as _b64
+        import io
+        from langchain_core.messages import HumanMessage
+        from app.services.llm_provider_service import LLMProviderService
+        from app.agent.llm_service import llm_service
+
+        provider_service = LLMProviderService()
+        provider = await provider_service.get_default_provider(db)
+        if not provider:
+            raise ValueError("请先在设置中配置默认 AI 供应商")
+
+        model_name = ""
+        if provider.models:
+            enabled_models = [m for m in provider.models if m.is_enabled == 1]
+            if enabled_models:
+                model_name = enabled_models[0].model_name
+        if not model_name:
+            raise ValueError("没有可用的模型")
+
+        # 解析 base64 图片
+        image_data_uri = data.image
+        if not image_data_uri:
+            raise ValueError("未提供图片数据")
+
+        # 压缩图片：大图传给 LLM 会超 token 限制
+        try:
+            from PIL import Image
+            if "," in image_data_uri:
+                raw = _b64.b64decode(image_data_uri.split(",", 1)[1])
+            else:
+                raw = _b64.b64decode(image_data_uri)
+            img = Image.open(io.BytesIO(raw))
+            # 缩放到最大边 512px
+            img.thumbnail((512, 512), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.convert("RGB").save(buf, format="JPEG", quality=80)
+            compressed_b64 = _b64.b64encode(buf.getvalue()).decode()
+            image_data_uri = f"data:image/jpeg;base64,{compressed_b64}"
+        except ImportError:
+            pass  # PIL 未安装则跳过压缩
+        except Exception as e:
+            logger.warning(f"图片压缩失败（使用原图）: {e}")
+
+        llm = await llm_service.get_chat_llm(
+            db, provider_id=provider.id, model_name=model_name, temperature=0.5,
+            max_tokens=1024,
+        )
+
+        message = HumanMessage(content=[
+            {"type": "text", "text": (
+                "请仔细观察这张图片，用中文生成一段详细的图片生成提示词，用于 AI 绘图重新生成类似风格的图片。\n"
+                "要求：\n"
+                "- 包含主体特征、环境背景、光影氛围、镜头语言、画质修饰等细节\n"
+                "- 描述要具体、生动、有画面感\n"
+                "- 200-400 字为宜\n"
+                "- 直接返回提示词正文，不要任何标题或前缀"
+            )},
+            {"type": "image_url", "image_url": {"url": image_data_uri}},
+        ])
+
+        response = await llm.ainvoke([message])
+        content = response.content if isinstance(response.content, str) else str(response.content)
         return content.strip()
 
     async def generate_image(self, db: AsyncSession, data: ImageGenerateRequest) -> dict:
@@ -229,10 +301,77 @@ class ImageGalleryService:
 
         return {
             "name": image_name,
-            "file_path": file_path,
-            "thumbnail_path": file_path,
+            "file_path": file_name,
+            "thumbnail_path": file_name,
             "width": data.width,
             "height": data.height,
+        }
+
+    async def generate_image_img2img(self, db: AsyncSession, data: ImageImg2ImgRequest) -> dict:
+        """图生图 — 基于原图生成新图片"""
+        from app.services.llm_provider_service import LLMProviderService
+        import base64 as _b64
+        provider_service = LLMProviderService()
+
+        provider = await provider_service.get_default_provider(db)
+        if not provider:
+            raise ValueError("请先在设置中配置默认 AI 供应商")
+
+        model_name = data.model_name
+        if not model_name and provider.models:
+            enabled_models = [m for m in provider.models if m.is_enabled == 1]
+            if enabled_models:
+                model_name = enabled_models[0].model_name
+        if not model_name:
+            raise ValueError("没有可用的模型")
+
+        # 从前端传来的 Data URI base64 解码为 bytes
+        image_data_uri = data.image
+        if not image_data_uri:
+            raise ValueError("未提供原图数据")
+        # 支持 "data:image/xxx;base64,XXXX" 或纯 base64
+        if "," in image_data_uri:
+            init_image_bytes = _b64.b64decode(image_data_uri.split(",", 1)[1])
+        else:
+            init_image_bytes = _b64.b64decode(image_data_uri)
+        if not init_image_bytes:
+            raise ValueError("原图数据为空")
+
+        _ensure_image_dir()
+        image_name = _generate_ancient_name(data.prompt)
+        file_name = f"{image_name}_{int(datetime.now().timestamp() * 1000)}.png"
+        file_path = os.path.join(IMAGE_DIR, file_name)
+
+        # 调用 img2img API
+        try:
+            image_result = await self._call_image_api_img2img(
+                provider=provider,
+                model_name=model_name,
+                prompt=data.prompt,
+                negative_prompt=data.negative_prompt,
+                init_image_bytes=init_image_bytes,
+            )
+            with open(file_path, "wb") as f:
+                f.write(image_result)
+        except Exception as e:
+            logger.error(f"图生图失败: {e}")
+            raise ValueError(f"图生图失败: {e}")
+
+        # 读取结果图尺寸
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(image_result))
+            width, height = img.size
+        except Exception:
+            width, height = 1024, 1024
+
+        return {
+            "name": image_name,
+            "file_path": file_name,
+            "thumbnail_path": file_name,
+            "width": width,
+            "height": height,
         }
 
     async def _call_image_api(
@@ -289,4 +428,78 @@ class ImageGalleryService:
                     msg = resp.text
                 raise ValueError(f"图片生成失败: {msg}")
             result = resp.json()
-            return base64.b64decode(result["data"][0]["b64_json"])
+            item = result["data"][0]
+            if "b64_json" in item and item["b64_json"]:
+                return base64.b64decode(item["b64_json"])
+            elif "url" in item and item["url"]:
+                async with httpx.AsyncClient(timeout=60) as dl:
+                    img_resp = await dl.get(item["url"])
+                    return img_resp.content
+            else:
+                raise ValueError("API 未返回图片数据")
+
+    async def _call_image_api_img2img(
+        self, provider, model_name: str, prompt: str,
+        negative_prompt: str = "", init_image_bytes: bytes = b"",
+    ) -> bytes:
+        """调用图生图 API（Agnes Image 格式）"""
+        import base64
+        api_key = provider.api_key or ""
+        base_url = (provider.base_url or "https://api.openai.com/v1").rstrip("/")
+        init_b64 = base64.b64encode(init_image_bytes).decode()
+        data_uri = f"data:image/png;base64,{init_b64}"
+
+        # SD WebUI 专用接口
+        if "/sdapi" in base_url:
+            url = f"{base_url}/img2img"
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            payload = {
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "init_images": [init_b64],
+                "steps": 30,
+                "cfg_scale": 7,
+            }
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+                resp.raise_for_status()
+                result = resp.json()
+                images = result.get("images", [])
+                if not images:
+                    raise ValueError("API 未返回图片数据")
+                return base64.b64decode(images[0])
+
+        # OpenAI 兼容接口 — image 为 string[]（Data URI Base64）
+        url = f"{base_url}/images/generations"
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        payload = {
+            "model": model_name,
+            "prompt": prompt,
+            "size": "1024x1024",
+            "image": [data_uri],
+            "return_base64": True,
+        }
+        if negative_prompt:
+            payload["negative_prompt"] = negative_prompt
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code != 200:
+                try:
+                    err = resp.json()
+                    msg = err.get("error", {}).get("message") or err.get("message") or str(err)
+                except Exception:
+                    msg = resp.text[:500]
+                raise ValueError(f"图生图失败: {msg}")
+            result = resp.json()
+            item = result["data"][0]
+            if "b64_json" in item and item["b64_json"]:
+                return base64.b64decode(item["b64_json"])
+            elif "url" in item and item["url"]:
+                async with httpx.AsyncClient(timeout=60) as dl:
+                    img_resp = await dl.get(item["url"])
+                    return img_resp.content
+            else:
+                raise ValueError("API 未返回图片数据")

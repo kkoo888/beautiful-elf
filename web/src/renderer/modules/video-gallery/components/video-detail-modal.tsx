@@ -1,21 +1,21 @@
-/** 图片详情弹窗 */
+/** 视频详情弹窗 — 三栏布局 */
 import { useState, useCallback, useEffect } from 'react'
 import {
   Modal, Form, Input, Button, Space, Tag, Popconfirm, App, Typography,
 } from 'antd'
-import { DeleteOutlined, ReloadOutlined, EditOutlined, CheckOutlined, LoadingOutlined } from '@ant-design/icons'
-import { useImageGallery } from '../hooks/use-image-gallery'
-import type { ImageGallery, ImageGenerateInput } from '../types'
-import styles from './image-gallery.module.css'
+import { DeleteOutlined, ReloadOutlined, EditOutlined, CheckOutlined, HourglassOutlined } from '@ant-design/icons'
+import { useVideoGallery } from '../hooks/use-video-gallery'
+import type { VideoGallery, VideoGenerateInput } from '../types'
+import styles from './video-gallery.module.css'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 
 const { TextArea } = Input
 const { Text } = Typography
 
-function toImageUrl(filePath: string) {
+function toVideoUrl(filePath: string) {
   if (!filePath) return ''
   const filename = filePath.split(/[/\\]/).pop() || ''
-  return `${API_BASE_URL}${API_PREFIX}/image_gallery/files/${encodeURIComponent(filename)}`
+  return `${API_BASE_URL}${API_PREFIX}/video_gallery/files/${encodeURIComponent(filename)}`
 }
 
 function fmtTime(s: string | null) {
@@ -23,7 +23,13 @@ function fmtTime(s: string | null) {
   return s.replace('T', ' ').replace(/\.\d+$/, '').slice(0, 19)
 }
 
-/** 旧图改名：原名-1, 原名-2 ... */
+function formatDuration(seconds: number) {
+  if (!seconds) return ''
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`
+}
+
 function incrName(baseName: string, existingNames: string[]): string {
   const base = baseName.replace(/-\d+$/, '')
   let n = 1
@@ -31,25 +37,25 @@ function incrName(baseName: string, existingNames: string[]): string {
   return `${base}-${n}`
 }
 
-interface ImageDetailModalProps {
-  image: ImageGallery | null
-  allImages: ImageGallery[]
+interface VideoDetailModalProps {
+  video: VideoGallery | null
+  allVideos: VideoGallery[]
   onClose: () => void
   onDelete: (id: number) => void
-  onRegenerate: (input: ImageGenerateInput) => Promise<{ name: string; filePath: string; thumbnailPath: string; width: number; height: number }>
+  onRegenerate: (input: VideoGenerateInput) => Promise<{ name: string; filePath: string; thumbnailPath: string; width: number; height: number; numFrames: number; frameRate: number; duration: number }>
   isGenerating: boolean
 }
 
-export function ImageDetailModal({
-  image,
-  allImages,
+export function VideoDetailModal({
+  video,
+  allVideos,
   onClose,
   onDelete,
   onRegenerate,
   isGenerating,
-}: ImageDetailModalProps) {
+}: VideoDetailModalProps) {
   const { message } = App.useApp()
-  const { createImage, deleteImage, updateImage } = useImageGallery()
+  const { createVideo, deleteVideo, updateVideo } = useVideoGallery()
   const [editing, setEditing] = useState(false)
   const [form] = Form.useForm()
   const [tags, setTags] = useState<string[]>([])
@@ -57,26 +63,27 @@ export function ImageDetailModal({
   const [regenerated, setRegenerated] = useState<{
     filePath: string; name: string; prompt: string; negativePrompt: string
     modelName: string; providerId: number; width: number; height: number
+    numFrames: number; frameRate: number; duration: number
   } | null>(null)
 
   useEffect(() => {
-    if (image) {
+    if (video) {
       setEditing(false)
       setRegenerated(null)
-      setTags(image.tags ? image.tags.split(',').filter(Boolean) : [])
+      setTags(video.tags ? video.tags.split(',').filter(Boolean) : [])
       form.setFieldsValue({
-        name: image.name,
-        prompt: image.prompt,
-        negativePrompt: image.negativePrompt,
+        name: video.name,
+        prompt: video.prompt,
+        negativePrompt: video.negativePrompt,
       })
     }
-  }, [image, form])
+  }, [video, form])
 
   const handleSave = useCallback(async () => {
-    if (!image) return
+    if (!video) return
     try {
       const values = await form.getFieldsValue()
-      await updateImage(image.id, {
+      await updateVideo(video.id, {
         name: values.name,
         prompt: values.prompt,
         negativePrompt: values.negativePrompt,
@@ -88,59 +95,67 @@ export function ImageDetailModal({
     } catch {
       message.error('更新失败')
     }
-  }, [image, form, tags, updateImage, message, onClose])
+  }, [video, form, tags, updateVideo, message, onClose])
 
   const handleRegenerate = useCallback(async () => {
-    if (!image) return
+    if (!video) return
     try {
       const result = await onRegenerate({
-        prompt: image.prompt,
-        negativePrompt: image.negativePrompt,
-        modelName: image.modelName || 'agnes-image-2.1-flash',
-        providerId: image.providerId || 0,
-        width: image.width || 1024,
-        height: image.height || 1024,
+        prompt: video.prompt,
+        negativePrompt: video.negativePrompt,
+        modelName: video.modelName || 'agnes-video-v2.0',
+        providerId: video.providerId || 0,
+        width: video.width || 1280,
+        height: video.height || 720,
+        numFrames: video.numFrames || 121,
+        frameRate: video.frameRate || 24,
       })
       setRegenerated({
         filePath: result.filePath || (result as any).file_path,
         name: result.name,
-        prompt: image.prompt,
-        negativePrompt: image.negativePrompt,
-        modelName: image.modelName,
-        providerId: image.providerId,
-        width: image.width || 1024,
-        height: image.height || 1024,
+        prompt: video.prompt,
+        negativePrompt: video.negativePrompt,
+        modelName: video.modelName,
+        providerId: video.providerId,
+        width: video.width || 1280,
+        height: video.height || 720,
+        numFrames: video.numFrames || 121,
+        frameRate: video.frameRate || 24,
+        duration: video.duration || 0,
       })
       message.success('生成成功，请确认')
     } catch (err: any) {
       message.error(err?.message || '重新生成失败')
     }
-  }, [image, onRegenerate, message])
+  }, [video, onRegenerate, message])
 
   const handleConfirm = useCallback(async () => {
-    if (!image || !regenerated) return
+    if (!video || !regenerated) return
     try {
-      const oldNewName = incrName(image.name, allImages.map((i) => i.name))
-      await updateImage(image.id, { name: oldNewName })
-      await createImage({
-        name: image.name,
+      const oldNewName = incrName(video.name, allVideos.map((v) => v.name))
+      await updateVideo(video.id, { name: oldNewName })
+      await createVideo({
+        name: video.name,
         prompt: regenerated.prompt,
         negativePrompt: regenerated.negativePrompt,
         modelName: regenerated.modelName,
         providerId: regenerated.providerId,
         filePath: regenerated.filePath,
         thumbnailPath: regenerated.filePath,
-        tags: image.tags || '',
+        tags: video.tags || '',
         width: regenerated.width,
         height: regenerated.height,
+        numFrames: regenerated.numFrames,
+        frameRate: regenerated.frameRate,
+        duration: regenerated.duration,
       })
-      await deleteImage(image.id)
-      message.success(`原图已改名「${oldNewName}」并删除，新图已保存`)
+      await deleteVideo(video.id)
+      message.success(`原视频已改名「${oldNewName}」并删除，新视频已保存`)
       onClose()
     } catch {
       message.error('保存失败')
     }
-  }, [image, regenerated, allImages, updateImage, createImage, deleteImage, message, onClose])
+  }, [video, regenerated, allVideos, updateVideo, createVideo, deleteVideo, message, onClose])
 
   const addTag = useCallback(() => {
     const t = tagInput.trim()
@@ -150,30 +165,30 @@ export function ImageDetailModal({
     setTagInput('')
   }, [tagInput, tags])
 
-  if (!image) return null
+  if (!video) return null
 
   const previewSrc = regenerated
-    ? toImageUrl(regenerated.filePath)
-    : toImageUrl(image.filePath || (image as any).file_path)
+    ? toVideoUrl(regenerated.filePath)
+    : toVideoUrl(video.filePath || (video as any).file_path)
 
   return (
     <Modal
-      open={!!image}
-      title={regenerated ? `${image.name} → 新生成` : image.name}
+      open={!!video}
+      title={regenerated ? `${video.name} → 新生成` : video.name}
       width={1100}
       footer={null}
       onCancel={onClose}
     >
       <div className={styles.createLayout}>
-        {/* 左侧：大图 */}
-        <div className={styles.detailImageWrap} style={{ flex: '0 0 380px' }}>
+        {/* 左侧：视频预览 */}
+        <div className={styles.previewWrap}>
           {isGenerating ? (
             <div style={{ textAlign: 'center', color: '#999' }}>
-              <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--ant-color-primary)' }}><LoadingOutlined spin /></div>
+              <div className={styles.spinIcon}><HourglassOutlined /></div>
               <div>正在生成中...</div>
             </div>
           ) : (
-            <img src={previewSrc} alt={image.name} />
+            <video src={previewSrc} controls muted preload="metadata" style={{ maxWidth: '100%', maxHeight: '65vh' }} />
           )}
           {regenerated && (
             <div style={{
@@ -199,14 +214,14 @@ export function ImageDetailModal({
               <div style={{ marginBottom: 16 }}>
                 <Text type="secondary" style={{ fontSize: 12 }}>提示词</Text>
                 <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                  {regenerated?.prompt || image.prompt}
+                  {regenerated?.prompt || video.prompt}
                 </div>
               </div>
-              {(regenerated?.negativePrompt || image.negativePrompt) && (
+              {(regenerated?.negativePrompt || video.negativePrompt) && (
                 <div style={{ marginBottom: 16 }}>
                   <Text type="secondary" style={{ fontSize: 12 }}>反向提示词</Text>
                   <div style={{ marginTop: 4, fontSize: 13, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                    {regenerated?.negativePrompt || image.negativePrompt}
+                    {regenerated?.negativePrompt || video.negativePrompt}
                   </div>
                 </div>
               )}
@@ -222,7 +237,7 @@ export function ImageDetailModal({
             ) : regenerated ? (
               <Space>
                 <Button type="primary" size="small" icon={<CheckOutlined />} onClick={handleConfirm}>
-                  确认生成（原图删除）
+                  确认生成（原视频删除）
                 </Button>
                 <Button size="small" onClick={() => setRegenerated(null)}>放弃</Button>
               </Space>
@@ -230,7 +245,7 @@ export function ImageDetailModal({
               <Space>
                 <Button size="small" icon={<EditOutlined />} onClick={() => setEditing(true)}>编辑</Button>
                 <Button size="small" icon={<ReloadOutlined />} loading={isGenerating} onClick={handleRegenerate}>重新生成</Button>
-                <Popconfirm title="确定删除此图片？" onConfirm={() => onDelete(image.id)}>
+                <Popconfirm title="确定删除此视频？" onConfirm={() => onDelete(video.id)}>
                   <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
                 </Popconfirm>
               </Space>
@@ -266,15 +281,23 @@ export function ImageDetailModal({
               </div>
               <div>
                 <Text type="secondary" style={{ fontSize: 12 }}>模型</Text>
-                <div style={{ marginTop: 4, fontSize: 13 }}>{image.modelName || '未知'}</div>
+                <div style={{ marginTop: 4, fontSize: 13 }}>{video.modelName || '未知'}</div>
               </div>
               <div>
                 <Text type="secondary" style={{ fontSize: 12 }}>尺寸</Text>
-                <div style={{ marginTop: 4, fontSize: 13 }}>{image.width} x {image.height}</div>
+                <div style={{ marginTop: 4, fontSize: 13 }}>{video.width} x {video.height}</div>
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>帧数 / 帧率</Text>
+                <div style={{ marginTop: 4, fontSize: 13 }}>{video.numFrames} 帧 / {video.frameRate} FPS</div>
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>时长</Text>
+                <div style={{ marginTop: 4, fontSize: 13 }}>{formatDuration(video.duration)}</div>
               </div>
               <div>
                 <Text type="secondary" style={{ fontSize: 12 }}>创建时间</Text>
-                <div style={{ marginTop: 4, fontSize: 13 }}>{fmtTime(image.createdAt)}</div>
+                <div style={{ marginTop: 4, fontSize: 13 }}>{fmtTime(video.createdAt)}</div>
               </div>
             </>
           )}

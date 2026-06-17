@@ -77,6 +77,9 @@ from app.models.markdown_memory import MarkdownMemory
 # 成本追踪
 from app.models.cost_tracking import CostRecord
 
+# 视频画廊
+from app.models.video_gallery import VideoGallery
+
 __all__ = [
     "BaseModel",
     "Conversation", "Message",
@@ -104,4 +107,5 @@ __all__ = [
     "User",
     "MarkdownMemory",
     "CostRecord",
+    "VideoGallery",
 ]

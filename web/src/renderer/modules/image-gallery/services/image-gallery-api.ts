@@ -5,7 +5,7 @@
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type {
   ImageGallery, ImageGalleryFormInput, ImageGalleryUpdateInput,
-  ImageGenerateInput, ImageGenerateResult,
+  ImageGenerateInput, ImageGenerateResult, ImageImg2ImgInput,
 } from '../types'
 
 const BASE = '/image_gallery'
@@ -47,8 +47,18 @@ export async function generateImage(input: ImageGenerateInput): Promise<ImageGen
   return extractData(await apiClient.post(`${BASE}/generate`, input, { timeout: 180000 }))
 }
 
+// ─── 图生图 ────────────────────────────────────────────
+
+export async function generateImageImg2Img(input: ImageImg2ImgInput): Promise<ImageGenerateResult> {
+  return extractData(await apiClient.post(`${BASE}/generate-img2img`, input, { timeout: 180000 }))
+}
+
 // ─── 图片提示词生成 ─────────────────────────────────────
 
 export async function generateImagePrompt(content: string): Promise<string> {
   return extractData(await apiClient.post(`${BASE}/generate-prompt`, { content }))
+}
+
+export async function describeImage(image: string): Promise<string> {
+  return extractData(await apiClient.post(`${BASE}/describe-image`, { image }))
 }

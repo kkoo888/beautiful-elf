@@ -40,6 +40,7 @@ const NotificationPanel = React.lazy(() => import('@/modules/notification/notifi
 const SettingsPanel = React.lazy(() => import('@/modules/settings/settings-panel'))
 const ExpertTeamPanel = React.lazy(() => import('@/modules/expert-team'))
 const ImageGalleryPanel = React.lazy(() => import('@/modules/image-gallery'))
+const VideoGalleryPanel = React.lazy(() => import('@/modules/video-gallery'))
 
 export function ChatPage() {
   return (
@@ -173,6 +174,14 @@ export function ImageGalleryPage() {
   return (
     <PageSuspense moduleName="图片画廊">
       <ImageGalleryPanel />
+    </PageSuspense>
+  )
+}
+
+export function VideoGalleryPage() {
+  return (
+    <PageSuspense moduleName="视频画廊">
+      <VideoGalleryPanel />
     </PageSuspense>
   )
 }

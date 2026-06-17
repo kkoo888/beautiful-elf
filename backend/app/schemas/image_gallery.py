@@ -52,5 +52,19 @@ class ImageGenerateRequest(CamelModel):
     negative_prompt: str = Field(default="", description="反向提示词")
     model_name: str = Field(default="", max_length=128, description="模型名称")
     provider_id: int = Field(default=0, description="供应商 ID（0=使用默认）")
-    width: int = Field(default=1024, ge=256, le=4096, description="图片宽度")
-    height: int = Field(default=1024, ge=256, le=4096, description="图片高度")
+    width: int = Field(default=1024, ge=256, le=7680, description="图片宽度")
+    height: int = Field(default=1024, ge=256, le=7680, description="图片高度")
+
+
+class ImageImg2ImgRequest(CamelModel):
+    """图生图请求"""
+    prompt: str = Field(..., min_length=1, description="生成提示词")
+    negative_prompt: str = Field(default="", description="反向提示词")
+    model_name: str = Field(default="", max_length=128, description="模型名称")
+    provider_id: int = Field(default=0, description="供应商 ID")
+    image: str = Field(..., description="原图 Data URI Base64")
+
+
+class DescribeImageRequest(CamelModel):
+    """解析图片生成提示词请求"""
+    image: str = Field(..., description="图片 Data URI Base64")

@@ -18,8 +18,8 @@ export function getMainWindow(): BrowserWindow | null {
 /** 创建主窗口 */
 export function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1980,
+    height: 1080,
     minWidth: 900,
     minHeight: 600,
     show: false,

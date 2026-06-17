@@ -271,10 +271,12 @@ try:
 
     @app.exception_handler(RateLimitExceeded)
     async def rate_limit_handler(request, exc):
-        return JSONResponse(
+        resp = JSONResponse(
             status_code=429,
             content={"code": "SYSTEM_RATE_LIMIT", "message": "请求过于频繁", "user_tip": "请稍后重试"},
         )
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
 except ImportError:
     pass  # slowapi 未安装时跳过限流
 
@@ -285,14 +287,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Trace-Id"],
+    expose_headers=["X-Trace-Id", "Content-Range", "Accept-Ranges", "Content-Length"],
 )
 
 
 # 全局异常处理
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError):
-    return JSONResponse(
+    resp = JSONResponse(
         status_code=exc.status_code,
         content={
             "code": exc.code,
@@ -302,12 +304,14 @@ async def app_error_handler(request: Request, exc: AppError):
             "requestId": getattr(request.state, "trace_id", ""),
         },
     )
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"未处理异常: {exc}", exc_info=True)
-    return JSONResponse(
+    resp = JSONResponse(
         status_code=500,
         content={
             "code": "SYSTEM_INTERNAL_ERROR",
@@ -317,11 +321,13 @@ async def global_exception_handler(request: Request, exc: Exception):
             "requestId": getattr(request.state, "trace_id", ""),
         },
     )
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
-    return JSONResponse(
+    resp = JSONResponse(
         status_code=400,
         content={
             "code": "SYSTEM_VALIDATION",
@@ -331,6 +337,8 @@ async def value_error_handler(request: Request, exc: ValueError):
             "requestId": getattr(request.state, "trace_id", ""),
         },
     )
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
 
 
 # 请求中间件：注入 trace_id

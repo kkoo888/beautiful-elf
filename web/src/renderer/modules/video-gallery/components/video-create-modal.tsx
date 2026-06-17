@@ -1,71 +1,67 @@
-/** 新增图片弹窗 */
+/** 新增视频弹窗 — 三栏布局 */
 import { useState, useCallback, useEffect } from 'react'
 import {
   Modal, Form, Input, Select, Button, Space, Tag, App, InputNumber,
 } from 'antd'
-import { ThunderboltOutlined, PlusOutlined, LoadingOutlined, PictureOutlined } from '@ant-design/icons'
+import { ThunderboltOutlined, PlusOutlined, HourglassOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { CompactModelSelect, getProvidersCached } from '@/modules/shared/components/model-selector'
 import { polishPrompt } from '@/modules/expert-team/services/expert-team-api'
-import { fetchImageTags, generateImagePrompt } from '../services/image-gallery-api'
-import type { ImageGalleryFormInput, ImageGenerateInput } from '../types'
-import styles from './image-gallery.module.css'
+import { fetchVideoTags, generateVideoPrompt } from '../services/video-gallery-api'
+import type { VideoGalleryFormInput, VideoGenerateInput } from '../types'
+import styles from './video-gallery.module.css'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 
 const { TextArea } = Input
 
-/** 将本地路径转为 API URL */
-function toImageUrl(filePath: string) {
+function toVideoUrl(filePath: string) {
   if (!filePath) return ''
   const filename = filePath.split(/[/\\]/).pop() || ''
-  return `${API_BASE_URL}${API_PREFIX}/image_gallery/files/${encodeURIComponent(filename)}`
+  return `${API_BASE_URL}${API_PREFIX}/video_gallery/files/${encodeURIComponent(filename)}`
 }
 
 /** 预设尺寸选项 */
 const SIZE_OPTIONS = [
-  { label: '1024 x 1024', value: '1024x1024' },
-  { label: '1024 x 768 (4:3)', value: '1024x768' },
-  { label: '768 x 1024 (3:4)', value: '768x1024' },
-  { label: '1024 x 576 (16:9)', value: '1024x576' },
-  { label: '576 x 1024 (9:16)', value: '576x1024' },
-  { label: '──────────── 2K ────────────', value: '__sep_2k', disabled: true },
-  { label: '2K 横 2048 x 1152 (16:9)', value: '2048x1152' },
-  { label: '2K 竖 1152 x 2048 (9:16)', value: '1152x2048' },
-  { label: '2K 横 2048 x 1536 (4:3)', value: '2048x1536' },
-  { label: '2K 竖 1536 x 2048 (3:4)', value: '1536x2048' },
-  { label: '──────────── 4K ────────────', value: '__sep_4k', disabled: true },
-  { label: '4K 横 3840 x 2160 (16:9)', value: '3840x2160' },
-  { label: '4K 竖 2160 x 3840 (9:16)', value: '2160x3840' },
-  { label: '4K 横 3840 x 2880 (4:3)', value: '3840x2880' },
-  { label: '4K 竖 2880 x 3840 (3:4)', value: '2880x3840' },
-  { label: '──────────── 6K ────────────', value: '__sep_6k', disabled: true },
-  { label: '6K 横 6144 x 3456 (16:9)', value: '6144x3456' },
-  { label: '6K 竖 3456 x 6144 (9:16)', value: '3456x6144' },
-  { label: '6K 横 6144 x 4608 (4:3)', value: '6144x4608' },
-  { label: '6K 竖 4608 x 6144 (3:4)', value: '4608x6144' },
-  { label: '──────────── 8K ────────────', value: '__sep_8k', disabled: true },
-  { label: '8K 横 7680 x 4320 (16:9)', value: '7680x4320' },
-  { label: '8K 竖 4320 x 7680 (9:16)', value: '4320x7680' },
-  { label: '8K 横 7680 x 5760 (4:3)', value: '7680x5760' },
-  { label: '8K 竖 5760 x 7680 (3:4)', value: '5760x7680' },
-  { label: '──────────── 自定义 ────────────', value: '__sep_custom', disabled: true },
+  { label: '720p 横 1280 x 720 (16:9)', value: '1280x720' },
+  { label: '720p 竖 720 x 1280 (9:16)', value: '720x1280' },
+  { label: '720p 方 720 x 720 (1:1)', value: '720x720' },
+  { label: '推荐 1152 x 768 (标准)', value: '1152x768' },
+  { label: '1080p 横 1920 x 1080 (16:9)', value: '1920x1080' },
+  { label: '1080p 竖 1080 x 1920 (9:16)', value: '1080x1920' },
+  { label: '1080p 方 1080 x 1080 (1:1)', value: '1080x1080' },
+  { label: '──────────── 自定义 ────────────', value: '__sep', disabled: true },
   { label: '自定义', value: 'custom' },
 ]
 
-interface ImageCreateModalProps {
+/** 帧数选项（8n+1） */
+const FRAME_OPTIONS = [
+  { label: '41 帧 (~1.7s)', value: 41 },
+  { label: '81 帧 (~3.4s)', value: 81 },
+  { label: '121 帧 (~5.0s)', value: 121 },
+  { label: '161 帧 (~6.7s)', value: 161 },
+  { label: '201 帧 (~8.4s)', value: 201 },
+  { label: '241 帧 (~10.0s)', value: 241 },
+  { label: '281 帧 (~11.7s)', value: 281 },
+  { label: '321 帧 (~13.4s)', value: 321 },
+  { label: '361 帧 (~15.0s)', value: 361 },
+  { label: '401 帧 (~16.7s)', value: 401 },
+  { label: '441 帧 (~18.4s)', value: 441 },
+]
+
+interface VideoCreateModalProps {
   open: boolean
-  onOk: (input: ImageGalleryFormInput) => void
-  onGenerate: (input: ImageGenerateInput) => Promise<{ name: string; filePath: string; thumbnailPath: string; width: number; height: number }>
+  onOk: (input: VideoGalleryFormInput) => void
+  onGenerate: (input: VideoGenerateInput) => Promise<{ name: string; filePath: string; thumbnailPath: string; width: number; height: number; numFrames: number; frameRate: number; duration: number }>
   isGenerating: boolean
   onCancel: () => void
 }
 
-export function ImageCreateModal({
+export function VideoCreateModal({
   open,
   onOk,
   onGenerate,
   isGenerating,
   onCancel,
-}: ImageCreateModalProps) {
+}: VideoCreateModalProps) {
   const { message } = App.useApp()
   const [form] = Form.useForm()
   const [generatedResult, setGeneratedResult] = useState<{
@@ -76,25 +72,25 @@ export function ImageCreateModal({
   const [existingTags, setExistingTags] = useState<string[]>([])
   const [polishing, setPolishing] = useState(false)
   const [generatingPrompt, setGeneratingPrompt] = useState(false)
-  const [sizeMode, setSizeMode] = useState('1024x1024')
-  const [customWidth, setCustomWidth] = useState(1024)
-  const [customHeight, setCustomHeight] = useState(1024)
+  const [sizeMode, setSizeMode] = useState('1152x768')
+  const [customWidth, setCustomWidth] = useState(1152)
+  const [customHeight, setCustomHeight] = useState(768)
+  const [numFrames, setNumFrames] = useState(121)
+  const [frameRate, setFrameRate] = useState(24)
   const [selectedModel, setSelectedModel] = useState('')
 
-  // 打开弹窗时设置默认模型 + 加载已有标签
   useEffect(() => {
     if (open) {
       setTags([])
       setSelectedModel('')
-      // 加载已有标签
-      fetchImageTags().then((t) => setExistingTags(t)).catch(() => {})
-      // 查找默认模型
+      setGeneratedResult(null)
+      fetchVideoTags().then((t) => setExistingTags(t)).catch(() => {})
       getProvidersCached().then((providers) => {
         for (const p of providers) {
-          const m = p.models?.find((m) => m.modelName === 'agnes-image-2.1-flash')
+          const m = p.models?.find((m) => m.modelName === 'agnes-video-v2.0')
           if (m) {
-            setSelectedModel(`${p.id}:agnes-image-2.1-flash`)
-            form.setFieldsValue({ modelName: 'agnes-image-2.1-flash', providerId: p.id })
+            setSelectedModel(`${p.id}:agnes-video-v2.0`)
+            form.setFieldsValue({ modelName: 'agnes-video-v2.0', providerId: p.id })
             return
           }
         }
@@ -120,6 +116,8 @@ export function ImageCreateModal({
         providerId: values.providerId || 0,
         width: w,
         height: h,
+        numFrames,
+        frameRate,
       })
       setGeneratedResult({
         name: result.name,
@@ -132,17 +130,18 @@ export function ImageCreateModal({
       if (err?.errorFields) return
       message.error(err?.message || '生成失败')
     }
-  }, [form, onGenerate, message])
+  }, [form, onGenerate, message, sizeMode, customWidth, customHeight, numFrames, frameRate])
 
   const handleOk = useCallback(async () => {
     if (!generatedResult) {
-      message.warning('请先生成图片')
+      message.warning('请先生成视频')
       return
     }
     const values = await form.getFieldsValue()
     const [w, h] = sizeMode === 'custom'
       ? [customWidth, customHeight]
       : sizeMode.split('x').map(Number)
+    const duration = numFrames / frameRate
     onOk({
       name: values.name || generatedResult.name,
       prompt: values.prompt,
@@ -154,11 +153,14 @@ export function ImageCreateModal({
       tags: tags.join(','),
       width: w,
       height: h,
+      numFrames,
+      frameRate,
+      duration: Math.round(duration * 100) / 100,
     })
     setGeneratedResult(null)
     setTags([])
     form.resetFields()
-  }, [generatedResult, form, tags, onOk, message])
+  }, [generatedResult, form, tags, onOk, message, sizeMode, customWidth, customHeight, numFrames, frameRate])
 
   const handleCancel = useCallback(() => {
     setGeneratedResult(null)
@@ -194,7 +196,7 @@ export function ImageCreateModal({
     if (!content?.trim()) return
     setGeneratingPrompt(true)
     try {
-      const result = await generateImagePrompt(content)
+      const result = await generateVideoPrompt(content)
       form.setFieldValue('prompt', result)
     } catch {
       // silent
@@ -206,22 +208,22 @@ export function ImageCreateModal({
   return (
     <Modal
       open={open}
-      title="新增图片"
+      title="新增视频"
       width={1100}
       footer={null}
       onCancel={handleCancel}
     >
       <div className={styles.createLayout}>
         {/* 左侧：预览区 */}
-        <div className={styles.detailImageWrap} style={{ flex: '0 0 380px' }}>
+        <div className={styles.previewWrap}>
           {isGenerating ? (
             <div style={{ textAlign: 'center', color: '#999' }}>
-              <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--ant-color-primary)' }}><LoadingOutlined spin /></div>
+              <div className={styles.spinIcon}><HourglassOutlined /></div>
               <div>正在生成中...</div>
             </div>
           ) : generatedResult ? (
             <>
-              <img src={toImageUrl(generatedResult.filePath)} alt="预览" />
+              <video src={toVideoUrl(generatedResult.filePath)} controls muted preload="metadata" style={{ maxWidth: '100%', maxHeight: '65vh' }} />
               <div style={{
                 position: 'absolute', top: 8, left: 8,
                 background: '#52c41a', color: '#fff', padding: '2px 8px',
@@ -232,8 +234,8 @@ export function ImageCreateModal({
             </>
           ) : (
             <div style={{ textAlign: 'center', color: '#999' }}>
-              <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--ant-color-text-tertiary)' }}><PictureOutlined /></div>
-              <div>输入提示词后点击「生成图片」</div>
+              <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--ant-color-text-tertiary)' }}><VideoCameraOutlined /></div>
+              <div>输入提示词后点击「生成视频」</div>
             </div>
           )}
         </div>
@@ -242,7 +244,7 @@ export function ImageCreateModal({
         <div className={styles.createCenter}>
           <Form form={form} layout="vertical" size="small" style={{ flex: 1 }}>
             <Form.Item label="名称" name="name">
-              <Input placeholder="留空自动生成古风名" />
+              <Input placeholder="留空自动生成" />
             </Form.Item>
 
             <Form.Item
@@ -274,7 +276,7 @@ export function ImageCreateModal({
               name="prompt"
               rules={[{ required: true, message: '请输入提示词' }]}
             >
-              <TextArea rows={6} placeholder="描述你想生成的图片内容..." style={{ resize: 'none' }} />
+              <TextArea rows={6} placeholder="描述视频内容（英文效果更佳）&#10;推荐结构：[主体] + [动作] + [场景] + [镜头运动] + [光照] + [风格]&#10;例：A cat walking on the beach at sunset, cinematic tracking shot" style={{ resize: 'none' }} />
             </Form.Item>
 
             <Form.Item label="反向提示词" name="negativePrompt">
@@ -297,7 +299,7 @@ export function ImageCreateModal({
                 onClick={handleGenerate}
                 size="large"
               >
-                生成图片
+                生成视频
               </Button>
             )}
           </div>
@@ -333,9 +335,9 @@ export function ImageCreateModal({
                   <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>宽度</div>
                   <InputNumber
                     value={customWidth}
-                    onChange={(v) => setCustomWidth(v || 1024)}
+                    onChange={(v) => setCustomWidth(v || 1152)}
                     min={256}
-                    max={7680}
+                    max={1920}
                     step={64}
                     style={{ width: '100%' }}
                   />
@@ -344,15 +346,34 @@ export function ImageCreateModal({
                   <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>高度</div>
                   <InputNumber
                     value={customHeight}
-                    onChange={(v) => setCustomHeight(v || 1024)}
+                    onChange={(v) => setCustomHeight(v || 768)}
                     min={256}
-                    max={7680}
+                    max={1920}
                     step={64}
                     style={{ width: '100%' }}
                   />
                 </div>
               </div>
             )}
+
+            <Form.Item label="帧数">
+              <Select
+                value={numFrames}
+                onChange={setNumFrames}
+                options={FRAME_OPTIONS}
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
+
+            <Form.Item label="帧率 (FPS)">
+              <InputNumber
+                value={frameRate}
+                onChange={(v) => setFrameRate(v || 24)}
+                min={1}
+                max={60}
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
 
             <Form.Item label="标签">
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>

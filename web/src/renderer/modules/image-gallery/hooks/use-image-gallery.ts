@@ -2,10 +2,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchImages, fetchImageTags, fetchImageById,
-  createImage, updateImage, deleteImage, generateImage,
+  createImage, updateImage, deleteImage, generateImage, generateImageImg2Img,
 } from '../services/image-gallery-api'
 import type {
-  ImageGalleryFormInput, ImageGalleryUpdateInput, ImageGenerateInput,
+  ImageGalleryFormInput, ImageGalleryUpdateInput, ImageGenerateInput, ImageImg2ImgInput,
 } from '../types'
 
 const KEY = ['image-gallery']
@@ -57,6 +57,10 @@ export function useImageGallery() {
     mutationFn: (input: ImageGenerateInput) => generateImage(input),
   })
 
+  const generateImg2ImgMut = useMutation({
+    mutationFn: (input: ImageImg2ImgInput) => generateImageImg2Img(input),
+  })
+
   return {
     imagesQuery,
     tagsQuery,
@@ -65,9 +69,11 @@ export function useImageGallery() {
     updateImage: (id: number, input: ImageGalleryUpdateInput) => updateMut.mutateAsync({ id, input }),
     deleteImage: (id: number) => deleteMut.mutateAsync(id),
     generateImage: (input: ImageGenerateInput) => generateMut.mutateAsync(input),
+    generateImageImg2Img: (input: ImageImg2ImgInput) => generateImg2ImgMut.mutateAsync(input),
     isCreating: createMut.isPending,
     isUpdating: updateMut.isPending,
     isDeleting: deleteMut.isPending,
     isGenerating: generateMut.isPending,
+    isImg2Imging: generateImg2ImgMut.isPending,
   }
 }
