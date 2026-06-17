@@ -349,8 +349,8 @@ export function LongTermTab() {
        }
         open={drawerOpen}
         onClose={() => { if (!distilling) { setDrawerOpen(false); setDistillStep(-1) } }}
-        width={420}
-        destroyOnClose
+        size="default"
+        destroyOnHidden
         extra={
           distillStep < 0 ? (
             <Button type="primary" icon={<ExperimentOutlined />} loading={distilling} onClick={handleDistill}>
