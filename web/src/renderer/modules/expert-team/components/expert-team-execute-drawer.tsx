@@ -4,6 +4,7 @@ import { Drawer, Form, Input, InputNumber, Button, Space, Typography, Tag } from
 import { PlayCircleOutlined } from '@ant-design/icons'
 import { useEffect } from 'react'
 import type { ExpertTeam, ExpertTeamExecuteInput } from '../types'
+import { ExpertAvatar } from '@/components/expert-avatar'
 import styles from './expert-team.module.css'
 
 const { TextArea } = Input
@@ -50,11 +51,7 @@ export function ExpertTeamExecuteDrawer({
     <Drawer
       title={
         <Space>
-          {team.icon?.startsWith('data:image') ? (
-            <img src={team.icon} style={{ width: 24, height: 24, borderRadius: 4, objectFit: 'cover' }} />
-          ) : (
-            <span style={{ fontSize: 24 }}>{team.icon}</span>
-          )}
+          <ExpertAvatar avatar={team.icon} size={24} style={{ borderRadius: 4 }} />
           <span>执行「{team.teamName}」</span>
         </Space>
       }
@@ -82,7 +79,7 @@ export function ExpertTeamExecuteDrawer({
               .map((m) => (
                 <Tag key={m.id} style={{ padding: '4px 8px' }}>
                   <Space size={4}>
-                    <span>{m.avatar}</span>
+                    <ExpertAvatar avatar={m.avatar} size={20} />
                     <span>{m.memberName}</span>
                     <Text type="secondary">({m.memberRole})</Text>
                   </Space>

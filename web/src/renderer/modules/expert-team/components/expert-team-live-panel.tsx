@@ -7,7 +7,7 @@
  * - 任务进度
  */
 
-import { Card, Tag, Space, Typography, Timeline, Progress, Empty, Collapse, Avatar } from 'antd'
+import { Card, Tag, Space, Typography, Timeline, Progress, Empty, Collapse } from 'antd'
 import {
   LoadingOutlined,
   CheckCircleFilled,
@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useWSMessage } from '@/services/websocket'
+import { ExpertAvatar } from '@/components/expert-avatar'
 import type {
   ExpertStatusEvent,
   ExpertThinkingEvent,
@@ -90,20 +91,7 @@ function ExpertCard({ expert }: { expert: LiveExpertState }) {
     >
       <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <Space>
-          {expert.avatar?.startsWith('data:image') ? (
-            <Avatar
-              size="small"
-              src={expert.avatar}
-              style={{ backgroundColor: 'transparent' }}
-            />
-          ) : (
-            <Avatar
-              size="small"
-              style={{ backgroundColor: getRoleColor(expert.role) }}
-            >
-              {expert.avatar || expert.name[0]}
-            </Avatar>
-          )}
+          <ExpertAvatar avatar={expert.avatar} size={28} bgColor={getRoleColor(expert.role)} color="#fff" />
           <Text strong>{expert.name}</Text>
           <Tag color={getRoleColor(expert.role)} style={{ margin: 0 }}>
             {expert.role}
@@ -383,12 +371,7 @@ export function ExpertTeamLivePanel({
                     content: (
                       <div>
                         <Space>
-                          <Avatar
-                            size="small"
-                            style={{ backgroundColor: getRoleColor(event.expertRole) }}
-                          >
-                            {event.avatar || event.expertName[0]}
-                          </Avatar>
+                          <ExpertAvatar avatar={event.avatar} size={24} bgColor={getRoleColor(event.expertRole)} color="#fff" />
                           <Text strong>{event.expertName}</Text>
                           <Tag color={getRoleColor(event.expertRole)} style={{ margin: 0 }}>
                             {event.expertRole}
