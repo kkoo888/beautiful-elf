@@ -74,12 +74,14 @@ export interface ExpertTeam {
   description: string
   icon: string
   category: string
+  leaderId: number
   orchestratorPrompt: string
   synthesizerPrompt: string
   maxRounds: number
   isEnabled: number
   version: number
   configJson: Record<string, unknown> | null
+  leader: Expert | null
   experts: Expert[]
   createdAt: string | null
   updatedAt: string | null
@@ -91,6 +93,7 @@ export interface ExpertTeamFormInput {
   description?: string
   icon?: string
   category?: string
+  leaderId?: number
   orchestratorPrompt?: string
   synthesizerPrompt?: string
   maxRounds?: number
@@ -104,6 +107,7 @@ export interface ExpertTeamUpdateInput {
   description?: string
   icon?: string
   category?: string
+  leaderId?: number
   orchestratorPrompt?: string
   synthesizerPrompt?: string
   maxRounds?: number

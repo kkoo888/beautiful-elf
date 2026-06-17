@@ -79,6 +79,13 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                   {team.description}
                 </Paragraph>
               )}
+              {team.leader && (
+                <div style={{ marginTop: 6 }}>
+                  <Tag color="gold">
+                    👑 组长: {team.leader.avatar} {team.leader.memberName}（{team.leader.memberRole}）
+                  </Tag>
+                </div>
+              )}
             </div>
           </Space>
           <div className={styles.detailActions}>

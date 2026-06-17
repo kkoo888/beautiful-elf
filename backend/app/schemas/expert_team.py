@@ -60,6 +60,7 @@ class ExpertTeamCreate(CamelModel):
     description: str = Field(default="", max_length=1024, description="描述")
     icon: str = Field(default="👥", description="图标 emoji 或 base64 小图")
     category: str = Field(default="通用", max_length=64, description="分类")
+    leader_id: int = Field(default=0, ge=0, description="组长/PM 专家 ID (0=未设置)")
     orchestrator_prompt: str = Field(default="", description="编排器系统提示词")
     synthesizer_prompt: str = Field(default="", description="汇总器系统提示词")
     max_rounds: int = Field(default=3, ge=1, le=10, description="最大讨论轮次")
@@ -73,6 +74,7 @@ class ExpertTeamUpdate(CamelModel):
     description: Optional[str] = Field(default=None, max_length=1024)
     icon: Optional[str] = Field(default=None)
     category: Optional[str] = Field(default=None, max_length=64)
+    leader_id: Optional[int] = Field(default=None, ge=0, description="组长/PM 专家 ID")
     orchestrator_prompt: Optional[str] = Field(default=None)
     synthesizer_prompt: Optional[str] = Field(default=None)
     max_rounds: Optional[int] = Field(default=None, ge=1, le=10)
@@ -93,12 +95,14 @@ class ExpertTeamOut(CamelModel):
     description: str
     icon: str
     category: str
+    leader_id: int = 0
     orchestrator_prompt: str
     synthesizer_prompt: str
     max_rounds: int
     is_enabled: int
     version: int
     config_json: Optional[dict] = None
+    leader: Optional[ExpertOut] = None  # 组长/PM 专家详情
     experts: List[ExpertOut] = []  # 通过 binding 查询的专家列表
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

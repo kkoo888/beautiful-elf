@@ -83,6 +83,9 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
     team?.experts.map((e) => e.id) ?? []
   )
 
+  // 组长 ID
+  const [leaderId, setLeaderId] = useState<number>(team?.leaderId ?? 0)
+
   // 绑定弹窗
   const [bindModalOpen, setBindModalOpen] = useState(false)
 
@@ -112,6 +115,7 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
         description: values.description ?? '',
         icon: teamIcon,
         category: values.category ?? '通用',
+        leaderId: leaderId || undefined,
         orchestratorPrompt: values.orchestratorPrompt ?? '',
         synthesizerPrompt: values.synthesizerPrompt ?? '',
         maxRounds: values.maxRounds ?? 3,
@@ -122,7 +126,7 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
     } catch {
       // form validation failed
     }
-  }, [form, expertIds, teamIcon, onSave, message])
+  }, [form, expertIds, leaderId, teamIcon, onSave, message])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -248,6 +252,24 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
           }
           style={{ marginTop: 16 }}
         >
+          {/* 组长选择器 */}
+          <div style={{ marginBottom: 16 }}>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>👑 组长（PM）</Text>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              组长负责分析任务、分配给专家、评估完成质量。从已绑定的专家中选择。
+            </Text>
+            <Select
+              placeholder="选择组长..."
+              value={leaderId || undefined}
+              onChange={(v) => setLeaderId(v)}
+              allowClear
+              style={{ width: '100%' }}
+              options={boundExperts.map((e) => ({
+                label: `${e.avatar ?? '🤖'} ${e.memberName}（${e.memberRole}）`,
+                value: e.id,
+              }))}
+            />
+          </div>
           {boundExperts.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <Text type="secondary">暂未绑定专家，请点击上方按钮选择</Text>

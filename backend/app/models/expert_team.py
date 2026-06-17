@@ -13,6 +13,7 @@ class ExpertTeam(BaseModel):
     description = Column(String(1024), default="", comment="专家团描述")
     icon = Column(String(64), default="👥", comment="图标")
     category = Column(String(64), default="通用", comment="分类")
+    leader_id = Column(BigInteger, nullable=False, default=0, comment="组长/PM 专家 ID (关联 expert.id, 0=未设置)")
     orchestrator_prompt = Column(Text, default="", comment="编排器系统提示词")
     synthesizer_prompt = Column(Text, default="", comment="汇总器系统提示词")
     max_rounds = Column(Integer, default=3, comment="最大讨论轮次")
