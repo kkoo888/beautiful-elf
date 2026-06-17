@@ -291,6 +291,22 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
 
             result = await service.execute_team(db, team_id, request, on_progress=on_progress)
 
+            # 自动生成会话标题（首条消息）
+            try:
+                from app.repository.conversation_repo import ConversationRepository
+                from app.core.database import AsyncSessionLocal
+                async with AsyncSessionLocal() as title_db:
+                    conv_repo = ConversationRepository()
+                    conv = await conv_repo.find_by_id(title_db, conversation_id)
+                    if conv and (not conv.title or conv.title == "新会话"):
+                        auto_title = user_content[:20].replace("\n", " ").strip()
+                        if len(user_content) > 20:
+                            auto_title += "..."
+                        await conv_repo.update(title_db, conversation_id, {"title": auto_title})
+                        await title_db.commit()
+            except Exception as e:
+                logger.warning(f"专家团会话标题更新失败: {e}")
+
             elapsed = result.get("durationMs", 0)
             await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'duration_ms': elapsed})}\n\n")
 

@@ -1,5 +1,6 @@
 """会话管理 Repository"""
 from typing import Optional, List
+from datetime import datetime
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,5 +40,5 @@ class ConversationRepository:
         if conv:
             await self.mapper.update(db, id, {
                 "message_count": conv.message_count + 1,
-                "last_message_at": func.now(),
+                "last_message_at": datetime.now(),
             })
