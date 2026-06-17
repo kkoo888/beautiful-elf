@@ -40,6 +40,8 @@ async function getProvidersCached(): Promise<LLMProvider[]> {
   return _cachedProviders
 }
 
+export { getProvidersCached }
+
 // ── 紧凑模式（单个 Select）──────────────────────────────────
 
 export interface CompactModelSelectProps {

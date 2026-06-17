@@ -59,7 +59,19 @@ export function ExpertTeamList({
         >
           {/* 头部：图标 + 名称 + 描述 */}
           <div className={styles.teamCardHeader}>
-            <div className={styles.teamCardAvatar}>{team.icon}</div>
+            <div
+              className={styles.teamCardAvatar}
+              style={{
+                backgroundColor: team.icon?.startsWith('data:image') ? 'transparent' : undefined,
+                overflow: 'hidden',
+              }}
+            >
+              {team.icon?.startsWith('data:image') ? (
+                <img src={team.icon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                team.icon
+              )}
+            </div>
             <div className={styles.teamCardInfo}>
               <div className={styles.teamCardName}>{team.teamName}</div>
               {team.description && (
@@ -78,10 +90,10 @@ export function ExpertTeamList({
             <Tag color="geekblue">{team.maxRounds} 轮</Tag>
           </div>
 
-          {/* 成员头像行 + 操作按钮 */}
+          {/* 专家头像行 + 操作按钮 */}
           <div className={styles.teamCardMembers}>
             <Space size={0}>
-              {team.members.slice(0, 6).map((m) => (
+              {team.experts.slice(0, 6).map((m) => (
                 <Tooltip key={m.id} title={`${m.memberName} (${m.memberRole})`}>
                   <Avatar
                     size={28}
@@ -91,11 +103,11 @@ export function ExpertTeamList({
                   </Avatar>
                 </Tooltip>
               ))}
-              {team.members.length > 6 && (
-                <Tag style={{ marginLeft: 8 }}>+{team.members.length - 6}</Tag>
+              {team.experts.length > 6 && (
+                <Tag style={{ marginLeft: 8 }}>+{team.experts.length - 6}</Tag>
               )}
-              {team.members.length === 0 && (
-                <Text type="secondary" style={{ fontSize: 12 }}>暂无成员</Text>
+              {team.experts.length === 0 && (
+                <Text type="secondary" style={{ fontSize: 12 }}>暂无专家</Text>
               )}
             </Space>
             <div className={styles.teamCardActions} onClick={(e) => e.stopPropagation()}>
@@ -108,7 +120,7 @@ export function ExpertTeamList({
                   size="small"
                   icon={<PlayCircleOutlined />}
                   onClick={() => onExecute(team)}
-                  disabled={team.members.length === 0}
+                  disabled={team.experts.length === 0}
                 />
               </Tooltip>
               <Tooltip title="编辑">

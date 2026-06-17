@@ -1,11 +1,10 @@
 /** 专家团工作流类型定义 — camelCase 匹配后端 API */
 
-// ─── 专家成员 ────────────────────────────────────────────
+// ─── 专家（独立实体）─────────────────────────────────────
 
-/** 专家成员 */
-export interface ExpertMember {
+/** 专家 */
+export interface Expert {
   id: number
-  teamId: number
   memberName: string
   memberRole: string
   avatar: string
@@ -15,14 +14,13 @@ export interface ExpertMember {
   temperature: number
   maxTokens: number
   toolsJson: Record<string, unknown>[] | null
-  sortOrder: number
   isEnabled: number
   createdAt: string | null
   updatedAt: string | null
 }
 
-/** 创建专家成员表单 */
-export interface ExpertMemberFormInput {
+/** 创建/编辑专家表单 */
+export interface ExpertFormInput {
   memberName: string
   memberRole: string
   avatar?: string
@@ -32,6 +30,38 @@ export interface ExpertMemberFormInput {
   temperature?: number
   maxTokens?: number
   toolsJson?: Record<string, unknown>[]
+  isEnabled?: number
+}
+
+// ─── 专家技能绑定 ────────────────────────────────────────
+
+/** 专家技能绑定 */
+export interface ExpertSkill {
+  id: number
+  expertId: number
+  skillId: number
+  skillName: string
+  skillDisplayName: string
+  skillDescription: string
+  priority: number
+  configOverride: Record<string, unknown> | null
+  isEnabled: number
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+/** 创建专家技能绑定 */
+export interface ExpertSkillCreate {
+  skillId: number
+  priority?: number
+  configOverride?: Record<string, unknown>
+  isEnabled?: number
+}
+
+/** 更新专家技能绑定 */
+export interface ExpertSkillUpdate {
+  priority?: number
+  configOverride?: Record<string, unknown>
   isEnabled?: number
 }
 
@@ -50,7 +80,7 @@ export interface ExpertTeam {
   isEnabled: number
   version: number
   configJson: Record<string, unknown> | null
-  members: ExpertMember[]
+  experts: Expert[]
   createdAt: string | null
   updatedAt: string | null
 }
@@ -65,7 +95,7 @@ export interface ExpertTeamFormInput {
   synthesizerPrompt?: string
   maxRounds?: number
   configJson?: Record<string, unknown>
-  members: ExpertMemberFormInput[]
+  expertIds: number[]
 }
 
 /** 更新专家团表单 */
@@ -79,6 +109,12 @@ export interface ExpertTeamUpdateInput {
   maxRounds?: number
   isEnabled?: number
   configJson?: Record<string, unknown>
+  expertIds?: number[]
+}
+
+/** 绑定专家到专家团 */
+export interface ExpertTeamBindExperts {
+  expertIds: number[]
 }
 
 // ─── 讨论消息 ────────────────────────────────────────────
@@ -142,7 +178,7 @@ export interface ExpertTeamTemplate {
   description: string
   icon: string
   category: string
-  members: ExpertMemberFormInput[]
+  experts: ExpertFormInput[]
   orchestratorPrompt: string
   synthesizerPrompt: string
   maxRounds: number

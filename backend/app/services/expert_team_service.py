@@ -9,9 +9,9 @@ LangGraph StateGraph 流程:
   3. synthesizer: 汇总所有专家意见，生成最终报告
 
 LLM 集成:
-  - 从 MySQL settings 表读取 ollama.host / ollama.chat_model
-  - 通过 OllamaClient 调用本地 Ollama 服务
-  - 每个专家可配置独立的 model / temperature / max_tokens
+  - 通过 LLMService 统一供应商体系（支持 OpenAI/DeepSeek/Ollama 等）
+  - 默认使用设置中标记为默认的供应商模型
+  - 每个专家可配置独立的 provider / model / temperature / max_tokens
 
 WebSocket 实时推送:
   - expert_status: 专家状态变更（开始/完成/失败）
@@ -33,14 +33,14 @@ from typing import TypedDict
 
 from app.repository.expert_team_repo import ExpertTeamRepository
 from app.schemas.expert_team import (
-    ExpertTeamCreate, ExpertTeamUpdate, ExpertTeamOut,
-    ExpertMemberCreate, ExpertMemberOut,
+    ExpertTeamCreate, ExpertTeamUpdate, ExpertTeamOut, ExpertTeamBindExperts,
+    ExpertCreate, ExpertUpdate, ExpertOut,
     ExpertTeamRunOut, ExpertTeamExecuteRequest,
     DiscussionMessage,
-    RoleSkillCreate, RoleSkillUpdate, RoleSkillOut, ExpertRoleRunOut,
+    ExpertSkillCreate, ExpertSkillUpdate, ExpertSkillOut, ExpertRoleRunOut,
+    PolishPromptRequest,
 )
 from app.core.exceptions import RecordNotFoundError
-from app.services.ollama_service import OllamaClient, get_chat_model
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +119,8 @@ class OrchestratorState(TypedDict):
     final_output: str
     total_tokens: int
     run_id: int  # 专家团运行记录 ID
+    default_provider_id: int  # 默认供应商 ID（0=未设置）
+    default_model_name: str  # 默认供应商模型名称（回退用）
     _service: Any  # service 实例引用
     _db: Any  # db session 引用
     _team_id: int  # 专家团 ID（WebSocket 推送用）
@@ -131,9 +133,29 @@ class ExpertState(TypedDict):
     discussion: List[dict]
     round_num: int
     run_id: int
+    default_provider_id: int  # 默认供应商 ID
+    default_model_name: str  # 默认供应商模型名称
     _service: Any
     _db: Any
     _team_id: int  # 专家团 ID（WebSocket 推送用）
+
+
+# ─── LLM 调用辅助函数 ──────────────────────────────────
+
+async def _call_llm(db, provider_id: int, model_name: str, prompt: str, temperature: float = 0.7) -> tuple:
+    """通过 LLMService 调用 LLM，返回 (content, tokens)"""
+    from langchain_core.messages import HumanMessage
+    from app.agent.llm_service import llm_service
+
+    llm = await llm_service.get_chat_llm(
+        db, provider_id=provider_id, model_name=model_name, temperature=temperature,
+    )
+    response = await llm.ainvoke([HumanMessage(content=prompt)])
+    content = response.content if isinstance(response.content, str) else str(response.content)
+    tokens = 0
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        tokens = response.usage_metadata.get("total_tokens", 0)
+    return content, tokens
 
 
 # ─── LangGraph 节点函数 ──────────────────────────────────
@@ -167,12 +189,14 @@ def _check_consensus(round_discussion: list) -> bool:
 
 async def orchestrator_node(state: OrchestratorState) -> dict:
     """Orchestrator 节点: 分析任务，生成执行计划（第一轮才执行）"""
-    client = OllamaClient()
     expert_list = state["expert_list"]
     input_text = state["input_text"]
     orchestrator_prompt = state["orchestrator_prompt"]
     current_round = state.get("current_round", 0)
     team_id = state.get("_team_id", 0)
+    db = state["_db"]
+    provider_id = state.get("default_provider_id", 0)
+    default_model = state.get("default_model_name", "")
 
     # 第一轮：分析任务
     if current_round == 0:
@@ -189,26 +213,24 @@ async def orchestrator_node(state: OrchestratorState) -> dict:
             expert_list=expert_list,
             input_text=input_text,
         )
-        response = await client.chat(
-            messages=[{"role": "system", "content": prompt}],
-            temperature=0.3,
+        content, tokens = await _call_llm(
+            db, provider_id, default_model, prompt, temperature=0.3,
         )
-        tokens = response.get("eval_count", 0)
         msg = {
             "round": 0,
             "expertName": "编排器",
             "expertRole": "Orchestrator",
-            "content": response["content"],
+            "content": content,
             "timestamp": datetime.now().isoformat(),
         }
-        logger.info(f"编排器分析完成: {response['content'][:100]}...")
+        logger.info(f"编排器分析完成: {content[:100]}...")
 
         # 推送：编排器完成 + 推理内容
         await _ws_broadcast(team_id, "expert_thinking", {
             "expertName": "编排器",
             "expertRole": "Orchestrator",
             "round": 0,
-            "content": response["content"],
+            "content": content,
             "runId": state.get("run_id"),
         })
         await _ws_broadcast(team_id, "expert_status", {
@@ -257,6 +279,8 @@ def route_after_orchestrator(state: OrchestratorState) -> list[Send]:
             "discussion": state["discussion"],
             "round_num": current_round,
             "run_id": state["run_id"],
+            "default_model_name": state.get("default_model_name", ""),
+            "default_provider_id": state.get("default_provider_id", 0),
             "_service": state["_service"],
             "_db": state["_db"],
             "_team_id": state.get("_team_id", 0),
@@ -268,7 +292,6 @@ def route_after_orchestrator(state: OrchestratorState) -> list[Send]:
 
 async def expert_call_node(state: ExpertState) -> dict:
     """单个专家节点: 从专业角度分析问题，追踪角色执行记录"""
-    client = OllamaClient()
     member = state["member"]
     input_text = state["input_text"]
     discussion = state["discussion"]
@@ -277,11 +300,13 @@ async def expert_call_node(state: ExpertState) -> dict:
     service = state["_service"]
     db = state["_db"]
     team_id = state.get("_team_id", 0)
+    default_provider_id = state.get("default_provider_id", 0)
+    default_model_name = state.get("default_model_name", "")
 
     # 推送：专家开始工作
     await _ws_broadcast(team_id, "expert_status", {
-        "expertName": member["name"],
-        "expertRole": member["role"],
+        "expertName": member["member_name"],
+        "expertRole": member["member_role"],
         "avatar": member.get("avatar", "🤖"),
         "status": "running",
         "round": round_num,
@@ -289,7 +314,7 @@ async def expert_call_node(state: ExpertState) -> dict:
     })
 
     # 创建角色执行记录
-    role_run = await service._create_role_run(db, run_id, member["id"], member["name"], round_num)
+    role_run = await service._create_role_run(db, run_id, member["id"], member["member_name"], round_num)
 
     # 构建上下文
     prev_msgs = [d for d in discussion if d.get("round", 0) > 0]
@@ -302,7 +327,7 @@ async def expert_call_node(state: ExpertState) -> dict:
     else:
         context = f"原始问题: {input_text}\n\n请从你的专业角度分析这个问题。"
 
-    base_prompt = member.get("system_prompt") or f"你是{member['name']}，角色是{member['role']}。请从专业角度分析问题。"
+    base_prompt = member.get("system_prompt") or f"你是{member['member_name']}，角色是{member['member_role']}。请从专业角度分析问题。"
 
     # 构建技能上下文
     skills = member.get("skills", [])
@@ -338,19 +363,18 @@ async def expert_call_node(state: ExpertState) -> dict:
 3. 如需使用工具，在分析中说明使用意图
 4. 控制在 300-500 字以内"""
 
-    model = member.get("model_name") or None
+    # 解析模型：成员指定 → 默认供应商
+    provider_id = member.get("provider_id") or default_provider_id
+    model_name = member.get("model_name") or default_model_name
+    if not provider_id:
+        raise ValueError("请先在设置中选择默认 AI 供应商")
     temperature = float(member.get("temperature") or 0.7)
 
     start_time = datetime.now()
     try:
-        response = await client.chat(
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            max_tokens=member.get("max_tokens", 2048),
-            model=model,
+        content, tokens = await _call_llm(
+            db, provider_id, model_name, prompt, temperature=temperature,
         )
-        content = response["content"]
-        tokens = response.get("eval_count", 0)
 
         # 完成角色执行记录
         duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
@@ -360,7 +384,7 @@ async def expert_call_node(state: ExpertState) -> dict:
         )
 
     except Exception as e:
-        logger.error(f"专家 {member['name']} 调用失败: {e}")
+        logger.error(f"专家 {member['member_name']} 调用失败: {e}")
         content = f"[调用失败: {e}]"
         tokens = 0
         duration_ms = int((datetime.now() - start_time).total_seconds() * 1000)
@@ -371,8 +395,8 @@ async def expert_call_node(state: ExpertState) -> dict:
 
         # 推送：专家失败
         await _ws_broadcast(team_id, "expert_status", {
-            "expertName": member["name"],
-            "expertRole": member["role"],
+            "expertName": member["member_name"],
+            "expertRole": member["member_role"],
             "avatar": member.get("avatar", "🤖"),
             "status": "failed",
             "round": round_num,
@@ -382,16 +406,16 @@ async def expert_call_node(state: ExpertState) -> dict:
 
     msg = {
         "round": round_num,
-        "expertName": member["name"],
-        "expertRole": member["role"],
+        "expertName": member["member_name"],
+        "expertRole": member["member_role"],
         "content": content,
         "timestamp": datetime.now().isoformat(),
     }
 
     # 推送：专家推理内容
     await _ws_broadcast(team_id, "expert_thinking", {
-        "expertName": member["name"],
-        "expertRole": member["role"],
+        "expertName": member["member_name"],
+        "expertRole": member["member_role"],
         "avatar": member.get("avatar", "🤖"),
         "round": round_num,
         "content": content,
@@ -401,8 +425,8 @@ async def expert_call_node(state: ExpertState) -> dict:
 
     # 推送：专家完成
     await _ws_broadcast(team_id, "expert_status", {
-        "expertName": member["name"],
-        "expertRole": member["role"],
+        "expertName": member["member_name"],
+        "expertRole": member["member_role"],
         "avatar": member.get("avatar", "🤖"),
         "status": "done",
         "round": round_num,
@@ -420,11 +444,13 @@ async def expert_call_node(state: ExpertState) -> dict:
 
 async def synthesizer_node(state: OrchestratorState) -> dict:
     """Synthesizer 节点: 汇总所有专家意见，生成最终报告"""
-    client = OllamaClient()
     input_text = state["input_text"]
     discussion = state["discussion"]
     synthesizer_prompt = state["synthesizer_prompt"]
     team_id = state.get("_team_id", 0)
+    db = state["_db"]
+    provider_id = state.get("default_provider_id", 0)
+    default_model = state.get("default_model_name", "")
 
     # 推送：汇总器开始
     await _ws_broadcast(team_id, "expert_status", {
@@ -446,12 +472,9 @@ async def synthesizer_node(state: OrchestratorState) -> dict:
         discussion=discussion_text,
     )
 
-    response = await client.chat(
-        messages=[{"role": "system", "content": prompt}],
-        temperature=0.3,
+    content, tokens = await _call_llm(
+        db, provider_id, default_model, prompt, temperature=0.3,
     )
-
-    tokens = response.get("eval_count", 0)
 
     # 推送：汇总器完成
     await _ws_broadcast(team_id, "expert_status", {
@@ -464,11 +487,11 @@ async def synthesizer_node(state: OrchestratorState) -> dict:
     await _ws_broadcast(team_id, "expert_progress", {
         "status": "completed",
         "runId": state.get("run_id"),
-        "output": response["content"][:500],
+        "output": content[:500],
     })
 
     return {
-        "final_output": response["content"],
+        "final_output": content,
         "total_tokens": tokens,
     }
 
@@ -504,6 +527,8 @@ def route_after_round(state: OrchestratorState) -> list[Send]:
             "discussion": state["discussion"],
             "round_num": next_round,
             "run_id": state["run_id"],
+            "default_model_name": state.get("default_model_name", ""),
+            "default_provider_id": state.get("default_provider_id", 0),
             "_service": state["_service"],
             "_db": state["_db"],
             "_team_id": state.get("_team_id", 0),
@@ -571,31 +596,24 @@ class ExpertTeamService:
     # ─── 专家团 CRUD ───────────────────────────────────
 
     async def create_team(self, db: AsyncSession, data: ExpertTeamCreate) -> ExpertTeamOut:
-        """创建专家团（含成员）"""
-        team_data = data.model_dump(exclude={"members"})
+        """创建专家团（可绑定已有专家）"""
+        team_data = data.model_dump(exclude={"expert_ids"})
         team = await self.repo.create_team(db, team_data)
 
-        members = []
-        for i, m in enumerate(data.members):
-            member_data = m.model_dump(by_alias=False)
-            member_data["team_id"] = team.id
-            member_data["sort_order"] = i
-            # 温度未填时，从 llm_model 读取模型默认温度
-            if member_data.get("provider_id") and member_data.get("model_name"):
-                member_data["temperature"] = await _get_model_temperature(
-                    db, member_data["provider_id"], member_data["model_name"]
-                )
-            member = await self.repo.create_member(db, member_data)
-            members.append(member)
+        # 绑定专家
+        experts = []
+        if data.expert_ids:
+            await self.repo.replace_team_experts(db, team.id, data.expert_ids)
+            experts = await self.repo.find_experts_by_ids(db, data.expert_ids)
 
-        return self._to_out_team(team, members)
+        return self._to_out_team(team, experts)
 
     async def get_team_by_id(self, db: AsyncSession, team_id: int) -> ExpertTeamOut:
         team = await self.repo.find_team_by_id(db, team_id)
         if not team:
             raise RecordNotFoundError("专家团不存在")
-        members = await self.repo.find_members_by_team(db, team_id)
-        return self._to_out_team(team, members)
+        experts = await self.repo.find_experts_by_team(db, team_id)
+        return self._to_out_team(team, experts)
 
     async def list_teams(
         self, db: AsyncSession, page: int = 1, page_size: int = 20,
@@ -605,14 +623,10 @@ class ExpertTeamService:
         teams = await self.repo.find_all_teams(db, offset=offset, limit=page_size, category=category, enabled=enabled)
         total = await self.repo.count_teams(db, category=category, enabled=enabled)
 
-        # 批量查询成员（消除 N+1）
-        team_ids = [t.id for t in teams]
-        all_members = await self.repo.find_members_by_teams(db, team_ids)
-        members_by_team: dict[int, list] = {}
-        for m in all_members:
-            members_by_team.setdefault(m.team_id, []).append(m)
-
-        result = [self._to_out_team(t, members_by_team.get(t.id, [])) for t in teams]
+        result = []
+        for t in teams:
+            experts = await self.repo.find_experts_by_team(db, t.id)
+            result.append(self._to_out_team(t, experts))
         return result, total
 
     async def update_team(self, db: AsyncSession, team_id: int, data: ExpertTeamUpdate) -> ExpertTeamOut:
@@ -620,102 +634,135 @@ class ExpertTeamService:
         if not team:
             raise RecordNotFoundError("专家团不存在")
         update_data = data.model_dump(exclude_unset=True, by_alias=False)
-        # members 单独处理，不传给 repo.update_team
-        members_data = update_data.pop("members", None)
+        # expert_ids 单独处理
+        expert_ids = update_data.pop("expert_ids", None)
         if update_data:
             team = await self.repo.update_team(db, team_id, update_data)
-        # 同步成员：整体替换模式
-        if members_data is not None:
-            old_members = await self.repo.find_members_by_team(db, team_id)
-            old_map = {m.id: m for m in old_members}
-            new_members = []
-            for i, m in enumerate(members_data):
-                m["team_id"] = team_id
-                m["sort_order"] = i
-                # 温度未填时，从 llm_model 读取模型默认温度
-                if m.get("provider_id") and m.get("model_name"):
-                    m["temperature"] = await _get_model_temperature(
-                        db, m["provider_id"], m["model_name"]
-                    )
-                if i < len(old_members):
-                    # 更新已有成员
-                    old = old_members[i]
-                    await self.repo.update_member(db, old.id, m)
-                    new_members.append(await self.repo.find_member_by_id(db, old.id))
-                else:
-                    # 新增成员
-                    member = await self.repo.create_member(db, m)
-                    new_members.append(member)
-            # 删除多余成员
-            for j in range(len(members_data), len(old_members)):
-                await self.repo.soft_delete_member(db, old_members[j].id)
-            return self._to_out_team(team, new_members)
-        members = await self.repo.find_members_by_team(db, team_id)
-        return self._to_out_team(team, members)
+        # 同步专家绑定：整体替换模式
+        if expert_ids is not None:
+            await self.repo.replace_team_experts(db, team_id, expert_ids)
+        experts = await self.repo.find_experts_by_team(db, team_id)
+        return self._to_out_team(team, experts)
 
     async def delete_team(self, db: AsyncSession, team_id: int) -> bool:
         team = await self.repo.find_team_by_id(db, team_id)
         if not team:
             raise RecordNotFoundError("专家团不存在")
-        await self.repo.soft_delete_members_by_team(db, team_id)
+        await self.repo.soft_delete_bindings_by_team(db, team_id)
         return await self.repo.soft_delete_team(db, team_id)
 
-    # ─── 专家成员 CRUD ─────────────────────────────────
-
-    async def add_member(self, db: AsyncSession, team_id: int, data: ExpertMemberCreate) -> ExpertMemberOut:
+    async def bind_experts(self, db: AsyncSession, team_id: int, data: ExpertTeamBindExperts) -> ExpertTeamOut:
+        """绑定专家到专家团"""
         team = await self.repo.find_team_by_id(db, team_id)
         if not team:
             raise RecordNotFoundError("专家团不存在")
-        member_data = data.model_dump(by_alias=False)
-        member_data["team_id"] = team_id
-        member = await self.repo.create_member(db, member_data)
-        return self._to_out_member(member)
+        await self.repo.replace_team_experts(db, team_id, data.expert_ids)
+        experts = await self.repo.find_experts_by_team(db, team_id)
+        return self._to_out_team(team, experts)
 
-    async def update_member(self, db: AsyncSession, member_id: int, data: dict) -> ExpertMemberOut:
-        member = await self.repo.find_member_by_id(db, member_id)
-        if not member:
-            raise RecordNotFoundError("专家成员不存在")
-        member = await self.repo.update_member(db, member_id, data)
-        return self._to_out_member(member)
+    # ─── 专家 CRUD（独立实体）─────────────────────────
 
-    async def delete_member(self, db: AsyncSession, member_id: int) -> bool:
-        member = await self.repo.find_member_by_id(db, member_id)
-        if not member:
-            raise RecordNotFoundError("专家成员不存在")
-        return await self.repo.soft_delete_member(db, member_id)
+    async def create_expert(self, db: AsyncSession, data: ExpertCreate) -> ExpertOut:
+        """创建专家"""
+        expert_data = data.model_dump(by_alias=False)
+        # 温度未填时，从 llm_model 读取模型默认温度
+        if expert_data.get("provider_id") and expert_data.get("model_name"):
+            expert_data["temperature"] = await _get_model_temperature(
+                db, expert_data["provider_id"], expert_data["model_name"]
+            )
+        expert = await self.repo.create_expert(db, expert_data)
+        return self._to_out_expert(expert)
 
-    # ─── 角色技能绑定 ─────────────────────────────────
+    async def get_expert_by_id(self, db: AsyncSession, expert_id: int) -> ExpertOut:
+        expert = await self.repo.find_expert_by_id(db, expert_id)
+        if not expert:
+            raise RecordNotFoundError("专家不存在")
+        return self._to_out_expert(expert)
 
-    async def list_member_skills(self, db: AsyncSession, member_id: int) -> list:
-        """查询成员绑定的技能（含技能详情）"""
-        binds = await self.repo.find_skills_by_role(db, member_id)
+    async def list_experts(
+        self, db: AsyncSession, page: int = 1, page_size: int = 20,
+        enabled: Optional[int] = None,
+    ) -> Tuple[List[ExpertOut], int]:
+        offset = (page - 1) * page_size
+        experts = await self.repo.find_all_experts(db, offset=offset, limit=page_size, enabled=enabled)
+        total = await self.repo.count_experts(db, enabled=enabled)
+        return [self._to_out_expert(e) for e in experts], total
+
+    async def update_expert(self, db: AsyncSession, expert_id: int, data: ExpertUpdate) -> ExpertOut:
+        expert = await self.repo.find_expert_by_id(db, expert_id)
+        if not expert:
+            raise RecordNotFoundError("专家不存在")
+        update_data = data.model_dump(exclude_unset=True, by_alias=False)
+        if update_data:
+            expert = await self.repo.update_expert(db, expert_id, update_data)
+        return self._to_out_expert(expert)
+
+    async def delete_expert(self, db: AsyncSession, expert_id: int) -> bool:
+        expert = await self.repo.find_expert_by_id(db, expert_id)
+        if not expert:
+            raise RecordNotFoundError("专家不存在")
+        return await self.repo.soft_delete_expert(db, expert_id)
+
+    async def polish_prompt(self, db: AsyncSession, data: PolishPromptRequest) -> str:
+        """润色提示词 — 调用默认大模型优化"""
+        from app.services.llm_provider_service import LLMProviderService
+        provider_service = LLMProviderService()
+        default_provider = await provider_service.get_default_provider(db)
+        if not default_provider:
+            raise ValueError("请先在设置中配置默认 AI 供应商")
+        provider_id = default_provider.id
+        model_name = ""
+        if default_provider.models:
+            enabled_models = [m for m in default_provider.models if m.is_enabled == 1]
+            if enabled_models:
+                model_name = enabled_models[0].model_name
+        if not model_name:
+            raise ValueError("默认供应商没有可用的模型")
+
+        polish_system = (
+            "优化用户的提示词，使其更清晰、专业、可执行，保持原意不变。\n"
+            "要求：\n"
+            "- 直接输出优化后的提示词正文\n"
+            "- 禁止输出任何标题、角色说明、格式标记、编号、前缀或后缀\n"
+            "- 禁止使用 #、##、**、``` 等 markdown 格式\n"
+            "- 只返回纯文本内容"
+        )
+        prompt = f"{polish_system}\n\n原始提示词：\n{data.content}"
+        content, _ = await _call_llm(db, provider_id, model_name, prompt, temperature=0.3)
+        return content.strip()
+
+    # ─── 专家技能绑定 ─────────────────────────────────
+
+    async def list_expert_skills(self, db: AsyncSession, expert_id: int) -> list:
+        """查询专家绑定的技能（含技能详情）"""
+        binds = await self.repo.find_skills_by_expert(db, expert_id)
         result = []
         for b in binds:
             skill = await self._get_skill_info(db, b.skill_id)
             result.append({
                 "id": b.id,
-                "roleId": b.role_id,
+                "expertId": b.expert_id,
                 "skillId": b.skill_id,
                 "skillName": skill.get("name", "") if skill else "",
                 "skillDisplayName": skill.get("display_name", "") if skill else "",
                 "skillDescription": skill.get("description", "") if skill else "",
                 "priority": b.priority,
                 "configOverride": b.config_override,
-                "enabled": b.is_enabled,
+                "isEnabled": b.is_enabled,
                 "createdAt": str(b.created_at) if b.created_at else None,
                 "updatedAt": str(b.updated_at) if b.updated_at else None,
             })
         return result
 
-    async def bind_skill(self, db: AsyncSession, member_id: int, data: RoleSkillCreate) -> RoleSkillOut:
-        """绑定技能到成员"""
-        member = await self.repo.find_member_by_id(db, member_id)
-        if not member:
-            raise RecordNotFoundError("专家成员不存在")
+    async def bind_skill(self, db: AsyncSession, expert_id: int, data: ExpertSkillCreate) -> ExpertSkillOut:
+        """绑定技能到专家"""
+        expert = await self.repo.find_expert_by_id(db, expert_id)
+        if not expert:
+            raise RecordNotFoundError("专家不存在")
         bind_data = data.model_dump(by_alias=False)
-        bind_data["role_id"] = member_id
+        bind_data["expert_id"] = expert_id
         # 检查是否已绑定
-        existing = await self.repo.find_skill_bind(db, member_id, data.skill_id)
+        existing = await self.repo.find_skill_bind(db, expert_id, data.skill_id)
         if existing:
             # 更新已有绑定
             bind = await self.repo.update_skill_bind(db, existing.id, bind_data)
@@ -723,8 +770,8 @@ class ExpertTeamService:
             bind = await self.repo.create_skill_bind(db, bind_data)
         return self._to_out_skill_bind(bind)
 
-    async def update_skill_bind(self, db: AsyncSession, bind_id: int, data: RoleSkillUpdate) -> RoleSkillOut:
-        """更新角色技能绑定"""
+    async def update_skill_bind(self, db: AsyncSession, bind_id: int, data: ExpertSkillUpdate) -> ExpertSkillOut:
+        """更新专家技能绑定"""
         bind = await self.repo.find_skill_bind_by_id(db, bind_id)
         if not bind:
             raise RecordNotFoundError("技能绑定不存在")
@@ -789,8 +836,8 @@ class ExpertTeamService:
             "token_usage": tokens,
         })
 
-    def _to_out_skill_bind(self, bind) -> RoleSkillOut:
-        return RoleSkillOut.model_validate(bind)
+    def _to_out_skill_bind(self, bind) -> ExpertSkillOut:
+        return ExpertSkillOut.model_validate(bind)
 
     def _to_out_role_run(self, run) -> ExpertRoleRunOut:
         return ExpertRoleRunOut.model_validate(run)
@@ -805,12 +852,24 @@ class ExpertTeamService:
         if not team:
             raise RecordNotFoundError("专家团不存在")
 
-        members = await self.repo.find_members_by_team(db, team_id)
-        enabled_members = [m for m in members if m.is_enabled == 1]
-        if not enabled_members:
-            raise RecordNotFoundError("专家团没有启用的成员")
+        # 通过 binding 表查询绑定的专家
+        experts = await self.repo.find_experts_by_team(db, team_id)
+        enabled_experts = [e for e in experts if e.is_enabled == 1]
+        if not enabled_experts:
+            raise RecordNotFoundError("专家团没有启用的专家")
 
         max_rounds = request.max_rounds or team.max_rounds
+
+        # 解析默认供应商的默认模型（成员未配模型时回退用）
+        from app.services.llm_provider_service import LLMProviderService
+        provider_service = LLMProviderService()
+        default_provider = await provider_service.get_default_provider(db)
+        default_provider_id = default_provider.id if default_provider else 0
+        default_model_name = ""
+        if default_provider and default_provider.models:
+            enabled_models = [m for m in default_provider.models if m.is_enabled == 1]
+            if enabled_models:
+                default_model_name = enabled_models[0].model_name
 
         # 创建运行记录
         run = await self.repo.create_run(db, {
@@ -823,39 +882,39 @@ class ExpertTeamService:
         start_time = datetime.now()
 
         try:
-            # 序列化成员信息供 LangGraph 使用（需要 dict 供 LangGraph state）
-            members_data = [self._to_out_member(m).model_dump() for m in enabled_members]
+            # 序列化专家信息供 LangGraph 使用（需要 dict 供 LangGraph state）
+            experts_data = [self._to_out_expert(e).model_dump() for e in enabled_experts]
 
             # 批量加载技能绑定（消除 N+1）
-            member_ids = [m["id"] for m in members_data]
-            all_skills = await self.repo.find_skills_by_roles(db, member_ids)
-            skills_by_role: dict[int, list] = {}
+            expert_ids = [e["id"] for e in experts_data]
+            all_skills = await self.repo.find_skills_by_experts(db, expert_ids)
+            skills_by_expert: dict[int, list] = {}
             for s in all_skills:
-                skills_by_role.setdefault(s.role_id, []).append(s)
+                skills_by_expert.setdefault(s.expert_id, []).append(s)
 
-            # 加载技能详情并注入到成员数据
-            for m in members_data:
-                binds = skills_by_role.get(m["id"], [])
-                m["skills"] = []
+            # 加载技能详情并注入到专家数据
+            for e in experts_data:
+                binds = skills_by_expert.get(e["id"], [])
+                e["skills"] = []
                 for b in binds:
                     skill_info = await self._get_skill_info(db, b.skill_id)
                     if skill_info:
                         skill_info["priority"] = b.priority
                         skill_info["config_override"] = b.config_override
-                        m["skills"].append(skill_info)
+                        e["skills"].append(skill_info)
 
             # 确保工具注册表已加载（从 DB 同步工具定义）
             from app.agent.tool_registry import tool_registry
             if not tool_registry._db_loaded:
                 await tool_registry.load_from_db(db)
 
-            expert_list = ", ".join([f"{m['name']}({m['role']})" for m in members_data])
+            expert_list = ", ".join([f"{e['member_name']}({e['member_role']})" for e in experts_data])
 
             # 构建 LangGraph 初始状态
             initial_state: OrchestratorState = {
                 "input_text": request.input_text,
                 "expert_list": expert_list,
-                "members_data": members_data,
+                "members_data": experts_data,  # 保持 members_data 名称供 LangGraph 使用
                 "orchestrator_prompt": team.orchestrator_prompt or "",
                 "synthesizer_prompt": team.synthesizer_prompt or "",
                 "max_rounds": max_rounds,
@@ -866,6 +925,8 @@ class ExpertTeamService:
                 "final_output": "",
                 "total_tokens": 0,
                 "run_id": run.id,
+                "default_model_name": default_model_name,
+                "default_provider_id": default_provider_id,
                 "_service": self,
                 "_db": db,
                 "_team_id": team_id,
@@ -943,16 +1004,16 @@ class ExpertTeamService:
     # ─── Pydantic 序列化（替代手动 dict）──────────────
 
     @staticmethod
-    def _to_out_team(team, members=None) -> ExpertTeamOut:
+    def _to_out_team(team, experts=None) -> ExpertTeamOut:
         """序列化专家团"""
         team_out = ExpertTeamOut.model_validate(team)
-        team_out.members = [ExpertTeamService._to_out_member(m) for m in (members or [])]
+        team_out.experts = [ExpertTeamService._to_out_expert(e) for e in (experts or [])]
         return team_out
 
     @staticmethod
-    def _to_out_member(member) -> ExpertMemberOut:
-        """用 Pydantic schema 序列化成员"""
-        return ExpertMemberOut.model_validate(member)
+    def _to_out_expert(expert) -> ExpertOut:
+        """用 Pydantic schema 序列化专家"""
+        return ExpertOut.model_validate(expert)
 
     @staticmethod
     def _to_out_run(run) -> ExpertTeamRunOut:

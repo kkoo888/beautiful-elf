@@ -39,6 +39,7 @@ const PerformancePanel = React.lazy(() => import('@/modules/performance/performa
 const NotificationPanel = React.lazy(() => import('@/modules/notification/notification-panel'))
 const SettingsPanel = React.lazy(() => import('@/modules/settings/settings-panel'))
 const ExpertTeamPanel = React.lazy(() => import('@/modules/expert-team'))
+const ImageGalleryPanel = React.lazy(() => import('@/modules/image-gallery'))
 
 export function ChatPage() {
   return (
@@ -164,6 +165,14 @@ export function ExpertTeamPage() {
   return (
     <PageSuspense moduleName="专家团">
       <ExpertTeamPanel />
+    </PageSuspense>
+  )
+}
+
+export function ImageGalleryPage() {
+  return (
+    <PageSuspense moduleName="图片画廊">
+      <ImageGalleryPanel />
     </PageSuspense>
   )
 }

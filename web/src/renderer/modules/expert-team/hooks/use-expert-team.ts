@@ -6,30 +6,41 @@ import type {
   ExpertTeam,
   ExpertTeamFormInput,
   ExpertTeamUpdateInput,
-  ExpertMemberFormInput,
+  ExpertTeamBindExperts,
+  Expert,
+  ExpertFormInput,
+  ExpertSkillCreate,
+  ExpertSkillUpdate,
   ExpertTeamRun,
   ExpertTeamExecuteInput,
   ExpertTeamExecuteResult,
 } from '../types'
 import {
+  fetchExperts,
+  createExpert,
+  updateExpert,
+  deleteExpert,
+  fetchExpertSkills,
+  bindExpertSkill,
+  updateExpertSkillBind,
+  unbindExpertSkill,
   fetchExpertTeams,
   fetchExpertTeamById,
   createExpertTeam,
   updateExpertTeam,
   deleteExpertTeam,
-  addExpertMember,
-  updateExpertMember,
-  deleteExpertMember,
+  bindExpertsToTeam,
   executeExpertTeam,
   fetchExpertTeamRuns,
   fetchAllExpertRuns,
 } from '../services/expert-team-api'
 
 const TEAM_KEY = ['expert-teams']
+const EXPERT_KEY = ['experts']
 const RUN_KEY = ['expert-team-runs']
 
 export interface UseExpertTeamReturn {
-  // 列表
+  // 专家团列表
   teams: ExpertTeam[]
   isLoading: boolean
   error: Error | null
@@ -49,15 +60,30 @@ export interface UseExpertTeamReturn {
   isRunsLoading: boolean
   runsTotal: number
 
-  // CRUD 操作
+  // 专家列表
+  experts: Expert[]
+  isExpertsLoading: boolean
+  expertsTotal: number
+
+  // 专家团 CRUD
   createTeamMut: (input: ExpertTeamFormInput) => Promise<ExpertTeam>
   updateTeamMut: (id: number, input: ExpertTeamUpdateInput) => Promise<ExpertTeam>
   deleteTeamMut: (id: number) => Promise<void>
+  bindExpertsMut: (teamId: number, data: ExpertTeamBindExperts) => Promise<ExpertTeam>
 
-  // 成员操作
-  addMemberMut: (teamId: number, input: ExpertMemberFormInput) => Promise<unknown>
-  updateMemberMut: (memberId: number, input: Partial<ExpertMemberFormInput>) => Promise<unknown>
-  deleteMemberMut: (memberId: number) => Promise<void>
+  // 专家 CRUD
+  createExpertMut: (input: ExpertFormInput) => Promise<Expert>
+  updateExpertMut: (id: number, input: Partial<ExpertFormInput>) => Promise<Expert>
+  deleteExpertMut: (id: number) => Promise<void>
+
+  // 专家技能
+  expertSkills: any[]
+  isSkillsLoading: boolean
+  bindSkillMut: (expertId: number, input: ExpertSkillCreate) => Promise<unknown>
+  updateSkillBindMut: (bindId: number, input: ExpertSkillUpdate) => Promise<unknown>
+  unbindSkillMut: (bindId: number) => Promise<void>
+  selectedExpertId: number | null
+  setSelectedExpertId: (id: number | null) => void
 
   // 执行
   executeTeamMut: (teamId: number, input: ExpertTeamExecuteInput) => Promise<ExpertTeamExecuteResult>
@@ -68,12 +94,15 @@ export interface UseExpertTeamReturn {
 
   // 刷新
   refreshTeams: () => void
+  refreshExperts: () => void
   refreshRuns: () => void
+  refreshSkills: () => void
 }
 
 export function useExpertTeam(): UseExpertTeamReturn {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedExpertId, setSelectedExpertId] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<'list' | 'detail' | 'editor' | 'monitor'>('list')
 
   // 专家团列表
@@ -92,6 +121,28 @@ export function useExpertTeam(): UseExpertTeamReturn {
   // 选中的专家团
   const selectedTeam = teams.find((t) => t.id === selectedId)
 
+  // 独立专家列表
+  const {
+    data: expertsData,
+    isLoading: isExpertsLoading,
+  } = useQuery({
+    queryKey: EXPERT_KEY,
+    queryFn: () => fetchExperts(),
+  })
+
+  const experts = expertsData?.items ?? []
+  const expertsTotal = expertsData?.total ?? 0
+
+  // 专家技能
+  const {
+    data: expertSkills = [],
+    isLoading: isSkillsLoading,
+  } = useQuery({
+    queryKey: ['expert-skills', selectedExpertId],
+    queryFn: () => fetchExpertSkills(selectedExpertId!),
+    enabled: !!selectedExpertId,
+  })
+
   // 运行记录
   const { data: runsData, isLoading: isRunsLoading } = useQuery({
     queryKey: RUN_KEY,
@@ -107,23 +158,31 @@ export function useExpertTeam(): UseExpertTeamReturn {
     void queryClient.invalidateQueries({ queryKey: TEAM_KEY })
   }, [queryClient])
 
+  const refreshExperts = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: EXPERT_KEY })
+  }, [queryClient])
+
   const refreshRuns = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: RUN_KEY })
   }, [queryClient])
 
-  // CRUD mutations — onSuccess 自动刷新，无需手动调用
-  const createMut = useMutation({
+  const refreshSkills = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['expert-skills', selectedExpertId] })
+  }, [queryClient, selectedExpertId])
+
+  // 专家团 CRUD mutations
+  const createTeamMutation = useMutation({
     mutationFn: (input: ExpertTeamFormInput) => createExpertTeam(input),
     onSuccess: refreshTeams,
   })
 
-  const updateMut = useMutation({
+  const updateTeamMutation = useMutation({
     mutationFn: ({ id, input }: { id: number; input: ExpertTeamUpdateInput }) =>
       updateExpertTeam(id, input),
     onSuccess: refreshTeams,
   })
 
-  const deleteMut = useMutation({
+  const deleteTeamMutation = useMutation({
     mutationFn: (id: number) => deleteExpertTeam(id),
     onSuccess: () => {
       refreshTeams()
@@ -131,22 +190,56 @@ export function useExpertTeam(): UseExpertTeamReturn {
     },
   })
 
-  // 成员 mutations
-  const addMemberMut = useMutation({
-    mutationFn: ({ teamId, input }: { teamId: number; input: ExpertMemberFormInput }) =>
-      addExpertMember(teamId, input),
-    onSuccess: refreshTeams,
+  const bindExpertsMutation = useMutation({
+    mutationFn: ({ teamId, data }: { teamId: number; data: ExpertTeamBindExperts }) =>
+      bindExpertsToTeam(teamId, data),
+    onSuccess: () => {
+      refreshTeams()
+    },
   })
 
-  const updateMemberMut = useMutation({
-    mutationFn: ({ memberId, input }: { memberId: number; input: Partial<ExpertMemberFormInput> }) =>
-      updateExpertMember(memberId, input),
-    onSuccess: refreshTeams,
+  // 专家 CRUD mutations
+  const createExpertMutation = useMutation({
+    mutationFn: (input: ExpertFormInput) => createExpert(input),
+    onSuccess: () => {
+      refreshExperts()
+      refreshTeams()
+    },
   })
 
-  const deleteMemberMut = useMutation({
-    mutationFn: (memberId: number) => deleteExpertMember(memberId),
-    onSuccess: refreshTeams,
+  const updateExpertMutation = useMutation({
+    mutationFn: ({ id, input }: { id: number; input: Partial<ExpertFormInput> }) =>
+      updateExpert(id, input),
+    onSuccess: () => {
+      refreshExperts()
+      refreshTeams()
+    },
+  })
+
+  const deleteExpertMutation = useMutation({
+    mutationFn: (id: number) => deleteExpert(id),
+    onSuccess: () => {
+      refreshExperts()
+      refreshTeams()
+    },
+  })
+
+  // 专家技能 mutations
+  const bindSkillMutation = useMutation({
+    mutationFn: ({ expertId, input }: { expertId: number; input: ExpertSkillCreate }) =>
+      bindExpertSkill(expertId, input),
+    onSuccess: refreshSkills,
+  })
+
+  const updateSkillBindMutation = useMutation({
+    mutationFn: ({ bindId, input }: { bindId: number; input: ExpertSkillUpdate }) =>
+      updateExpertSkillBind(bindId, input),
+    onSuccess: refreshSkills,
+  })
+
+  const unbindSkillMutation = useMutation({
+    mutationFn: (bindId: number) => unbindExpertSkill(bindId),
+    onSuccess: refreshSkills,
   })
 
   // 执行 mutation
@@ -158,35 +251,57 @@ export function useExpertTeam(): UseExpertTeamReturn {
 
   // 包装函数 — 参数展平
   const createTeamMut = useCallback(
-    (input: ExpertTeamFormInput) => createMut.mutateAsync(input),
-    [createMut]
+    (input: ExpertTeamFormInput) => createTeamMutation.mutateAsync(input),
+    [createTeamMutation]
   )
 
   const updateTeamMut = useCallback(
-    (id: number, input: ExpertTeamUpdateInput) => updateMut.mutateAsync({ id, input }),
-    [updateMut]
+    (id: number, input: ExpertTeamUpdateInput) => updateTeamMutation.mutateAsync({ id, input }),
+    [updateTeamMutation]
   )
 
   const deleteTeamMut = useCallback(
-    (id: number) => deleteMut.mutateAsync(id),
-    [deleteMut]
+    (id: number) => deleteTeamMutation.mutateAsync(id),
+    [deleteTeamMutation]
   )
 
-  const addMemberMutFn = useCallback(
-    (teamId: number, input: ExpertMemberFormInput) =>
-      addMemberMut.mutateAsync({ teamId, input }),
-    [addMemberMut]
+  const bindExpertsMutFn = useCallback(
+    (teamId: number, data: ExpertTeamBindExperts) =>
+      bindExpertsMutation.mutateAsync({ teamId, data }),
+    [bindExpertsMutation]
   )
 
-  const updateMemberMutFn = useCallback(
-    (memberId: number, input: Partial<ExpertMemberFormInput>) =>
-      updateMemberMut.mutateAsync({ memberId, input }),
-    [updateMemberMut]
+  const createExpertMutFn = useCallback(
+    (input: ExpertFormInput) => createExpertMutation.mutateAsync(input),
+    [createExpertMutation]
   )
 
-  const deleteMemberMutFn = useCallback(
-    (memberId: number) => deleteMemberMut.mutateAsync(memberId),
-    [deleteMemberMut]
+  const updateExpertMutFn = useCallback(
+    (id: number, input: Partial<ExpertFormInput>) =>
+      updateExpertMutation.mutateAsync({ id, input }),
+    [updateExpertMutation]
+  )
+
+  const deleteExpertMutFn = useCallback(
+    (id: number) => deleteExpertMutation.mutateAsync(id),
+    [deleteExpertMutation]
+  )
+
+  const bindSkillMutFn = useCallback(
+    (expertId: number, input: ExpertSkillCreate) =>
+      bindSkillMutation.mutateAsync({ expertId, input }),
+    [bindSkillMutation]
+  )
+
+  const updateSkillBindMutFn = useCallback(
+    (bindId: number, input: ExpertSkillUpdate) =>
+      updateSkillBindMutation.mutateAsync({ bindId, input }),
+    [updateSkillBindMutation]
+  )
+
+  const unbindSkillMutFn = useCallback(
+    (bindId: number) => unbindSkillMutation.mutateAsync(bindId),
+    [unbindSkillMutation]
   )
 
   const executeTeamMut = useCallback(
@@ -196,12 +311,13 @@ export function useExpertTeam(): UseExpertTeamReturn {
   )
 
   const isMutating =
-    createMut.isPending ||
-    updateMut.isPending ||
-    deleteMut.isPending ||
-    addMemberMut.isPending ||
-    updateMemberMut.isPending ||
-    deleteMemberMut.isPending
+    createTeamMutation.isPending ||
+    updateTeamMutation.isPending ||
+    deleteTeamMutation.isPending ||
+    bindExpertsMutation.isPending ||
+    createExpertMutation.isPending ||
+    updateExpertMutation.isPending ||
+    deleteExpertMutation.isPending
 
   return {
     teams,
@@ -216,16 +332,29 @@ export function useExpertTeam(): UseExpertTeamReturn {
     runs,
     isRunsLoading,
     runsTotal,
+    experts,
+    isExpertsLoading,
+    expertsTotal,
     createTeamMut,
     updateTeamMut,
     deleteTeamMut,
-    addMemberMut: addMemberMutFn,
-    updateMemberMut: updateMemberMutFn,
-    deleteMemberMut: deleteMemberMutFn,
+    bindExpertsMut: bindExpertsMutFn,
+    createExpertMut: createExpertMutFn,
+    updateExpertMut: updateExpertMutFn,
+    deleteExpertMut: deleteExpertMutFn,
+    expertSkills,
+    isSkillsLoading,
+    bindSkillMut: bindSkillMutFn,
+    updateSkillBindMut: updateSkillBindMutFn,
+    unbindSkillMut: unbindSkillMutFn,
+    selectedExpertId,
+    setSelectedExpertId,
     executeTeamMut,
     isExecuting: executeMut.isPending,
     isMutating,
     refreshTeams,
+    refreshExperts,
     refreshRuns,
+    refreshSkills,
   }
 }

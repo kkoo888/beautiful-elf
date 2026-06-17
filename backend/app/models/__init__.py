@@ -60,8 +60,8 @@ from app.models.action_log import ActionLog
 
 # 专家团工作流
 from app.models.expert_team import (
-    ExpertTeam, ExpertTeamMember, ExpertTeamRun,
-    ExpertRoleSkill, ExpertRoleRun,
+    ExpertTeam, Expert, TeamExpertBinding, ExpertTeamRun,
+    ExpertSkill, ExpertRoleRun,
 )
 
 # 大模型供应商
@@ -98,8 +98,8 @@ __all__ = [
     "AIFeedback",
     "Prompt",
     "ActionLog",
-    "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
-    "ExpertRoleSkill", "ExpertRoleRun",
+    "ExpertTeam", "Expert", "TeamExpertBinding", "ExpertTeamRun",
+    "ExpertSkill", "ExpertRoleRun",
     "LLMProvider", "LLMModel",
     "User",
     "MarkdownMemory",

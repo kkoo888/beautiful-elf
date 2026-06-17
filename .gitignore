@@ -52,3 +52,7 @@ backend/app/router/models/
 
 # 技能安装目录（运行时生成，不入库）
 backend/data/
+
+# 上传文件目录
+backend/uploads/
+uploads/

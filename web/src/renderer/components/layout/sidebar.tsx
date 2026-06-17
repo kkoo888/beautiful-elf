@@ -15,6 +15,7 @@ import {
   BellOutlined,
   HeartOutlined,
   TeamOutlined,
+  PictureOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppStore } from '@/stores/use-app-store'
@@ -48,6 +49,7 @@ const menuItems: ItemType[] = [
       { key: '/memory', icon: <BulbOutlined />, label: '记忆' },
       { key: '/translate', icon: <TranslationOutlined />, label: '翻译' },
       { key: '/skills', icon: <ToolOutlined />, label: '技能' },
+      { key: '/image-gallery', icon: <PictureOutlined />, label: '图片画廊' },
     ],
   },
   {

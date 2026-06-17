@@ -9,7 +9,7 @@ import asyncio
 import json
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -283,18 +283,15 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
     heartbeat_task = asyncio.create_task(_heartbeat())
     producer_task = asyncio.create_task(_produce())
 
-    async def _sse_generator():
-        try:
-            while True:
-                item = await _queue.get()
-                if item is None:
-                    break
-                yield item
-        finally:
-            heartbeat_task.cancel()
-            producer_task.cancel()
-
-    return _sse_generator()
+    try:
+        while True:
+            item = await _queue.get()
+            if item is None:
+                break
+            yield item
+    finally:
+        heartbeat_task.cancel()
+        producer_task.cancel()
 
 
 async def _stream_response(

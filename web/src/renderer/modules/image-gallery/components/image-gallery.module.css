@@ -1,0 +1,192 @@
+/* 图片画廊 — Pinterest 风格瀑布流 */
+
+.galleryContainer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.toolbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tagBar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* ── 瀑布流主体 ────────────────────────────── */
+
+.masonry {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  padding: 0 2px 16px 0;
+  scroll-behavior: smooth;
+}
+
+.masonryInner {
+  column-count: 5;
+  column-gap: 12px;
+}
+
+@media (max-width: 1600px) { .masonryInner { column-count: 4; } }
+@media (max-width: 1200px) { .masonryInner { column-count: 3; } }
+@media (max-width: 800px)  { .masonryInner { column-count: 2; } }
+@media (max-width: 500px)  { .masonryInner { column-count: 1; } }
+
+/* ── 卡片 ──────────────────────────────────── */
+
+.masonryItem {
+  break-inside: avoid;
+  margin-bottom: 12px;
+  cursor: pointer;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.masonryItem:hover {
+  transform: translateY(-3px);
+  border-color: var(--ant-color-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.masonryItem img {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.masonryItemInfo {
+  padding: 8px 10px 10px;
+}
+
+.masonryItemName {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.masonryItemTags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.masonryItemMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+/* ── 空状态占满 ────────────────────────────── */
+
+.emptyWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── 加载态 ────────────────────────────────── */
+
+.loadingWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── 分页栏 ────────────────────────────────── */
+
+.pagination {
+  flex-shrink: 0;
+  text-align: center;
+  padding-top: 8px;
+}
+
+/* ── 详情弹窗 ──────────────────────────────── */
+
+.detailLayout {
+  display: flex;
+  gap: 24px;
+  min-height: 400px;
+  max-height: 70vh;
+}
+
+.detailImageWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ant-color-fill-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 300px;
+  position: relative;
+}
+
+.detailImageWrap img {
+  max-width: 100%;
+  max-height: 65vh;
+  object-fit: contain;
+}
+
+.detailSidebar {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+@media (max-width: 800px) {
+  .detailLayout {
+    flex-direction: column;
+    max-height: none;
+  }
+  .detailSidebar { width: 100%; }
+  .detailImageWrap img { max-height: 40vh; }
+}
+
+/* ── 生成弹窗 ──────────────────────────────── */
+
+.generatePreview {
+  text-align: center;
+  padding: 20px;
+  background: var(--ant-color-fill-secondary);
+  border-radius: 8px;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.generatePreview img {
+  max-width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 6px;
+}

@@ -5,42 +5,39 @@ from pydantic import Field
 from app.schemas.base import CamelModel
 
 
-# ─── 专家成员 ─────────────────────────────────────────────
+# ─── 专家（独立实体）─────────────────────────────────────
 
-class ExpertMemberCreate(CamelModel):
-    """创建专家成员"""
+class ExpertCreate(CamelModel):
+    """创建专家"""
     member_name: str = Field(..., min_length=1, max_length=128, description="专家名称")
     member_role: str = Field(..., min_length=1, max_length=128, description="专家角色")
-    avatar: str = Field(default="🤖", max_length=64, description="头像 emoji")
+    avatar: str = Field(default="🤖", description="头像 emoji 或 base64 小图")
     system_prompt: str = Field(..., min_length=1, description="专家系统提示词")
     model_name: str = Field(default="", max_length=128, description="模型名称")
-    provider_id: Optional[int] = Field(default=None, description="供应商 ID (用于读取模型默认温度)")
+    provider_id: Optional[int] = Field(default=None, description="供应商 ID")
     temperature: float = Field(default=0.7, ge=0, le=2, description="温度 0-2")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数")
     tools_json: Optional[List[dict]] = Field(default=None, description="可用工具列表")
-    sort_order: int = Field(default=0, description="排序顺序")
     is_enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
 
 
-class ExpertMemberUpdate(CamelModel):
-    """更新专家成员"""
+class ExpertUpdate(CamelModel):
+    """更新专家"""
     member_name: Optional[str] = Field(default=None, max_length=128)
     member_role: Optional[str] = Field(default=None, max_length=128)
-    avatar: Optional[str] = Field(default=None, max_length=64)
+    avatar: Optional[str] = Field(default=None)
     system_prompt: Optional[str] = Field(default=None)
     model_name: Optional[str] = Field(default=None, max_length=128)
     provider_id: Optional[int] = Field(default=None)
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=8192)
     tools_json: Optional[List[dict]] = Field(default=None)
-    sort_order: Optional[int] = Field(default=None)
     is_enabled: Optional[int] = Field(default=None, ge=0, le=1)
 
 
-class ExpertMemberOut(CamelModel):
-    """专家成员输出"""
+class ExpertOut(CamelModel):
+    """专家输出（独立实体，无 team_id）"""
     id: int
-    team_id: int
     member_name: str
     member_role: str
     avatar: str
@@ -50,7 +47,6 @@ class ExpertMemberOut(CamelModel):
     temperature: float = 0.7
     max_tokens: int
     tools_json: Optional[List[dict]] = None
-    sort_order: int
     is_enabled: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -62,27 +58,32 @@ class ExpertTeamCreate(CamelModel):
     """创建专家团"""
     team_name: str = Field(..., min_length=1, max_length=256, description="专家团名称")
     description: str = Field(default="", max_length=1024, description="描述")
-    icon: str = Field(default="👥", max_length=64, description="图标")
+    icon: str = Field(default="👥", description="图标 emoji 或 base64 小图")
     category: str = Field(default="通用", max_length=64, description="分类")
     orchestrator_prompt: str = Field(default="", description="编排器系统提示词")
     synthesizer_prompt: str = Field(default="", description="汇总器系统提示词")
     max_rounds: int = Field(default=3, ge=1, le=10, description="最大讨论轮次")
     config_json: Optional[dict] = Field(default=None, description="扩展配置")
-    members: List[ExpertMemberCreate] = Field(default=[], description="专家成员列表")
+    expert_ids: List[int] = Field(default=[], description="绑定的专家 ID 列表")
 
 
 class ExpertTeamUpdate(CamelModel):
     """更新专家团"""
     team_name: Optional[str] = Field(default=None, max_length=256)
     description: Optional[str] = Field(default=None, max_length=1024)
-    icon: Optional[str] = Field(default=None, max_length=64)
+    icon: Optional[str] = Field(default=None)
     category: Optional[str] = Field(default=None, max_length=64)
     orchestrator_prompt: Optional[str] = Field(default=None)
     synthesizer_prompt: Optional[str] = Field(default=None)
     max_rounds: Optional[int] = Field(default=None, ge=1, le=10)
     is_enabled: Optional[int] = Field(default=None, ge=0, le=1)
     config_json: Optional[dict] = Field(default=None)
-    members: Optional[List[ExpertMemberCreate]] = Field(default=None, description="专家成员列表（整体替换）")
+    expert_ids: Optional[List[int]] = Field(default=None, description="绑定的专家 ID 列表（整体替换）")
+
+
+class ExpertTeamBindExperts(CamelModel):
+    """绑定专家到专家团"""
+    expert_ids: List[int] = Field(..., description="要绑定的专家 ID 列表")
 
 
 class ExpertTeamOut(CamelModel):
@@ -98,7 +99,7 @@ class ExpertTeamOut(CamelModel):
     is_enabled: int
     version: int
     config_json: Optional[dict] = None
-    members: List[ExpertMemberOut] = []
+    experts: List[ExpertOut] = []  # 通过 binding 查询的专家列表
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -130,6 +131,11 @@ class ExpertTeamExecuteRequest(CamelModel):
     max_rounds: Optional[int] = Field(default=None, ge=1, le=10, description="覆盖最大轮次")
 
 
+class PolishPromptRequest(CamelModel):
+    """润色提示词请求"""
+    content: str = Field(..., min_length=1, description="原始提示词内容")
+
+
 # ─── 讨论消息 ─────────────────────────────────────────────
 
 class DiscussionMessage(CamelModel):
@@ -141,27 +147,27 @@ class DiscussionMessage(CamelModel):
     timestamp: str = Field(..., description="时间戳")
 
 
-# ─── 角色技能绑定 ────────────────────────────────────────
+# ─── 专家技能绑定 ─────────────────────────────────────────
 
-class RoleSkillCreate(CamelModel):
-    """绑定技能到角色"""
+class ExpertSkillCreate(CamelModel):
+    """绑定技能到专家"""
     skill_id: int = Field(..., description="技能 ID")
     priority: int = Field(default=0, ge=0, description="调用优先级")
     config_override: Optional[dict] = Field(default=None, description="配置覆盖")
     is_enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
 
 
-class RoleSkillUpdate(CamelModel):
-    """更新角色技能绑定"""
+class ExpertSkillUpdate(CamelModel):
+    """更新专家技能绑定"""
     priority: Optional[int] = Field(default=None, ge=0)
     config_override: Optional[dict] = Field(default=None)
     is_enabled: Optional[int] = Field(default=None, ge=0, le=1)
 
 
-class RoleSkillOut(CamelModel):
-    """角色技能绑定输出"""
+class ExpertSkillOut(CamelModel):
+    """专家技能绑定输出"""
     id: int
-    role_id: int
+    expert_id: int
     skill_id: int
     skill_name: str = ""
     skill_display_name: str = ""
@@ -173,7 +179,7 @@ class RoleSkillOut(CamelModel):
     updated_at: Optional[datetime] = None
 
 
-# ─── 角色执行记录 ────────────────────────────────────────
+# ─── 角色执行记录 ─────────────────────────────────────────
 
 class ExpertRoleRunOut(CamelModel):
     """角色执行记录输出"""

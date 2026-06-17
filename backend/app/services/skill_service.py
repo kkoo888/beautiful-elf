@@ -34,10 +34,10 @@ class SkillService:
         return SkillStatsOut.model_validate(stats)
 
     async def create_skill(self, db: AsyncSession, data: SkillCreate) -> SkillOut:
-        """创建技能记录"""
-        existing = await self.repo.find_by_name(db, data.name)
+        """创建技能记录（幂等：已存在则返回已有记录）"""
+        existing = await self.repo.find_by_name_any(db, data.name)
         if existing:
-            raise DuplicateEntryError(f"技能名称 '{data.name}' 已存在")
+            return self._to_out(existing)
         item = await self.repo.create(db, data.model_dump())
         return self._to_out(item)
 
@@ -154,8 +154,8 @@ class SkillService:
         trigger_words: list[str], dependencies: list[str],
     ) -> dict:
         """从 zip 安装技能：解压 → 安全扫描 → 通过则入库，否则返回扫描报告"""
-        # 检查名称是否已存在
-        existing = await self.repo.find_by_name(db, name)
+        # 检查名称是否已存在（含软删除记录，避免唯一索引冲突）
+        existing = await self.repo.find_by_name_any(db, name)
         if existing:
             raise DuplicateEntryError(f"技能名称 '{name}' 已存在")
 
@@ -212,10 +212,13 @@ class SkillService:
         trigger_words: list[str], dependencies: list[str],
         zip_bytes: bytes,
     ) -> dict:
-        """用户确认忽略扫描风险后强制安装技能"""
-        existing = await self.repo.find_by_name(db, name)
+        """用户确认忽略扫描风险后强制安装技能（幂等：已存在则直接返回）"""
+        existing = await self.repo.find_by_name_any(db, name)
         if existing:
-            raise DuplicateEntryError(f"技能名称 '{name}' 已存在")
+            result = self._to_out(existing).model_dump()
+            result["installed"] = True
+            result["scanResult"] = existing.config.get("scanResult", {})
+            return result
 
         # 解压到磁盘
         skill_dir = os.path.join(SKILLS_DIR, name)

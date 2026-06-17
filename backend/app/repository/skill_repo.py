@@ -21,6 +21,11 @@ class SkillRepository:
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def find_by_name_any(self, db: AsyncSession, name: str) -> Optional[Skill]:
+        stmt = select(Skill).where(Skill.name == name)
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def find_all(
         self, db: AsyncSession, offset: int = 0, limit: int = 20,
         enabled: Optional[int] = None,

@@ -506,7 +506,7 @@ class AgentService:
             # [P0] LangGraph v3 Event Streaming — 官方推荐的 typed projection API
             # 文档: https://docs.langchain.com/oss/python/langgraph/event-streaming
             # v3 核心优势: 每个 projection（messages/values/output）独立消费，天然去重
-            stream = self._graph.astream_events(
+            stream = await self._graph.astream_events(
                 initial_state,
                 config=config,
                 version="v3",
@@ -527,15 +527,28 @@ class AgentService:
                     msg_chunk, metadata = data[0], data[1] if len(data) > 1 else {}
                     node_name = metadata.get("langgraph_node", "") if isinstance(metadata, dict) else ""
 
-                    # 只处理 text-delta（LLM 生成的文本 token）
-                    if isinstance(data, dict) and data.get("event") == "content-block-delta":
-                        block = (data.get("delta") or {})
+                    # v3: data = (payload, metadata); payload 是 dict（protocol event）或 BaseMessage
+                    # ── content-block-delta: 流式 token（文本生成过程中的增量） ──
+                    if isinstance(msg_chunk, dict) and msg_chunk.get("event") == "content-block-delta":
+                        block = (msg_chunk.get("delta") or {})
                         if block.get("type") == "text-delta":
                             token_text = block.get("text", "")
                             if token_text:
                                 _got_llm_tokens = True
                                 yield {"type": "token", "content": token_text}
-                    # 兼容: message_chunk 有 content（LangChain 模型返回的 AIMessageChunk）
+                    # ── content-block-start: reasoning / thinking 内容 ──
+                    elif isinstance(msg_chunk, dict) and msg_chunk.get("event") == "content-block-start":
+                        block = msg_chunk.get("content_block", {})
+                        if isinstance(block, dict) and block.get("type") == "thinking":
+                            thinking_text = block.get("thinking", "")
+                            if thinking_text:
+                                yield {"type": "token", "content": thinking_text}
+                    # ── reasoning-delta: reasoning 流式增量 ──
+                    elif isinstance(msg_chunk, dict) and msg_chunk.get("event") == "reasoning-delta":
+                        reasoning_text = msg_chunk.get("delta", {}).get("reasoning", "") if isinstance(msg_chunk.get("delta"), dict) else ""
+                        if reasoning_text:
+                            yield {"type": "token", "content": reasoning_text}
+                    # 兼容 v2: AIMessageChunk（LangChain 模型返回的完整 chunk）
                     elif hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
                         if getattr(msg_chunk, "type", "") == "AIMessageChunk":
                             _got_llm_tokens = True
@@ -543,7 +556,15 @@ class AgentService:
                             yield {"type": "token", "content": token_text}
 
                     # 提取 usage
-                    if hasattr(msg_chunk, "usage_metadata") and msg_chunk.usage_metadata:
+                    if isinstance(msg_chunk, dict) and msg_chunk.get("event") == "message-finish":
+                        usage = msg_chunk.get("usage") or {}
+                        pt = usage.get("input_tokens", 0) or 0
+                        ct = usage.get("output_tokens", 0) or 0
+                        if pt or ct:
+                            total_prompt_tokens += pt
+                            total_completion_tokens += ct
+                            yield {"type": "cost_update", "prompt_tokens": total_prompt_tokens, "completion_tokens": total_completion_tokens}
+                    elif hasattr(msg_chunk, "usage_metadata") and msg_chunk.usage_metadata:
                         usage = msg_chunk.usage_metadata
                         pt = getattr(usage, "input_tokens", 0) or 0
                         ct = getattr(usage, "output_tokens", 0) or 0
@@ -552,19 +573,19 @@ class AgentService:
                             total_completion_tokens += ct
                             yield {"type": "cost_update", "prompt_tokens": total_prompt_tokens, "completion_tokens": total_completion_tokens}
 
-                # ── tools 通道: 工具调用事件 ──
+                # ── tools 通道: 工具调用事件（v3: tool-started / tool-output-delta / tool-finished / tool-error） ──
                 elif method == "tools":
-                    event_type = event.get("event", "")
-                    tool_name = data.get("name", "") if isinstance(data, dict) else ""
+                    event_type = data.get("event", "") if isinstance(data, dict) else ""
+                    tool_name = data.get("tool_name", "") if isinstance(data, dict) else ""
 
-                    if event_type == "on_tool_start":
+                    if event_type == "tool-started":
                         if tool_name:
                             tools_used.append(tool_name)
                             yield {"type": "tool_start", "tool": tool_name, "args": data.get("input", {}) if isinstance(data, dict) else {}}
 
-                    elif event_type in ("on_tool_end", "on_tool_error"):
+                    elif event_type in ("tool-finished", "tool-error"):
                         output_str = str(data.get("output", "")) if isinstance(data, dict) else ""
-                        is_error = event_type == "on_tool_error" or '"success": false' in output_str.lower() or '"error"' in output_str.lower()
+                        is_error = event_type == "tool-error"
                         if is_error:
                             yield {"type": "tool_error", "tool": tool_name, "output_preview": output_str[:200]}
                         else:

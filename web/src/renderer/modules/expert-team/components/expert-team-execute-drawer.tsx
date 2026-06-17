@@ -50,7 +50,11 @@ export function ExpertTeamExecuteDrawer({
     <Drawer
       title={
         <Space>
-          <span style={{ fontSize: 24 }}>{team.icon}</span>
+          {team.icon?.startsWith('data:image') ? (
+            <img src={team.icon} style={{ width: 24, height: 24, borderRadius: 4, objectFit: 'cover' }} />
+          ) : (
+            <span style={{ fontSize: 24 }}>{team.icon}</span>
+          )}
           <span>执行「{team.teamName}」</span>
         </Space>
       }
@@ -73,7 +77,7 @@ export function ExpertTeamExecuteDrawer({
         <Text type="secondary" style={{ fontSize: 12 }}>参与专家</Text>
         <div style={{ marginTop: 8 }}>
           <Space wrap>
-            {team.members
+            {team.experts
               .filter((m) => m.isEnabled)
               .map((m) => (
                 <Tag key={m.id} style={{ padding: '4px 8px' }}>

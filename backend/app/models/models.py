@@ -22,14 +22,15 @@ from app.models.ai_feedback import AIFeedback
 from app.models.prompt import Prompt
 from app.models.action_log import ActionLog
 from app.models.expert_team import (
-    ExpertTeam, ExpertTeamMember, ExpertTeamRun,
-    ExpertRoleSkill, ExpertRoleRun,
+    ExpertTeam, Expert, TeamExpertBinding, ExpertTeamRun,
+    ExpertSkill, ExpertRoleRun,
 )
 from app.models.llm_provider import LLMProvider
 from app.models.llm_model import LLMModel
 from app.models.user import User
 from app.models.markdown_memory import MarkdownMemory
 from app.models.cost_tracking import CostRecord
+from app.models.image_gallery import ImageGallery
 
 __all__ = [
     "Conversation", "Message",
@@ -51,9 +52,11 @@ __all__ = [
     "AIFeedback",
     "Prompt",
     "ActionLog",
-    "ExpertTeam", "ExpertTeamMember", "ExpertTeamRun",
+    "ExpertTeam", "Expert", "TeamExpertBinding", "ExpertTeamRun",
+    "ExpertSkill", "ExpertRoleRun",
     "LLMProvider",
     "User",
     "MarkdownMemory",
     "CostRecord",
+    "ImageGallery",
 ]

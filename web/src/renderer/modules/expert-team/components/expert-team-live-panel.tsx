@@ -90,12 +90,20 @@ function ExpertCard({ expert }: { expert: LiveExpertState }) {
     >
       <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <Space>
-          <Avatar
-            size="small"
-            style={{ backgroundColor: getRoleColor(expert.role) }}
-          >
-            {expert.avatar || expert.name[0]}
-          </Avatar>
+          {expert.avatar?.startsWith('data:image') ? (
+            <Avatar
+              size="small"
+              src={expert.avatar}
+              style={{ backgroundColor: 'transparent' }}
+            />
+          ) : (
+            <Avatar
+              size="small"
+              style={{ backgroundColor: getRoleColor(expert.role) }}
+            >
+              {expert.avatar || expert.name[0]}
+            </Avatar>
+          )}
           <Text strong>{expert.name}</Text>
           <Tag color={getRoleColor(expert.role)} style={{ margin: 0 }}>
             {expert.role}

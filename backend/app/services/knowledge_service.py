@@ -157,15 +157,26 @@ class KnowledgeService:
     # ── Qdrant 向量库管理 ────────────────────────────────
 
     def get_qdrant_stats(self) -> QdrantCollectionStats:
-        """获取 Qdrant 集合状态"""
-        info = self._qdrant.collection_info(COLLECTION_NAME)
+        """获取 Qdrant 集合状态（集合不存在则自动创建）"""
+        try:
+            info = self._qdrant.collection_info(COLLECTION_NAME)
+        except Exception:
+            info = None
+
         if info is None:
-            return QdrantCollectionStats(
-                collection_name=COLLECTION_NAME,
-                vector_count=0,
-                status="red",
-                is_connected=False,
-            )
+            # 集合不存在 → 懒创建
+            try:
+                self._qdrant.ensure_collection(COLLECTION_NAME, vector_size=1024)
+                info = self._qdrant.collection_info(COLLECTION_NAME)
+            except Exception as e:
+                logger.error(f"Qdrant 连接失败: {e}")
+                return QdrantCollectionStats(
+                    collection_name=COLLECTION_NAME,
+                    vector_count=0,
+                    status="red",
+                    is_connected=False,
+                )
+
         status_str = str(info.get("status", "unknown")).lower()
         return QdrantCollectionStats(
             collection_name=info["name"],

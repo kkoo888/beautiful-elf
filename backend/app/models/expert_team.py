@@ -26,25 +26,39 @@ class ExpertTeam(BaseModel):
     )
 
 
-class ExpertTeamMember(BaseModel):
-    """专家团成员"""
-    __tablename__ = "expert_team_member"
+class Expert(BaseModel):
+    """专家定义（独立实体，可被多个专家团复用）"""
+    __tablename__ = "expert"
 
-    team_id = Column(BigInteger, nullable=False, comment="专家团 ID")
     member_name = Column(String(128), nullable=False, comment="专家名称")
     member_role = Column(String(128), nullable=False, comment="专家角色 (如: 架构师、测试专家)")
-    avatar = Column(String(64), default="🤖", comment="头像 emoji")
+    avatar = Column(Text, default="🤖", comment="头像 emoji 或 base64 小图")
     system_prompt = Column(Text, nullable=False, comment="专家系统提示词")
     model_name = Column(String(128), default="", comment="使用的模型名称")
     provider_id = Column(BigInteger, nullable=False, default=0, comment="供应商 ID (0=默认, 关联 llm_provider)")
     temperature = Column(Float, nullable=False, default=0.7, comment="温度 0-2")
     max_tokens = Column(Integer, default=2048, comment="最大生成 token 数")
     tools_json = Column(JSON, nullable=False, default=list, comment="可用工具列表")
+    is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
+
+    __table_args__ = (
+        Index("idx_expert_is_deleted_enabled", "is_deleted", "is_enabled"),
+    )
+
+
+class TeamExpertBinding(BaseModel):
+    """专家团-专家绑定关系（多对多）"""
+    __tablename__ = "team_expert_binding"
+
+    team_id = Column(BigInteger, nullable=False, comment="专家团 ID (关联 expert_team.id)")
+    expert_id = Column(BigInteger, nullable=False, comment="专家 ID (关联 expert.id)")
     sort_order = Column(Integer, default=0, comment="排序顺序")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
 
     __table_args__ = (
-        Index("idx_expert_team_member_team_deleted", "team_id", "is_deleted"),
+        Index("uk_team_expert", "team_id", "expert_id", unique=True),
+        Index("idx_team_expert_binding_team_id", "team_id", "is_deleted"),
+        Index("idx_team_expert_binding_expert_id", "expert_id"),
     )
 
 
@@ -72,29 +86,29 @@ class ExpertTeamRun(BaseModel):
     )
 
 
-class ExpertRoleSkill(BaseModel):
-    """角色技能绑定 — 专家成员可绑定已有技能，执行时按优先级调用"""
-    __tablename__ = "expert_role_skill"
+class ExpertSkill(BaseModel):
+    """专家技能绑定 — 专家可绑定已有技能，执行时按优先级调用"""
+    __tablename__ = "expert_skill"
 
-    role_id = Column(BigInteger, nullable=False, comment="成员 ID (关联 expert_team_member.id)")
+    expert_id = Column(BigInteger, nullable=False, comment="专家 ID (关联 expert.id)")
     skill_id = Column(BigInteger, nullable=False, comment="技能 ID (关联 skill.id)")
     priority = Column(Integer, default=0, comment="调用优先级 (数值越大越优先)")
-    config_override = Column(JSON, nullable=False, default=dict, comment="角色级别的技能配置覆盖")
+    config_override = Column(JSON, nullable=False, default=dict, comment="专家级别的技能配置覆盖")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
 
     __table_args__ = (
-        Index("uk_role_skill", "role_id", "skill_id", unique=True),
-        Index("idx_expert_role_skill_skill_id", "skill_id"),
+        Index("uk_expert_skill", "expert_id", "skill_id", unique=True),
+        Index("idx_expert_skill_skill_id", "skill_id"),
     )
 
 
 class ExpertRoleRun(BaseModel):
-    """角色执行记录 — 每次运行中各专家成员的独立执行记录"""
+    """角色执行记录 — 每次运行中各专家的独立执行记录"""
     __tablename__ = "expert_role_run"
 
     run_id = Column(BigInteger, nullable=False, comment="运行记录 ID (关联 expert_team_run.id)")
-    role_id = Column(BigInteger, nullable=False, comment="成员 ID (关联 expert_team_member.id)")
-    role_name = Column(String(128), nullable=False, comment="成员名称 (冗余)")
+    role_id = Column(BigInteger, nullable=False, comment="专家 ID (关联 expert.id)")
+    role_name = Column(String(128), nullable=False, comment="专家名称 (冗余)")
     run_status = Column(Integer, nullable=False, default=0, comment="状态: 0=待运行 1=运行中 2=成功 3=失败 4=跳过")
     round_num = Column(Integer, default=0, comment="所在讨论轮次")
     input_json = Column(JSON, nullable=False, default=dict, comment="角色输入 (子任务 + 上下文)")

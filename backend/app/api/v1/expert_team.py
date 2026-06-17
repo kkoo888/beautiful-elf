@@ -7,16 +7,129 @@ from app.core.database import get_db
 from app.core.dependencies import PaginationParams, get_pagination
 from app.services.expert_team_service import ExpertTeamService
 from app.schemas.expert_team import (
-    ExpertTeamCreate, ExpertTeamUpdate, ExpertTeamOut,
-    ExpertMemberCreate, ExpertMemberUpdate, ExpertMemberOut,
+    ExpertTeamCreate, ExpertTeamUpdate, ExpertTeamOut, ExpertTeamBindExperts,
+    ExpertCreate, ExpertUpdate, ExpertOut,
     ExpertTeamExecuteRequest,
-    RoleSkillCreate, RoleSkillUpdate, RoleSkillOut,
+    ExpertSkillCreate, ExpertSkillUpdate, ExpertSkillOut,
     ExpertTeamRunOut, ExpertRoleRunOut,
+    PolishPromptRequest,
 )
 from app.schemas.response import ApiResult, ApiPageResult
 
 router = APIRouter()
 service = ExpertTeamService()
+
+
+# ─── 工具接口 ──────────────────────────────────────────────
+
+@router.post("/polish-prompt", response_model=ApiResult[str])
+async def polish_prompt(
+    data: PolishPromptRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[str]:
+    """润色提示词 — 调用默认大模型优化"""
+    result = await service.polish_prompt(db, data)
+    return ApiResult(data=result)
+
+
+# ─── 专家 CRUD（独立实体）─────────────────────────────────
+
+@router.get("/experts", response_model=ApiPageResult[ExpertOut])
+async def list_experts(
+    enabled: Optional[int] = Query(default=None, ge=0, le=1, description="启用状态"),
+    pagination: PaginationParams = Depends(get_pagination),
+    db: AsyncSession = Depends(get_db),
+) -> ApiPageResult[ExpertOut]:
+    """获取专家列表"""
+    items, total = await service.list_experts(
+        db, page=pagination.page, page_size=pagination.page_size, enabled=enabled,
+    )
+    return ApiPageResult(data=items, total=total, page=pagination.page, page_size=pagination.page_size)
+
+
+@router.post("/experts", response_model=ApiResult[ExpertOut])
+async def create_expert(
+    data: ExpertCreate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[ExpertOut]:
+    """创建专家"""
+    expert = await service.create_expert(db, data)
+    return ApiResult(data=expert)
+
+
+@router.get("/experts/{expert_id}", response_model=ApiResult[ExpertOut])
+async def get_expert(
+    expert_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[ExpertOut]:
+    """获取专家详情"""
+    expert = await service.get_expert_by_id(db, expert_id)
+    return ApiResult(data=expert)
+
+
+@router.put("/experts/{expert_id}", response_model=ApiResult[ExpertOut])
+async def update_expert(
+    expert_id: int,
+    data: ExpertUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[ExpertOut]:
+    """更新专家"""
+    expert = await service.update_expert(db, expert_id, data)
+    return ApiResult(data=expert)
+
+
+@router.delete("/experts/{expert_id}", response_model=ApiResult)
+async def delete_expert(
+    expert_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """删除专家"""
+    await service.delete_expert(db, expert_id)
+    return ApiResult(message="删除成功")
+
+
+# ─── 专家技能绑定 ─────────────────────────────────────────
+
+@router.get("/experts/{expert_id}/skills", response_model=ApiResult)
+async def list_expert_skills(
+    expert_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """查询专家绑定的技能列表"""
+    skills = await service.list_expert_skills(db, expert_id)
+    return ApiResult(data=skills)
+
+
+@router.post("/experts/{expert_id}/skills", response_model=ApiResult[ExpertSkillOut])
+async def bind_skill_to_expert(
+    expert_id: int,
+    data: ExpertSkillCreate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[ExpertSkillOut]:
+    """绑定技能到专家"""
+    bind = await service.bind_skill(db, expert_id, data)
+    return ApiResult(data=bind)
+
+
+@router.put("/expert-skills/{bind_id}", response_model=ApiResult[ExpertSkillOut])
+async def update_expert_skill_bind(
+    bind_id: int,
+    data: ExpertSkillUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult[ExpertSkillOut]:
+    """更新专家技能绑定"""
+    bind = await service.update_skill_bind(db, bind_id, data)
+    return ApiResult(data=bind)
+
+
+@router.delete("/expert-skills/{bind_id}", response_model=ApiResult)
+async def unbind_expert_skill(
+    bind_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """解绑专家技能"""
+    await service.unbind_skill(db, bind_id)
+    return ApiResult(message="解绑成功")
 
 
 # ─── 运行记录（具体路由在前，通配在后）───────────────────
@@ -66,7 +179,7 @@ async def create_expert_team(
     data: ExpertTeamCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult[ExpertTeamOut]:
-    """创建专家团（含成员）"""
+    """创建专家团（可绑定已有专家）"""
     team = await service.create_team(db, data)
     return ApiResult(data=team)
 
@@ -102,39 +215,17 @@ async def delete_expert_team(
     return ApiResult(message="删除成功")
 
 
-# ─── 专家成员 ───────────────────────────────────────────
+# ─── 专家团绑定专家 ──────────────────────────────────────
 
-@router.post("/{team_id}/members", response_model=ApiResult[ExpertMemberOut])
-async def add_expert_member(
+@router.post("/{team_id}/bind-experts", response_model=ApiResult[ExpertTeamOut])
+async def bind_experts_to_team(
     team_id: int,
-    data: ExpertMemberCreate,
+    data: ExpertTeamBindExperts,
     db: AsyncSession = Depends(get_db),
-) -> ApiResult[ExpertMemberOut]:
-    """添加专家成员"""
-    member = await service.add_member(db, team_id, data)
-    return ApiResult(data=member)
-
-
-@router.put("/members/{member_id}", response_model=ApiResult[ExpertMemberOut])
-async def update_expert_member(
-    member_id: int,
-    data: ExpertMemberUpdate,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult[ExpertMemberOut]:
-    """更新专家成员"""
-    update_data = data.model_dump(exclude_unset=True, by_alias=False)
-    member = await service.update_member(db, member_id, update_data)
-    return ApiResult(data=member)
-
-
-@router.delete("/members/{member_id}", response_model=ApiResult)
-async def delete_expert_member(
-    member_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult:
-    """删除专家成员"""
-    await service.delete_member(db, member_id)
-    return ApiResult(message="删除成功")
+) -> ApiResult[ExpertTeamOut]:
+    """绑定专家到专家团（整体替换）"""
+    team = await service.bind_experts(db, team_id, data)
+    return ApiResult(data=team)
 
 
 # ─── 执行与运行记录 ─────────────────────────────────────
@@ -161,50 +252,6 @@ async def list_expert_team_runs(
         db, team_id, page=pagination.page, page_size=pagination.page_size,
     )
     return ApiPageResult(data=items, total=total, page=pagination.page, page_size=pagination.page_size)
-
-
-# ─── 角色技能绑定 ───────────────────────────────────────
-
-@router.get("/members/{member_id}/skills", response_model=ApiResult)
-async def list_member_skills(
-    member_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult:
-    """查询成员绑定的技能列表"""
-    skills = await service.list_member_skills(db, member_id)
-    return ApiResult(data=skills)
-
-
-@router.post("/members/{member_id}/skills", response_model=ApiResult[RoleSkillOut])
-async def bind_skill_to_member(
-    member_id: int,
-    data: RoleSkillCreate,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult[RoleSkillOut]:
-    """绑定技能到成员"""
-    bind = await service.bind_skill(db, member_id, data)
-    return ApiResult(data=bind)
-
-
-@router.put("/skills/{bind_id}", response_model=ApiResult[RoleSkillOut])
-async def update_skill_bind(
-    bind_id: int,
-    data: RoleSkillUpdate,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult[RoleSkillOut]:
-    """更新角色技能绑定"""
-    bind = await service.update_skill_bind(db, bind_id, data)
-    return ApiResult(data=bind)
-
-
-@router.delete("/skills/{bind_id}", response_model=ApiResult)
-async def unbind_skill(
-    bind_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> ApiResult:
-    """解绑技能"""
-    await service.unbind_skill(db, bind_id)
-    return ApiResult(message="解绑成功")
 
 
 # ─── 角色执行记录 ───────────────────────────────────────

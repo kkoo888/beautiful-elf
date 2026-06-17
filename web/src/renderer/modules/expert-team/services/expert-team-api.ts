@@ -6,9 +6,58 @@
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type {
-  ExpertTeam, ExpertTeamFormInput, ExpertTeamUpdateInput,
-  ExpertMemberFormInput, ExpertTeamRun, ExpertTeamExecuteInput, ExpertTeamExecuteResult,
+  ExpertTeam, ExpertTeamFormInput, ExpertTeamUpdateInput, ExpertTeamBindExperts,
+  Expert, ExpertFormInput,
+  ExpertSkill, ExpertSkillCreate, ExpertSkillUpdate,
+  ExpertTeamRun, ExpertTeamExecuteInput, ExpertTeamExecuteResult,
 } from '../types'
+
+// ─── 专家 CRUD（独立实体）─────────────────────────────────
+
+export async function fetchExperts(params?: {
+  enabled?: number; page?: number; pageSize?: number
+}): Promise<{ items: Expert[]; total: number }> {
+  const { items, total } = extractPaginated(await apiClient.get('/expert_teams/experts', {
+    params: { enabled: params?.enabled, page: params?.page, pageSize: params?.pageSize },
+  }) as any)
+  return { items, total }
+}
+
+export async function fetchExpertById(id: number): Promise<Expert> {
+  return extractData(await apiClient.get(`/expert_teams/experts/${id}`))
+}
+
+export async function createExpert(input: ExpertFormInput): Promise<Expert> {
+  return extractData(await apiClient.post('/expert_teams/experts', input))
+}
+
+export async function updateExpert(id: number, input: Partial<ExpertFormInput>): Promise<Expert> {
+  return extractData(await apiClient.put(`/expert_teams/experts/${id}`, input))
+}
+
+export async function deleteExpert(id: number): Promise<void> {
+  await apiClient.delete(`/expert_teams/experts/${id}`)
+}
+
+// ─── 专家技能绑定 ────────────────────────────────────────
+
+export async function fetchExpertSkills(expertId: number): Promise<ExpertSkill[]> {
+  return extractData(await apiClient.get(`/expert_teams/experts/${expertId}/skills`))
+}
+
+export async function bindExpertSkill(expertId: number, input: ExpertSkillCreate): Promise<ExpertSkill> {
+  return extractData(await apiClient.post(`/expert_teams/experts/${expertId}/skills`, input))
+}
+
+export async function updateExpertSkillBind(bindId: number, input: ExpertSkillUpdate): Promise<ExpertSkill> {
+  return extractData(await apiClient.put(`/expert_teams/expert-skills/${bindId}`, input))
+}
+
+export async function unbindExpertSkill(bindId: number): Promise<void> {
+  await apiClient.delete(`/expert_teams/expert-skills/${bindId}`)
+}
+
+// ─── 专家团 CRUD ─────────────────────────────────────────
 
 export async function fetchExpertTeams(params?: {
   category?: string; enabled?: number; page?: number; pageSize?: number
@@ -35,17 +84,13 @@ export async function deleteExpertTeam(id: number): Promise<void> {
   await apiClient.delete(`/expert_teams/${id}`)
 }
 
-export async function addExpertMember(teamId: number, input: ExpertMemberFormInput): Promise<ExpertMemberFormInput> {
-  return extractData(await apiClient.post(`/expert_teams/${teamId}/members`, input))
+// ─── 专家团绑定专家 ──────────────────────────────────────
+
+export async function bindExpertsToTeam(teamId: number, data: ExpertTeamBindExperts): Promise<ExpertTeam> {
+  return extractData(await apiClient.post(`/expert_teams/${teamId}/bind-experts`, data))
 }
 
-export async function updateExpertMember(memberId: number, input: Partial<ExpertMemberFormInput>): Promise<ExpertMemberFormInput> {
-  return extractData(await apiClient.put(`/expert_teams/members/${memberId}`, input))
-}
-
-export async function deleteExpertMember(memberId: number): Promise<void> {
-  await apiClient.delete(`/expert_teams/members/${memberId}`)
-}
+// ─── 执行与运行记录 ─────────────────────────────────────
 
 export async function executeExpertTeam(teamId: number, input: ExpertTeamExecuteInput): Promise<ExpertTeamExecuteResult> {
   return extractData(await apiClient.post(`/expert_teams/${teamId}/execute`, input))
@@ -71,4 +116,10 @@ export async function fetchAllExpertRuns(params?: {
 
 export async function fetchExpertRunById(runId: number): Promise<ExpertTeamRun> {
   return extractData(await apiClient.get(`/expert_teams/runs/${runId}`))
+}
+
+// ─── 工具接口 ─────────────────────────────────────────────
+
+export async function polishPrompt(content: string): Promise<string> {
+  return extractData(await apiClient.post('/expert_teams/polish-prompt', { content }))
 }

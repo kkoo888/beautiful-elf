@@ -32,6 +32,7 @@ from app.api.v1 import (
     intent,
     auth,
     debug,
+    image_gallery,
 )
 
 api_router = APIRouter()
@@ -65,6 +66,7 @@ api_router.include_router(skill.router, prefix="/skills", tags=["skill"])
 api_router.include_router(tool.router, prefix="/tools", tags=["tool"])
 api_router.include_router(workflow.router, prefix="/workflows", tags=["workflow"])
 api_router.include_router(expert_team.router, prefix="/expert_teams", tags=["expert_team"])
+api_router.include_router(image_gallery.router, prefix="/image_gallery", tags=["image_gallery"])
 api_router.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
 api_router.include_router(llm_provider.router, prefix="/llm_providers", tags=["llm_provider"])
 api_router.include_router(intent.router, prefix="/intents", tags=["intent"])

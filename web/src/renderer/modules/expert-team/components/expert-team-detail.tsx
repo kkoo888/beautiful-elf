@@ -50,7 +50,19 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
       <Card>
         <div className={styles.detailHeader}>
           <Space align="start" size={16}>
-            <div className={styles.detailAvatar}>{team.icon}</div>
+            <div
+              className={styles.detailAvatar}
+              style={{
+                backgroundColor: team.icon?.startsWith('data:image') ? 'transparent' : undefined,
+                overflow: 'hidden',
+              }}
+            >
+              {team.icon?.startsWith('data:image') ? (
+                <img src={team.icon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                team.icon
+              )}
+            </div>
             <div>
               <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.4 }}>
                 {team.teamName}
@@ -85,7 +97,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
                 type="primary"
                 icon={<PlayCircleOutlined />}
                 onClick={onExecute}
-                disabled={team.members.length === 0 || team.isEnabled !== 1}
+                disabled={team.experts.length === 0 || team.isEnabled !== 1}
               >
                 执行
               </Button>
@@ -97,7 +109,7 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
       {/* 统计信息 */}
       <div className={styles.statGrid}>
         <Card>
-          <Statistic title="专家成员" value={team.members.length} prefix={<UserOutlined />} suffix="人" />
+          <Statistic title="专家成员" value={team.experts.length} prefix={<UserOutlined />} suffix="人" />
         </Card>
         <Card>
           <Statistic title="最大讨论轮次" value={team.maxRounds} prefix={<ThunderboltOutlined />} suffix="轮" />
@@ -105,15 +117,15 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
         <Card>
           <Statistic
             title="启用成员"
-            value={team.members.filter((m) => m.isEnabled).length}
-            suffix={`/ ${team.members.length}`}
+            value={team.experts.filter((m) => m.isEnabled).length}
+            suffix={`/ ${team.experts.length}`}
           />
         </Card>
       </div>
 
-      {/* 专家成员列表 */}
-      <Card title="👥 专家成员" styles={{ body: { padding: '12px 16px' } }}>
-        {team.members.map((member) => {
+      {/* 绑定的专家列表 */}
+      <Card title="👥 绑定专家" styles={{ body: { padding: '12px 16px' } }}>
+        {team.experts.map((member) => {
           const roleColor = getExpertRoleColor(member.memberRole)
           return (
             <div
@@ -124,9 +136,17 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
               <div className={styles.memberListCardHeader}>
                 <div
                   className={styles.memberAvatar}
-                  style={{ backgroundColor: roleColor + '18', color: roleColor }}
+                  style={{
+                    backgroundColor: member.avatar?.startsWith('data:image') ? 'transparent' : roleColor + '18',
+                    color: member.avatar?.startsWith('data:image') ? 'transparent' : roleColor,
+                    overflow: 'hidden',
+                  }}
                 >
-                  {member.avatar}
+                  {member.avatar?.startsWith('data:image') ? (
+                    <img src={member.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    member.avatar || '🤖'
+                  )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Space>
@@ -145,9 +165,9 @@ export function ExpertTeamDetail({ team, onEdit, onExecute, onRefresh }: ExpertT
             </div>
           )
         })}
-        {team.members.length === 0 && (
+        {team.experts.length === 0 && (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <Text type="secondary">暂无成员</Text>
+            <Text type="secondary">暂未绑定专家</Text>
           </div>
         )}
       </Card>

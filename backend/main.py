@@ -319,6 +319,20 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=400,
+        content={
+            "code": "SYSTEM_VALIDATION",
+            "message": str(exc),
+            "userTip": str(exc),
+            "data": None,
+            "requestId": getattr(request.state, "trace_id", ""),
+        },
+    )
+
+
 # 请求中间件：注入 trace_id
 @app.middleware("http")
 async def trace_middleware(request: Request, call_next):

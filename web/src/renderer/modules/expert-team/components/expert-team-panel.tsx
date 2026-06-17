@@ -1,9 +1,8 @@
-/** 专家团工作流主面板 */
+/** 专家团工作流主面板 — 含「专家团」和「专家」双列表切换 */
 
-import { Button, Space, Typography, App, Breadcrumb } from 'antd'
+import { Button, Space, Typography, App, Breadcrumb, Segmented } from 'antd'
 import {
   PlusOutlined,
-  PlayCircleOutlined,
   HistoryOutlined,
   ArrowLeftOutlined,
 } from '@ant-design/icons'
@@ -16,12 +15,14 @@ import { ExpertTeamEditor } from './expert-team-editor'
 import { ExpertTeamMonitor } from './expert-team-monitor'
 import { ExpertTeamExecuteDrawer } from './expert-team-execute-drawer'
 import { ExpertTeamLivePanel } from './expert-team-live-panel'
-import type { ExpertTeam, ExpertTeamFormInput, ExpertTeamExecuteInput } from '../types'
+import { ExpertList } from './expert-list'
+import type { ExpertTeam, ExpertTeamFormInput, ExpertTeamExecuteInput, ExpertFormInput } from '../types'
 import styles from './expert-team.module.css'
 
 const { Text } = Typography
 
 type ViewMode = 'list' | 'detail' | 'editor' | 'monitor'
+type ListTab = 'teams' | 'experts'
 
 /** 专家团工作流主面板 */
 export default function ExpertTeamPanel() {
@@ -36,17 +37,25 @@ export default function ExpertTeamPanel() {
     runs,
     isRunsLoading,
     runsTotal,
+    experts,
+    isExpertsLoading,
     createTeamMut,
     updateTeamMut,
     deleteTeamMut,
+    bindExpertsMut,
+    createExpertMut,
+    updateExpertMut,
+    deleteExpertMut,
     executeTeamMut,
     isExecuting,
     isMutating,
     refreshTeams,
+    refreshExperts,
     refreshRuns,
   } = useExpertTeam()
 
   const [view, setView] = useState<ViewMode>('list')
+  const [listTab, setListTab] = useState<ListTab>('teams')
 
   // 执行抽屉
   const [executeDrawerOpen, setExecuteDrawerOpen] = useState(false)
@@ -63,14 +72,14 @@ export default function ExpertTeamPanel() {
     setActiveTab('list')
   }, [setSelectedId, setActiveTab])
 
-  // 新建
-  const handleCreate = useCallback(() => {
+  // 新建专家团
+  const handleCreateTeam = useCallback(() => {
     setSelectedId(null)
     setView('editor')
     setActiveTab('editor')
   }, [setSelectedId, setActiveTab])
 
-  // 编辑
+  // 编辑专家团
   const handleEdit = useCallback(
     (id: number) => {
       setSelectedId(id)
@@ -90,7 +99,7 @@ export default function ExpertTeamPanel() {
     [setSelectedId, setActiveTab]
   )
 
-  // 删除
+  // 删除专家团
   const handleDelete = useCallback(
     async (id: number) => {
       await deleteTeamMut(id)
@@ -99,8 +108,8 @@ export default function ExpertTeamPanel() {
     [deleteTeamMut]
   )
 
-  // 保存（新建/编辑）
-  const handleSave = useCallback(
+  // 保存专家团（新建/编辑）
+  const handleSaveTeam = useCallback(
     async (input: ExpertTeamFormInput) => {
       if (selectedId) {
         await updateTeamMut(selectedId, input)
@@ -141,21 +150,69 @@ export default function ExpertTeamPanel() {
     [executeTeam, executeTeamMut, setActiveTab, refreshRuns]
   )
 
+  // 创建专家
+  const handleCreateExpert = useCallback(
+    async (input: ExpertFormInput) => {
+      return await createExpertMut(input)
+    },
+    [createExpertMut]
+  )
+
+  // 更新专家
+  const handleUpdateExpert = useCallback(
+    async (id: number, input: Partial<ExpertFormInput>) => {
+      return await updateExpertMut(id, input)
+    },
+    [updateExpertMut]
+  )
+
+  // 删除专家
+  const handleDeleteExpert = useCallback(
+    async (id: number) => {
+      await deleteExpertMut(id)
+    },
+    [deleteExpertMut]
+  )
+
+  // 绑定技能（暂用提示）
+  const handleBindSkills = useCallback(
+    (_expertId: number) => {
+      message.info('技能绑定功能开发中...')
+    },
+    [message]
+  )
+
   // 渲染页面标题和返回按钮
   const renderHeader = () => {
     if (view === 'list') {
       return (
         <div className={styles.toolbar}>
-          <span className={styles.toolbarTitle}>
-            {teams.length} 个专家团 · 多专家协作，AI 驱动的智能分析
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Segmented
+              value={listTab}
+              onChange={(v) => setListTab(v as ListTab)}
+              options={[
+                { label: '专家团', value: 'teams' },
+                { label: '专家', value: 'experts' },
+              ]}
+            />
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              {listTab === 'teams'
+                ? `${teams.length} 个专家团 · 多专家协作，AI 驱动的智能分析`
+                : `${experts.length} 位专家 · 独立管理，可复用于多个专家团`}
+            </Text>
+          </div>
           <Space>
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-              新建专家团
-            </Button>
-            <Button icon={<HistoryOutlined />} onClick={() => { setView('monitor'); setActiveTab('monitor') }}>
-              运行记录
-            </Button>
+            {listTab === 'teams' ? (
+              <>
+                <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateTeam}>
+                  新建专家团
+                </Button>
+                <Button icon={<HistoryOutlined />} onClick={() => { setView('monitor'); setActiveTab('monitor') }}>
+                  运行记录
+                </Button>
+              </>
+            ) : null}
           </Space>
         </div>
       )
@@ -188,19 +245,34 @@ export default function ExpertTeamPanel() {
 
   // 渲染当前视图
   const renderView = () => {
-    switch (view) {
-      case 'list':
+    // 列表视图：根据 tab 切换
+    if (view === 'list') {
+      if (listTab === 'experts') {
         return (
-          <ExpertTeamList
-            teams={teams}
-            loading={isLoading}
-            onView={handleViewDetail}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onExecute={handleExecute}
+          <ExpertList
+            experts={experts}
+            loading={isExpertsLoading}
+            onCreate={handleCreateExpert}
+            onUpdate={handleUpdateExpert}
+            onDelete={handleDeleteExpert}
+            onBindSkills={handleBindSkills}
           />
         )
+      }
 
+      return (
+        <ExpertTeamList
+          teams={teams}
+          loading={isLoading}
+          onView={handleViewDetail}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onExecute={handleExecute}
+        />
+      )
+    }
+
+    switch (view) {
       case 'detail':
         return selectedTeam ? (
           <ExpertTeamDetail
@@ -216,7 +288,8 @@ export default function ExpertTeamPanel() {
           <ExpertTeamEditor
             key={selectedId ?? 'new'}
             team={selectedTeam}
-            onSave={handleSave}
+            allExperts={experts}
+            onSave={handleSaveTeam}
             onCancel={goList}
             loading={isMutating}
           />
