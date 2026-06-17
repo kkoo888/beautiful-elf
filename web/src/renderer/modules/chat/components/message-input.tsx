@@ -16,6 +16,7 @@ import {
 } from '@ant-design/icons'
 import { fetchExpertTeams } from '@/modules/expert-team/services/expert-team-api'
 import type { ExpertTeam } from '@/modules/expert-team/types'
+import { ExpertAvatar } from '@/components/expert-avatar'
 import { fetchSkills } from '@/modules/skills/services/skills-api'
 import type { Skill } from '@/modules/skills/types/skills'
 import styles from './chat-panel.module.css'
@@ -156,7 +157,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       key: String(team.id),
       label: (
         <div className={styles.menuItemInner}>
-          <span className={styles.menuItemLabel}>{team.icon || '🤖'} {team.teamName}</span>
+          <span className={styles.menuItemLabel}><ExpertAvatar avatar={team.icon} size={18} style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }} />{team.teamName}</span>
           {team.description && (
             <span className={styles.menuItemDesc}>{team.description}</span>
           )}
