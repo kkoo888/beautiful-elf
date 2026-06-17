@@ -244,7 +244,7 @@ export function ExpertList({
                       type="text"
                       size="small"
                       icon={<ThunderboltOutlined />}
-                      onClick={() => onBindSkills?.(expert.id)}
+                      onClick={() => openEditModal(expert)}
                     />
                   </Tooltip>
                   <Tooltip title="编辑">
