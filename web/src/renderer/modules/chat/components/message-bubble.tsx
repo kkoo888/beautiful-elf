@@ -14,6 +14,13 @@ import 'prismjs/components/prism-json'
 import 'prismjs/components/prism-bash'
 import 'prismjs/components/prism-css'
 import 'prismjs/components/prism-markdown'
+import {
+  CheckCircleOutlined,
+  ExperimentOutlined,
+  BarChartOutlined,
+  FileTextOutlined,
+  BulbOutlined,
+} from '@ant-design/icons'
 import 'prismjs/components/prism-yaml'
 import 'prismjs/components/prism-sql'
 import 'prismjs/components/prism-rust'
@@ -22,6 +29,29 @@ import styles from './chat-panel.module.css'
 import { FeedbackButtons } from './feedback-buttons'
 import { QuickAnswerBadge } from './quick-answer-badge'
 import type { ChatMessage, FeedbackData } from '../types/chat'
+
+/** ◆ 符号替换为前端 UI icon */
+function renderIconMarkers(children: React.ReactNode): React.ReactNode {
+  return React.Children.map(children, (child) => {
+    if (typeof child !== 'string') return child
+    const parts = child.split('◆')
+    if (parts.length <= 1) return child
+    return parts.flatMap((part, i) => {
+      if (i === 0) return [part]
+      // 根据上下文选择 icon
+      const nextText = parts[i] || ''
+      let Icon = BulbOutlined
+      if (nextText.includes('分析完成')) Icon = ExperimentOutlined
+      else if (nextText.includes('评估')) Icon = BarChartOutlined
+      else if (nextText.includes('最终报告')) Icon = FileTextOutlined
+      else if (nextText.includes('完成')) Icon = CheckCircleOutlined
+      return [
+        <Icon key={`icon-${i}`} style={{ color: '#1890ff', marginRight: 4, fontSize: 14 }} />,
+        part,
+      ]
+    })
+  })
+}
 
 /** 格式化时间 */
 const formatTime = (timestamp: number): string => {
@@ -121,6 +151,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedbac
                     return <code {...props}>{children}</code>
                   }
                   return <CodeBlock className={className}>{children}</CodeBlock>
+                },
+                // ◆ 替换为前端 UI icon
+                p({ children }) {
+                  return <p>{renderIconMarkers(children)}</p>
+                },
+                strong({ children }) {
+                  return <strong>{renderIconMarkers(children)}</strong>
                 },
               }}
             >
