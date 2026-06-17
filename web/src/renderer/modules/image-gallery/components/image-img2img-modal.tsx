@@ -1,14 +1,14 @@
 /** 图生图弹窗 — 用编辑样式（左图右表单） */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
-  Modal, Form, Input, Button, Space, App, Upload, Typography,
+  Modal, Form, Input, Button, Space, Tag, App, Upload, Typography,
 } from 'antd'
-import { UploadOutlined, ThunderboltOutlined, LoadingOutlined, PictureOutlined } from '@ant-design/icons'
+import { UploadOutlined, ThunderboltOutlined, LoadingOutlined, PictureOutlined, PlusOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
 import { CompactModelSelect, getProvidersCached } from '@/modules/shared/components/model-selector'
 import { polishPrompt } from '@/modules/expert-team/services/expert-team-api'
-import { generateImagePrompt, describeImage } from '../services/image-gallery-api'
-import type { ImageImg2ImgInput, ImageGenerateResult } from '../types'
+import { generateImagePrompt, describeImage, fetchImageTags } from '../services/image-gallery-api'
+import type { ImageImg2ImgInput, ImageGenerateResult, ImageGalleryFormInput } from '../types'
 import styles from './image-gallery.module.css'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 
@@ -24,6 +24,7 @@ function toImageUrl(filePath: string) {
 interface ImageImg2ImgModalProps {
   open: boolean
   onOk: (input: ImageImg2ImgInput) => Promise<ImageGenerateResult>
+  onSave: (input: ImageGalleryFormInput) => Promise<void>
   isGenerating: boolean
   onCancel: () => void
 }
@@ -31,6 +32,7 @@ interface ImageImg2ImgModalProps {
 export function ImageImg2ImgModal({
   open,
   onOk,
+  onSave,
   isGenerating,
   onCancel,
 }: ImageImg2ImgModalProps) {
@@ -45,13 +47,20 @@ export function ImageImg2ImgModal({
   const [initImageBase64, setInitImageBase64] = useState('')
 
   const [result, setResult] = useState<ImageGenerateResult | null>(null)
+  const [tags, setTags] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState('')
+  const [existingTags, setExistingTags] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (open) {
       setResult(null)
       setInitImagePreview('')
       setInitImageBase64('')
+      setTags([])
+      setTagInput('')
       form.resetFields()
+      fetchImageTags().then((t) => setExistingTags(t)).catch(() => {})
       getProvidersCached().then((providers) => {
         for (const p of providers) {
           const m = p.models?.find((m) => m.modelName === 'agnes-image-2.1-flash')
@@ -99,6 +108,8 @@ export function ImageImg2ImgModal({
         filePath: genResult.filePath || (genResult as any).file_path,
         thumbnailPath: genResult.thumbnailPath || (genResult as any).thumbnail_path,
         name: genResult.name,
+        width: genResult.width || 1024,
+        height: genResult.height || 1024,
       })
       message.success('生成成功')
     } catch (err: any) {
@@ -150,9 +161,44 @@ export function ImageImg2ImgModal({
     setResult(null)
     setInitImagePreview('')
     setInitImageBase64('')
+    setTags([])
+    setTagInput('')
     form.resetFields()
     onCancel()
   }, [form, onCancel])
+
+  const handleSave = useCallback(async () => {
+    if (!result) return
+    setSaving(true)
+    try {
+      await onSave({
+        name: form.getFieldValue('name') || result.name,
+        prompt: form.getFieldValue('prompt'),
+        negativePrompt: form.getFieldValue('negativePrompt') || '',
+        modelName: form.getFieldValue('modelName') || '',
+        providerId: form.getFieldValue('providerId') || 0,
+        filePath: result.filePath,
+        thumbnailPath: result.thumbnailPath,
+        tags: tags.join(','),
+        width: result.width,
+        height: result.height,
+      })
+      message.success('已保存到画廊')
+      handleClose()
+    } catch {
+      message.error('保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }, [result, form, tags, onSave, message, handleClose])
+
+  const addTag = useCallback(() => {
+    const t = tagInput.trim()
+    if (t && !tags.includes(t)) {
+      setTags([...tags, t])
+    }
+    setTagInput('')
+  }, [tagInput, tags])
 
   return (
     <Modal
@@ -258,6 +304,7 @@ export function ImageImg2ImgModal({
             {result ? (
               <Space>
                 <Button onClick={() => setResult(null)}>重新生成</Button>
+                <Button type="primary" loading={saving} onClick={handleSave}>保存</Button>
                 <Button onClick={handleClose}>关闭</Button>
               </Space>
             ) : (
@@ -278,6 +325,10 @@ export function ImageImg2ImgModal({
         {/* 右侧：设置区 */}
         <div className={styles.createRight}>
           <Form form={form} layout="vertical" size="small">
+            <Form.Item label="名称" name="name">
+              <Input placeholder="留空自动生成古风名" />
+            </Form.Item>
+
             <Form.Item label="模型">
               <CompactModelSelect
                 value={selectedModel}
@@ -288,6 +339,42 @@ export function ImageImg2ImgModal({
                 placeholder="选择模型"
                 style={{ width: '100%' }}
               />
+            </Form.Item>
+
+            <Form.Item label="标签">
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <Input
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onPressEnter={addTag}
+                  placeholder="输入标签后回车"
+                  style={{ flex: 1 }}
+                />
+                <Button icon={<PlusOutlined />} onClick={addTag}>添加</Button>
+              </div>
+              {existingTags.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: '#999' }}>已有标签：</span>
+                  <Space wrap size={[0, 4]} style={{ marginTop: 4 }}>
+                    {existingTags.filter((t) => !tags.includes(t)).map((t) => (
+                      <Tag
+                        key={t}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => setTags([...tags, t])}
+                      >
+                        + {t}
+                      </Tag>
+                    ))}
+                  </Space>
+                </div>
+              )}
+              <Space wrap>
+                {tags.map((t) => (
+                  <Tag key={t} color="blue" closable onClose={() => setTags(tags.filter((x) => x !== t))}>
+                    {t}
+                  </Tag>
+                ))}
+              </Space>
             </Form.Item>
           </Form>
         </div>

@@ -66,6 +66,10 @@ export default function ImageGalleryPanel() {
     return await generateImageImg2Img(input)
   }, [generateImageImg2Img])
 
+  const handleSaveImg2Img = useCallback(async (input: ImageGalleryFormInput) => {
+    await createImage(input)
+  }, [createImage])
+
   const handleDelete = useCallback(async (id: number) => {
     try {
       await deleteImage(id)
@@ -189,6 +193,7 @@ export default function ImageGalleryPanel() {
       <ImageImg2ImgModal
         open={img2ImgOpen}
         onOk={handleImg2Img}
+        onSave={handleSaveImg2Img}
         isGenerating={isImg2Imging}
         onCancel={() => setImg2ImgOpen(false)}
       />
