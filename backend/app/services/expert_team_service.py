@@ -512,7 +512,7 @@ class ExpertTeamService:
 
                     # ── 改进2: 委派指令 ──
                     delegation_text = ""
-                    if member.get("allow_delegation") and _delegation_depth < 1:
+                    if member.get("is_delegation_allowed") and _delegation_depth < 1:
                         delegation_text = (
                             "\n\n## 委派能力\n如果你认为某个子任务更适合团队中的其他专家完成，"
                             "可以输出委派请求，格式：DELEGATE: {expert_id} | {subtask_description}\n"
@@ -571,7 +571,7 @@ class ExpertTeamService:
                             })
 
                         # ── 改进2: 检测并处理委派请求（最多1层）──
-                        if (member.get("allow_delegation") and _delegation_depth < 1
+                        if (member.get("is_delegation_allowed") and _delegation_depth < 1
                                 and content and "DELEGATE:" in content):
                             delegate_match = re.search(r'DELEGATE:\s*(\d+)\s*\|\s*(.+)', content)
                             if delegate_match:

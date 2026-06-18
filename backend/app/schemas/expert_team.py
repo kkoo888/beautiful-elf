@@ -20,7 +20,7 @@ class ExpertCreate(CamelModel):
     temperature: float = Field(default=0.7, ge=0, le=2, description="温度 0-2")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数")
     tools_json: Optional[List[dict]] = Field(default=None, description="可用工具列表")
-    allow_delegation: bool = Field(default=False, description="是否允许委派子任务给队友")
+    is_delegation_allowed: bool = Field(default=False, description="是否允许委派子任务给队友")
     max_execution_time: int = Field(default=120, ge=10, le=600, description="最大执行时间（秒）")
     is_enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
 
@@ -38,7 +38,7 @@ class ExpertUpdate(CamelModel):
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=8192)
     tools_json: Optional[List[dict]] = Field(default=None)
-    allow_delegation: Optional[bool] = Field(default=None)
+    is_delegation_allowed: Optional[bool] = Field(default=None)
     max_execution_time: Optional[int] = Field(default=None, ge=10, le=600)
     is_enabled: Optional[int] = Field(default=None, ge=0, le=1)
 
@@ -57,7 +57,7 @@ class ExpertOut(CamelModel):
     temperature: float = 0.7
     max_tokens: int
     tools_json: Optional[List[dict]] = None
-    allow_delegation: int = 0
+    is_delegation_allowed: int = 0
     max_execution_time: int = 120
     is_enabled: int
     created_at: Optional[datetime] = None

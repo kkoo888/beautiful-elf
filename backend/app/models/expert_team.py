@@ -43,7 +43,7 @@ class Expert(BaseModel):
     temperature = Column(Float, nullable=False, default=0.7, comment="温度 0-2")
     max_tokens = Column(Integer, default=2048, comment="最大生成 token 数")
     tools_json = Column(JSON, nullable=False, default=list, comment="可用工具列表")
-    allow_delegation = Column(Integer, default=0, comment="允许委派: 1=是 0=否")
+    is_delegation_allowed = Column(Integer, default=0, comment="允许委派: 1=是 0=否")
     max_execution_time = Column(Integer, default=120, comment="最大执行时间（秒）")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=是 0=否")
 
