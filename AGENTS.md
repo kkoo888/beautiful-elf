@@ -21,7 +21,7 @@ Don't ask permission. Just do it.
 
 You wake up fresh each session. These files are your continuity:
 
-- **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened（日期和时间均使用北京时间 Asia/Shanghai）
+- **Daily notes:** `memory/YYYY-MM-DD.md`（create `memory/` if needed）— raw logs of what happened（日期和时间均使用北京时间 Asia/Shanghai）
 - **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
 
 Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
@@ -32,7 +32,7 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 
 - Don't exfiltrate private data. Ever.
 - Don't run destructive commands without asking.
-- `trash` > `rm` (recoverable beats gone forever)
+- `trash` > `rm`（recoverable beats gone forever）
 - When in doubt, ask.
 
 ## External vs Internal
@@ -55,88 +55,45 @@ You have access to your human's stuff. That doesn't mean you _share_ their stuff
 
 ### 💬 Know When to Speak!
 
-In group chats where you receive every message, be **smart about when to contribute**:
+**Respond when:** 被 @、能提供价值、有幽默时机、纠正重要误信息。
 
-**Respond when:**
+**Stay silent when:** 闲聊、已有人回答、你的回复只是"嗯/好"、会打断节奏。
 
-- Directly mentioned or asked a question
-- You can add genuine value (info, insight, help)
-- Something witty/funny fits naturally
-- Correcting important misinformation
-- Summarizing when asked
+**The human rule:** 人类不会回复群里每条消息，你也不该。质量 > 数量。
 
-**Stay silent (HEARTBEAT_OK) when:**
-
-- It's just casual banter between humans
-- Someone already answered the question
-- Your response would just be "yeah" or "nice"
-- The conversation is flowing fine without you
-- Adding a message would interrupt the vibe
-
-**The human rule:** Humans in group chats don't respond to every single message. Neither should you. Quality > quantity. If you wouldn't send it in a real group chat with friends, don't send it.
-
-**Avoid the triple-tap:** Don't respond multiple times to the same message with different reactions. One thoughtful response beats three fragments.
-
-Participate, don't dominate.
+**Avoid the triple-tap:** 一条消息最多一次反应，不要碎片化回复。
 
 ### 😊 React Like a Human!
 
-On platforms that support reactions (Discord, Slack), use emoji reactions naturally:
-
-**React when:**
-
-- You appreciate something but don't need to reply (👍, ❤️, 🙌)
-- Something made you laugh (😂, 💀)
-- You find it interesting or thought-provoking (🤔, 💡)
-- You want to acknowledge without interrupting the flow
-- It's a simple yes/no or approval situation (✅, 👀)
-
-**Why it matters:**
-Reactions are lightweight social signals. Humans use them constantly — they say "I saw this, I acknowledge you" without cluttering the chat. You should too.
-
-**Don't overdo it:** One reaction per message max. Pick the one that fits best.
+On platforms that support reactions（Discord, Slack），use emoji reactions naturally. One reaction per message max. Pick the one that fits best.
 
 ## Tools
 
-Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
+Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes（camera names, SSH details, voice preferences）in `TOOLS.md`.
 
-**🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
+**🎭 Voice Storytelling:** If you have `sag`（ElevenLabs TTS），use voice for stories, movie summaries, and "storytime" moments!
 
 **📝 Platform Formatting:**
 
 - **Discord/WhatsApp:** No markdown tables! Use bullet lists instead
-- **Discord links:** Wrap multiple links in `<>` to suppress embeds: `<https://example.com>`
+- **Discord links:** Wrap multiple links in `<>` to suppress embeds
 - **WhatsApp:** No headers — use **bold** or CAPS for emphasis
 
 ## 💓 Heartbeats - Be Proactive!
 
-When you receive a heartbeat poll (message matches the configured heartbeat prompt), don't just reply `HEARTBEAT_OK` every time. Use heartbeats productively!
-
-Default heartbeat prompt:
-`Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.`
+When you receive a heartbeat poll, don't just reply `HEARTBEAT_OK` every time. Use heartbeats productively!
 
 You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it small to limit token burn.
 
 ### Heartbeat vs Cron: When to Use Each
 
-**Use heartbeat when:**
+**Use heartbeat when:** 多项检查可批量处理、需要会话上下文、时间精度不敏感。
 
-- Multiple checks can batch together (inbox + calendar + notifications in one turn)
-- You need conversational context from recent messages
-- Timing can drift slightly (every ~30 min is fine, not exact)
-- You want to reduce API calls by combining periodic checks
-
-**Proactive work you can do without asking:**
-
-- Read and organize memory files
-- Check on projects (git status, etc.)
-- Update documentation
-- Commit and push your own changes
-- **Review and update MEMORY.md** (see below)
+**Proactive work you can do without asking:** 整理 memory、检查项目状态、更新文档、commit/push、**review MEMORY.md**。
 
 ---
 
-# 🏗️ 项目开发规约（完整检查清单）
+# 🏗️ 项目开发规约
 
 > 整合自规范文档：api-design-spec、mysql-p3c-rules、soul-backend-architect。
 > **违反任何一条 = 必须立即修正，不留到以后。**
@@ -149,11 +106,8 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 ```
 
-- [ ] **API 层**：只做参数校验 + 调用 service + 返回响应。
-      通过 `Depends(get_db)` 注入 db session 并透传给 service，
-      禁止在 API 层直接写 SQL 或 CRUD 操作。
-- [ ] **Service 层**：纯业务编排 + 事务管理。接收 db session（`db: AsyncSession`），调用 repo。
-      不含 HTTP 细节、不直接写 SQL 语句。
+- [ ] **API 层**：只做参数校验 + 调用 service + 返回响应。通过 `Depends(get_db)` 注入 db session 并透传给 service，禁止在 API 层直接写 SQL 或 CRUD 操作。
+- [ ] **Service 层**：纯业务编排 + 事务管理。接收 db session（`db: AsyncSession`），调用 repo。不含 HTTP 细节、不直接写 SQL 语句。
 - [ ] **Repository 层**：通过 Mapper 基类封装 CRUD 查询，返回 ORM 对象。不含业务逻辑。
 - [ ] **Mapper 层**：封装具体存储引擎操作（MySQL/Redis/Qdrant）。
 
@@ -163,20 +117,57 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 
 ## 2. 开发哲学（不可违反）
 
-- [ ] **先找根因再动手**：任何 bug / 问题，先定位根本原因，再动手修复。禁止「试一试改一改」的碰运气式开发
+> 融合 Karpathy 四准则与项目工程实践。哲学管「态度」，准则管「行为」。
+
+### 2.1 编码前思考 — 不要假设，不要隐藏困惑
+
+- [ ] **明确说明假设** — 不确定时询问，不猜测
+- [ ] **呈现多种解释** — 存在歧义时不默默选择，列出选项让主人决策
+- [ ] **适时提出异议** — 有更简单的方法时，主动说出来
+- [ ] **困惑时停下来** — 指出不清楚的地方，要求澄清后再动手
+- [ ] **先找根因再动手** — 任何 bug / 问题，先定位根本原因，再动手修复。禁止「试一试改一改」的碰运气式开发
+- [ ] **规则不清楚就查官方文档** — 遇到不确定的技术规则、API 用法、框架行为，必须先查对应技术的**官方最新文档**确认，再动手修改。禁止凭记忆、猜测或过时经验盲目修改。查完文档后，把结论写在注释里，方便后人
+
+### 2.2 简洁优先 — 用最少的代码解决问题
+
+- [ ] 不添加要求之外的功能
+- [ ] 不为一次性代码创建抽象
+- [ ] 不添加未要求的「灵活性」或「可配置性」
+- [ ] 不为不可能发生的场景做错误处理
+- [ ] 能用 3 行解决的不要写 10 行。能复用的不要重写
+- [ ] 项目内公共方法优先：发现重复逻辑必须提取为公共方法 / 工具函数 / 基类
+- [ ] **检验标准**：资深工程师会觉得过于复杂吗？如果是，简化。
+
+### 2.3 精准修改 — 只碰必须碰的，只清理自己造成的混乱
+
+- [ ] 不「改进」相邻的代码、注释或格式（除非明确要求）
+- [ ] 不重构没坏的东西
+- [ ] 匹配现有风格，即使个人偏好不同
+- [ ] 注意到无关死代码 → 提一下，不删除
+- [ ] 自己的改动产生孤儿代码 → 必须清理（无用的 import / 变量 / 函数）
+- [ ] **检验标准**：每一行修改都能直接追溯到用户的请求
+
+### 2.4 目标驱动执行 — 定义成功标准，循环验证直到达成
+
+- [ ] 将指令式任务转化为可验证的目标
+- [ ] 多步骤任务必须先列计划，每步附验证方式：
+  ```
+  1. [步骤] → 验证: [检查]
+  2. [步骤] → 验证: [检查]
+  ```
+- [ ] 弱标准（「让它工作」）→ 要求澄清后转化为强标准
+
+### 2.5 工程纪律
+
 - [ ] **高效有效代码**：每次提交的代码必须是最终版本，不留 TODO、不留「以后再改」、不留半成品
-- [ ] **做到最好**：要么不做，做就做到业内标准。不会的不要乱猜乱来，去找业内的标准答案
 - [ ] **结构性的东西一次做到最好**：架构、模型、接口这类结构性改动，追求最好改动，不追求最小改动
-- [ ] **简洁开发**：能用 3 行解决的不要写 10 行。能复用的不要重写
-- [ ] **项目内公共方法优先**：发现重复逻辑必须提取为公共方法 / 工具函数 / 基类
 - [ ] **技术栈最新**：所有依赖使用最新稳定版
-- [ ] **规则不清楚就查官方文档**：遇到不确定的技术规则、API 用法、框架行为，必须先查对应技术的**官方最新文档**确认，再动手修改。禁止凭记忆、猜测或过时经验盲目修改。查完文档后，把结论写在注释里，方便后人
 
 ---
 
 ## 3. 龙模式工作流（不可违反）
 
-**核心原则：先分析，后动手。确认再改。**
+**核心原则：先分析，后动手。确认再改。用户的指令就是最终交付物。放弃不是选项。**
 
 收到任务时，严格按以下流程执行：
 
@@ -196,7 +187,7 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 
 ## 4. MySQL P3C 规约（强制）
 
-### 3.1 建表检查清单
+### 4.1 建表检查清单
 
 - [ ] 表名必须使用小写字母或数字（`getter_admin` ✅，`GetterAdmin` ❌）
 - [ ] 表名禁止数字开头（`task_config` ✅，`3_task` ❌）
@@ -223,10 +214,9 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] 推荐单表超 500 万行或 2GB 再考虑分库分表
 - [ ] 合理选择存储长度（人 150 岁→tinyint，龟→smallint，恐龙→int，太阳→bigint）
 - [ ] 存储引擎 InnoDB，字符集 utf8mb4（支持 emoji）
-- [ ] 字符存储与表示均用 utf8mb4 编码，注意与 utf-8 的区别
 - [ ] 区分 `LENGTH()` 和 `CHARACTER_LENGTH()`（`LENGTH("轻松工作")`=12，`CHARACTER_LENGTH("轻松工作")`=4）
 
-### 3.2 索引检查清单
+### 4.2 索引检查清单
 
 - [ ] 命名：主键 `pk_{字段名}`，唯一 `uk_{字段名}`，普通 `idx_{表名}_{字段名}`（比 P3C 官方更严格，项目统一）
 - [ ] 业务唯一字段必须建唯一索引（即使应用层校验了，没有唯一索引必然产生脏数据）
@@ -241,13 +231,10 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] 避免索引三大误区：① 宁滥勿缺 ② 宁缺勿滥 ③ 抵制唯一索引
 - [ ] 超过三个表禁止 join，需要 join 的字段数据类型必须一致
 
-### 3.3 SQL 检查清单
+### 4.3 SQL 检查清单
 
 - [ ] **禁止 `SELECT *`**，明确写出需要的字段
 - [ ] 使用 `count(*)` 统计行数（禁止 `count(列名)` 或 `count(常量)`，`count(*)` 是 SQL92 标准语法）
-- [ ] `count(*)` 与 `count(1)` 等效，语义一致
-- [ ] `count(col)` 不统计 NULL 行，若该列全为 NULL 则返回 0
-- [ ] `count(distinct col)` 注意 NULL，若一列全为 NULL 即使另一列不同也返回 0
 - [ ] 分页查询 count 为 0 直接返回，避免执行后续分页语句
 - [ ] 数据订正（UPDATE/DELETE）前先 SELECT 确认
 - [ ] 参数化查询防 SQL 注入（SQLAlchemy 用 `bindparam` / `:param`，**禁止字符串拼接**）
@@ -256,10 +243,8 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] 禁用存储过程（难以调试和扩展，没有移植性）
 - [ ] `sum(col)` 注意 NPE：全 NULL 时 sum 返回 NULL，用 `func.coalesce(func.sum(col), 0)`
 - [ ] 使用 `IS NULL` / `IS NOT NULL` 判断 NULL，NULL 与任何值直接比较都为 NULL
-- [ ] `NULL<>NULL` 返回 NULL（非 false）
-- [ ] `NULL=NULL` 返回 NULL（非 true）
 
-### 3.4 ORM 检查清单（SQLAlchemy 2.0 + Pydantic v2）
+### 4.4 ORM 检查清单（SQLAlchemy 2.0 + Pydantic v2）
 
 - [ ] **禁止 `SELECT *`**，明确写出字段列表（`select(Model.id, Model.name)` 而非 `select(Model)`）
 - [ ] 使用 SQLAlchemy 2.0 风格：`mapped_column()` + `Mapped[]` 类型注解（弃用 `Column()`）
@@ -268,13 +253,12 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] 禁止 HashMap/Hashtable 作为查询结果集（值类型不可控）
 - [ ] 更新记录必须同时更新 `updated_at`（为当前时间）
 - [ ] 不写大而全的更新接口，只更新有改动的字段（减少 binlog 存储）
-- [ ] `@Transactional` 不要滥用，事务影响 QPS，需考虑回滚方案（缓存回滚、搜索引擎回滚、消息补偿、统计修正等）
 - [ ] 事务尽量短小，减少锁持有时间
 - [ ] Schema 层（CamelModel 基类）负责 `snake_case` → `camelCase` 转换，不暴露数据库字段给前端
 - [ ] `get_db` 依赖中 session 的 commit/rollback/finally 模式保持一致
 - [ ] ORM 模型统一继承 `BaseModel`（提供 id, is_deleted, created_at, updated_at）
 
-### 3.5 字段命名映射
+### 4.5 字段命名映射
 
 | 数据库 (snake_case) | Model 属性 | JSON 响应 (camelCase) |
 |---------------------|-----------|----------------------|
@@ -285,7 +269,7 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 | `created_at` | `created_at` | `createdAt` |
 | `updated_at` | `updated_at` | `updatedAt` |
 
-### 3.6 软删除策略
+### 4.6 软删除策略
 
 - [ ] 所有业务表使用 `is_deleted` 字段做逻辑删除
 - [ ] `0` = 正常（默认），`1` = 已删除
@@ -296,7 +280,7 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 
 ## 5. API 设计规约（强制）
 
-### 4.1 URL 检查清单
+### 5.1 URL 检查清单
 
 - [ ] 格式：`/api/{version}/{resource}`
 - [ ] 全小写 + 下划线分隔（`clipboard_items` ✅，`ClipboardItems` ❌）
@@ -308,7 +292,7 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] 版本号在 URL 中：`/api/v1/...`
 - [ ] 升级 v2 时新建 `/api/v2/...`，v1 保持兼容
 
-### 4.2 HTTP 方法检查
+### 5.2 HTTP 方法检查
 
 - [ ] GET = 获取资源（幂等）
 - [ ] POST = 创建资源（不幂等）
@@ -316,34 +300,33 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] PATCH = 部分更新（幂等）
 - [ ] DELETE = 删除资源（幂等，软删除）
 
-### 4.3 响应格式检查
+### 5.3 响应格式检查
 
 - [ ] 成功（单个）：`{ "code": "SUCCESS", "message": "操作成功", "data": {...} }`
 - [ ] 成功（分页）：`{ "code": "SUCCESS", "message": "操作成功", "data": [...], "total": 100, "page": 1, "pageSize": 20 }`（顶层字段，非 meta 嵌套）
 - [ ] 错误：`{ "code": "MODULE_ERROR_TYPE", "message": "排查信息", "user_tip": "用户提示", "request_id": "uuid" }`
 - [ ] 空列表返回 `[]`，**不返回 `null`**
 
-### 4.4 错误码检查
+### 5.4 错误码检查
 
 - [ ] 格式：`{MODULE}_{ERROR_TYPE}`
 - [ ] 模块前缀：SYSTEM, PET, SCHEDULE, SKILL, TOOL, CONVERSATION, MESSAGE, CONFIG, PROMPT, NOTIFICATION, BACKUP, AI, AUTH, AGENT, WORKFLOW, INTENT, KNOWLEDGE, MEMORY, DEBUG, COST
 - [ ] 错误类型：NOT_FOUND(404), DUPLICATE(409), VALIDATION(400), UNAUTHORIZED(401), FORBIDDEN(403), TIMEOUT(503), INTERNAL_ERROR(500), FAILED(500), ERROR(500)
-- [ ] 示例：`PET_NOT_FOUND`(404)、`SKILL_DUPLICATE`(409)、`SYSTEM_VALIDATION`(400)、`AI_TIMEOUT`(503)、`MEMORY_CREATE_FAILED`(500)、`AGENT_RESUME_ERROR`(500)
 - [ ] 错误响应四部分：`code`（机器可读）、`message`（开发者排查）、`user_tip`（用户友好）、`request_id`（追踪 ID）
 
-### 4.5 分页检查
+### 5.5 分页检查
 
 - [ ] 参数：`page`（默认 1，最小 1）、`page_size`（默认 20，1-100）
 - [ ] `page < 1` → 返回第 1 页
 - [ ] `page > 总页数` → 返回最后一页
 - [ ] `page_size > 100` → 按 100 处理
 
-### 4.6 JSON 命名检查
+### 5.6 JSON 命名检查
 
 - [ ] 请求/响应 body：小驼峰 `camelCase`
 - [ ] 数据库字段：下划线 `snake_case`（内部转换，不暴露给前端）
 
-### 4.7 P3C 前后端规约补充（强制/推荐）
+### 5.7 P3C 前后端规约补充（强制/推荐）
 
 - [ ] 【强制】URL 参数不能超过 2048 字节（浏览器最小限制）
 - [ ] 【强制】body 传递内容必须控制长度（nginx 默认 1MB，tomcat 默认 2MB）
@@ -351,7 +334,6 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] 【强制】服务器内部重定向用 forward，外部重定向用 URL 统一代理模块
 - [ ] 【推荐】时间格式统一 `yyyy-MM-dd HH:mm:ss`，时区统一 Asia/Shanghai（北京时间，GMT+8）
 - [ ] 【推荐】返回数据用 JSON 而非 XML
-- [ ] 【推荐】返回信息标记是否可缓存（Cache-Control s-maxage）
 
 ---
 
@@ -402,7 +384,6 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 - [ ] CORS 白名单控制
 - [ ] 密码通过 `security.py` bcrypt 哈希存储，禁止明文
 - [ ] 认证使用 JWT（PyJWT）+ bcrypt
-- [ ] 敏感信息禁止出现在 URL 参数中
 
 ---
 
@@ -423,7 +404,7 @@ API 层 → Service 层 → Repository 层 → Mapper 层 → 存储引擎
 
 ### 8.3 生命周期
 
-- [ ] 使用 `lifespan` 上下文管理器（FastAPI 推荐），**弃用 `@app.on_event`**（仍可用但非首选）
+- [ ] 使用 `lifespan` 上下文管理器（FastAPI 推荐），**弃用 `@app.on_event`**
 - [ ] 启动初始化（数据库表、缓存预热、外部连接）放 `lifespan` 的 `yield` 之前
 - [ ] 资源清理（关闭连接、取消后台任务）放 `lifespan` 的 `yield` 之后
 - [ ] 可选组件初始化失败应 `try/except` 捕获，不阻塞启动
@@ -538,30 +519,7 @@ if isinstance(final_answer, list):
 
 ---
 
-## 10. 性能意识
-
-- [ ] 单表超过 500 万行或 2GB 再考虑分库分表
-- [ ] 合理使用索引，不要宁滥勿缺
-- [ ] 适当冗余可提高查询性能（非频繁修改、非超长字段）
-- [ ] 事务尽量短小，减少锁持有时间
-- [ ] `in` 操作控制在 1000 以内，能避免则避免
-- [ ] 深分页使用延迟关联/子查询优化
-
----
-
-## 11. 核心任务执行协议
-
-**最高原则：用户的指令就是最终交付物。放弃不是选项。**
-
-面对任何任务时，按以下顺序执行，直至完成：
-
-1. **理解与分解**：解析用户指令的最终意图与期望成果，将复杂任务分解为子任务
-2. **应用内置能力**：优先使用核心推理与规划能力，匹配预置技能
-3. **主动寻找与创造**：当内置能力无法完成时，主动搜索、创造工具、分治迭代、发起澄清
-
----
-
-## 12. 多模态理解 - 优先使用 Omni
+## 10. 多模态理解 - 优先使用 Omni
 
 多模态内容禁止使用 read 工具读取，优先调用 `mimo-omni` skill（`bash mimo_api.sh`）：
 
@@ -571,13 +529,13 @@ if isinstance(final_answer, list):
 
 ---
 
-## 13. 沟通风格
+## 11. 沟通风格
 
-- **直接**：发现问题直说，不绕弯子
-- **有理有据**：每条建议都引用具体规约条款
-- **举例说明**：给正例和反例，不空谈
-- **严格但不刻板**：规约是底线，合理变通可以讨论
-- **关注全局**：不只看单个文件，关注架构一致性和可维护性
+- **直接** — 发现问题直说，不绕弯子
+- **有理有据** — 每条建议引用具体规约条款
+- **举例说明** — 给正例和反例，不空谈
+- **严格但不刻板** — 规约是底线，合理变通可以讨论
+- **关注全局** — 不只看单个文件，关注架构一致性和可维护性
 
 ---
 
