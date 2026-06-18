@@ -441,8 +441,11 @@ class ExpertTeamService:
                         skill_info["config_override"] = b.config_override
                         e["skills"].append(skill_info)
 
-            expert_list_str = ", ".join([
-                f"ID={e['id']} {e['member_name']}({e['member_role']})" for e in experts_data
+            expert_list_str = "\n".join([
+                f"- ID={e['id']} {e['member_name']}({e['member_role']})"
+                + (f" — 目标: {e['goal']}" if e.get('goal') else "")
+                + (f" — 背景: {e['backstory']}" if e.get('backstory') else "")
+                for e in experts_data
             ])
 
             # ── 确保工具注册表已加载 ──
@@ -697,8 +700,9 @@ class ExpertTeamService:
 输出 JSON 格式：
 {{"scores": [{{"expert_id": ID, "score": 分数, "feedback": "评价"}}], "overall_pass": true/false, "reason": "总体评价"}}"""
 
-                eval_content, eval_tokens = await _call_llm(
-                    db, pm_provider_id, pm_model_name, eval_prompt, temperature=pm_temperature,
+                eval_content, eval_tokens = await asyncio.wait_for(
+                    _call_llm(db, pm_provider_id, pm_model_name, eval_prompt, temperature=pm_temperature),
+                    timeout=120,
                 )
 
                 await _ws_broadcast(team_id, "expert_thinking", {
@@ -742,8 +746,9 @@ class ExpertTeamService:
 
 请分析任务并输出分配计划（JSON 格式）。"""
 
-            plan_content, plan_tokens = await _call_llm(
-                db, pm_provider_id, pm_model_name, analyze_prompt, temperature=pm_temperature,
+            plan_content, plan_tokens = await asyncio.wait_for(
+                _call_llm(db, pm_provider_id, pm_model_name, analyze_prompt, temperature=pm_temperature),
+                timeout=120,
             )
             total_tokens += plan_tokens
 
@@ -844,8 +849,9 @@ class ExpertTeamService:
 
 请生成最终报告。"""
 
-            report_content, report_tokens = await _call_llm(
-                db, pm_provider_id, pm_model_name, report_prompt, temperature=pm_temperature,
+            report_content, report_tokens = await asyncio.wait_for(
+                _call_llm(db, pm_provider_id, pm_model_name, report_prompt, temperature=pm_temperature),
+                timeout=120,
             )
             total_tokens += report_tokens
 
