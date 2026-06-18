@@ -31,14 +31,6 @@ export async function deleteSkill(id: number): Promise<void> {
   await apiClient.delete(`/skills/${id}`)
 }
 
-export async function enableSkill(id: number): Promise<Skill> {
-  return extractData(await apiClient.patch(`/skills/${id}/enable`))
-}
-
-export async function disableSkill(id: number): Promise<Skill> {
-  return extractData(await apiClient.patch(`/skills/${id}/disable`))
-}
-
 export async function fetchSkillStats(id: number): Promise<SkillStats> {
   return extractData(await apiClient.get(`/skills/${id}/stats`))
 }
@@ -61,7 +53,7 @@ export async function installSkill(input: InstallSkillInput): Promise<Skill> {
 }
 
 export async function toggleSkill(id: number, enabled: boolean): Promise<Skill> {
-  return extractData(await apiClient.patch(`/skills/${id}/toggle`, { enabled }))
+  return extractData(await apiClient.put(`/skills/${id}`, { isEnabled: enabled }))
 }
 
 export async function refineSkill(id: number, prompt?: string): Promise<RefineResult> {

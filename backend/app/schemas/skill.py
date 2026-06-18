@@ -23,6 +23,7 @@ class SkillUpdate(CamelModel):
     source: Optional[str] = Field(default=None, max_length=256, description="来源")
     trigger_words: Optional[List[str]] = Field(default=None, description="触发词列表")
     dependencies: Optional[List[str]] = Field(default=None, description="依赖技能列表")
+    is_enabled: Optional[int] = Field(default=None, description="是否启用: 1=是 0=否")
     config: Optional[Any] = Field(default=None, description="技能配置")
 
 
