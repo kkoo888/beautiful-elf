@@ -550,6 +550,25 @@ class ExpertTeamService:
                             timeout=max_execution_time,
                         )
                         duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+
+                        # ── 改进2: 检测并处理委派请求（最多1层）──
+                        if (member.get("is_delegation_allowed") and _delegation_depth < 1
+                                and content and "DELEGATE:" in content):
+                            delegate_match = re.search(r'DELEGATE:\s*(\d+)\s*\|\s*(.+)', content)
+                            if delegate_match:
+                                target_id = int(delegate_match.group(1))
+                                delegate_subtask = delegate_match.group(2).strip()
+                                target_member = next((e for e in experts_data if e["id"] == target_id), None)
+                                if target_member:
+                                    logger.info(f"专家 {expert_name} 委派子任务给 {target_member['member_name']}: {delegate_subtask}")
+                                    delegate_result = await _run_one_expert(
+                                        target_member, delegate_subtask, round_num,
+                                        context_text, feedback_text, _delegation_depth=1,
+                                    )
+                                    content = f"{content}\n\n[委派结果 - {target_member['member_name']}]:\n{delegate_result.get('output', '')}"
+                                    tokens += delegate_result.get("tokens", 0)
+
+                        # 记录最终结果（只调用一次 _finish_role_run）
                         await self._finish_role_run(db, role_run.id, status=2, output=content, tokens=tokens)
 
                         # 推送：专家完成
@@ -569,25 +588,6 @@ class ExpertTeamService:
                                 "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
                                 "content": content, "durationMs": duration_ms,
                             })
-
-                        # ── 改进2: 检测并处理委派请求（最多1层）──
-                        if (member.get("is_delegation_allowed") and _delegation_depth < 1
-                                and content and "DELEGATE:" in content):
-                            delegate_match = re.search(r'DELEGATE:\s*(\d+)\s*\|\s*(.+)', content)
-                            if delegate_match:
-                                target_id = int(delegate_match.group(1))
-                                delegate_subtask = delegate_match.group(2).strip()
-                                target_member = next((e for e in experts_data if e["id"] == target_id), None)
-                                if target_member:
-                                    logger.info(f"专家 {expert_name} 委派子任务给 {target_member['member_name']}: {delegate_subtask}")
-                                    delegate_result = await _run_one_expert(
-                                        target_member, delegate_subtask, round_num,
-                                        context_text, feedback_text, _delegation_depth=1,
-                                    )
-                                    # 将委派结果注入到当前专家输出
-                                    content = f"{content}\n\n[委派结果 - {target_member['member_name']}]:\n{delegate_result.get('output', '')}"
-                                    tokens += delegate_result.get("tokens", 0)
-                                    await self._finish_role_run(db, role_run.id, status=2, output=content, tokens=tokens)
 
                         return {
                             "expert_id": member["id"], "expert_name": expert_name,
@@ -894,7 +894,6 @@ class ExpertTeamService:
         Returns:
             {"overall_pass": bool, "scores": [{"expert_id", "score", "feedback"}], "reason": str}
         """
-        import re
         try:
             # 尝试直接 JSON 解析
             data = json.loads(eval_output.strip())
