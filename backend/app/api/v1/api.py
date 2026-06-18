@@ -25,6 +25,7 @@ from app.api.v1 import (
     knowledge,
     memory,
     markdown_memory,
+    memory_entity,
     workflow,
     expert_team,
     ollama,
@@ -56,6 +57,7 @@ api_router.include_router(snippet.router, prefix="/snippets", tags=["snippet"])
 api_router.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
 api_router.include_router(memory.router, prefix="/memories", tags=["memory"])
 api_router.include_router(markdown_memory.router, prefix="/markdown_memories", tags=["markdown_memory"])
+api_router.include_router(memory_entity.router, prefix="/memory", tags=["memory_entity"])
 
 # AI 相关
 api_router.include_router(pet.router, prefix="/pets", tags=["pet"])

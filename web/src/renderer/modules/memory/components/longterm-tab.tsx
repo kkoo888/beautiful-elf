@@ -30,6 +30,8 @@ import type {
   MarkdownMemoryEntry, DistillRequest, Observation,
 } from '../services/memory-api'
 import { MemoryGraphTab } from './memory-graph-tab'
+import { EntityTab } from './entity-tab'
+import { InsightTab } from './insight-tab'
 
 const { Text } = Typography
 const { TextArea } = Input
@@ -82,7 +84,7 @@ export function LongTermTab() {
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [viewMode, setViewMode] = useState<'observations' | 'memory' | 'graph'>('observations')
+  const [viewMode, setViewMode] = useState<'observations' | 'entities' | 'insights' | 'memory' | 'graph'>('observations')
   const [observations, setObservations] = useState<Observation[]>([])
   const [obsLoading, setObsLoading] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
@@ -237,6 +239,8 @@ export function LongTermTab() {
           onChange={v => setViewMode(v as typeof viewMode)}
           options={[
             { label: '提炼记忆', value: 'observations' },
+            { label: '实体', value: 'entities' },
+            { label: '洞察', value: 'insights' },
             { label: '关系图', value: 'graph' },
             { label: 'MEMORY.md', value: 'memory' },
           ]}
@@ -294,6 +298,20 @@ export function LongTermTab() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── 实体视图 ── */}
+      {viewMode === 'entities' && (
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <EntityTab />
+        </div>
+      )}
+
+      {/* ── 洞察视图 ── */}
+      {viewMode === 'insights' && (
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <InsightTab />
         </div>
       )}
 

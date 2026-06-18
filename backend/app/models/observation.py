@@ -20,6 +20,16 @@ class MemoryObservation(BaseModel):
     freshness = Column(String(16), nullable=False, default="new",
                        comment="新鲜度: new/stable/strengthening/weakening/stale")
     source_days = Column(Integer, nullable=False, default=0, comment="来源日志天数")
+    # Phase 2: 时间感知
+    valid_from = Column(String(32), nullable=False, default="",
+                        comment="生效时间 ISO（从源日志最早时间）")
+    valid_until = Column(String(32), nullable=False, default="",
+                         comment="失效时间 ISO（被新 observation 替代时设置）")
+    superseded_by = Column(BigInteger, nullable=False, default=0,
+                           comment="被哪条 observation 替代（0=当前有效）")
+    # Phase 1: 实体关联
+    entities = Column(String(500), nullable=False, default="",
+                      comment="关联实体 ID 列表，逗号分隔")
 
     __table_args__ = (
         Index("idx_obs_user", "user_id"),
