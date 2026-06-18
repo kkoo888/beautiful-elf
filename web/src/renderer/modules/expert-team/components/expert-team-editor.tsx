@@ -22,6 +22,8 @@ import {
   TeamOutlined,
   PictureOutlined,
   CrownOutlined,
+  ThunderboltOutlined,
+  OrderedListOutlined,
 } from '@ant-design/icons'
 import type { ExpertTeam, ExpertTeamFormInput, Expert } from '../types'
 import { getExpertRoleColor } from '../types'
@@ -237,8 +239,8 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
           </Form.Item>
           <Form.Item name="processMode" label="执行模式" style={{ marginBottom: 0, width: 150 }}>
             <Select options={[
-              { label: '⚡ 并行', value: 'parallel' },
-              { label: '📋 顺序', value: 'sequential' },
+              { label: <span><ThunderboltOutlined style={{ color: '#1890ff' }} /> 并行</span>, value: 'parallel' },
+              { label: <span><OrderedListOutlined style={{ color: '#52c41a' }} /> 顺序</span>, value: 'sequential' },
             ]} />
           </Form.Item>
           <Form.Item name="maxRounds" label="最大讨论轮次" style={{ marginBottom: 0 }}>
