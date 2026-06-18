@@ -414,23 +414,47 @@ class AgentService:
 
         # ── 手动指定技能：直接执行，不走 Agent 流程 ──
         if skill_id:
-            yield {"type": "progress", "step": "skill", "status": "executing", "message": "正在执行指定技能..."}
             try:
                 from app.core.database import AsyncSessionLocal
                 from app.services.skill_service import SkillService
                 from app.agent.skill_executor import skill_executor
+
+                async def _skill_progress(event: dict):
+                    """技能进度回调 → 转为 SSE progress 事件"""
+                    yield_event = {"type": "progress", **event}
+                    # 通过外层 yield 返回（闭包引用外层 async generator）
+                    _skill_progress_events.append(yield_event)
+
+                _skill_progress_events: list = []
+
                 async with AsyncSessionLocal() as skill_db:
                     svc = SkillService()
                     skill = await svc.get_skill_by_id(skill_db, skill_id)
                     if skill:
-                        answer = await skill_executor.execute(
-                            db=skill_db,
-                            skill_name=skill.name,
-                            user_message=messages[-1].get("content", ""),
-                            messages=messages,
-                            provider_id=provider_id,
-                            model_name=model_name,
-                        )
+                        import asyncio
+
+                        async def _run_skill():
+                            return await skill_executor.execute(
+                                db=skill_db,
+                                skill_name=skill.name,
+                                user_message=messages[-1].get("content", ""),
+                                messages=messages,
+                                provider_id=provider_id,
+                                model_name=model_name,
+                                on_progress=_skill_progress,
+                            )
+
+                        # 并行：技能执行 + 进度事件 yield
+                        skill_task = asyncio.create_task(_run_skill())
+                        while not skill_task.done():
+                            while _skill_progress_events:
+                                yield _skill_progress_events.pop(0)
+                            await asyncio.sleep(0.05)
+                        # 收尾：剩余进度事件
+                        while _skill_progress_events:
+                            yield _skill_progress_events.pop(0)
+
+                        answer = skill_task.result()
                         if answer:
                             yield {"type": "token", "content": answer}
                             elapsed = int((time.time() - t0) * 1000)

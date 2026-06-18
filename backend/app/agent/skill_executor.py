@@ -43,6 +43,7 @@ class SkillExecutor:
         model_name: str = "",
         context_engine=None,
         memory_manager=None,
+        on_progress=None,
     ) -> str:
         """
         执行技能。
@@ -60,16 +61,23 @@ class SkillExecutor:
         Returns:
             技能执行结果（文本）
         """
+        async def _progress(step: str, status: str, message: str, **kwargs):
+            if on_progress:
+                await on_progress({"step": step, "status": status, "message": message, **kwargs})
+
         # 1. 查找技能
+        await _progress("skill", "executing", "正在加载技能...")
         from app.services.skill_service import SkillService
         skill_service = SkillService()
 
         skill = await self._find_skill(db, skill_service, skill_name)
         if not skill:
             logger.warning(f"技能 '{skill_name}' 不存在，降级走 LLM")
+            await _progress("skill", "done", f"技能不存在，降级为普通对话")
             return await self._fallback_llm(
                 db, user_message, messages, provider_id, model_name,
                 context_engine=context_engine, memory_manager=memory_manager,
+                on_progress=on_progress,
             )
 
         config = skill.config or {}
@@ -81,6 +89,7 @@ class SkillExecutor:
             return await self._execute_with_tools(
                 db, skill_name, skill_description, tool_defs,
                 user_message, messages, provider_id, model_name,
+                on_progress=on_progress,
             )
 
         # 3. 无工具 → LLM + 技能上下文 + 记忆/RAG
@@ -88,6 +97,7 @@ class SkillExecutor:
             db, skill_name, skill_description, config,
             user_message, messages, provider_id, model_name,
             context_engine=context_engine, memory_manager=memory_manager,
+            on_progress=on_progress,
         )
 
     async def _find_skill(self, db, skill_service, skill_name):
@@ -103,6 +113,7 @@ class SkillExecutor:
     async def _execute_with_tools(
         self, db, skill_name, skill_description, tool_defs,
         user_message, messages, provider_id, model_name,
+        on_progress=None,
     ) -> str:
         """有工具：注册到 ToolRegistry → Agent 图执行"""
         import time
@@ -111,11 +122,16 @@ class SkillExecutor:
         from app.agent.llm_service import llm_service
         from app.services.llm_provider_service import LLMProviderService
 
+        async def _progress(step: str, status: str, message: str, **kwargs):
+            if on_progress:
+                await on_progress({"step": step, "status": status, "message": message, **kwargs})
+
         t0 = time.time()
         temp_tool_names = []
 
         try:
             # 注册技能工具到全局 ToolRegistry（临时）
+            await _progress("skill", "executing", f"正在注册 {len(tool_defs)} 个工具...")
             for td in tool_defs:
                 name = td["name"]
                 temp_tool_names.append(name)
@@ -142,9 +158,11 @@ class SkillExecutor:
             )
 
             # 构建 Agent 图
+            await _progress("skill", "executing", "正在构建 Agent 图...")
             graph = build_agent_graph(llm=llm, tool_registry=tool_registry)
 
             # 执行
+            await _progress("skill", "executing", "Agent 图执行中...")
             result = await graph.ainvoke({
                 "conversation_id": 0,
                 "user_id": 0,
@@ -159,8 +177,10 @@ class SkillExecutor:
             })
 
             elapsed = time.time() - t0
+            elapsed_ms = int(elapsed * 1000)
             logger.info(f"[SkillExecutor] '{skill_name}' 完成 elapsed={elapsed:.2f}s tools={result.get('tools_used', [])}")
 
+            await _progress("skill", "done", f"技能执行完成", elapsedMs=elapsed_ms)
             return result.get("final_answer") or "技能执行完成，但未生成回答。"
 
         finally:
@@ -173,6 +193,7 @@ class SkillExecutor:
         self, db, skill_name, skill_description, config,
         user_message, messages, provider_id, model_name,
         context_engine=None, memory_manager=None,
+        on_progress=None,
     ) -> str:
         """无工具：LLM + 技能描述 + 记忆/RAG 上下文"""
         from app.services.llm_chat_service import llm_chat_service
@@ -218,17 +239,24 @@ class SkillExecutor:
         }
         enriched_messages = [system_msg] + messages
 
+        async def _progress(step: str, status: str, message: str, **kwargs):
+            if on_progress:
+                await on_progress({"step": step, "status": status, "message": message, **kwargs})
+
+        await _progress("skill", "executing", "正在调用 LLM 生成回答...")
         result = await llm_chat_service.chat(
             db, provider_id=provider_id, model_name=model_name,
             messages=enriched_messages, temperature=0.7, max_tokens=2048,
         )
         if result.error:
             logger.warning(f"技能 '{skill_name}' LLM 调用失败: {result.error}")
+        await _progress("skill", "done", "技能执行完成")
         return result.content
 
     async def _fallback_llm(
         self, db, user_message, messages, provider_id, model_name,
         context_engine=None, memory_manager=None,
+        on_progress=None,
     ) -> str:
         """降级：纯 LLM 对话 + 可用上下文"""
         from app.services.llm_chat_service import llm_chat_service
@@ -257,12 +285,18 @@ class SkillExecutor:
             system_msg = {"role": "system", "content": "\n".join(context_parts)}
             enriched_messages = [system_msg] + messages
 
+        async def _progress(step: str, status: str, message: str, **kwargs):
+            if on_progress:
+                await on_progress({"step": step, "status": status, "message": message, **kwargs})
+
+        await _progress("skill", "executing", "降级为普通对话，正在生成...")
         result = await llm_chat_service.chat(
             db, provider_id=provider_id, model_name=model_name,
             messages=enriched_messages, temperature=0.7, max_tokens=2048,
         )
         if result.error:
             logger.warning(f"降级 LLM 调用失败: {result.error}")
+        await _progress("skill", "done", "对话完成")
         return result.content
 
     @staticmethod
