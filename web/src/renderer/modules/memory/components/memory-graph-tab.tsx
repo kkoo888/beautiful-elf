@@ -1,11 +1,11 @@
-/** 记忆关系图 — React Flow 节点图（复用项目已有 reactflow v11）
+/** 记忆关系图 — 基于 Dify 模式重构
 
-功能:
-  - 左侧 daily log 节点，右侧 observation 节点
-  - 连线表示关联关系
-  - 拖拽连线创建新关联
-  - 点击连线删除关联
-  - 节点可拖拽布局
+借鉴 Dify 核心设计：
+  - Zustand store 统一状态管理（graph-store.ts）
+  - 点击节点 → 右侧 Drawer 属性面板（graph-detail-drawer.tsx）
+  - 右键菜单 → 编辑/删除/断开连线（graph-context-menu.tsx）
+  - 顶部搜索 + 分类筛选（graph-toolbar.tsx）
+  - 节点选中高亮 + 连线样式增强
 */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
@@ -22,11 +22,11 @@ import ReactFlow, {
   type Edge,
   type Node,
   type OnConnect,
-  type OnNodesChange,
-  type OnEdgesChange,
+  type OnNodeContextMenu,
+  type OnEdgeContextMenu,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Spin, Empty, message, App, Typography } from 'antd'
+import { Spin, Empty, App } from 'antd'
 import { FileTextOutlined, BulbOutlined } from '@ant-design/icons'
 import {
   listObservations,
@@ -35,20 +35,25 @@ import {
   deleteObservationSource,
 } from '../services/memory-api'
 import type { Observation, MarkdownMemoryEntry } from '../services/memory-api'
+import { useGraphStore } from './graph-store'
+import { NodeContextMenu, EdgeContextMenu } from './graph-context-menu'
+import { NodeDetailDrawer } from './graph-detail-drawer'
+import { GraphToolbar } from './graph-toolbar'
 
-const { Text } = Typography
-
-// ── 节点样式 ────────────────────────────────────────────────
+// ── 样式常量 ──────────────────────────────────────────────
 
 const COLORS = {
   primary: '#E8913A',
   info: '#3BA0E8',
   dailyBg: '#E6F4FF',
   dailyBorder: '#91CAFF',
+  dailySelected: '#1890ff',
   obsBg: '#FFF7ED',
   obsBorder: '#FDBA74',
+  obsSelected: '#E8913A',
   edge: '#BFBFBF',
   edgeActive: '#E8913A',
+  dimmed: '#d9d9d9',
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -58,47 +63,63 @@ const CATEGORY_ICONS: Record<string, string> = {
   status: '📦',
 }
 
-// ── 自定义节点组件 ──────────────────────────────────────────
+// ── 自定义节点组件（增强版：支持选中高亮 + 搜索半透明）──
 
-function DailyLogNode({ data }: { data: { title: string; wordCount: number; memoryId: string } }) {
+function DailyLogNode({ data, selected }: { data: any; selected?: boolean }) {
+  const searchKeyword = useGraphStore(s => s.searchKeyword)
+  const dimmed = searchKeyword && !(data.title || '').toLowerCase().includes(searchKeyword.toLowerCase())
+
   return (
     <div style={{
       padding: '10px 14px',
-      background: COLORS.dailyBg,
-      border: `1px solid ${COLORS.dailyBorder}`,
+      background: selected ? '#e6f7ff' : COLORS.dailyBg,
+      border: `2px solid ${selected ? COLORS.dailySelected : COLORS.dailyBorder}`,
       borderRadius: 8,
       fontSize: 12,
       minWidth: 120,
       cursor: 'grab',
+      opacity: dimmed ? 0.3 : 1,
+      transition: 'all 0.2s',
+      boxShadow: selected ? '0 0 0 2px rgba(24,144,255,0.2)' : 'none',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
         <FileTextOutlined style={{ color: COLORS.info, fontSize: 14 }} />
-        <Text strong style={{ fontSize: 13 }}>{data.title}</Text>
+        <strong style={{ fontSize: 13 }}>{data.title}</strong>
       </div>
-      <Text type="secondary" style={{ fontSize: 11 }}>{data.wordCount} 字</Text>
+      <span style={{ color: '#8c8c8c', fontSize: 11 }}>{data.wordCount} 字</span>
     </div>
   )
 }
 
-function ObservationNode({ data }: { data: { content: string; category: string; freshness: string; obsId: number } }) {
+function ObservationNode({ data, selected }: { data: any; selected?: boolean }) {
+  const searchKeyword = useGraphStore(s => s.searchKeyword)
+  const categoryFilter = useGraphStore(s => s.categoryFilter)
+  const dimmedBySearch = searchKeyword && !(data.content || '').toLowerCase().includes(searchKeyword.toLowerCase())
+  const dimmedByCategory = categoryFilter !== 'all' && data.category !== categoryFilter
+  const dimmed = dimmedBySearch || dimmedByCategory
+
   const icon = CATEGORY_ICONS[data.category] || '📌'
-  const preview = data.content.length > 60 ? data.content.slice(0, 60) + '...' : data.content
+  const preview = data.content?.length > 50 ? data.content.slice(0, 50) + '...' : (data.content || '')
+
   return (
     <div style={{
       padding: '10px 14px',
-      background: COLORS.obsBg,
-      border: `1px solid ${COLORS.obsBorder}`,
+      background: selected ? '#fff7e6' : COLORS.obsBg,
+      border: `2px solid ${selected ? COLORS.obsSelected : COLORS.obsBorder}`,
       borderRadius: 8,
       fontSize: 12,
       minWidth: 140,
       maxWidth: 200,
       cursor: 'grab',
+      opacity: dimmed ? 0.3 : 1,
+      transition: 'all 0.2s',
+      boxShadow: selected ? '0 0 0 2px rgba(232,145,58,0.2)' : 'none',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
         <span>{icon}</span>
-        <Text strong style={{ fontSize: 12 }}>{preview.split('\n')[0]}</Text>
+        <strong style={{ fontSize: 12 }}>{preview.split('\n')[0]}</strong>
       </div>
-      <Text type="secondary" style={{ fontSize: 11 }}>{data.freshness}</Text>
+      <span style={{ color: '#8c8c8c', fontSize: 11 }}>{data.freshness}</span>
     </div>
   )
 }
@@ -112,17 +133,24 @@ const nodeTypes = {
 
 export function MemoryGraphTab() {
   const { message: msg } = App.useApp()
-  const [loading, setLoading] = useState(true)
-  const [observations, setObservations] = useState<Observation[]>([])
-  const [dailyLogs, setDailyLogs] = useState<MarkdownMemoryEntry[]>([])
+  const {
+    loading, setLoading,
+    observations, setObservations,
+    dailyLogs, setDailyLogs,
+    nodes: storeNodes, edges: storeEdges,
+    setNodes: setStoreNodes, setEdges: setStoreEdges,
+    selectNode, openContextMenu, openEdgeContextMenu,
+  } = useGraphStore()
+
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
-  // ── 加载数据 ──────────────────────────────────────────
+  // ── 同步 React Flow 状态到 Store ──
+  useEffect(() => { setStoreNodes(nodes) }, [nodes])
+  useEffect(() => { setStoreEdges(edges) }, [edges])
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  // ── 加载数据 ──
+  useEffect(() => { loadData() }, [])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -139,13 +167,11 @@ export function MemoryGraphTab() {
     }
   }, [])
 
-  // ── 构建图 ────────────────────────────────────────────
-
+  // ── 构建图 ──
   const buildGraph = useCallback((obs: Observation[], logs: MarkdownMemoryEntry[]) => {
     const newNodes: Node[] = []
     const newEdges: Edge[] = []
 
-    // Daily log 节点（左侧）
     logs.forEach((log, i) => {
       newNodes.push({
         id: `log-${log.id}`,
@@ -155,20 +181,17 @@ export function MemoryGraphTab() {
       })
     })
 
-    // Observation 节点（右侧）
     obs.forEach((ob, i) => {
       newNodes.push({
         id: `obs-${ob.id}`,
         type: 'observation',
         position: { x: 450, y: i * 120 + 50 },
-        data: { content: ob.content, category: ob.category, freshness: ob.freshness, obsId: ob.id },
+        data: { content: ob.content, category: ob.category, freshness: ob.freshness, obsId: ob.id, sources: ob.sources },
       })
 
-      // 连线（关联关系）
       if (ob.sources) {
         ob.sources.forEach(src => {
-          const sourceLogExists = logs.some(l => l.id === String(src.logId))
-          if (sourceLogExists) {
+          if (logs.some(l => l.id === String(src.logId))) {
             newEdges.push({
               id: `edge-${src.sourceId}`,
               source: `log-${src.logId}`,
@@ -187,12 +210,9 @@ export function MemoryGraphTab() {
     setEdges(newEdges)
   }, [])
 
-  // ── 连线回调（创建关联）──────────────────────────────
-
+  // ── 连线回调 ──
   const onConnect: OnConnect = useCallback(async (connection: Connection) => {
     if (!connection.source || !connection.target) return
-
-    // 只允许 dailyLog → observation 方向
     if (!connection.source.startsWith('log-') || !connection.target.startsWith('obs-')) {
       msg.warning('只能从日志拖拽到提炼记忆')
       return
@@ -201,7 +221,6 @@ export function MemoryGraphTab() {
     const logId = parseInt(connection.source.replace('log-', ''))
     const obsId = parseInt(connection.target.replace('obs-', ''))
 
-    // 乐观更新
     const tempEdgeId = `edge-temp-${Date.now()}`
     setEdges(eds => addEdge({
       ...connection,
@@ -213,7 +232,6 @@ export function MemoryGraphTab() {
 
     try {
       const result = await createObservationSource(obsId, logId)
-      // 替换临时边为真实边
       setEdges(eds => eds.map(e =>
         e.id === tempEdgeId
           ? { ...e, id: `edge-${result.id}`, animated: false, style: { stroke: COLORS.edge, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.edge } }
@@ -221,33 +239,43 @@ export function MemoryGraphTab() {
       ))
       msg.success('关联创建成功')
     } catch {
-      // 回滚
       setEdges(eds => eds.filter(e => e.id !== tempEdgeId))
       msg.error('关联创建失败')
     }
   }, [])
 
-  // ── 点击边删除关联 ───────────────────────────────────
+  // ── 节点点击 → 选中 + 打开详情 ──
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    selectNode(node.id)
+  }, [selectNode])
 
+  // ── 节点右键 → 上下文菜单 ──
+  const handleNodeContextMenu: OnNodeContextMenu = useCallback((event, node) => {
+    event.preventDefault()
+    openContextMenu(node.id, event.clientX, event.clientY)
+  }, [openContextMenu])
+
+  // ── 边右键 → 上下文菜单 ──
+  const handleEdgeContextMenu: OnEdgeContextMenu = useCallback((event, edge) => {
+    event.preventDefault()
+    openEdgeContextMenu(edge.id, event.clientX, event.clientY)
+  }, [openEdgeContextMenu])
+
+  // ── 边点击 → 删除关联（保留原逻辑）──
   const onEdgeClick = useCallback(async (_: React.MouseEvent, edge: Edge) => {
     const sourceId = edge.data?.sourceId
     if (!sourceId) return
-
-    // 乐观删除
     setEdges(eds => eds.filter(e => e.id !== edge.id))
-
     try {
       await deleteObservationSource(sourceId)
       msg.success('关联已删除')
     } catch {
-      // 回滚
       setEdges(eds => [...eds, edge])
       msg.error('删除失败')
     }
   }, [])
 
-  // ── Loading ───────────────────────────────────────────
-
+  // ── Loading ──
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -257,31 +285,41 @@ export function MemoryGraphTab() {
   }
 
   if (observations.length === 0 && dailyLogs.length === 0) {
-    return (
-      <Empty
-        description="暂无数据，请先提炼记忆"
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-      />
-    )
+    return <Empty description="暂无数据，请先提炼记忆" image={Empty.PRESENTED_IMAGE_SIMPLE} />
   }
 
   return (
-    <div style={{ height: '100%', width: '100%', borderRadius: 8, overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+    <div style={{ height: '100%', width: '100%', borderRadius: 8, overflow: 'hidden', border: '1px solid #f0f0f0', position: 'relative' }}>
+      {/* 搜索 + 筛选 */}
+      <GraphToolbar />
+
+      {/* 右键菜单 */}
+      <NodeContextMenu />
+      <EdgeContextMenu />
+
+      {/* 详情抽屉 */}
+      <NodeDetailDrawer />
+
+      {/* 画布 */}
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeClick={handleNodeClick}
+        onNodeContextMenu={handleNodeContextMenu}
+        onEdgeContextMenu={handleEdgeContextMenu}
         onEdgeClick={onEdgeClick}
         nodeTypes={nodeTypes}
         fitView
+        deleteKeyCode={null}
         attributionPosition="bottom-left"
         style={{ background: '#fafafa' }}
       >
         <Controls />
         <MiniMap
-          nodeColor={(node) => node.type === 'dailyLog' ? COLORS.dailyBg : COLORS.obsBg}
+          nodeColor={node => node.type === 'dailyLog' ? COLORS.dailyBg : COLORS.obsBg}
           maskColor="rgba(0,0,0,0.08)"
           style={{ border: '1px solid #f0f0f0', borderRadius: 4 }}
         />
@@ -305,7 +343,7 @@ export function MemoryGraphTab() {
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ width: 20, height: 2, background: COLORS.edge, display: 'inline-block' }} />
-          关联（点击删除）
+          点击节点查看详情 · 右键操作 · 拖拽连线
         </span>
       </div>
     </div>
