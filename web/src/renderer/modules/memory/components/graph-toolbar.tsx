@@ -29,8 +29,8 @@ export function GraphToolbar() {
         onChange={e => setSearchKeyword(e.target.value)}
         allowClear
         style={{
-          width: 200, background: 'rgba(255,255,255,0.95)',
-          borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          width: 200, background: 'rgba(255,255,255,0.92)',
+          borderRadius: 6, boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
           pointerEvents: 'auto',
         }}
         size="small"
@@ -43,9 +43,9 @@ export function GraphToolbar() {
         options={CATEGORY_OPTIONS}
         size="small"
         style={{
-          background: 'rgba(255,255,255,0.95)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-          borderRadius: 8,
+          background: 'rgba(255,255,255,0.92)',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+          borderRadius: 6,
           pointerEvents: 'auto',
         }}
       />

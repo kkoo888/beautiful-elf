@@ -155,7 +155,7 @@ export function NodeDetailDrawer() {
           {/* 内容 */}
           <div style={{
             whiteSpace: 'pre-wrap', lineHeight: 1.8, fontSize: 14,
-            padding: 12, background: '#fafafa', borderRadius: 8,
+            padding: 12, background: '#fafafa', borderRadius: 6,
             border: '1px solid #f0f0f0',
           }}>
             {data.content || data.title || '无内容'}

@@ -83,27 +83,26 @@ function DailyLogNode({ data, selected }: { data: any; selected?: boolean }) {
 
   return (
     <div style={{
-      padding: 0, borderRadius: 10, overflow: 'hidden',
-      border: `2px solid ${selected ? COLORS.dailySelected : COLORS.dailyBorder}`,
-      background: '#fff',
-      opacity: dimmed ? 0.25 : 1,
-      transition: 'all 0.2s',
-      boxShadow: selected ? '0 0 0 3px rgba(24,144,255,0.15), 0 4px 12px rgba(0,0,0,0.08)' : '0 2px 6px rgba(0,0,0,0.04)',
-      minWidth: 160, maxWidth: 220,
+      padding: 0, borderRadius: 6, overflow: 'hidden',
+      border: `1.5px solid ${selected ? COLORS.dailySelected : COLORS.dailyBorder}`,
+      background: selected ? '#f0f7ff' : '#fff',
+      opacity: dimmed ? 0.2 : 1,
+      transition: 'opacity 0.2s, border-color 0.15s, box-shadow 0.15s',
+      boxShadow: selected ? '0 0 0 2px rgba(24,144,255,0.12)' : 'none',
+      minWidth: 150, maxWidth: 200,
     }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '8px 12px', background: COLORS.dailyBg,
-        borderBottom: `1px solid ${COLORS.dailyBorder}`,
+        padding: '7px 10px', background: selected ? '#e6f0ff' : COLORS.dailyBg,
       }}>
-        <FileTextOutlined style={{ color: COLORS.info, fontSize: 14 }} />
-        <strong style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <FileTextOutlined style={{ color: COLORS.info, fontSize: 13 }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {data.title}
-        </strong>
+        </span>
       </div>
       {/* Body */}
-      <div style={{ padding: '6px 12px 8px' }}>
+      <div style={{ padding: '5px 10px 7px' }}>
         <span style={{ color: '#8c8c8c', fontSize: 11 }}>{data.wordCount} 字</span>
       </div>
     </div>
@@ -123,39 +122,38 @@ function ObservationNode({ data, selected }: { data: any; selected?: boolean }) 
 
   return (
     <div style={{
-      padding: 0, borderRadius: 10, overflow: 'hidden',
-      border: `2px solid ${selected ? COLORS.obsSelected : COLORS.obsBorder}`,
-      background: '#fff',
-      opacity: dimmed ? 0.25 : 1,
-      transition: 'all 0.2s',
-      boxShadow: selected ? '0 0 0 3px rgba(232,145,58,0.15), 0 4px 12px rgba(0,0,0,0.08)' : '0 2px 6px rgba(0,0,0,0.04)',
-      minWidth: 160, maxWidth: 220,
+      padding: 0, borderRadius: 6, overflow: 'hidden',
+      border: `1.5px solid ${selected ? COLORS.obsSelected : COLORS.obsBorder}`,
+      background: selected ? '#fff8f0' : '#fff',
+      opacity: dimmed ? 0.2 : 1,
+      transition: 'opacity 0.2s, border-color 0.15s, box-shadow 0.15s',
+      boxShadow: selected ? '0 0 0 2px rgba(232,145,58,0.12)' : 'none',
+      minWidth: 150, maxWidth: 200,
     }}>
       {/* Header */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '8px 12px', background: COLORS.obsBg,
-        borderBottom: `1px solid ${COLORS.obsBorder}`,
+        display: 'flex', alignItems: 'center', gap: 5,
+        padding: '7px 10px', background: selected ? '#fff0e0' : COLORS.obsBg,
       }}>
-        <span style={{ fontSize: 14 }}>{icon}</span>
+        <span style={{ fontSize: 13 }}>{icon}</span>
         <span style={{
-          fontSize: 11, padding: '1px 6px', borderRadius: 4,
-          background: '#fff', color: '#8c8c8c', border: '1px solid #f0f0f0',
+          fontSize: 10, padding: '1px 5px', borderRadius: 3,
+          background: '#fff', color: '#8c8c8c',
         }}>{catLabel}</span>
       </div>
       {/* Body */}
-      <div style={{ padding: '8px 12px' }}>
-        <div style={{ fontSize: 12, lineHeight: 1.6, color: '#262626', wordBreak: 'break-all' }}>
+      <div style={{ padding: '6px 10px' }}>
+        <div style={{ fontSize: 12, lineHeight: 1.5, color: '#1a1a2e', wordBreak: 'break-all' }}>
           {preview.split('\n')[0]}
         </div>
       </div>
       {/* desc */}
       {data.freshness && (
         <div style={{
-          padding: '4px 12px 6px', borderTop: '1px solid #f5f5f5',
+          padding: '3px 10px 5px',
           fontSize: 11, color: '#bfbfbf',
         }}>
-          {data.freshness} · {data.sources?.length || 0} 条来源
+          {data.sources?.length || 0} 条来源
         </div>
       )}
     </div>
@@ -413,7 +411,7 @@ export function MemoryGraphTab() {
       position: 'absolute', top: 8, right: 8, zIndex: 10,
       display: 'flex', gap: 4, pointerEvents: 'none',
     }}>
-      <Space size={4} style={{ pointerEvents: 'auto', background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: '4px 8px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+      <Space size={4} style={{ pointerEvents: 'auto', background: 'rgba(255,255,255,0.95)', borderRadius: 6, padding: '4px 8px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <Tooltip title="撤销 (Ctrl+Z)"><Button size="small" type="text" icon={<UndoOutlined />} disabled={!canUndo()} onClick={undo} /></Tooltip>
         <Tooltip title="重做 (Ctrl+Y)"><Button size="small" type="text" icon={<RedoOutlined />} disabled={!canRedo()} onClick={redo} /></Tooltip>
         <Tooltip title="自动布局"><Button size="small" type="text" icon={<SortAscendingOutlined />} onClick={handleAutoLayout} /></Tooltip>
@@ -433,7 +431,7 @@ export function MemoryGraphTab() {
   }
 
   return (
-    <div style={{ height: '100%', width: '100%', borderRadius: 8, overflow: 'hidden', border: '1px solid #f0f0f0', position: 'relative' }}>
+    <div style={{ height: '100%', width: '100%', borderRadius: 6, overflow: 'hidden', border: '1px solid #f0f0f0', position: 'relative' }}>
       <GraphToolbar />
       {toolbarButtons}
       <NodePalette />

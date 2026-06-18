@@ -11,7 +11,6 @@ import { Typography, Divider } from 'antd'
 import {
   FileTextOutlined,
   BulbOutlined,
-  PlusOutlined,
 } from '@ant-design/icons'
 import { useGraphStore } from './graph-store'
 import type { Node } from 'reactflow'
@@ -23,7 +22,7 @@ const NODE_TEMPLATES = [
     type: 'observation',
     label: '提炼记忆',
     icon: <BulbOutlined style={{ color: '#E8913A', fontSize: 16 }} />,
-    description: '添加一条提炼记忆节点',
+    description: '从日志中提炼的知识',
     color: '#FFF7ED',
     borderColor: '#FDBA74',
     createData: () => ({
@@ -32,6 +31,19 @@ const NODE_TEMPLATES = [
       freshness: 'new',
       obsId: 0,
       sources: [],
+    }),
+  },
+  {
+    type: 'dailyLog',
+    label: '日志节点',
+    icon: <FileTextOutlined style={{ color: '#3BA0E8', fontSize: 16 }} />,
+    description: '标记一条日志',
+    color: '#E6F4FF',
+    borderColor: '#91CAFF',
+    createData: () => ({
+      title: `日志 ${new Date().toLocaleDateString('zh-CN')}`,
+      wordCount: 0,
+      memoryId: '',
     }),
   },
 ]
@@ -61,10 +73,10 @@ export function NodePalette() {
   return (
     <div style={{
       position: 'absolute', left: 8, top: 48, zIndex: 10,
-      width: 180, background: 'rgba(255,255,255,0.95)',
-      borderRadius: 8, border: '1px solid #f0f0f0',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-      padding: '12px 0',
+      width: 170, background: 'rgba(255,255,255,0.92)',
+      borderRadius: 6, border: '1px solid #f0f0f0',
+      boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
+      padding: '10px 0',
     }}>
       <div style={{ padding: '0 12px 8px' }}>
         <Text strong style={{ fontSize: 13 }}>添加节点</Text>
