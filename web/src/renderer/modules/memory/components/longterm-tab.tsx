@@ -33,6 +33,8 @@ import { MemoryGraphTab } from './memory-graph-tab'
 import { EntityTab } from './entity-tab'
 import { InsightTab } from './insight-tab'
 
+import { EmptyState } from '@/components/empty-state'
+
 const { Text } = Typography
 const { TextArea } = Input
 
@@ -285,7 +287,12 @@ export function LongTermTab() {
               <Spin />
             </div>
           ) : observations.length === 0 ? (
-            <EmptyState onDistill={() => setDrawerOpen(true)} />
+            <EmptyState
+              icon={<BulbOutlined style={{ fontSize: 28, color: COLORS.primary }} />}
+              description="从每日日志中提炼关键决策、踩坑经验和偏好"
+              actionText="开始提炼"
+              onAction={() => setDrawerOpen(true)}
+            />
           ) : (
             <div>
               {observations.map((obs, index) => (
@@ -354,7 +361,11 @@ export function LongTermTab() {
                     fontFamily: "'SFMono-Regular', Consolas, 'PingFang SC', sans-serif",
                     fontSize: 13, lineHeight: 1.8, resize: 'vertical',
                     background: 'transparent',
+                    transition: 'border-color 0.2s',
+                    outline: 'none',
                   }}
+                  onFocus={e => (e.target.style.borderColor = COLORS.primary)}
+                  onBlur={e => (e.target.style.borderColor = COLORS.border)}
                 />
               </div>
             ) : (
@@ -443,32 +454,7 @@ export function LongTermTab() {
 
 // ── 空状态组件 ────────────────────────────────────────────
 
-function EmptyState({ onDistill }: { onDistill: () => void }) {
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', padding: '48px 24px', textAlign: 'center',
-    }}>
-      <div style={{
-        width: 64, height: 64, borderRadius: 16,
-        background: COLORS.primaryBg, display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        marginBottom: 16,
-      }}>
-        <BulbOutlined style={{ fontSize: 28, color: COLORS.primary }} />
-      </div>
-      <Text strong style={{ fontSize: 16, marginBottom: 8 }}>还没有提炼记忆</Text>
-      <Text type="secondary" style={{ fontSize: 13, marginBottom: 24, maxWidth: 280 }}>
-        从每日日志中提炼关键决策、踩坑经验和偏好，让 AI 记住重要的事
-      </Text>
-      <Button type="primary" icon={<ExperimentOutlined />} onClick={onDistill}>
-        开始提炼
-      </Button>
-    </div>
-  )
-}
-
-// ── 提炼记忆条目组件（扁平设计，不嵌套 Card）─────────────
+// ── 提炼记忆条目组件（扁平设计 + 左侧分类色条）─────────
 
 function ObservationItem({ obs, onDelete, isLast }: {
   obs: Observation; onDelete: (id: number) => void; isLast: boolean
@@ -479,9 +465,15 @@ function ObservationItem({ obs, onDelete, isLast }: {
 
   return (
     <div style={{
-      padding: '14px 0',
+      padding: '12px 0 12px 10px',
       borderBottom: isLast ? 'none' : `1px solid ${COLORS.border}`,
-    }}>
+      borderLeft: `3px solid ${cat.color}`,
+      marginLeft: 2,
+      transition: 'background 0.15s',
+    }}
+    onMouseEnter={e => (e.currentTarget.style.background = '#fafafa')}
+    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+    >
       {/* 头部行：分类 + 新鲜度 + 证据数 + 删除 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <Space size={6} wrap={false}>
@@ -516,7 +508,7 @@ function ObservationItem({ obs, onDelete, isLast }: {
 
       {/* 内容 */}
       <div
-        style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, fontSize: 13, color: '#262626' }}
+        style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7, fontSize: 13, color: '#1a1a2e' }}
         dangerouslySetInnerHTML={{ __html: renderMarkdown(obs.content) }}
       />
 
@@ -553,7 +545,7 @@ function ObservationItem({ obs, onDelete, isLast }: {
                   </Text>
                   {src.evidenceQuote && (
                     <div style={{
-                      fontSize: 12, color: '#595959', fontStyle: 'italic',
+                      fontSize: 12, color: '#4a4a5a', fontStyle: 'italic',
                       paddingLeft: 8, marginTop: 2,
                       borderLeft: `2px solid ${COLORS.primaryBorder}`,
                       lineHeight: 1.6,
