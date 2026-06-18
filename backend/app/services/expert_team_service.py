@@ -269,13 +269,17 @@ class ExpertTeamService:
             raise RecordNotFoundError("专家不存在")
         bind_data = data.model_dump(by_alias=False)
         bind_data["expert_id"] = expert_id
-        # 检查是否已绑定
+        # 检查是否已绑定（有效记录）
         existing = await self.repo.find_skill_bind(db, expert_id, data.skill_id)
         if existing:
-            # 更新已有绑定
             bind = await self.repo.update_skill_bind(db, existing.id, bind_data)
-        else:
-            bind = await self.repo.create_skill_bind(db, bind_data)
+            return self._to_out_skill_bind(bind)
+        # 检查是否有软删除的旧记录（唯一键冲突防护）
+        deleted = await self.repo.find_skill_bind_any(db, expert_id, data.skill_id)
+        if deleted:
+            bind = await self.repo.restore_skill_bind(db, deleted.id, bind_data)
+            return self._to_out_skill_bind(bind)
+        bind = await self.repo.create_skill_bind(db, bind_data)
         return self._to_out_skill_bind(bind)
 
     async def update_skill_bind(self, db: AsyncSession, bind_id: int, data: ExpertSkillUpdate) -> ExpertSkillOut:

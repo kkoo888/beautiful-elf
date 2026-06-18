@@ -227,11 +227,20 @@ class ExpertTeamRepository:
         return await self.skill_bind_mapper.find_by_id(db, bind_id)
 
     async def find_skill_bind(self, db: AsyncSession, expert_id: int, skill_id: int) -> Optional[ExpertSkill]:
-        """查询特定专家-技能绑定"""
+        """查询特定专家-技能绑定（仅有效记录）"""
         stmt = select(ExpertSkill).where(
             ExpertSkill.expert_id == expert_id,
             ExpertSkill.skill_id == skill_id,
             ExpertSkill.is_deleted == 0,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def find_skill_bind_any(self, db: AsyncSession, expert_id: int, skill_id: int) -> Optional[ExpertSkill]:
+        """查询特定专家-技能绑定（含软删除）"""
+        stmt = select(ExpertSkill).where(
+            ExpertSkill.expert_id == expert_id,
+            ExpertSkill.skill_id == skill_id,
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
@@ -247,6 +256,11 @@ class ExpertTeamRepository:
         result = await db.execute(stmt)
         await db.flush()
         return result.rowcount > 0
+
+    async def restore_skill_bind(self, db: AsyncSession, bind_id: int, data: dict) -> Optional[ExpertSkill]:
+        """恢复软删除的绑定记录"""
+        data["is_deleted"] = 0
+        return await self.skill_bind_mapper.update(db, bind_id, data)
 
     # ─── 角色执行记录 ───────────────────────────────────
 
