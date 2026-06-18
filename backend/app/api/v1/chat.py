@@ -192,7 +192,7 @@ async def chat_resume(
                 yield item
         finally:
             heartbeat_task.cancel()
-            producer_task.cancel()
+            # 不取消 producer_task，让后端继续执行完成保存消息
 
     return StreamingResponse(_sse_generator(), media_type="text/event-stream")
 
@@ -317,7 +317,7 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
             yield item
     finally:
         heartbeat_task.cancel()
-        producer_task.cancel()
+        # 不取消 producer_task，让后端继续执行完成保存消息
 
 
 async def _stream_response(
@@ -447,4 +447,6 @@ async def _stream_response(
             yield item
     finally:
         heartbeat_task.cancel()
-        producer_task.cancel()
+        # 注意：不取消 producer_task！
+        # SSE 断开时让后端继续执行完成，确保消息保存。
+        # producer_task 完成后会自行退出，_queue 中的 None 哨兵值会丢弃。
