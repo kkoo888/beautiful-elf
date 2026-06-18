@@ -53,20 +53,21 @@ export function NodePalette() {
 
   const handleAddNode = useCallback((template: typeof NODE_TEMPLATES[0]) => {
     pushSnapshot()
-
-    // 找到合适的放置位置
-    const existingObs = nodes.filter(n => n.type === 'observation')
+    const existingObs = nodes.filter(n => n.type === template.type)
     const maxY = existingObs.reduce((max, n) => Math.max(max, n.position.y), 0)
-
     const newNode: Node = {
-      id: `obs-new-${Date.now()}`,
+      id: `${template.type}-${Date.now()}`,
       type: template.type,
-      position: { x: 450, y: maxY + 120 },
+      position: { x: template.type === 'observation' ? 450 : 80, y: maxY + 120 },
       data: template.createData(),
     }
-
     setNodes([...nodes, newNode])
   }, [nodes, setNodes, pushSnapshot])
+
+  const handleDragStart = useCallback((e: React.DragEvent, template: typeof NODE_TEMPLATES[0]) => {
+    e.dataTransfer.setData('application/memory-node-type', template.type)
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
 
   if (!paletteOpen) return null
 
@@ -78,14 +79,17 @@ export function NodePalette() {
       boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
       padding: '10px 0',
     }}>
-      <div style={{ padding: '0 12px 8px' }}>
+      <div style={{ padding: '0 12px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text strong style={{ fontSize: 13 }}>添加节点</Text>
+        <DragOutlined style={{ fontSize: 11, color: '#bfbfbf' }} />
       </div>
       <Divider style={{ margin: '0 0 8px' }} />
       {NODE_TEMPLATES.map(template => (
         <div
           key={template.type}
           onClick={() => handleAddNode(template)}
+          draggable
+          onDragStart={(e) => handleDragStart(e, template)}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '8px 12px', cursor: 'pointer',

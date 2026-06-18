@@ -37,7 +37,8 @@ import {
   FileTextOutlined, BulbOutlined,
   UndoOutlined, RedoOutlined,
   AppstoreOutlined, SortAscendingOutlined,
-  SaveOutlined,
+  SaveOutlined, CompressOutlined,
+  DragOutlined,
 } from '@ant-design/icons'
 import {
   listObservations,
@@ -370,6 +371,32 @@ export function MemoryGraphTab() {
     }
   }, [])
 
+  // ── 拖拽创建节点 ──
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const type = e.dataTransfer.getData('application/memory-node-type')
+    if (!type) return
+
+    const position = reactflow.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    pushSnapshot()
+
+    const newNode: Node = {
+      id: `${type}-${Date.now()}`,
+      type,
+      position,
+      data: type === 'observation'
+        ? { content: '新提炼记忆（点击编辑）', category: 'decisions', freshness: 'new', obsId: 0, sources: [] }
+        : { title: `日志 ${new Date().toLocaleDateString('zh-CN')}`, wordCount: 0, memoryId: '' },
+    }
+
+    setNodes([...nodes, newNode])
+  }, [nodes, reactflow])
+
   // ── 自动布局 ──
   const handleAutoLayout = useCallback(() => {
     pushSnapshot()
@@ -415,6 +442,7 @@ export function MemoryGraphTab() {
         <Tooltip title="撤销 (Ctrl+Z)"><Button size="small" type="text" icon={<UndoOutlined />} disabled={!canUndo()} onClick={undo} /></Tooltip>
         <Tooltip title="重做 (Ctrl+Y)"><Button size="small" type="text" icon={<RedoOutlined />} disabled={!canRedo()} onClick={redo} /></Tooltip>
         <Tooltip title="自动布局"><Button size="small" type="text" icon={<SortAscendingOutlined />} onClick={handleAutoLayout} /></Tooltip>
+        <Tooltip title="适应视图"><Button size="small" type="text" icon={<CompressOutlined />} onClick={() => reactflow.fitView({ padding: 0.15, duration: 300 })} /></Tooltip>
         <Tooltip title="节点面板"><Button size="small" type="text" icon={<AppstoreOutlined />} onClick={togglePalette} style={paletteOpen ? { color: COLORS.primary, background: COLORS.obsBg } : {}} /></Tooltip>
         <Tooltip title="保存布局"><Button size="small" type="text" icon={<SaveOutlined />} onClick={() => { saveLayout(); msg.success('布局已保存') }} /></Tooltip>
       </Space>
@@ -449,6 +477,8 @@ export function MemoryGraphTab() {
         onNodeContextMenu={handleNodeContextMenu}
         onEdgeContextMenu={handleEdgeContextMenu}
         onEdgeClick={onEdgeClick}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView

@@ -63,11 +63,13 @@ export function NodeDetailDrawer() {
   }, [selectedNode, editContent, editCategory, selectedNodeId, nodes, setNodes])
 
   const handleDelete = useCallback(async () => {
-    if (!selectedNode || selectedNode.type !== 'observation') return
+    if (!selectedNode) return
     try {
-      await deleteObservation(selectedNode.data.obsId)
-      // 从 store 移除节点和相关连线
-      const { edges, setEdges } = useGraphStore.getState()
+      if (selectedNode.type === 'observation' && selectedNode.data.obsId) {
+        await deleteObservation(selectedNode.data.obsId)
+      }
+      const { edges, setEdges, pushSnapshot } = useGraphStore.getState()
+      pushSnapshot()
       setNodes(nodes.filter(n => n.id !== selectedNodeId))
       setEdges(edges.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId))
       closeDetailDrawer()
