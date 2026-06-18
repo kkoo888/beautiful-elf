@@ -12,12 +12,16 @@ class ExpertCreate(CamelModel):
     member_name: str = Field(..., min_length=1, max_length=128, description="专家名称")
     member_role: str = Field(..., min_length=1, max_length=128, description="专家角色")
     avatar: str = Field(default="🤖", description="头像 emoji 或 base64 小图")
+    goal: str = Field(default="", max_length=500, description="专家目标 — 驱动决策方向")
+    backstory: str = Field(default="", max_length=1000, description="专家背景 — 丰富角色人格")
     system_prompt: str = Field(..., min_length=1, description="专家系统提示词")
     model_name: str = Field(default="", max_length=128, description="模型名称")
     provider_id: Optional[int] = Field(default=None, description="供应商 ID")
     temperature: float = Field(default=0.7, ge=0, le=2, description="温度 0-2")
     max_tokens: int = Field(default=2048, ge=1, le=8192, description="最大 token 数")
     tools_json: Optional[List[dict]] = Field(default=None, description="可用工具列表")
+    allow_delegation: bool = Field(default=False, description="是否允许委派子任务给队友")
+    max_execution_time: int = Field(default=120, ge=10, le=600, description="最大执行时间（秒）")
     is_enabled: int = Field(default=1, ge=0, le=1, description="是否启用")
 
 
@@ -26,12 +30,16 @@ class ExpertUpdate(CamelModel):
     member_name: Optional[str] = Field(default=None, max_length=128)
     member_role: Optional[str] = Field(default=None, max_length=128)
     avatar: Optional[str] = Field(default=None)
+    goal: Optional[str] = Field(default=None, max_length=500)
+    backstory: Optional[str] = Field(default=None, max_length=1000)
     system_prompt: Optional[str] = Field(default=None)
     model_name: Optional[str] = Field(default=None, max_length=128)
     provider_id: Optional[int] = Field(default=None)
     temperature: Optional[float] = Field(default=None, ge=0, le=2)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=8192)
     tools_json: Optional[List[dict]] = Field(default=None)
+    allow_delegation: Optional[bool] = Field(default=None)
+    max_execution_time: Optional[int] = Field(default=None, ge=10, le=600)
     is_enabled: Optional[int] = Field(default=None, ge=0, le=1)
 
 
@@ -41,12 +49,16 @@ class ExpertOut(CamelModel):
     member_name: str
     member_role: str
     avatar: str
+    goal: str = ""
+    backstory: str = ""
     system_prompt: str
     model_name: str
     provider_id: Optional[int] = None
     temperature: float = 0.7
     max_tokens: int
     tools_json: Optional[List[dict]] = None
+    allow_delegation: int = 0
+    max_execution_time: int = 120
     is_enabled: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -64,6 +76,7 @@ class ExpertTeamCreate(CamelModel):
     orchestrator_prompt: str = Field(default="", description="编排器系统提示词")
     synthesizer_prompt: str = Field(default="", description="汇总器系统提示词")
     max_rounds: int = Field(default=3, ge=1, le=10, description="最大讨论轮次")
+    process_mode: str = Field(default="parallel", description="执行模式: parallel=并行 sequential=顺序")
     config_json: Optional[dict] = Field(default=None, description="扩展配置")
     expert_ids: List[int] = Field(default=[], description="绑定的专家 ID 列表")
 
@@ -78,6 +91,7 @@ class ExpertTeamUpdate(CamelModel):
     orchestrator_prompt: Optional[str] = Field(default=None)
     synthesizer_prompt: Optional[str] = Field(default=None)
     max_rounds: Optional[int] = Field(default=None, ge=1, le=10)
+    process_mode: Optional[str] = Field(default=None, description="执行模式")
     is_enabled: Optional[int] = Field(default=None, ge=0, le=1)
     config_json: Optional[dict] = Field(default=None)
     expert_ids: Optional[List[int]] = Field(default=None, description="绑定的专家 ID 列表（整体替换）")
@@ -99,6 +113,7 @@ class ExpertTeamOut(CamelModel):
     orchestrator_prompt: str
     synthesizer_prompt: str
     max_rounds: int
+    process_mode: str = "parallel"
     is_enabled: int
     version: int
     config_json: Optional[dict] = None

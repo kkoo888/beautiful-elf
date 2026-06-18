@@ -358,7 +358,7 @@ class ExpertTeamService:
 
     async def execute_team(
         self, db: AsyncSession, team_id: int, request: ExpertTeamExecuteRequest,
-        on_progress: Any = None,
+        on_progress: Any = None, process_mode: str = "parallel",
     ) -> dict:
         """执行专家团工作流 — PM 委派模式（v2: 并行 + 多轮 + 返工 + 技能接入）
 
@@ -458,7 +458,8 @@ class ExpertTeamService:
             # 内部方法：执行单个专家
             # ─────────────────────────────────────────
             async def _run_one_expert(member: dict, subtask: str, round_num: int,
-                                      context_text: str = "", feedback_text: str = "") -> dict:
+                                      context_text: str = "", feedback_text: str = "",
+                                      _delegation_depth: int = 0) -> dict:
                 """执行单个专家，返回结果 dict"""
                 expert_name = member["member_name"]
                 expert_role = member["member_role"]
@@ -478,18 +479,43 @@ class ExpertTeamService:
 
                 role_run = await self._create_role_run(db, run.id, member["id"], expert_name, round_num)
 
-                # 构建专家 prompt（注入技能 + 上下文 + 反馈）
-                expert_system = member.get("system_prompt") or f"你是{expert_name}，角色是{expert_role}。"
-                skill_text = ""
-                skills = member.get("skills", [])
-                if skills:
-                    skill_lines = [f"- {s.get('display_name', s.get('name', ''))}: {s.get('description', '')}" for s in skills]
-                    skill_text = f"\n\n## 你可用的技能\n{chr(10).join(skill_lines)}"
+                # ── 改进1: 工具注册（从技能中提取 tools，临时注册到 tool_registry）──
+                temp_tool_ids: list[str] = []
+                try:
+                    skill_text = ""
+                    tool_usage_text = ""
+                    skills = member.get("skills", [])
+                    if skills:
+                        skill_lines = [f"- {s.get('display_name', s.get('name', ''))}: {s.get('description', '')}" for s in skills]
+                        skill_text = f"\n\n## 你可用的技能\n{chr(10).join(skill_lines)}"
 
-                context_section = f"\n\n## 之前讨论\n{context_text}" if context_text else ""
-                feedback_section = f"\n\n## PM 改进建议（请务必参考）\n{feedback_text}" if feedback_text else ""
+                        # 收集技能附带的工具并临时注册
+                        for s in skills:
+                            skill_tools = s.get("tools") or []
+                            for tool_def in skill_tools:
+                                if isinstance(tool_def, dict):
+                                    tool_name = tool_def.get("name", "")
+                                    if tool_name and tool_name not in tool_registry:
+                                        tool_registry[tool_name] = tool_def
+                                        temp_tool_ids.append(tool_name)
+                        if temp_tool_ids:
+                            tool_usage_text = f"\n\n## 你可以使用以下工具\n{', '.join(temp_tool_ids)}。如果需要使用工具来完成任务，请调用相应工具。"
 
-                expert_prompt = f"""{expert_system}{skill_text}
+                    # ── 改进2: 委派指令 ──
+                    delegation_text = ""
+                    if member.get("allow_delegation") and _delegation_depth < 1:
+                        delegation_text = (
+                            "\n\n## 委派能力\n如果你认为某个子任务更适合团队中的其他专家完成，"
+                            "可以输出委派请求，格式：DELEGATE: {expert_id} | {subtask_description}\n"
+                            "只有在确实需要其他专家的专业能力时才使用委派。"
+                        )
+
+                    context_section = f"\n\n## 之前讨论\n{context_text}" if context_text else ""
+                    feedback_section = f"\n\n## PM 改进建议（请务必参考）\n{feedback_text}" if feedback_text else ""
+
+                    # 构建专家 prompt（注入技能 + 工具 + 委派 + 上下文 + 反馈）
+                    expert_system = member.get("system_prompt") or f"你是{expert_name}，角色是{expert_role}。"
+                    expert_prompt = f"""{expert_system}{skill_text}{tool_usage_text}{delegation_text}
 
 ## 你的任务
 {subtask}
@@ -499,58 +525,104 @@ class ExpertTeamService:
 
 请从你的专业角度，完成以上任务。"""
 
-                expert_provider_id = member.get("provider_id") or default_provider_id
-                expert_model_name = member.get("model_name") or default_model_name
-                expert_temperature = float(member.get("temperature") or 0.7)
+                    expert_provider_id = member.get("provider_id") or default_provider_id
+                    expert_model_name = member.get("model_name") or default_model_name
+                    expert_temperature = float(member.get("temperature") or 0.7)
 
-                exp_start = datetime.now()
-                try:
-                    content, tokens = await _call_llm(
-                        db, expert_provider_id, expert_model_name, expert_prompt, temperature=expert_temperature,
-                    )
-                    duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
-                    await self._finish_role_run(db, role_run.id, status=2, output=content, tokens=tokens)
+                    exp_start = datetime.now()
+                    try:
+                        # ── 改进3: 执行超时 ──
+                        max_execution_time = int(member.get("max_execution_time") or 120)
+                        content, tokens = await asyncio.wait_for(
+                            _call_llm(
+                                db, expert_provider_id, expert_model_name, expert_prompt,
+                                temperature=expert_temperature,
+                            ),
+                            timeout=max_execution_time,
+                        )
+                        duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+                        await self._finish_role_run(db, role_run.id, status=2, output=content, tokens=tokens)
 
-                    # 推送：专家完成
-                    await _ws_broadcast(team_id, "expert_thinking", {
-                        "expertName": expert_name, "expertRole": expert_role,
-                        "avatar": member.get("avatar", "🤖"),
-                        "round": round_num, "content": content, "runId": run.id, "durationMs": duration_ms,
-                    })
-                    await _ws_broadcast(team_id, "expert_status", {
-                        "expertName": expert_name, "expertRole": expert_role,
-                        "avatar": member.get("avatar", "🤖"),
-                        "status": "done", "round": round_num, "runId": run.id, "durationMs": duration_ms,
-                    })
-                    if on_progress:
-                        await on_progress({
-                            "type": "expert_done", "expertName": expert_name,
-                            "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
-                            "content": content, "durationMs": duration_ms,
+                        # 推送：专家完成
+                        await _ws_broadcast(team_id, "expert_thinking", {
+                            "expertName": expert_name, "expertRole": expert_role,
+                            "avatar": member.get("avatar", "🤖"),
+                            "round": round_num, "content": content, "runId": run.id, "durationMs": duration_ms,
                         })
+                        await _ws_broadcast(team_id, "expert_status", {
+                            "expertName": expert_name, "expertRole": expert_role,
+                            "avatar": member.get("avatar", "🤖"),
+                            "status": "done", "round": round_num, "runId": run.id, "durationMs": duration_ms,
+                        })
+                        if on_progress:
+                            await on_progress({
+                                "type": "expert_done", "expertName": expert_name,
+                                "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
+                                "content": content, "durationMs": duration_ms,
+                            })
 
-                    return {
-                        "expert_id": member["id"], "expert_name": expert_name,
-                        "expert_role": expert_role, "subtask": subtask,
-                        "output": content, "tokens": tokens, "status": "done",
-                    }
-                except Exception as e:
-                    logger.error(f"专家 {expert_name} 执行失败: {e}")
-                    duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
-                    await self._finish_role_run(db, role_run.id, status=3, error=str(e))
-                    return {
-                        "expert_id": member["id"], "expert_name": expert_name,
-                        "expert_role": expert_role, "subtask": subtask,
-                        "output": f"[执行失败: {e}]", "tokens": 0, "status": "failed",
-                    }
+                        # ── 改进2: 检测并处理委派请求（最多1层）──
+                        if (member.get("allow_delegation") and _delegation_depth < 1
+                                and content and "DELEGATE:" in content):
+                            delegate_match = re.search(r'DELEGATE:\s*(\d+)\s*\|\s*(.+)', content)
+                            if delegate_match:
+                                target_id = int(delegate_match.group(1))
+                                delegate_subtask = delegate_match.group(2).strip()
+                                target_member = next((e for e in experts_data if e["id"] == target_id), None)
+                                if target_member:
+                                    logger.info(f"专家 {expert_name} 委派子任务给 {target_member['member_name']}: {delegate_subtask}")
+                                    delegate_result = await _run_one_expert(
+                                        target_member, delegate_subtask, round_num,
+                                        context_text, feedback_text, _delegation_depth=1,
+                                    )
+                                    # 将委派结果注入到当前专家输出
+                                    content = f"{content}\n\n[委派结果 - {target_member['member_name']}]:\n{delegate_result.get('output', '')}"
+                                    tokens += delegate_result.get("tokens", 0)
+                                    await self._finish_role_run(db, role_run.id, status=2, output=content, tokens=tokens)
+
+                        return {
+                            "expert_id": member["id"], "expert_name": expert_name,
+                            "expert_role": expert_role, "subtask": subtask,
+                            "output": content, "tokens": tokens, "status": "done",
+                        }
+                    except asyncio.TimeoutError:
+                        logger.error(f"专家 {expert_name} 执行超时（超过 {max_execution_time} 秒）")
+                        duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+                        timeout_msg = f"[执行超时: 超过 {max_execution_time} 秒]"
+                        await self._finish_role_run(db, role_run.id, status=3, error=timeout_msg)
+                        await _ws_broadcast(team_id, "expert_status", {
+                            "expertName": expert_name, "expertRole": expert_role,
+                            "avatar": member.get("avatar", "🤖"),
+                            "status": "failed", "round": round_num, "runId": run.id, "durationMs": duration_ms,
+                        })
+                        return {
+                            "expert_id": member["id"], "expert_name": expert_name,
+                            "expert_role": expert_role, "subtask": subtask,
+                            "output": timeout_msg, "tokens": 0, "status": "failed",
+                        }
+                    except Exception as e:
+                        logger.error(f"专家 {expert_name} 执行失败: {e}")
+                        duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+                        await self._finish_role_run(db, role_run.id, status=3, error=str(e))
+                        return {
+                            "expert_id": member["id"], "expert_name": expert_name,
+                            "expert_role": expert_role, "subtask": subtask,
+                            "output": f"[执行失败: {e}]", "tokens": 0, "status": "failed",
+                        }
+                finally:
+                    # 清理临时注册的工具
+                    for tid in temp_tool_ids:
+                        tool_registry.pop(tid, None)
 
             # ─────────────────────────────────────────
             # 内部方法：并行执行一批专家
             # ─────────────────────────────────────────
             async def _run_experts_parallel(assignments: list[dict], round_num: int,
                                             context_text: str = "", feedback_map: dict | None = None) -> list[dict]:
-                """并行执行所有被指派的专家（CrewAI async_execution 模式）"""
-                tasks = []
+                """执行所有被指派的专家（并行或顺序，取决于 process_mode）"""
+                effective_mode = getattr(team, "process_mode", None) or process_mode
+
+                results_list: list[dict] = []
                 for assign in assignments:
                     expert_id = assign["expert_id"]
                     subtask = assign["subtask"]
@@ -559,19 +631,34 @@ class ExpertTeamService:
                         logger.warning(f"分配计划中的专家 ID={expert_id} 不存在，跳过")
                         continue
                     feedback = (feedback_map or {}).get(expert_id, "")
-                    tasks.append(_run_one_expert(member, subtask, round_num, context_text, feedback))
+                    results_list.append({"member": member, "subtask": subtask, "feedback": feedback})
 
-                if not tasks:
+                if not results_list:
                     return []
-                # 并行执行所有专家
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                outputs = []
-                for r in results:
-                    if isinstance(r, Exception):
-                        logger.error(f"专家执行异常: {r}")
-                        continue
-                    outputs.append(r)
-                return outputs
+
+                if effective_mode == "sequential":
+                    # ── 改进5: 顺序执行模式 ──
+                    outputs = []
+                    for item in results_list:
+                        r = await _run_one_expert(
+                            item["member"], item["subtask"], round_num, context_text, item["feedback"],
+                        )
+                        outputs.append(r)
+                    return outputs
+                else:
+                    # ── 改进5: 并行执行模式（默认）──
+                    tasks = [
+                        _run_one_expert(item["member"], item["subtask"], round_num, context_text, item["feedback"])
+                        for item in results_list
+                    ]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    outputs = []
+                    for r in results:
+                        if isinstance(r, Exception):
+                            logger.error(f"专家执行异常: {r}")
+                            continue
+                        outputs.append(r)
+                    return outputs
 
             # ─────────────────────────────────────────
             # 内部方法：PM 评估
@@ -597,6 +684,7 @@ class ExpertTeamService:
 {results_text}
 
 请评估每个专家的完成质量，打分（1-10），并判断是否达标。
+你必须严格按照 JSON 格式输出，不要添加其他文字。
 输出 JSON 格式：
 {{"scores": [{{"expert_id": ID, "score": 分数, "feedback": "评价"}}], "overall_pass": true/false, "reason": "总体评价"}}"""
 
