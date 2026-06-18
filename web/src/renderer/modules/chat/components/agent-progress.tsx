@@ -30,6 +30,11 @@ const STEP_ICONS: Record<string, string> = {
   skill: '⚡',
   eval: '📊',
   memory_save: '💾',
+  expert_team: '🧠',
+  expert: '👤',
+  pm_plan: '📋',
+  pm_eval: '📝',
+  pm_report: '📄',
 }
 
 /** 是否为进行中状态 */

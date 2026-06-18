@@ -5,6 +5,7 @@ import {
   MenuUnfoldOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { ChatContent } from './components/chat-panel'
@@ -104,7 +105,7 @@ export default function ChatPanel() {
           {!progressCollapsed && (
             <div className={styles.progressPanelInner}>
               <h4 className={styles.progressPanelTitle}>
-                ⚡ 执行进展
+                <ThunderboltOutlined /> 执行进展
               </h4>
 
               {/* Agent 执行进展 */}

@@ -260,6 +260,7 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
                     header = f"**◆ {name}** 分析完成:{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
+                    await _queue.put(f"data: {json.dumps({'progress': {'step': 'pm_plan', 'status': 'done', 'message': f'{name} 任务规划完成'}, 'done': False})}{NL}{NL}")
                 elif event_type == "expert_start":
                     name = event.get("expertName", "")
                     role = event.get("expertRole", "")
@@ -268,6 +269,7 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
                     prefix = f"{avatar} " if avatar else ""
                     msg = f"**{prefix}{name}** ({role}){NL}{subtask}{NL}{NL}"
                     await _queue.put(f"data: {json.dumps({'content': msg, 'done': False})}{NL}{NL}")
+                    await _queue.put(f"data: {json.dumps({'progress': {'step': f'expert_{name}', 'status': 'executing', 'message': f'{name}({role}) 正在分析...'}, 'done': False})}{NL}{NL}")
                 elif event_type == "expert_done":
                     name = event.get("expertName", "")
                     role = event.get("expertRole", "")
@@ -278,16 +280,19 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
                     header = f"**{prefix}{name}** ({role}) · {duration}ms{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
+                    await _queue.put(f"data: {json.dumps({'progress': {'step': f'expert_{name}', 'status': 'done', 'message': f'{name}({role}) 分析完成', 'elapsedMs': duration}, 'done': False})}{NL}{NL}")
                 elif event_type == "pm_eval":
                     content = event.get("content", "")
                     header = f"**◆ PM 评估:**{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
+                    await _queue.put(f"data: {json.dumps({'progress': {'step': 'pm_eval', 'status': 'done', 'message': 'PM 评估完成'}, 'done': False})}{NL}{NL}")
                 elif event_type == "pm_report":
                     content = event.get("content", "")
                     header = f"---{NL}**◆ 最终报告:**{NL}{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content, 'done': False})}{NL}{NL}")
+                    await _queue.put(f"data: {json.dumps({'progress': {'step': 'expert_team', 'status': 'done', 'message': '专家团执行完成'}, 'done': False})}{NL}{NL}")
 
             result = await service.execute_team(db, team_id, request, on_progress=on_progress)
 
