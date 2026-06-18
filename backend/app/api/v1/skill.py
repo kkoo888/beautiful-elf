@@ -91,7 +91,7 @@ async def get_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiRes
 @router.get("", response_model=ApiPageResult[SkillOut])
 async def list_skills(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    page_size: int = Query(default=20, ge=1, le=500, alias="pageSize"),
     enabled: Optional[int] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> ApiPageResult[SkillOut]:
