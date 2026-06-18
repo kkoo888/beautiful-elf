@@ -1,7 +1,7 @@
 """专家团工作流 Repository"""
 from typing import Optional, List
 from datetime import datetime
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mappers.base import MySQLMapper
@@ -243,7 +243,10 @@ class ExpertTeamRepository:
         return await self.skill_bind_mapper.update(db, bind_id, data)
 
     async def soft_delete_skill_bind(self, db: AsyncSession, bind_id: int) -> bool:
-        return await self.skill_bind_mapper.soft_delete(db, bind_id)
+        stmt = delete(ExpertSkill).where(ExpertSkill.id == bind_id)
+        result = await db.execute(stmt)
+        await db.flush()
+        return result.rowcount > 0
 
     # ─── 角色执行记录 ───────────────────────────────────
 
