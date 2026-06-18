@@ -8,12 +8,16 @@ export interface Expert {
   memberName: string
   memberRole: string
   avatar: string
+  goal: string
+  backstory: string
   systemPrompt: string
   modelName: string
   providerId?: number | null
   temperature: number
   maxTokens: number
   toolsJson: Record<string, unknown>[] | null
+  isDelegationAllowed: number
+  maxExecutionTime: number
   isEnabled: number
   createdAt: string | null
   updatedAt: string | null
@@ -24,12 +28,16 @@ export interface ExpertFormInput {
   memberName: string
   memberRole: string
   avatar?: string
+  goal?: string
+  backstory?: string
   systemPrompt: string
   modelName?: string
   providerId?: number | null
   temperature?: number
   maxTokens?: number
   toolsJson?: Record<string, unknown>[]
+  isDelegationAllowed?: boolean
+  maxExecutionTime?: number
   isEnabled?: number
 }
 
@@ -78,6 +86,7 @@ export interface ExpertTeam {
   orchestratorPrompt: string
   synthesizerPrompt: string
   maxRounds: number
+  processMode: string
   isEnabled: number
   version: number
   configJson: Record<string, unknown> | null
@@ -97,6 +106,7 @@ export interface ExpertTeamFormInput {
   orchestratorPrompt?: string
   synthesizerPrompt?: string
   maxRounds?: number
+  processMode?: string
   configJson?: Record<string, unknown>
   expertIds: number[]
 }
@@ -111,6 +121,7 @@ export interface ExpertTeamUpdateInput {
   orchestratorPrompt?: string
   synthesizerPrompt?: string
   maxRounds?: number
+  processMode?: string
   isEnabled?: number
   configJson?: Record<string, unknown>
   expertIds?: number[]

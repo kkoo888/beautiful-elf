@@ -121,6 +121,7 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
         orchestratorPrompt: values.orchestratorPrompt ?? '',
         synthesizerPrompt: values.synthesizerPrompt ?? '',
         maxRounds: values.maxRounds ?? 3,
+        processMode: values.processMode ?? 'parallel',
         expertIds,
       }
 
@@ -142,6 +143,7 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
           orchestratorPrompt: team?.orchestratorPrompt ?? '',
           synthesizerPrompt: team?.synthesizerPrompt ?? '',
           maxRounds: team?.maxRounds ?? 3,
+          processMode: team?.processMode ?? 'parallel',
         }}
       >
         {/* 基本信息 */}
@@ -232,6 +234,12 @@ export function ExpertTeamEditor({ team, allExperts, onSave, onCancel, loading }
               rows={3}
               placeholder="留空使用默认汇总器。自定义汇总器可以控制输出格式和风格..."
             />
+          </Form.Item>
+          <Form.Item name="processMode" label="执行模式" style={{ marginBottom: 0, width: 150 }}>
+            <Select options={[
+              { label: '⚡ 并行', value: 'parallel' },
+              { label: '📋 顺序', value: 'sequential' },
+            ]} />
           </Form.Item>
           <Form.Item name="maxRounds" label="最大讨论轮次" style={{ marginBottom: 0 }}>
             <InputNumber min={1} max={10} style={{ width: 120 }} />

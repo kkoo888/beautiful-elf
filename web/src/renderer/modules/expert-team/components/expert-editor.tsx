@@ -107,17 +107,23 @@ export function ExpertEditorModal({
         memberName: expert.memberName,
         memberRole: isPreset ? expert.memberRole : '自定义',
         customRole: isPreset ? '' : expert.memberRole,
+        goal: expert.goal || '',
+        backstory: expert.backstory || '',
         systemPrompt: expert.systemPrompt,
         modelName: expert.modelName || '',
         temperature: expert.temperature,
         maxTokens: expert.maxTokens,
+        isDelegationAllowed: expert.isDelegationAllowed === 1,
+        maxExecutionTime: expert.maxExecutionTime || 120,
         isEnabled: expert.isEnabled !== 0,
       })
     } else if (open && isNew) {
       setIsCustomRole(false); setBoundSkills([])
       form.setFieldsValue({
         memberName: '', memberRole: undefined, customRole: '',
-        systemPrompt: '', modelName: '', temperature: 0.7, maxTokens: 2048, isEnabled: true,
+        goal: '', backstory: '',
+        systemPrompt: '', modelName: '', temperature: 0.7, maxTokens: 2048,
+        isDelegationAllowed: false, maxExecutionTime: 120, isEnabled: true,
       })
     }
   }, [open, expert, isNew, form])
@@ -128,8 +134,11 @@ export function ExpertEditorModal({
       const memberRole = values.memberRole === '自定义' ? values.customRole : values.memberRole
       onOk({
         memberName: values.memberName, memberRole, avatar,
+        goal: values.goal || '', backstory: values.backstory || '',
         systemPrompt: values.systemPrompt, modelName: values.modelName || undefined,
         temperature: values.temperature, maxTokens: values.maxTokens,
+        isDelegationAllowed: values.isDelegationAllowed || false,
+        maxExecutionTime: values.maxExecutionTime || 120,
         isEnabled: values.isEnabled ? 1 : 0,
       })
     } catch { /* validation failed */ }
@@ -246,6 +255,14 @@ export function ExpertEditorModal({
           </Form.Item>
         )}
 
+        <Form.Item name="goal" label="目标">
+          <Input placeholder="驱动专家决策方向，如：设计高可用架构方案" />
+        </Form.Item>
+
+        <Form.Item name="backstory" label="背景">
+          <TextArea rows={2} placeholder="丰富角色人格，如：10年分布式系统架构经验，曾在多家头部公司任职" />
+        </Form.Item>
+
         <Form.Item name="systemPrompt" label={
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
             <span>系统提示词</span>
@@ -270,9 +287,17 @@ export function ExpertEditorModal({
           </Form.Item>
         </div>
 
-        <Form.Item name="isEnabled" label="启用" valuePropName="checked" initialValue={true} style={{ marginBottom: 0 }}>
-          <Switch size="small" />
-        </Form.Item>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Form.Item name="isDelegationAllowed" label="允许委派" valuePropName="checked" initialValue={false} style={{ marginBottom: 0 }}>
+            <Switch size="small" />
+          </Form.Item>
+          <Form.Item name="maxExecutionTime" label="超时(秒)" initialValue={120} style={{ marginBottom: 0 }}>
+            <InputNumber min={10} max={600} step={10} style={{ width: 90 }} />
+          </Form.Item>
+          <Form.Item name="isEnabled" label="启用" valuePropName="checked" initialValue={true} style={{ marginBottom: 0 }}>
+            <Switch size="small" />
+          </Form.Item>
+        </div>
       </Form>
     </div>
   )
