@@ -266,7 +266,7 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
                     role = event.get("expertRole", "")
                     avatar = event.get("avatar", "")
                     subtask = event.get("subtask", "")
-                    prefix = f"{avatar} " if avatar else ""
+                    prefix = "" if (avatar and avatar.startswith(("data:", "http"))) else (f"{avatar} " if avatar else "")
                     msg = f"**{prefix}{name}** ({role}){NL}{subtask}{NL}{NL}"
                     await _queue.put(f"data: {json.dumps({'content': msg, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'progress': {'step': f'expert_{name}', 'status': 'executing', 'message': f'{name}({role}) 正在分析...'}, 'done': False})}{NL}{NL}")
@@ -276,7 +276,7 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
                     avatar = event.get("avatar", "")
                     content = event.get("content", "")
                     duration = event.get("durationMs", 0)
-                    prefix = f"{avatar} " if avatar else ""
+                    prefix = "" if (avatar and avatar.startswith(("data:", "http"))) else (f"{avatar} " if avatar else "")
                     header = f"**{prefix}{name}** ({role}) · {duration}ms{NL}"
                     await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
                     await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")

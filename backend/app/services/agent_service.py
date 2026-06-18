@@ -846,7 +846,7 @@ class AgentService:
                 # 同时生成 content token
                 avatar = event.get("avatar", "")
                 subtask = event.get("subtask", "")
-                prefix = f"{avatar} " if avatar else ""
+                prefix = "" if (avatar and avatar.startswith(("data:", "http"))) else (f"{avatar} " if avatar else "")
                 _progress_events.append({"type": "token", "content": f"**{prefix}{name}** ({role}){NL}{subtask}{NL}{NL}"})
             elif event_type == "expert_done":
                 name = event.get("expertName", "")
@@ -855,7 +855,7 @@ class AgentService:
                 content = event.get("content", "")
                 _progress_events.append({"type": "progress", "step": f"expert_{name}", "status": "done", "message": f"{name}({role}) 分析完成", "elapsedMs": duration})
                 avatar = event.get("avatar", "")
-                prefix = f"{avatar} " if avatar else ""
+                prefix = "" if (avatar and avatar.startswith(("data:", "http"))) else (f"{avatar} " if avatar else "")
                 _progress_events.append({"type": "token", "content": f"**{prefix}{name}** ({role}) · {duration}ms{NL}"})
                 _progress_events.append({"type": "token", "content": content + NL + NL})
             elif event_type == "pm_done":
