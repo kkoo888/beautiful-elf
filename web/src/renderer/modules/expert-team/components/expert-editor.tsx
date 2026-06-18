@@ -15,6 +15,7 @@ import {
   Empty,
   Spin,
   Divider,
+  App,
 } from 'antd'
 import {
   ThunderboltOutlined,
@@ -84,6 +85,7 @@ export function ExpertEditorModal({
   open, expert, expertId, isNew, onOk, onCancel,
 }: ExpertEditorModalProps) {
   const [form] = Form.useForm()
+  const { message } = App.useApp()
   const [avatar, setAvatar] = useState(expert?.avatar ?? '🤖')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showImagePicker, setShowImagePicker] = useState(false)
@@ -145,9 +147,9 @@ export function ExpertEditorModal({
   const roleColor = expert ? getExpertRoleColor(expert.memberRole) : '#d9d9d9'
   const isImageAvatar = avatar && avatar.startsWith('data:image')
 
-  // 加载技能
+  // 加载技能（新建专家时不请求）
   useEffect(() => {
-    if (!open) return
+    if (!open || isNew) return
     const load = async () => {
       setSkillsLoading(true)
       try {
@@ -157,11 +159,12 @@ export function ExpertEditorModal({
         ])
         setAllSkills(skillsRes.data || [])
         setBoundSkills(boundRes || [])
-      } catch { /* */ }
-      finally { setSkillsLoading(false) }
+      } catch (err) {
+        message.error('加载技能列表失败，请检查网络或刷新重试')
+      } finally { setSkillsLoading(false) }
     }
     load()
-  }, [open, expertId])
+  }, [open, expertId, isNew])
 
   const handleBindSkills = useCallback(async (skillIds: number[]) => {
     if (!expertId) return
@@ -274,8 +277,8 @@ export function ExpertEditorModal({
     </div>
   )
 
-  // ── 右栏：技能绑定 ──
-  const rightPanel = expertId ? (
+  // ── 右栏：技能绑定（新建专家时隐藏）──
+  const rightPanel = isNew ? null : expertId ? (
     <div style={{ width: 260, flexShrink: 0, borderLeft: '1px solid #f0f0f0', paddingLeft: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <Text strong style={{ fontSize: 13 }}>

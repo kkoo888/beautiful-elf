@@ -32,13 +32,13 @@ class SkillRepository:
     ) -> List[Skill]:
         filters = {}
         if enabled is not None:
-            filters["enabled"] = enabled
+            filters["is_enabled"] = enabled
         return await self.mapper.find_all(db, filters=filters, offset=offset, limit=limit)
 
     async def count(self, db: AsyncSession, enabled: Optional[int] = None) -> int:
         filters = {}
         if enabled is not None:
-            filters["enabled"] = enabled
+            filters["is_enabled"] = enabled
         return await self.mapper.count(db, filters=filters)
 
     async def create(self, db: AsyncSession, data: dict) -> Skill:
