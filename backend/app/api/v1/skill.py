@@ -123,6 +123,19 @@ async def disable_skill(skill_id: int, db: AsyncSession = Depends(get_db)) -> Ap
     return ApiResult(data=item)
 
 
+@router.patch("/{skill_id}/toggle", response_model=ApiResult[SkillOut])
+async def toggle_skill(skill_id: int, body: dict, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillOut]:
+    """切换技能启用/禁用（前端 toggleSkill 调用）"""
+    enabled = body.get("enabled")
+    if enabled is None:
+        return api_error("SKILL_VALIDATION", "缺少 enabled 参数")
+    if enabled:
+        item = await _service.enable_skill(db, skill_id)
+    else:
+        item = await _service.disable_skill(db, skill_id)
+    return ApiResult(data=item)
+
+
 @router.get("/{skill_id}/stats", response_model=ApiResult[SkillStatsOut])
 async def get_skill_stats(skill_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[SkillStatsOut]:
     item = await _service.get_skill_stats(db, skill_id)
