@@ -18,6 +18,7 @@ import ReactFlow, {
   Controls,
   Background,
   MiniMap,
+  ReactFlowProvider,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -194,6 +195,14 @@ const edgeTypes = { gradient: GradientEdge }
 // ── 主组件 ──────────────────────────────────────────────────
 
 export function MemoryGraphTab() {
+  return (
+    <ReactFlowProvider>
+      <MemoryGraphInner />
+    </ReactFlowProvider>
+  )
+}
+
+function MemoryGraphInner() {
   const { message: msg } = App.useApp()
   const reactflow = useReactFlow()
   const {
