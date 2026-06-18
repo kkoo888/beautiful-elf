@@ -15,7 +15,6 @@ class Conversation(BaseModel):
 
     __table_args__ = (
         Index("idx_conversation_created_at", "created_at"),
-        Index("idx_conversation_last_message_at", "last_message_at"),
         Index("idx_conversation_is_deleted", "is_deleted"),
     )
 

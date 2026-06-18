@@ -1,6 +1,5 @@
 """会话管理 Repository"""
 from typing import Optional, List
-from datetime import datetime
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +18,7 @@ class ConversationRepository:
         self, db: AsyncSession, offset: int = 0, limit: int = 20,
     ) -> List[Conversation]:
         return await self.mapper.find_all(
-            db, offset=offset, limit=limit, order_by=Conversation.last_message_at.desc()
+            db, offset=offset, limit=limit
         )
 
     async def count(self, db: AsyncSession) -> int:
@@ -35,10 +34,9 @@ class ConversationRepository:
         return await self.mapper.soft_delete(db, id)
 
     async def increment_message_count(self, db: AsyncSession, id: int) -> None:
-        """消息计数 +1，更新最后消息时间"""
+        """消息计数 +1"""
         conv = await self.find_by_id(db, id)
         if conv:
             await self.mapper.update(db, id, {
                 "message_count": conv.message_count + 1,
-                "last_message_at": datetime.now(),
             })
