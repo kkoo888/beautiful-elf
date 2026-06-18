@@ -826,33 +826,75 @@ class AgentService:
         return None
 
     async def _execute_expert_team_stream(self, team_id: int, user_msg: str) -> AsyncIterator[Dict[str, Any]]:
-        """执行专家团并以流式事件返回"""
+        """执行专家团并以流式事件返回（实时进度）"""
+        import asyncio
         from app.services.expert_team_service import ExpertTeamService
         from app.schemas.expert_team import ExpertTeamExecuteRequest
 
         t0 = time.time()
+        _progress_events: list = []
+
+        async def _on_progress(event: dict):
+            """专家团进度回调 → 收集事件供外层 yield"""
+            event_type = event.get("type", "")
+            NL = "\n"
+            # 构建 progress 事件
+            if event_type == "expert_start":
+                name = event.get("expertName", "")
+                role = event.get("expertRole", "")
+                _progress_events.append({"type": "progress", "step": f"expert_{name}", "status": "executing", "message": f"{name}({role}) 正在分析..."})
+                # 同时生成 content token
+                avatar = event.get("avatar", "")
+                subtask = event.get("subtask", "")
+                prefix = f"{avatar} " if avatar else ""
+                _progress_events.append({"type": "token", "content": f"**{prefix}{name}** ({role}){NL}{subtask}{NL}{NL}"})
+            elif event_type == "expert_done":
+                name = event.get("expertName", "")
+                role = event.get("expertRole", "")
+                duration = event.get("durationMs", 0)
+                content = event.get("content", "")
+                _progress_events.append({"type": "progress", "step": f"expert_{name}", "status": "done", "message": f"{name}({role}) 分析完成", "elapsedMs": duration})
+                avatar = event.get("avatar", "")
+                prefix = f"{avatar} " if avatar else ""
+                _progress_events.append({"type": "token", "content": f"**{prefix}{name}** ({role}) · {duration}ms{NL}"})
+                _progress_events.append({"type": "token", "content": content + NL + NL})
+            elif event_type == "pm_done":
+                name = event.get("expertName", "PM")
+                content = event.get("content", "")
+                _progress_events.append({"type": "progress", "step": "pm_plan", "status": "done", "message": f"{name} 任务规划完成"})
+                _progress_events.append({"type": "token", "content": f"**◆ {name}** 分析完成:{NL}"})
+                _progress_events.append({"type": "token", "content": content + NL + NL})
+            elif event_type == "pm_eval":
+                content = event.get("content", "")
+                _progress_events.append({"type": "progress", "step": "pm_eval", "status": "done", "message": "PM 评估完成"})
+                _progress_events.append({"type": "token", "content": f"**◆ PM 评估:**{NL}"})
+                _progress_events.append({"type": "token", "content": content + NL + NL})
+            elif event_type == "pm_report":
+                content = event.get("content", "")
+                _progress_events.append({"type": "progress", "step": "expert_team", "status": "done", "message": "专家团执行完成"})
+                _progress_events.append({"type": "token", "content": f"---{NL}**◆ 最终报告:**{NL}{NL}"})
+                _progress_events.append({"type": "token", "content": content})
+
         try:
             from app.core.database import AsyncSessionLocal
             async with AsyncSessionLocal() as db:
                 service = ExpertTeamService()
                 request = ExpertTeamExecuteRequest(input_text=user_msg)
-                result = await service.execute_team(db, team_id, request)
 
-                # 把讨论过程转为 token 流
-                for msg in result.get("discussion", []):
-                    expert_name = msg.get("expertName", "")
-                    expert_role = msg.get("expertRole", "")
-                    content = msg.get("content", "")
-                    round_num = msg.get("round", 0)
-                    header = f"**{expert_name}** ({expert_role}) 第{round_num}轮:\n"
-                    yield {"type": "token", "content": header}
-                    yield {"type": "token", "content": content + "\n\n"}
+                async def _run_team():
+                    return await service.execute_team(db, team_id, request, on_progress=_on_progress)
 
-                # 最终汇总
-                final = result.get("output", "")
-                if final:
-                    yield {"type": "token", "content": "---\n**📋 最终报告:**\n\n" + final}
+                # 并行：专家团执行 + 进度事件 yield
+                team_task = asyncio.create_task(_run_team())
+                while not team_task.done():
+                    while _progress_events:
+                        yield _progress_events.pop(0)
+                    await asyncio.sleep(0.05)
+                # 收尾：剩余进度事件
+                while _progress_events:
+                    yield _progress_events.pop(0)
 
+                result = team_task.result()
                 elapsed = int((time.time() - t0) * 1000)
                 yield {"type": "done", "tools_used": [], "duration_ms": elapsed,
                        "prompt_tokens": 0, "completion_tokens": 0}
