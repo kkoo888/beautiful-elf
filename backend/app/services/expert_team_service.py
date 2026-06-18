@@ -490,13 +490,22 @@ class ExpertTeamService:
                         skill_text = f"\n\n## 你可用的技能\n{chr(10).join(skill_lines)}"
 
                         # 收集技能附带的工具并临时注册
+                        from app.agent.tool_registry import ToolDef, RiskLevel as _RiskLevel
                         for s in skills:
                             skill_tools = s.get("tools") or []
                             for tool_def in skill_tools:
                                 if isinstance(tool_def, dict):
                                     tool_name = tool_def.get("name", "")
-                                    if tool_name and tool_name not in tool_registry:
-                                        tool_registry[tool_name] = tool_def
+                                    if tool_name and not tool_registry.get(tool_name):
+                                        tool_registry._tools[tool_name] = ToolDef(
+                                            id=tool_def.get("id", 0),
+                                            name=tool_name,
+                                            description=tool_def.get("description", ""),
+                                            parameters=tool_def.get("parameters", {}),
+                                            risk_level=_RiskLevel(tool_def.get("risk_level", "low")),
+                                            module=tool_def.get("module", "skill"),
+                                            display_name=tool_def.get("display_name", tool_name),
+                                        )
                                         temp_tool_ids.append(tool_name)
                         if temp_tool_ids:
                             tool_usage_text = f"\n\n## 你可以使用以下工具\n{', '.join(temp_tool_ids)}。如果需要使用工具来完成任务，请调用相应工具。"
@@ -612,7 +621,7 @@ class ExpertTeamService:
                 finally:
                     # 清理临时注册的工具
                     for tid in temp_tool_ids:
-                        tool_registry.pop(tid, None)
+                        tool_registry._tools.pop(tid, None)
 
             # ─────────────────────────────────────────
             # 内部方法：并行执行一批专家
