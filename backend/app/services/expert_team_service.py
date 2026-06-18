@@ -360,18 +360,20 @@ class ExpertTeamService:
         self, db: AsyncSession, team_id: int, request: ExpertTeamExecuteRequest,
         on_progress: Any = None,
     ) -> dict:
-        """执行专家团工作流 — PM 委派模式
+        """执行专家团工作流 — PM 委派模式（v2: 并行 + 多轮 + 返工 + 技能接入）
 
-        流程:
-          1. PM（组长）分析任务，输出分配计划
-          2. 逐个执行被指派的专家
+        流程（借鉴 CrewAI Hierarchical Process）:
+          1. PM 分析任务，输出分配计划
+          2. 专家并行执行（asyncio.gather）
           3. PM 评估打分
-          4. 不达标则返工（带改进建议），达标则 PM 汇总报告
+          4. 不达标 → 带 feedback 重跑不达标专家（最多 max_rounds 轮）
+          5. 达标 → PM 汇总最终报告
 
         Args:
             on_progress: 可选回调 async def on_progress(event: dict)
-                         实时推送 SSE 事件（expert_start / expert_done / pm_thinking / pm_done）
         """
+        import asyncio
+
         team = await self.repo.find_team_by_id(db, team_id)
         if not team:
             raise RecordNotFoundError("专家团不存在")
@@ -391,7 +393,7 @@ class ExpertTeamService:
 
         max_rounds = request.max_rounds or team.max_rounds
 
-        # 解析默认供应商模型（专家未配模型时回退用）
+        # 解析默认供应商模型
         from app.services.llm_provider_service import LLMProviderService
         provider_service = LLMProviderService()
         default_provider = await provider_service.get_default_provider(db)
@@ -402,7 +404,7 @@ class ExpertTeamService:
             if enabled_models:
                 default_model_name = enabled_models[0].model_name
 
-        # PM 的模型配置（组长专家的配置，回退到默认）
+        # PM 的模型配置
         pm_provider_id = leader.provider_id or default_provider_id
         pm_model_name = leader.model_name or default_model_name
         pm_temperature = leader.temperature or 0.3
@@ -448,21 +450,181 @@ class ExpertTeamService:
             if not tool_registry._db_loaded:
                 await tool_registry.load_from_db(db)
 
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # Step 1: PM 分析任务，输出分配计划
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            await _ws_broadcast(team_id, "expert_status", {
-                "expertName": leader.member_name,
-                "expertRole": "PM/组长",
-                "status": "running",
-                "round": 0,
-                "runId": run.id,
-            })
-
             pm_system = leader.system_prompt or "你是一位资深项目经理（PM），擅长任务拆解和资源调度。"
             orchestrator_prompt = team.orchestrator_prompt or ""
+            synthesizer_prompt = team.synthesizer_prompt or ""
 
-            # 如果团队没配 orchestrator_prompt，用默认模板
+            # ─────────────────────────────────────────
+            # 内部方法：执行单个专家
+            # ─────────────────────────────────────────
+            async def _run_one_expert(member: dict, subtask: str, round_num: int,
+                                      context_text: str = "", feedback_text: str = "") -> dict:
+                """执行单个专家，返回结果 dict"""
+                expert_name = member["member_name"]
+                expert_role = member["member_role"]
+
+                # 推送：专家开始
+                await _ws_broadcast(team_id, "expert_status", {
+                    "expertName": expert_name, "expertRole": expert_role,
+                    "avatar": member.get("avatar", "🤖"),
+                    "status": "running", "round": round_num, "runId": run.id,
+                })
+                if on_progress:
+                    await on_progress({
+                        "type": "expert_start", "expertName": expert_name,
+                        "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
+                        "subtask": subtask,
+                    })
+
+                role_run = await self._create_role_run(db, run.id, member["id"], expert_name, round_num)
+
+                # 构建专家 prompt（注入技能 + 上下文 + 反馈）
+                expert_system = member.get("system_prompt") or f"你是{expert_name}，角色是{expert_role}。"
+                skill_text = ""
+                skills = member.get("skills", [])
+                if skills:
+                    skill_lines = [f"- {s.get('display_name', s.get('name', ''))}: {s.get('description', '')}" for s in skills]
+                    skill_text = f"\n\n## 你可用的技能\n{chr(10).join(skill_lines)}"
+
+                context_section = f"\n\n## 之前讨论\n{context_text}" if context_text else ""
+                feedback_section = f"\n\n## PM 改进建议（请务必参考）\n{feedback_text}" if feedback_text else ""
+
+                expert_prompt = f"""{expert_system}{skill_text}
+
+## 你的任务
+{subtask}
+
+## 原始用户问题
+{request.input_text}{context_section}{feedback_section}
+
+请从你的专业角度，完成以上任务。"""
+
+                expert_provider_id = member.get("provider_id") or default_provider_id
+                expert_model_name = member.get("model_name") or default_model_name
+                expert_temperature = float(member.get("temperature") or 0.7)
+
+                exp_start = datetime.now()
+                try:
+                    content, tokens = await _call_llm(
+                        db, expert_provider_id, expert_model_name, expert_prompt, temperature=expert_temperature,
+                    )
+                    duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+                    await self._finish_role_run(db, role_run.id, status=2, output=content, tokens=tokens)
+
+                    # 推送：专家完成
+                    await _ws_broadcast(team_id, "expert_thinking", {
+                        "expertName": expert_name, "expertRole": expert_role,
+                        "avatar": member.get("avatar", "🤖"),
+                        "round": round_num, "content": content, "runId": run.id, "durationMs": duration_ms,
+                    })
+                    await _ws_broadcast(team_id, "expert_status", {
+                        "expertName": expert_name, "expertRole": expert_role,
+                        "avatar": member.get("avatar", "🤖"),
+                        "status": "done", "round": round_num, "runId": run.id, "durationMs": duration_ms,
+                    })
+                    if on_progress:
+                        await on_progress({
+                            "type": "expert_done", "expertName": expert_name,
+                            "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
+                            "content": content, "durationMs": duration_ms,
+                        })
+
+                    return {
+                        "expert_id": member["id"], "expert_name": expert_name,
+                        "expert_role": expert_role, "subtask": subtask,
+                        "output": content, "tokens": tokens, "status": "done",
+                    }
+                except Exception as e:
+                    logger.error(f"专家 {expert_name} 执行失败: {e}")
+                    duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+                    await self._finish_role_run(db, role_run.id, status=3, error=str(e))
+                    return {
+                        "expert_id": member["id"], "expert_name": expert_name,
+                        "expert_role": expert_role, "subtask": subtask,
+                        "output": f"[执行失败: {e}]", "tokens": 0, "status": "failed",
+                    }
+
+            # ─────────────────────────────────────────
+            # 内部方法：并行执行一批专家
+            # ─────────────────────────────────────────
+            async def _run_experts_parallel(assignments: list[dict], round_num: int,
+                                            context_text: str = "", feedback_map: dict | None = None) -> list[dict]:
+                """并行执行所有被指派的专家（CrewAI async_execution 模式）"""
+                tasks = []
+                for assign in assignments:
+                    expert_id = assign["expert_id"]
+                    subtask = assign["subtask"]
+                    member = next((e for e in experts_data if e["id"] == expert_id), None)
+                    if not member:
+                        logger.warning(f"分配计划中的专家 ID={expert_id} 不存在，跳过")
+                        continue
+                    feedback = (feedback_map or {}).get(expert_id, "")
+                    tasks.append(_run_one_expert(member, subtask, round_num, context_text, feedback))
+
+                if not tasks:
+                    return []
+                # 并行执行所有专家
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                outputs = []
+                for r in results:
+                    if isinstance(r, Exception):
+                        logger.error(f"专家执行异常: {r}")
+                        continue
+                    outputs.append(r)
+                return outputs
+
+            # ─────────────────────────────────────────
+            # 内部方法：PM 评估
+            # ─────────────────────────────────────────
+            async def _pm_evaluate(expert_results: list[dict], round_num: int) -> dict:
+                """PM 评估专家结果，返回 {overall_pass, scores, reason}"""
+                await _ws_broadcast(team_id, "expert_status", {
+                    "expertName": leader.member_name, "expertRole": "PM/组长",
+                    "status": "running", "round": round_num, "runId": run.id,
+                })
+
+                results_text = "\n\n".join([
+                    f"### {o['expert_name']}({o['expert_role']}) — 子任务: {o['subtask']}\n{o['output']}"
+                    for o in expert_results
+                ])
+
+                eval_prompt = f"""{pm_system}
+
+## 用户原始任务
+{request.input_text}
+
+## 专家完成情况（第 {round_num} 轮）
+{results_text}
+
+请评估每个专家的完成质量，打分（1-10），并判断是否达标。
+输出 JSON 格式：
+{{"scores": [{{"expert_id": ID, "score": 分数, "feedback": "评价"}}], "overall_pass": true/false, "reason": "总体评价"}}"""
+
+                eval_content, eval_tokens = await _call_llm(
+                    db, pm_provider_id, pm_model_name, eval_prompt, temperature=pm_temperature,
+                )
+
+                await _ws_broadcast(team_id, "expert_thinking", {
+                    "expertName": leader.member_name, "expertRole": "PM/组长",
+                    "round": round_num, "content": eval_content, "runId": run.id,
+                })
+                await _ws_broadcast(team_id, "expert_status", {
+                    "expertName": leader.member_name, "expertRole": "PM/组长",
+                    "status": "done", "round": round_num, "runId": run.id,
+                })
+                if on_progress:
+                    await on_progress({"type": "pm_eval", "expertName": leader.member_name, "content": eval_content})
+
+                return self._parse_evaluation(eval_content), eval_tokens
+
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # Step 1: PM 分析任务，输出分配计划
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            await _ws_broadcast(team_id, "expert_status", {
+                "expertName": leader.member_name, "expertRole": "PM/组长",
+                "status": "running", "round": 0, "runId": run.id,
+            })
+
             if not orchestrator_prompt:
                 orchestrator_prompt = (
                     "请分析用户任务，决定分配给团队中的哪些专家，以及每个专家需要完成的子任务。\n"
@@ -488,232 +650,97 @@ class ExpertTeamService:
             )
             total_tokens += plan_tokens
 
-            # 记录 PM 分析
             discussion.append({
-                "round": 0,
-                "expertName": leader.member_name,
-                "expertRole": "PM/组长",
-                "content": plan_content,
+                "round": 0, "expertName": leader.member_name,
+                "expertRole": "PM/组长", "content": plan_content,
                 "timestamp": datetime.now().isoformat(),
             })
-
             await _ws_broadcast(team_id, "expert_thinking", {
-                "expertName": leader.member_name,
-                "expertRole": "PM/组长",
-                "round": 0,
-                "content": plan_content,
-                "runId": run.id,
+                "expertName": leader.member_name, "expertRole": "PM/组长",
+                "round": 0, "content": plan_content, "runId": run.id,
             })
             await _ws_broadcast(team_id, "expert_status", {
-                "expertName": leader.member_name,
-                "expertRole": "PM/组长",
-                "status": "done",
-                "round": 0,
-                "runId": run.id,
+                "expertName": leader.member_name, "expertRole": "PM/组长",
+                "status": "done", "round": 0, "runId": run.id,
             })
-
-            # 回调：PM 分析完成
             if on_progress:
                 await on_progress({"type": "pm_done", "expertName": leader.member_name, "content": plan_content})
 
-            # 解析分配计划
             assignments = self._parse_assignments(plan_content, experts_data)
 
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # Step 2: 逐个执行被指派的专家
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            expert_outputs: list[dict] = []  # {expert_id, expert_name, subtask, output, tokens}
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # Step 2-4: 多轮执行 + 评估 + 返工
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            expert_outputs: list[dict] = []
+            all_round_results: list[dict] = []  # 所有轮次的结果（用于上下文传递）
+            feedback_map: dict[int, str] = {}   # expert_id → PM 反馈
+            passed = False
 
-            for assign in assignments:
-                expert_id = assign["expert_id"]
-                subtask = assign["subtask"]
-                member = next((e for e in experts_data if e["id"] == expert_id), None)
-                if not member:
-                    logger.warning(f"分配计划中的专家 ID={expert_id} 不存在，跳过")
-                    continue
+            for round_num in range(1, max_rounds + 1):
+                # 构建上下文（之前所有轮次的讨论）
+                context_text = ""
+                if all_round_results:
+                    ctx_parts = []
+                    for prev in all_round_results:
+                        ctx_parts.append(f"### {prev['expert_name']}({prev['expert_role']}) 第{prev.get('round', '?')}轮\n{prev['output']}")
+                    context_text = "\n\n".join(ctx_parts)
 
-                # 推送：专家开始
-                await _ws_broadcast(team_id, "expert_status", {
-                    "expertName": member["member_name"],
-                    "expertRole": member["member_role"],
-                    "avatar": member.get("avatar", "🤖"),
-                    "status": "running",
-                    "round": 1,
-                    "runId": run.id,
-                })
+                # 并行执行专家
+                round_results = await _run_experts_parallel(assignments, round_num, context_text, feedback_map)
+                total_tokens += sum(r.get("tokens", 0) for r in round_results)
 
-                # 回调：专家开始
-                if on_progress:
-                    await on_progress({
-                        "type": "expert_start",
-                        "expertName": member["member_name"],
-                        "expertRole": member["member_role"],
-                        "avatar": member.get("avatar", "🤖"),
-                        "subtask": subtask,
-                    })
-
-                # 创建角色执行记录
-                role_run = await self._create_role_run(db, run.id, member["id"], member["member_name"], 1)
-
-                # 构建专家 prompt
-                expert_system = member.get("system_prompt") or f"你是{member['member_name']}，角色是{member['member_role']}。"
-                expert_prompt = f"""{expert_system}
-
-## 你的任务
-{subtask}
-
-## 原始用户问题
-{request.input_text}
-
-请从你的专业角度，完成以上任务。"""
-
-                # 专家的模型配置
-                expert_provider_id = member.get("provider_id") or default_provider_id
-                expert_model_name = member.get("model_name") or default_model_name
-                expert_temperature = float(member.get("temperature") or 0.7)
-
-                exp_start = datetime.now()
-                try:
-                    content, tokens = await _call_llm(
-                        db, expert_provider_id, expert_model_name, expert_prompt, temperature=expert_temperature,
-                    )
-                    total_tokens += tokens
-                    duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
-
-                    await self._finish_role_run(db, role_run.id, status=2, output=content, tokens=tokens)
-
-                    expert_outputs.append({
-                        "expert_id": expert_id,
-                        "expert_name": member["member_name"],
-                        "expert_role": member["member_role"],
-                        "subtask": subtask,
-                        "output": content,
-                        "tokens": tokens,
-                    })
+                # 记录讨论
+                for r in round_results:
+                    r["round"] = round_num
+                    all_round_results.append(r)
+                    expert_outputs.append(r)
                     discussion.append({
-                        "round": 1,
-                        "expertName": member["member_name"],
-                        "expertRole": member["member_role"],
-                        "content": content,
+                        "round": round_num, "expertName": r["expert_name"],
+                        "expertRole": r["expert_role"], "content": r["output"],
                         "timestamp": datetime.now().isoformat(),
                     })
 
-                except Exception as e:
-                    logger.error(f"专家 {member['member_name']} 执行失败: {e}")
-                    content = f"[执行失败: {e}]"
-                    tokens = 0
-                    duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
-                    await self._finish_role_run(db, role_run.id, status=3, error=str(e))
-                    expert_outputs.append({
-                        "expert_id": expert_id,
-                        "expert_name": member["member_name"],
-                        "expert_role": member["member_role"],
-                        "subtask": subtask,
-                        "output": content,
-                        "tokens": 0,
-                    })
-
-                # 推送：专家完成
-                await _ws_broadcast(team_id, "expert_thinking", {
-                    "expertName": member["member_name"],
-                    "expertRole": member["member_role"],
-                    "avatar": member.get("avatar", "🤖"),
-                    "round": 1,
-                    "content": content,
-                    "runId": run.id,
-                    "durationMs": duration_ms,
-                })
-                await _ws_broadcast(team_id, "expert_status", {
-                    "expertName": member["member_name"],
-                    "expertRole": member["member_role"],
-                    "avatar": member.get("avatar", "🤖"),
-                    "status": "done",
-                    "round": 1,
-                    "runId": run.id,
-                    "durationMs": duration_ms,
+                # PM 评估
+                evaluation, eval_tokens = await _pm_evaluate(round_results, round_num)
+                total_tokens += eval_tokens
+                discussion.append({
+                    "round": round_num, "expertName": leader.member_name,
+                    "expertRole": "PM/组长(评估)", "content": json.dumps(evaluation, ensure_ascii=False),
+                    "timestamp": datetime.now().isoformat(),
                 })
 
-                # 回调：专家完成
-                if on_progress:
-                    await on_progress({
-                        "type": "expert_done",
-                        "expertName": member["member_name"],
-                        "expertRole": member["member_role"],
-                        "avatar": member.get("avatar", "🤖"),
-                        "content": content,
-                        "durationMs": duration_ms,
-                    })
+                passed = evaluation.get("overall_pass", False)
+                if passed:
+                    break
 
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # Step 3: PM 评估打分
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            await _ws_broadcast(team_id, "expert_status", {
-                "expertName": leader.member_name,
-                "expertRole": "PM/组长",
-                "status": "running",
-                "round": -1,
-                "runId": run.id,
-            })
+                # 不达标：构建 feedback_map，继续下一轮
+                if round_num < max_rounds:
+                    feedback_map = {}
+                    for score in evaluation.get("scores", []):
+                        eid = score.get("expert_id")
+                        fb = score.get("feedback", "")
+                        if eid and fb:
+                            feedback_map[eid] = fb
+                    logger.info(f"[execute_team] 第 {round_num} 轮未达标，返工 feedback: {list(feedback_map.keys())}")
 
-            expert_results_text = "\n\n".join([
-                f"### {o['expert_name']}({o['expert_role']}) — 子任务: {o['subtask']}\n{o['output']}"
-                for o in expert_outputs
-            ])
-
-            eval_prompt = f"""{pm_system}
-
-## 用户原始任务
-{request.input_text}
-
-## 专家完成情况
-{expert_results_text}
-
-请评估每个专家的完成质量，打分（1-10），并判断是否达标。
-输出 JSON 格式：
-{{"scores": [{{"expert_id": ID, "score": 分数, "feedback": "评价"}}], "overall_pass": true/false, "reason": "总体评价"}}"""
-
-            eval_content, eval_tokens = await _call_llm(
-                db, pm_provider_id, pm_model_name, eval_prompt, temperature=pm_temperature,
-            )
-            total_tokens += eval_tokens
-
-            discussion.append({
-                "round": -1,
-                "expertName": leader.member_name,
-                "expertRole": "PM/组长(评估)",
-                "content": eval_content,
-                "timestamp": datetime.now().isoformat(),
-            })
-
-            await _ws_broadcast(team_id, "expert_thinking", {
-                "expertName": leader.member_name,
-                "expertRole": "PM/组长",
-                "round": -1,
-                "content": eval_content,
-                "runId": run.id,
-            })
-
-            # 回调：PM 评估完成
-            if on_progress:
-                await on_progress({"type": "pm_eval", "expertName": leader.member_name, "content": eval_content})
-
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # Step 4: PM 汇总最终报告
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            synthesizer_prompt = team.synthesizer_prompt or ""
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # Step 5: PM 汇总最终报告
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             if not synthesizer_prompt:
                 synthesizer_prompt = "请综合所有专家的分析结果，生成结构化的最终报告，包含：核心结论、各专家观点摘要、关键建议。"
+
+            final_results_text = "\n\n".join([
+                f"### {o['expert_name']}({o['expert_role']}) 第{o.get('round', '?')}轮 — {o['subtask']}\n{o['output']}"
+                for o in expert_outputs if o["status"] == "done"
+            ])
 
             report_prompt = f"""{pm_system}
 
 ## 用户原始任务
 {request.input_text}
 
-## 专家分析结果
-{expert_results_text}
-
-## 评估结果
-{eval_content}
+## 专家分析结果（共 {len(all_round_results)} 条）
+{final_results_text}
 
 ## 工作指令
 {synthesizer_prompt}
@@ -726,45 +753,31 @@ class ExpertTeamService:
             total_tokens += report_tokens
 
             await _ws_broadcast(team_id, "expert_status", {
-                "expertName": leader.member_name,
-                "expertRole": "PM/组长",
-                "status": "done",
-                "round": -1,
-                "runId": run.id,
+                "expertName": leader.member_name, "expertRole": "PM/组长",
+                "status": "done", "round": -1, "runId": run.id,
             })
             await _ws_broadcast(team_id, "expert_progress", {
-                "status": "completed",
-                "runId": run.id,
-                "output": report_content[:500],
+                "status": "completed", "runId": run.id, "output": report_content[:500],
             })
-
-            # 回调：PM 报告完成
             if on_progress:
                 await on_progress({"type": "pm_report", "content": report_content})
 
             # ── 汇总结果 ──
             end_time = datetime.now()
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
+            actual_rounds = max(r.get("round", 0) for r in all_round_results) if all_round_results else 0
 
             result = {
-                "runId": run.id,
-                "status": 2,
-                "output": report_content,
-                "discussion": discussion,
-                "rounds": 1,
-                "tokenUsage": total_tokens,
-                "durationMs": duration_ms,
+                "runId": run.id, "status": 2, "output": report_content,
+                "discussion": discussion, "rounds": actual_rounds,
+                "tokenUsage": total_tokens, "durationMs": duration_ms,
             }
 
             await self.repo.update_run(db, run.id, {
-                "run_status": 2,
-                "output_text": report_content,
-                "discussion_json": discussion,
-                "round_count": 1,
-                "token_usage": total_tokens,
-                "started_at": run.created_at,
-                "finished_at": end_time,
-                "duration_ms": duration_ms,
+                "run_status": 2, "output_text": report_content,
+                "discussion_json": discussion, "round_count": actual_rounds,
+                "token_usage": total_tokens, "started_at": run.created_at,
+                "finished_at": end_time, "duration_ms": duration_ms,
             })
 
             return result
@@ -772,11 +785,47 @@ class ExpertTeamService:
         except Exception as e:
             logger.error(f"专家团执行失败: {e}", exc_info=True)
             await self.repo.update_run(db, run.id, {
-                "run_status": 3,
-                "error_message": str(e)[:2048],
+                "run_status": 3, "error_message": str(e)[:2048],
                 "finished_at": datetime.now(),
             })
             raise
+
+    @staticmethod
+    def _parse_evaluation(eval_output: str) -> dict:
+        """解析 PM 评估 JSON
+
+        Returns:
+            {"overall_pass": bool, "scores": [{"expert_id", "score", "feedback"}], "reason": str}
+        """
+        import re
+        try:
+            # 尝试直接 JSON 解析
+            data = json.loads(eval_output.strip())
+            return {
+                "overall_pass": data.get("overall_pass", False),
+                "scores": data.get("scores", []),
+                "reason": data.get("reason", ""),
+            }
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+        # 降级：从文本中提取 JSON 块
+        match = re.search(r'\{[\s\S]*"overall_pass"[\s\S]*\}', eval_output)
+        if match:
+            try:
+                data = json.loads(match.group())
+                return {
+                    "overall_pass": data.get("overall_pass", False),
+                    "scores": data.get("scores", []),
+                    "reason": data.get("reason", ""),
+                }
+            except json.JSONDecodeError:
+                pass
+
+        # 最终降级：关键词判断
+        lower = eval_output.lower()
+        passed = '"overall_pass": true' in lower or '达标' in eval_output or '"pass"' in lower
+        return {"overall_pass": passed, "scores": [], "reason": eval_output[:200]}
 
     @staticmethod
     def _parse_assignments(pm_output: str, experts_data: list[dict]) -> list[dict]:
