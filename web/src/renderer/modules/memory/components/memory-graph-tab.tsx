@@ -1,14 +1,19 @@
-/** 记忆关系图 — 基于 Dify 模式重构
+/** 记忆关系图 — 全面进化版，借鉴 Dify 核心模式
 
-借鉴 Dify 核心设计：
-  - Zustand store 统一状态管理（graph-store.ts）
-  - 点击节点 → 右侧 Drawer 属性面板（graph-detail-drawer.tsx）
-  - 右键菜单 → 编辑/删除/断开连线（graph-context-menu.tsx）
-  - 顶部搜索 + 分类筛选（graph-toolbar.tsx）
-  - 节点选中高亮 + 连线样式增强
+进化清单：
+  1. 撤销/重做（Ctrl+Z / Ctrl+Y）
+  2. 布局持久化（localStorage，刷新不丢）
+  3. 节点结构增强（Header+Body+desc）
+  4. 关系链接修复（任意节点间可连线）
+  5. Handle 快速添加（点击 Handle 弹出选项）
+  6. 自动布局（一键整理）
+  7. 快捷键支持
+  8. 连线渐变色
+  9. 节点 Palette 侧栏
+  10. 搜索 + 分类筛选
 */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import ReactFlow, {
   Controls,
   Background,
@@ -18,6 +23,7 @@ import ReactFlow, {
   useEdgesState,
   BackgroundVariant,
   MarkerType,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -26,8 +32,13 @@ import ReactFlow, {
   type OnEdgeContextMenu,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Spin, Empty, App } from 'antd'
-import { FileTextOutlined, BulbOutlined } from '@ant-design/icons'
+import { Spin, Empty, App, Tooltip, Button, Space } from 'antd'
+import {
+  FileTextOutlined, BulbOutlined,
+  UndoOutlined, RedoOutlined,
+  AppstoreOutlined, SortAscendingOutlined,
+  SaveOutlined,
+} from '@ant-design/icons'
 import {
   listObservations,
   fetchDailyLogs,
@@ -39,6 +50,8 @@ import { useGraphStore } from './graph-store'
 import { NodeContextMenu, EdgeContextMenu } from './graph-context-menu'
 import { NodeDetailDrawer } from './graph-detail-drawer'
 import { GraphToolbar } from './graph-toolbar'
+import { NodePalette } from './graph-palette'
+import { autoLayoutAndFit } from './graph-layout'
 
 // ── 样式常量 ──────────────────────────────────────────────
 
@@ -53,7 +66,6 @@ const COLORS = {
   obsSelected: '#E8913A',
   edge: '#BFBFBF',
   edgeActive: '#E8913A',
-  dimmed: '#d9d9d9',
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -63,7 +75,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   status: '📦',
 }
 
-// ── 自定义节点组件（增强版：支持选中高亮 + 搜索半透明）──
+// ── 增强版节点组件（Header + Body + desc）──
 
 function DailyLogNode({ data, selected }: { data: any; selected?: boolean }) {
   const searchKeyword = useGraphStore(s => s.searchKeyword)
@@ -71,22 +83,29 @@ function DailyLogNode({ data, selected }: { data: any; selected?: boolean }) {
 
   return (
     <div style={{
-      padding: '10px 14px',
-      background: selected ? '#e6f7ff' : COLORS.dailyBg,
+      padding: 0, borderRadius: 10, overflow: 'hidden',
       border: `2px solid ${selected ? COLORS.dailySelected : COLORS.dailyBorder}`,
-      borderRadius: 8,
-      fontSize: 12,
-      minWidth: 120,
-      cursor: 'grab',
-      opacity: dimmed ? 0.3 : 1,
+      background: '#fff',
+      opacity: dimmed ? 0.25 : 1,
       transition: 'all 0.2s',
-      boxShadow: selected ? '0 0 0 2px rgba(24,144,255,0.2)' : 'none',
+      boxShadow: selected ? '0 0 0 3px rgba(24,144,255,0.15), 0 4px 12px rgba(0,0,0,0.08)' : '0 2px 6px rgba(0,0,0,0.04)',
+      minWidth: 160, maxWidth: 220,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '8px 12px', background: COLORS.dailyBg,
+        borderBottom: `1px solid ${COLORS.dailyBorder}`,
+      }}>
         <FileTextOutlined style={{ color: COLORS.info, fontSize: 14 }} />
-        <strong style={{ fontSize: 13 }}>{data.title}</strong>
+        <strong style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {data.title}
+        </strong>
       </div>
-      <span style={{ color: '#8c8c8c', fontSize: 11 }}>{data.wordCount} 字</span>
+      {/* Body */}
+      <div style={{ padding: '6px 12px 8px' }}>
+        <span style={{ color: '#8c8c8c', fontSize: 11 }}>{data.wordCount} 字</span>
+      </div>
     </div>
   )
 }
@@ -99,27 +118,46 @@ function ObservationNode({ data, selected }: { data: any; selected?: boolean }) 
   const dimmed = dimmedBySearch || dimmedByCategory
 
   const icon = CATEGORY_ICONS[data.category] || '📌'
-  const preview = data.content?.length > 50 ? data.content.slice(0, 50) + '...' : (data.content || '')
+  const preview = data.content?.length > 40 ? data.content.slice(0, 40) + '...' : (data.content || '')
+  const catLabel = { decisions: '决策', pitfalls: '踩坑', preferences: '偏好', status: '状态' }[data.category] || ''
 
   return (
     <div style={{
-      padding: '10px 14px',
-      background: selected ? '#fff7e6' : COLORS.obsBg,
+      padding: 0, borderRadius: 10, overflow: 'hidden',
       border: `2px solid ${selected ? COLORS.obsSelected : COLORS.obsBorder}`,
-      borderRadius: 8,
-      fontSize: 12,
-      minWidth: 140,
-      maxWidth: 200,
-      cursor: 'grab',
-      opacity: dimmed ? 0.3 : 1,
+      background: '#fff',
+      opacity: dimmed ? 0.25 : 1,
       transition: 'all 0.2s',
-      boxShadow: selected ? '0 0 0 2px rgba(232,145,58,0.2)' : 'none',
+      boxShadow: selected ? '0 0 0 3px rgba(232,145,58,0.15), 0 4px 12px rgba(0,0,0,0.08)' : '0 2px 6px rgba(0,0,0,0.04)',
+      minWidth: 160, maxWidth: 220,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-        <span>{icon}</span>
-        <strong style={{ fontSize: 12 }}>{preview.split('\n')[0]}</strong>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '8px 12px', background: COLORS.obsBg,
+        borderBottom: `1px solid ${COLORS.obsBorder}`,
+      }}>
+        <span style={{ fontSize: 14 }}>{icon}</span>
+        <span style={{
+          fontSize: 11, padding: '1px 6px', borderRadius: 4,
+          background: '#fff', color: '#8c8c8c', border: '1px solid #f0f0f0',
+        }}>{catLabel}</span>
       </div>
-      <span style={{ color: '#8c8c8c', fontSize: 11 }}>{data.freshness}</span>
+      {/* Body */}
+      <div style={{ padding: '8px 12px' }}>
+        <div style={{ fontSize: 12, lineHeight: 1.6, color: '#262626', wordBreak: 'break-all' }}>
+          {preview.split('\n')[0]}
+        </div>
+      </div>
+      {/* desc */}
+      {data.freshness && (
+        <div style={{
+          padding: '4px 12px 6px', borderTop: '1px solid #f5f5f5',
+          fontSize: 11, color: '#bfbfbf',
+        }}>
+          {data.freshness} · {data.sources?.length || 0} 条来源
+        </div>
+      )}
     </div>
   )
 }
@@ -129,28 +167,76 @@ const nodeTypes = {
   observation: ObservationNode,
 }
 
+// ── 渐变连线组件 ──
+
+function GradientEdge({ id, sourceX, sourceY, targetX, targetY, style, markerEnd, data }: any) {
+  const gradientId = `gradient-${id}`
+  return (
+    <>
+      <defs>
+        <linearGradient id={gradientId} x1={sourceX} y1={sourceY} x2={targetX} y2={targetY} gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor={COLORS.info} stopOpacity={0.6} />
+          <stop offset="100%" stopColor={COLORS.primary} stopOpacity={0.8} />
+        </linearGradient>
+      </defs>
+      <path
+        d={`M${sourceX},${sourceY} C${sourceX + 80},${sourceY} ${targetX - 80},${targetY} ${targetX},${targetY}`}
+        stroke={`url(#${gradientId})`}
+        strokeWidth={2.5}
+        fill="none"
+        markerEnd={markerEnd}
+      />
+    </>
+  )
+}
+
+const edgeTypes = { gradient: GradientEdge }
+
 // ── 主组件 ──────────────────────────────────────────────────
 
 export function MemoryGraphTab() {
   const { message: msg } = App.useApp()
+  const reactflow = useReactFlow()
   const {
     loading, setLoading,
     observations, setObservations,
     dailyLogs, setDailyLogs,
-    nodes: storeNodes, edges: storeEdges,
     setNodes: setStoreNodes, setEdges: setStoreEdges,
     selectNode, openContextMenu, openEdgeContextMenu,
+    undo, redo, canUndo, canRedo, pushSnapshot,
+    saveLayout, loadLayout, paletteOpen, togglePalette,
   } = useGraphStore()
 
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const isInitialized = useRef(false)
 
-  // ── 同步 React Flow 状态到 Store ──
-  useEffect(() => { setStoreNodes(nodes) }, [nodes])
-  useEffect(() => { setStoreEdges(edges) }, [edges])
+  // ── 同步到 Store ──
+  useEffect(() => { setStoreNodes(nodes, true) }, [nodes])
+  useEffect(() => { setStoreEdges(edges, true) }, [edges])
 
-  // ── 加载数据 ──
-  useEffect(() => { loadData() }, [])
+  // ── 初始化：尝试恢复布局 → 否则加载数据 ──
+  useEffect(() => {
+    if (isInitialized.current) return
+    isInitialized.current = true
+
+    const saved = loadLayout()
+    if (saved && saved.nodes.length > 0) {
+      setNodes(saved.nodes)
+      setEdges(saved.edges)
+      setLoading(false)
+    } else {
+      loadData()
+    }
+  }, [])
+
+  // ── 自动保存布局（debounce）──
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (nodes.length > 0) saveLayout()
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [nodes, edges])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -167,7 +253,6 @@ export function MemoryGraphTab() {
     }
   }, [])
 
-  // ── 构建图 ──
   const buildGraph = useCallback((obs: Observation[], logs: MarkdownMemoryEntry[]) => {
     const newNodes: Node[] = []
     const newEdges: Edge[] = []
@@ -196,9 +281,9 @@ export function MemoryGraphTab() {
               id: `edge-${src.sourceId}`,
               source: `log-${src.logId}`,
               target: `obs-${ob.id}`,
+              type: 'gradient',
               animated: false,
-              style: { stroke: COLORS.edge, strokeWidth: 2 },
-              markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.edge },
+              markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.primary },
               data: { sourceId: src.sourceId },
             })
           }
@@ -210,78 +295,137 @@ export function MemoryGraphTab() {
     setEdges(newEdges)
   }, [])
 
-  // ── 连线回调 ──
+  // ── 连线（支持任意节点间，修复关系链接）──
   const onConnect: OnConnect = useCallback(async (connection: Connection) => {
     if (!connection.source || !connection.target) return
-    if (!connection.source.startsWith('log-') || !connection.target.startsWith('obs-')) {
-      msg.warning('只能从日志拖拽到提炼记忆')
+    if (connection.source === connection.target) return
+
+    pushSnapshot()
+
+    const sourceIsLog = connection.source.startsWith('log-')
+    const targetIsObs = connection.target.startsWith('obs-')
+
+    // 日志 → 提炼记忆：创建后端关联
+    if (sourceIsLog && targetIsObs) {
+      const logId = parseInt(connection.source.replace('log-', ''))
+      const obsId = parseInt(connection.target.replace('obs-', ''))
+
+      const tempEdgeId = `edge-temp-${Date.now()}`
+      setEdges(eds => addEdge({
+        ...connection,
+        id: tempEdgeId,
+        type: 'gradient',
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.edgeActive },
+      }, eds))
+
+      try {
+        const result = await createObservationSource(obsId, logId)
+        setEdges(eds => eds.map(e =>
+          e.id === tempEdgeId
+            ? { ...e, id: `edge-${result.id}`, animated: false, data: { sourceId: result.id } }
+            : e
+        ))
+        msg.success('关联创建成功')
+      } catch {
+        setEdges(eds => eds.filter(e => e.id !== tempEdgeId))
+        msg.error('关联创建失败')
+      }
       return
     }
 
-    const logId = parseInt(connection.source.replace('log-', ''))
-    const obsId = parseInt(connection.target.replace('obs-', ''))
-
-    const tempEdgeId = `edge-temp-${Date.now()}`
+    // 其他方向（提炼→提炼、提炼→日志）：纯前端连线
     setEdges(eds => addEdge({
       ...connection,
-      id: tempEdgeId,
-      animated: true,
-      style: { stroke: COLORS.edgeActive, strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.edgeActive },
+      id: `edge-local-${Date.now()}`,
+      type: 'gradient',
+      animated: false,
+      markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.primary },
+      style: { strokeDasharray: '5,5' },
     }, eds))
-
-    try {
-      const result = await createObservationSource(obsId, logId)
-      setEdges(eds => eds.map(e =>
-        e.id === tempEdgeId
-          ? { ...e, id: `edge-${result.id}`, animated: false, style: { stroke: COLORS.edge, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.edge } }
-          : e
-      ))
-      msg.success('关联创建成功')
-    } catch {
-      setEdges(eds => eds.filter(e => e.id !== tempEdgeId))
-      msg.error('关联创建失败')
-    }
+    msg.success('关系已建立')
   }, [])
 
-  // ── 节点点击 → 选中 + 打开详情 ──
+  // ── 节点点击 ──
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     selectNode(node.id)
   }, [selectNode])
 
-  // ── 节点右键 → 上下文菜单 ──
+  // ── 右键菜单 ──
   const handleNodeContextMenu: OnNodeContextMenu = useCallback((event, node) => {
     event.preventDefault()
     openContextMenu(node.id, event.clientX, event.clientY)
   }, [openContextMenu])
 
-  // ── 边右键 → 上下文菜单 ──
   const handleEdgeContextMenu: OnEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault()
     openEdgeContextMenu(edge.id, event.clientX, event.clientY)
   }, [openEdgeContextMenu])
 
-  // ── 边点击 → 删除关联（保留原逻辑）──
+  // ── 边点击删除 ──
   const onEdgeClick = useCallback(async (_: React.MouseEvent, edge: Edge) => {
     const sourceId = edge.data?.sourceId
-    if (!sourceId) return
+    pushSnapshot()
     setEdges(eds => eds.filter(e => e.id !== edge.id))
-    try {
-      await deleteObservationSource(sourceId)
-      msg.success('关联已删除')
-    } catch {
-      setEdges(eds => [...eds, edge])
-      msg.error('删除失败')
+    if (sourceId) {
+      try { await deleteObservationSource(sourceId) } catch {}
     }
   }, [])
 
+  // ── 自动布局 ──
+  const handleAutoLayout = useCallback(() => {
+    pushSnapshot()
+    autoLayoutAndFit(nodes, edges, (newNodes) => setNodes(newNodes), reactflow.fitView)
+  }, [nodes, edges, reactflow.fitView])
+
+  // ── 快捷键 ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Z 撤销
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+      // Ctrl+Y 或 Ctrl+Shift+Z 重做
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        redo()
+      }
+      // Delete 删除选中节点
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const { selectedNodeId, nodes: storeNodes, edges: storeEdges } = useGraphStore.getState()
+        if (selectedNodeId && !document.querySelector('input:focus, textarea:focus')) {
+          e.preventDefault()
+          pushSnapshot()
+          setNodes(storeNodes.filter(n => n.id !== selectedNodeId))
+          setEdges(storeEdges.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId))
+          selectNode(null)
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [undo, redo])
+
+  // ── 工具栏按钮 ──
+  const toolbarButtons = (
+    <div style={{
+      position: 'absolute', top: 8, right: 8, zIndex: 10,
+      display: 'flex', gap: 4, pointerEvents: 'none',
+    }}>
+      <Space size={4} style={{ pointerEvents: 'auto', background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: '4px 8px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+        <Tooltip title="撤销 (Ctrl+Z)"><Button size="small" type="text" icon={<UndoOutlined />} disabled={!canUndo()} onClick={undo} /></Tooltip>
+        <Tooltip title="重做 (Ctrl+Y)"><Button size="small" type="text" icon={<RedoOutlined />} disabled={!canRedo()} onClick={redo} /></Tooltip>
+        <Tooltip title="自动布局"><Button size="small" type="text" icon={<SortAscendingOutlined />} onClick={handleAutoLayout} /></Tooltip>
+        <Tooltip title="节点面板"><Button size="small" type="text" icon={<AppstoreOutlined />} onClick={togglePalette} style={paletteOpen ? { color: COLORS.primary, background: COLORS.obsBg } : {}} /></Tooltip>
+        <Tooltip title="保存布局"><Button size="small" type="text" icon={<SaveOutlined />} onClick={() => { saveLayout(); msg.success('布局已保存') }} /></Tooltip>
+      </Space>
+    </div>
+  )
+
   // ── Loading ──
   if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <Spin />
-      </div>
-    )
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Spin /></div>
   }
 
   if (observations.length === 0 && dailyLogs.length === 0) {
@@ -290,17 +434,13 @@ export function MemoryGraphTab() {
 
   return (
     <div style={{ height: '100%', width: '100%', borderRadius: 8, overflow: 'hidden', border: '1px solid #f0f0f0', position: 'relative' }}>
-      {/* 搜索 + 筛选 */}
       <GraphToolbar />
-
-      {/* 右键菜单 */}
+      {toolbarButtons}
+      <NodePalette />
       <NodeContextMenu />
       <EdgeContextMenu />
-
-      {/* 详情抽屉 */}
       <NodeDetailDrawer />
 
-      {/* 画布 */}
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -312,6 +452,7 @@ export function MemoryGraphTab() {
         onEdgeContextMenu={handleEdgeContextMenu}
         onEdgeClick={onEdgeClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         deleteKeyCode={null}
         attributionPosition="bottom-left"
@@ -342,8 +483,8 @@ export function MemoryGraphTab() {
           提炼记忆
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 20, height: 2, background: COLORS.edge, display: 'inline-block' }} />
-          点击节点查看详情 · 右键操作 · 拖拽连线
+          <span style={{ width: 20, height: 2, background: 'linear-gradient(90deg, #3BA0E8, #E8913A)', display: 'inline-block', borderRadius: 1 }} />
+          拖拽连线 · 右键操作 · Ctrl+Z 撤销
         </span>
       </div>
     </div>

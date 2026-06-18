@@ -59,7 +59,8 @@ export function NodeContextMenu() {
       label: '断开所有连线',
       icon: <DisconnectOutlined />,
       onClick: () => {
-        const { edges, setEdges } = useGraphStore.getState()
+        const { edges, setEdges, pushSnapshot } = useGraphStore.getState()
+        pushSnapshot()
         setEdges(edges.filter(e => e.source !== contextMenu.nodeId && e.target !== contextMenu.nodeId))
         closeContextMenu()
       },
@@ -70,7 +71,8 @@ export function NodeContextMenu() {
       icon: <DeleteOutlined />,
       danger: true,
       onClick: () => {
-        const { nodes, edges, setNodes, setEdges } = useGraphStore.getState()
+        const { nodes, edges, setNodes, setEdges, pushSnapshot } = useGraphStore.getState()
+        pushSnapshot()
         setNodes(nodes.filter(n => n.id !== contextMenu.nodeId))
         setEdges(edges.filter(e => e.source !== contextMenu.nodeId && e.target !== contextMenu.nodeId))
         closeContextMenu()
@@ -155,7 +157,8 @@ export function EdgeContextMenu() {
     >
       <div
         onClick={() => {
-          const { edges, setEdges } = useGraphStore.getState()
+          const { edges, setEdges, pushSnapshot } = useGraphStore.getState()
+          pushSnapshot()
           setEdges(edges.filter(e => e.id !== edgeContextMenu.edgeId))
           closeEdgeContextMenu()
         }}

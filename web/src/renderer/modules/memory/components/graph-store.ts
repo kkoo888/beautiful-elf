@@ -1,8 +1,24 @@
-/** 记忆关系图 Zustand Store — 对标 Dify store 分层设计 */
+/** 记忆关系图 Zustand Store — 对标 Dify 分层设计
+
+增强功能：
+  - 撤销/重做（手动实现 temporal，不依赖 zundo）
+  - 布局持久化（localStorage）
+  - 状态分片管理
+*/
 
 import { create } from 'zustand'
 import type { Node, Edge } from 'reactflow'
 import type { Observation, MarkdownMemoryEntry } from '../services/memory-api'
+
+// ── 历史快照 ──────────────────────────────────────────────
+
+interface Snapshot {
+  nodes: Node[]
+  edges: Edge[]
+}
+
+const MAX_HISTORY = 50
+const STORAGE_KEY = 'memory-graph-layout'
 
 // ── 状态类型 ──────────────────────────────────────────────
 
@@ -23,12 +39,26 @@ interface GraphState {
   searchKeyword: string
   categoryFilter: string
   loading: boolean
+  paletteOpen: boolean
 
-  // Actions
+  // 撤销/重做
+  past: Snapshot[]
+  future: Snapshot[]
+
+  // Actions - 数据
   setObservations: (obs: Observation[]) => void
   setDailyLogs: (logs: MarkdownMemoryEntry[]) => void
-  setNodes: (nodes: Node[]) => void
-  setEdges: (edges: Edge[]) => void
+
+  // Actions - 节点/边（带历史记录）
+  setNodes: (nodes: Node[], skipHistory?: boolean) => void
+  setEdges: (edges: Edge[], skipHistory?: boolean) => void
+  pushSnapshot: () => void
+  undo: () => void
+  redo: () => void
+  canUndo: () => boolean
+  canRedo: () => boolean
+
+  // Actions - UI
   selectNode: (nodeId: string | null) => void
   openContextMenu: (nodeId: string, x: number, y: number) => void
   closeContextMenu: () => void
@@ -39,10 +69,13 @@ interface GraphState {
   setSearchKeyword: (keyword: string) => void
   setCategoryFilter: (filter: string) => void
   setLoading: (loading: boolean) => void
+  togglePalette: () => void
+  setPaletteOpen: (open: boolean) => void
 
-  // 派生
-  getSelectedNode: () => Node | null
-  getFilteredNodes: () => Node[]
+  // Actions - 持久化
+  saveLayout: () => void
+  loadLayout: () => { nodes: Node[]; edges: Edge[] } | null
+  clearLayout: () => void
 }
 
 export const useGraphStore = create<GraphState>((set, get) => ({
@@ -58,52 +91,105 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   searchKeyword: '',
   categoryFilter: 'all',
   loading: true,
+  paletteOpen: false,
+  past: [],
+  future: [],
 
-  // Actions
+  // 数据
   setObservations: (observations) => set({ observations }),
   setDailyLogs: (dailyLogs) => set({ dailyLogs }),
-  setNodes: (nodes) => set({ nodes }),
-  setEdges: (edges) => set({ edges }),
 
+  // 节点/边（带历史）
+  setNodes: (nodes, skipHistory = false) => {
+    const state = get()
+    if (!skipHistory) {
+      const snapshot: Snapshot = { nodes: state.nodes, edges: state.edges }
+      const past = [...state.past, snapshot].slice(-MAX_HISTORY)
+      set({ nodes, past, future: [] })
+    } else {
+      set({ nodes })
+    }
+  },
+
+  setEdges: (edges, skipHistory = false) => {
+    const state = get()
+    if (!skipHistory) {
+      const snapshot: Snapshot = { nodes: state.nodes, edges: state.edges }
+      const past = [...state.past, snapshot].slice(-MAX_HISTORY)
+      set({ edges, past, future: [] })
+    } else {
+      set({ edges })
+    }
+  },
+
+  pushSnapshot: () => {
+    const { nodes, edges, past } = get()
+    const snapshot: Snapshot = { nodes: [...nodes], edges: [...edges] }
+    set({ past: [...past, snapshot].slice(-MAX_HISTORY), future: [] })
+  },
+
+  undo: () => {
+    const { past, nodes, edges } = get()
+    if (past.length === 0) return
+    const prev = past[past.length - 1]
+    const current: Snapshot = { nodes, edges }
+    set({
+      nodes: prev.nodes,
+      edges: prev.edges,
+      past: past.slice(0, -1),
+      future: [current, ...get().future],
+    })
+  },
+
+  redo: () => {
+    const { future, nodes, edges } = get()
+    if (future.length === 0) return
+    const next = future[0]
+    const current: Snapshot = { nodes, edges }
+    set({
+      nodes: next.nodes,
+      edges: next.edges,
+      past: [...get().past, current],
+      future: future.slice(1),
+    })
+  },
+
+  canUndo: () => get().past.length > 0,
+  canRedo: () => get().future.length > 0,
+
+  // UI
   selectNode: (nodeId) => set({ selectedNodeId: nodeId, detailDrawerOpen: nodeId !== null }),
-
   openContextMenu: (nodeId, x, y) => set({ contextMenu: { nodeId, x, y } }),
   closeContextMenu: () => set({ contextMenu: null }),
-
   openEdgeContextMenu: (edgeId, x, y) => set({ edgeContextMenu: { edgeId, x, y } }),
   closeEdgeContextMenu: () => set({ edgeContextMenu: null }),
-
   openDetailDrawer: () => set({ detailDrawerOpen: true }),
   closeDetailDrawer: () => set({ detailDrawerOpen: false, selectedNodeId: null }),
-
   setSearchKeyword: (searchKeyword) => set({ searchKeyword }),
   setCategoryFilter: (categoryFilter) => set({ categoryFilter }),
   setLoading: (loading) => set({ loading }),
+  togglePalette: () => set(s => ({ paletteOpen: !s.paletteOpen })),
+  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
 
-  // 派生
-  getSelectedNode: () => {
-    const { nodes, selectedNodeId } = get()
-    return nodes.find(n => n.id === selectedNodeId) ?? null
+  // 持久化
+  saveLayout: () => {
+    const { nodes, edges } = get()
+    try {
+      const data = JSON.stringify({ nodes, edges, savedAt: Date.now() })
+      localStorage.setItem(STORAGE_KEY, data)
+    } catch {}
   },
 
-  getFilteredNodes: () => {
-    const { nodes, searchKeyword, categoryFilter } = get()
-    return nodes.map(node => {
-      let visible = true
+  loadLayout: () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return null
+      const data = JSON.parse(raw)
+      return { nodes: data.nodes || [], edges: data.edges || [] }
+    } catch { return null }
+  },
 
-      // 搜索过滤
-      if (searchKeyword) {
-        const kw = searchKeyword.toLowerCase()
-        const content = (node.data.content || node.data.title || '').toLowerCase()
-        visible = content.includes(kw)
-      }
-
-      // 分类过滤
-      if (visible && categoryFilter !== 'all' && node.type === 'observation') {
-        visible = node.data.category === categoryFilter
-      }
-
-      return { ...node, hidden: !visible }
-    })
+  clearLayout: () => {
+    try { localStorage.removeItem(STORAGE_KEY) } catch {}
   },
 }))
