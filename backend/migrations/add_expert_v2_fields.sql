@@ -9,7 +9,7 @@ ALTER TABLE expert_team
 
 -- ─── Expert 新增字段 ───
 ALTER TABLE expert
-    ADD COLUMN goal TEXT NOT NULL COMMENT '专家目标 — 驱动决策方向' AFTER avatar,
-    ADD COLUMN backstory TEXT NOT NULL COMMENT '专家背景 — 丰富角色人格' AFTER goal,
+    ADD COLUMN goal VARCHAR(500) NOT NULL DEFAULT '' COMMENT '专家目标 — 驱动决策方向' AFTER avatar,
+    ADD COLUMN backstory VARCHAR(1000) NOT NULL DEFAULT '' COMMENT '专家背景 — 丰富角色人格' AFTER goal,
     ADD COLUMN is_delegation_allowed TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '允许委派: 1=是 0=否' AFTER tools_json,
     ADD COLUMN max_execution_time INT UNSIGNED NOT NULL DEFAULT 120 COMMENT '最大执行时间（秒）' AFTER is_delegation_allowed;
