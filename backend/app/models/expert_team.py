@@ -84,6 +84,7 @@ class ExpertTeamRun(BaseModel):
     started_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="开始时间")
     finished_at = Column(DateTime, nullable=False, default=datetime(2000, 1, 1), comment="完成时间")
     duration_ms = Column(Integer, default=0, comment="执行耗时")
+    progress_json = Column(JSON, nullable=False, default=list, comment="执行检查点记录（断点恢复 + 回放）")
 
     __table_args__ = (
         Index("idx_expert_team_run_team_status", "team_id", "run_status"),

@@ -141,6 +141,7 @@ class ExpertTeamRunOut(CamelModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     duration_ms: int
+    progress_json: Optional[List[dict]] = None
     created_at: Optional[datetime] = None
 
 

@@ -92,8 +92,77 @@ export async function bindExpertsToTeam(teamId: number, data: ExpertTeamBindExpe
 
 // ─── 执行与运行记录 ─────────────────────────────────────
 
-export async function executeExpertTeam(teamId: number, input: ExpertTeamExecuteInput): Promise<ExpertTeamExecuteResult> {
-  return extractData(await apiClient.post(`/expert_teams/${teamId}/execute`, input))
+export interface ExpertTeamSSEEvent {
+  type: string
+  expertName?: string
+  expertRole?: string
+  avatar?: string
+  content?: string
+  subtask?: string
+  durationMs?: number
+  runId?: number
+  round?: number
+  message?: string
+  status?: string
+  output?: string
+}
+
+/**
+ * 执行专家团 — SSE 流式返回
+ * 后端返回 text/event-stream，前端逐事件处理
+ */
+export async function executeExpertTeam(
+  teamId: number,
+  input: ExpertTeamExecuteInput,
+  onEvent: (event: ExpertTeamSSEEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = localStorage.getItem('beautiful-elf:auth_token')
+  const base = (apiClient.defaults.baseURL || '').replace(/\/+$/, '')
+  const url = `${base}/expert_teams/${teamId}/execute`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(input),
+    signal,
+  })
+
+  if (!res.ok) {
+    throw new Error(`专家团执行失败: ${res.status} ${res.statusText}`)
+  }
+
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('无法读取 SSE 流')
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const event = JSON.parse(line.slice(6)) as ExpertTeamSSEEvent
+          onEvent(event)
+        } catch {
+          // 心跳行或无效 JSON，跳过
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
 }
 
 export async function fetchExpertTeamRuns(

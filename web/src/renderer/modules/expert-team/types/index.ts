@@ -146,7 +146,7 @@ export interface DiscussionMessage {
 // ─── 运行记录 ────────────────────────────────────────────
 
 /** 运行状态 */
-export type ExpertRunStatus = 0 | 1 | 2 | 3 | 4 // 待执行 | 运行中 | 已完成 | 失败 | 已取消
+export type ExpertRunStatus = 0 | 1 | 2 | 3 | 4 | 5 // 待执行 | 运行中 | 已完成 | 失败 | 已取消 | 暂停等待审核
 
 /** 运行记录 */
 export interface ExpertTeamRun {
@@ -164,6 +164,7 @@ export interface ExpertTeamRun {
   startedAt: string | null
   finishedAt: string | null
   durationMs: number
+  progressJson: Record<string, unknown>[] | null
   createdAt: string | null
 }
 
@@ -201,7 +202,7 @@ export interface ExpertTeamTemplate {
 
 // ─── 状态映射 ────────────────────────────────────────────
 
-// ─── WebSocket 实时事件类型 ───────────────────────────────
+// ─── SSE 实时事件类型 ───────────────────────────────────
 
 /** 专家状态事件 */
 export interface ExpertStatusEvent {
@@ -267,6 +268,7 @@ export const EXPERT_RUN_STATUS_MAP: Record<
   2: { label: '已完成', color: 'success' },
   3: { label: '失败', color: 'error' },
   4: { label: '已取消', color: 'warning' },
+  5: { label: '暂停审核', color: 'processing' },
 }
 
 /** 专家角色预设颜色 */

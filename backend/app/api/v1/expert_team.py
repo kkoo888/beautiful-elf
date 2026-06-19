@@ -1,6 +1,9 @@
 """专家团工作流 API — 符合 API 设计规范"""
+import asyncio
+import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -15,6 +18,10 @@ from app.schemas.expert_team import (
     PolishPromptRequest,
 )
 from app.schemas.response import ApiResult, ApiPageResult
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+SSE_HEARTBEAT_INTERVAL = 15
 
 router = APIRouter()
 service = ExpertTeamService()
@@ -132,6 +139,90 @@ async def unbind_expert_skill(
     return ApiResult(message="解绑成功")
 
 
+# ─── 专家知识源 ──────────────────────────────────────────
+
+@router.post("/experts/{expert_id}/knowledge")
+async def add_expert_knowledge(
+    expert_id: int,
+    data: dict,
+):
+    """添加知识到专家知识库
+
+    Body: {"content": "知识内容", "source": "来源标识"}
+    """
+    content = data.get("content", "")
+    source = data.get("source", "")
+    if not content:
+        return ApiResult(code=400, message="content 不能为空")
+
+    from app.agent.expert_team.knowledge import KNOWLEDGE_COLLECTION
+    from app.mappers.qdrant_mapper import QdrantMapper
+    from app.core.embeddings import get_embeddings
+    import uuid
+
+    qdrant = QdrantMapper()
+    qdrant.ensure_collection(KNOWLEDGE_COLLECTION)
+    qdrant.ensure_payload_index(KNOWLEDGE_COLLECTION, "expert_id", "keyword")
+
+    embeddings = get_embeddings()
+    vector = await embeddings.aembed_query(content)
+
+    point_id = str(uuid.uuid4())
+    qdrant.upsert(
+        collection=KNOWLEDGE_COLLECTION,
+        point_id=point_id,
+        vector=vector,
+        payload={
+            "content": content,
+            "source": source,
+            "expert_id": str(expert_id),
+        },
+    )
+    return ApiResult(data={"id": point_id, "message": "知识已添加"})
+
+
+@router.get("/experts/{expert_id}/knowledge")
+async def list_expert_knowledge(
+    expert_id: int,
+):
+    """查询专家知识库"""
+    from app.agent.expert_team.knowledge import KNOWLEDGE_COLLECTION
+    from app.mappers.qdrant_mapper import QdrantMapper
+
+    qdrant = QdrantMapper()
+    info = qdrant.collection_info(KNOWLEDGE_COLLECTION)
+    if not info:
+        return ApiResult(data=[])
+
+    results, _ = qdrant.scroll(
+        collection=KNOWLEDGE_COLLECTION,
+        filter_payload={"expert_id": str(expert_id)},
+        limit=50,
+    )
+    items = [{"id": r["id"], **(r.get("payload") or {})} for r in results]
+    return ApiResult(data=items)
+
+
+@router.delete("/knowledge/{point_id}")
+async def delete_expert_knowledge(
+    point_id: str,
+):
+    """删除专家知识"""
+    from app.agent.expert_team.knowledge import KNOWLEDGE_COLLECTION
+    from app.mappers.qdrant_mapper import QdrantMapper
+
+    qdrant = QdrantMapper()
+    try:
+        qdrant._client.delete(
+            collection_name=KNOWLEDGE_COLLECTION,
+            points_selector=[point_id],
+        )
+    except Exception as e:
+        logger.warning(f"删除知识失败: {e}")
+        return ApiResult(code=500, message=f"删除失败: {e}")
+    return ApiResult(message="删除成功")
+
+
 # ─── 运行记录（具体路由在前，通配在后）───────────────────
 
 @router.get("/runs/all", response_model=ApiPageResult[ExpertTeamRunOut])
@@ -230,15 +321,21 @@ async def bind_experts_to_team(
 
 # ─── 执行与运行记录 ─────────────────────────────────────
 
-@router.post("/{team_id}/execute", response_model=ApiResult)
+@router.post("/{team_id}/execute")
 async def execute_expert_team(
     team_id: int,
     data: ExpertTeamExecuteRequest,
     db: AsyncSession = Depends(get_db),
-) -> ApiResult:
-    """执行专家团工作流"""
-    result = await service.execute_team(db, team_id, data)
-    return ApiResult(data=result)
+):
+    """执行专家团工作流 — SSE 流式推送"""
+    return StreamingResponse(
+        _stream_expert_team(service, db, team_id, data),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/{team_id}/runs", response_model=ApiPageResult[ExpertTeamRunOut])
@@ -254,6 +351,58 @@ async def list_expert_team_runs(
     return ApiPageResult(data=items, total=total, page=pagination.page, page_size=pagination.page_size)
 
 
+# ─── 人类审核 ──────────────────────────────────────────
+
+@router.post("/runs/{run_id}/review")
+async def review_expert_run(
+    run_id: int,
+    data: dict,
+):
+    """人类审核 — 审批/拒绝/修改专家团执行
+
+    Body: {"action": "approve|reject|modify", "feedback": "审核意见", "modifications": {}}
+    """
+    from app.agent.expert_team.checkpoint import resume_from_review, HumanReviewRequest
+
+    review = HumanReviewRequest(
+        run_id=run_id,
+        action=data.get("action", "approve"),
+        feedback=data.get("feedback", ""),
+        modifications=data.get("modifications", {}),
+    )
+
+    from app.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        success = await resume_from_review(db, run_id, review)
+
+    if success:
+        return ApiResult(data={"status": "resumed", "message": "已恢复执行"})
+    else:
+        return ApiResult(data={"status": "stopped", "message": "已停止执行"})
+
+
+@router.get("/runs/{run_id}/checkpoints")
+async def get_run_checkpoints(
+    run_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """获取运行检查点列表（执行回放）"""
+    from app.repository.expert_team_repo import ExpertTeamRepository
+    repo = ExpertTeamRepository()
+    run = await repo.find_run_by_id(db, run_id)
+    if not run:
+        return ApiResult(code=404, message="运行记录不存在")
+
+    progress = run.progress_json or []
+    if isinstance(progress, str):
+        try:
+            progress = json.loads(progress)
+        except (json.JSONDecodeError, TypeError):
+            progress = []
+
+    return ApiResult(data=progress)
+
+
 # ─── 角色执行记录 ───────────────────────────────────────
 
 @router.get("/runs/{run_id}/role-runs", response_model=ApiResult)
@@ -264,3 +413,52 @@ async def list_role_runs(
     """查询某次运行的所有角色执行记录"""
     runs = await service.list_role_runs(db, run_id)
     return ApiResult(data=runs)
+
+
+# ─── SSE 流式推送 ────────────────────────────────────────
+
+async def _stream_expert_team(service: ExpertTeamService, db: AsyncSession,
+                               team_id: int, data: ExpertTeamExecuteRequest):
+    """专家团 SSE 流式执行 — 复用 chat.py 的 Queue + 心跳模式"""
+    _queue: asyncio.Queue = asyncio.Queue()
+    _stream_done = asyncio.Event()
+
+    async def _heartbeat():
+        try:
+            while not _stream_done.is_set():
+                await asyncio.sleep(SSE_HEARTBEAT_INTERVAL)
+                if not _stream_done.is_set():
+                    await _queue.put(": heartbeat\n\n")
+        except asyncio.CancelledError:
+            pass
+
+    async def _produce():
+        try:
+            async def on_progress(event: dict):
+                await _queue.put(f"data: {json.dumps(event, ensure_ascii=False)}\n\n")
+
+            result = await service.execute_team(db, team_id, data, on_progress=on_progress)
+            elapsed = result.get("durationMs", 0)
+            await _queue.put(
+                f"data: {json.dumps({'type': 'done', 'durationMs': elapsed, 'runId': result.get('runId')}, ensure_ascii=False)}\n\n"
+            )
+        except Exception as e:
+            logger.error(f"专家团执行失败: {e}", exc_info=True)
+            await _queue.put(
+                f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+            )
+        finally:
+            _stream_done.set()
+            await _queue.put(None)
+
+    heartbeat_task = asyncio.create_task(_heartbeat())
+    producer_task = asyncio.create_task(_produce())
+
+    try:
+        while True:
+            item = await _queue.get()
+            if item is None:
+                break
+            yield item
+    finally:
+        heartbeat_task.cancel()

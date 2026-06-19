@@ -1,7 +1,7 @@
 /** 专家团工作流状态管理 hook */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import type {
   ExpertTeam,
   ExpertTeamFormInput,
@@ -33,6 +33,7 @@ import {
   executeExpertTeam,
   fetchExpertTeamRuns,
   fetchAllExpertRuns,
+  type ExpertTeamSSEEvent,
 } from '../services/expert-team-api'
 
 const TEAM_KEY = ['expert-teams']
@@ -86,8 +87,14 @@ export interface UseExpertTeamReturn {
   setSelectedExpertId: (id: number | null) => void
 
   // 执行
-  executeTeamMut: (teamId: number, input: ExpertTeamExecuteInput) => Promise<ExpertTeamExecuteResult>
+  executeTeamMut: (teamId: number, input: ExpertTeamExecuteInput) => Promise<void>
   isExecuting: boolean
+  // SSE 实时事件
+  liveEvents: ExpertTeamSSEEvent[]
+  liveExperts: Map<string, { name: string; role: string; avatar: string; status: string; thinking: string; durationMs: number }>
+  liveStatus: string
+  liveOutput: string
+  resetLive: () => void
 
   // 状态
   isMutating: boolean
@@ -242,12 +249,132 @@ export function useExpertTeam(): UseExpertTeamReturn {
     onSuccess: refreshSkills,
   })
 
+  // SSE 实时状态
+  const [liveEvents, setLiveEvents] = useState<ExpertTeamSSEEvent[]>([])
+  const [liveExperts, setLiveExperts] = useState<Map<string, { name: string; role: string; avatar: string; status: string; thinking: string; durationMs: number }>>(new Map())
+  const [liveStatus, setLiveStatus] = useState<string>('idle')
+  const [liveOutput, setLiveOutput] = useState<string>('')
+  const abortRef = useRef<AbortController | null>(null)
+
+  const resetLive = useCallback(() => {
+    setLiveEvents([])
+    setLiveExperts(new Map())
+    setLiveStatus('idle')
+    setLiveOutput('')
+  }, [])
+
   // 执行 mutation
-  const executeMut = useMutation({
-    mutationFn: ({ teamId, input }: { teamId: number; input: ExpertTeamExecuteInput }) =>
-      executeExpertTeam(teamId, input),
-    onSuccess: refreshRuns,
-  })
+  const [isExecuting, setIsExecuting] = useState(false)
+
+  const executeTeamMut = useCallback(
+    async (teamId: number, input: ExpertTeamExecuteInput) => {
+      setIsExecuting(true)
+      resetLive()
+      setLiveStatus('running')
+      abortRef.current = new AbortController()
+
+      try {
+        await executeExpertTeam(teamId, input, (event) => {
+          setLiveEvents((prev) => [...prev, event])
+
+          if (event.type === 'expert_start') {
+            const key = `${event.expertName}-${event.expertRole}`
+            setLiveExperts((prev) => {
+              const next = new Map(prev)
+              next.set(key, {
+                name: event.expertName || '',
+                role: event.expertRole || '',
+                avatar: event.avatar || '🤖',
+                status: 'running',
+                thinking: '',
+                durationMs: 0,
+              })
+              return next
+            })
+            setLiveStatus('discussing')
+          } else if (event.type === 'expert_done') {
+            const key = `${event.expertName}-${event.expertRole}`
+            setLiveExperts((prev) => {
+              const next = new Map(prev)
+              const existing = next.get(key)
+              next.set(key, {
+                name: event.expertName || '',
+                role: event.expertRole || '',
+                avatar: event.avatar || '🤖',
+                status: 'done',
+                thinking: existing?.thinking || '',
+                durationMs: event.durationMs || 0,
+              })
+              return next
+            })
+          } else if (event.type === 'expert_thinking') {
+            const key = `${event.expertName}-${event.expertRole}`
+            setLiveExperts((prev) => {
+              const next = new Map(prev)
+              const existing = next.get(key)
+              next.set(key, {
+                name: event.expertName || '',
+                role: event.expertRole || '',
+                avatar: event.avatar || '🤖',
+                status: existing?.status || 'running',
+                thinking: event.content || '',
+                durationMs: event.durationMs || existing?.durationMs || 0,
+              })
+              return next
+            })
+          } else if (event.type === 'pm_done') {
+            setLiveStatus('orchestrating')
+            // PM 开始分析
+            const pmKey = `${event.expertName || 'PM'}-PM/组长`
+            setLiveExperts((prev) => {
+              const next = new Map(prev)
+              next.set(pmKey, {
+                name: event.expertName || 'PM',
+                role: 'PM/组长',
+                avatar: '🎯',
+                status: 'running',
+                thinking: event.content || '',
+                durationMs: 0,
+              })
+              return next
+            })
+          } else if (event.type === 'pm_eval') {
+            setLiveStatus('synthesizing')
+            const pmKey = `${event.expertName || 'PM'}-PM/组长`
+            setLiveExperts((prev) => {
+              const next = new Map(prev)
+              const existing = next.get(pmKey)
+              next.set(pmKey, {
+                name: event.expertName || 'PM',
+                role: 'PM/组长',
+                avatar: '🎯',
+                status: 'done',
+                thinking: event.content || existing?.thinking || '',
+                durationMs: existing?.durationMs || 0,
+              })
+              return next
+            })
+          } else if (event.type === 'pm_report') {
+            setLiveOutput(event.content || '')
+            setLiveStatus('completed')
+          } else if (event.type === 'done') {
+            setLiveStatus('completed')
+            refreshRuns()
+          } else if (event.type === 'error') {
+            setLiveStatus('failed')
+          }
+        }, abortRef.current.signal)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setLiveStatus('failed')
+          throw err
+        }
+      } finally {
+        setIsExecuting(false)
+      }
+    },
+    [refreshRuns, resetLive],
+  )
 
   // 包装函数 — 参数展平
   const createTeamMut = useCallback(
@@ -304,11 +431,7 @@ export function useExpertTeam(): UseExpertTeamReturn {
     [unbindSkillMutation]
   )
 
-  const executeTeamMut = useCallback(
-    (teamId: number, input: ExpertTeamExecuteInput) =>
-      executeMut.mutateAsync({ teamId, input }),
-    [executeMut]
-  )
+
 
   const isMutating =
     createTeamMutation.isPending ||
@@ -350,11 +473,17 @@ export function useExpertTeam(): UseExpertTeamReturn {
     selectedExpertId,
     setSelectedExpertId,
     executeTeamMut,
-    isExecuting: executeMut.isPending,
+    isExecuting,
     isMutating,
     refreshTeams,
     refreshExperts,
     refreshRuns,
     refreshSkills,
+    // SSE 实时状态
+    liveEvents,
+    liveExperts,
+    liveStatus,
+    liveOutput,
+    resetLive,
   }
 }

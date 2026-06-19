@@ -6,15 +6,12 @@
   3. PM 评估打分
   4. PM 汇总最终报告
 
-WebSocket 实时推送:
-  - expert_status: 专家状态变更（开始/完成/失败）
-  - expert_thinking: 专家推理过程
-  - expert_progress: 任务进度更新
+实时推送:
+  通过 on_progress 回调推送 SSE 事件（expert_status / expert_thinking / expert_progress）
 """
 import json
 import logging
 import re
-import uuid
 from typing import List, Optional, Tuple, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,22 +28,6 @@ from app.schemas.expert_team import (
 from app.core.exceptions import RecordNotFoundError
 
 logger = logging.getLogger(__name__)
-
-
-# ─── WebSocket 实时推送辅助 ──────────────────────────────
-
-async def _ws_broadcast(team_id: int, event_type: str, payload: dict):
-    """广播专家团执行事件到 WebSocket"""
-    try:
-        from app.core.websocket_manager import ws_manager
-        await ws_manager.broadcast_all({
-            "type": event_type,
-            "payload": {**payload, "teamId": team_id},
-            "timestamp": int(datetime.now().timestamp() * 1000),
-            "eventId": str(uuid.uuid4()),
-        })
-    except Exception as e:
-        logger.debug(f"WebSocket 推送失败（非致命）: {e}")
 
 
 # ─── LLM 调用辅助函数 ──────────────────────────────────
@@ -468,11 +449,6 @@ class ExpertTeamService:
                 expert_role = member["member_role"]
 
                 # 推送：专家开始
-                await _ws_broadcast(team_id, "expert_status", {
-                    "expertName": expert_name, "expertRole": expert_role,
-                    "avatar": member.get("avatar", "🤖"),
-                    "status": "running", "round": round_num, "runId": run.id,
-                })
                 if on_progress:
                     await on_progress({
                         "type": "expert_start", "expertName": expert_name,
@@ -525,9 +501,58 @@ class ExpertTeamService:
                     context_section = f"\n\n## 之前讨论\n{context_text}" if context_text else ""
                     feedback_section = f"\n\n## PM 改进建议（请务必参考）\n{feedback_text}" if feedback_text else ""
 
-                    # 构建专家 prompt（注入技能 + 工具 + 委派 + 上下文 + 反馈）
+                    # ── 进化: Reasoning + Planning + 知识源 + 记忆召回 ──
+                    reasoning_text = ""
+                    plan_text = ""
+                    knowledge_text = ""
+                    memory_text = ""
+
+                    expert_provider_id = member.get("provider_id") or default_provider_id
+                    expert_model_name = member.get("model_name") or default_model_name
+                    expert_temperature = float(member.get("temperature") or 0.7)
+                    expert_goal = member.get("goal", "")
+
+                    if _delegation_depth == 0:  # 仅主任务执行，委派不注入
+                        # Reasoning: 执行前反思
+                        from app.agent.expert_team.reasoning import generate_reasoning, format_reasoning_for_prompt
+                        if on_progress:
+                            await on_progress({"type": "expert_thinking", "expertName": expert_name, "expertRole": expert_role, "avatar": member.get("avatar", "🤖"), "round": round_num, "content": "🔍 正在分析任务...", "runId": run.id, "durationMs": 0})
+                        reasoning = await generate_reasoning(
+                            db, expert_provider_id, expert_model_name,
+                            expert_name, expert_role, expert_goal, subtask,
+                            skill_text, context_text, temperature=0.3,
+                        )
+                        reasoning_text = format_reasoning_for_prompt(reasoning)
+
+                        # Tree of Thoughts: 多路径探索
+                        from app.agent.expert_team.tot import explore_thoughts, format_tot_for_prompt
+                        tot_evaluation = await explore_thoughts(
+                            db, expert_provider_id, expert_model_name,
+                            expert_name, expert_role, subtask, context_text,
+                        )
+                        tot_text = format_tot_for_prompt(tot_evaluation)
+
+                        # Planning: 生成执行计划
+                        from app.agent.expert_team.planner import generate_expert_plan, format_plan_for_prompt
+                        if on_progress:
+                            await on_progress({"type": "expert_thinking", "expertName": expert_name, "expertRole": expert_role, "avatar": member.get("avatar", "🤖"), "round": round_num, "content": "📋 正在生成执行计划...", "runId": run.id, "durationMs": 0})
+                        plan = await generate_expert_plan(
+                            db, expert_provider_id, expert_model_name,
+                            expert_name, expert_role, expert_goal, subtask, context_text,
+                        )
+                        plan_text = format_plan_for_prompt(plan)
+
+                        # 知识源: 检索相关知识
+                        from app.agent.expert_team.knowledge import inject_expert_knowledge
+                        knowledge_text = await inject_expert_knowledge(db, member["id"], subtask)
+
+                        # 记忆: 召回相关经验
+                        from app.agent.expert_team.memory import recall_experience
+                        memory_text = await recall_experience(member["id"], subtask)
+
+                    # 构建专家 prompt（注入全部增强内容）
                     expert_system = member.get("system_prompt") or f"你是{expert_name}，角色是{expert_role}。"
-                    expert_prompt = f"""{expert_system}{skill_text}{tool_usage_text}{delegation_text}
+                    expert_prompt = f"""{expert_system}{skill_text}{tool_usage_text}{delegation_text}{tot_text}{reasoning_text}{plan_text}{knowledge_text}{memory_text}
 
 ## 你的任务
 {subtask}
@@ -537,22 +562,47 @@ class ExpertTeamService:
 
 请从你的专业角度，完成以上任务。"""
 
-                    expert_provider_id = member.get("provider_id") or default_provider_id
-                    expert_model_name = member.get("model_name") or default_model_name
-                    expert_temperature = float(member.get("temperature") or 0.7)
-
                     exp_start = datetime.now()
                     try:
-                        # ── 改进3: 执行超时 ──
+                        # ── 改进3: 执行（Self-Consistency 多路径投票，首轮启用）──
                         max_execution_time = int(member.get("max_execution_time") or 120)
-                        content, tokens = await asyncio.wait_for(
-                            _call_llm(
+                        if _delegation_depth == 0 and round_num == 1:
+                            from app.agent.expert_team.consistency import execute_with_self_consistency
+                            if on_progress:
+                                await on_progress({"type": "expert_thinking", "expertName": expert_name, "expertRole": expert_role, "avatar": member.get("avatar", "🤖"), "round": round_num, "content": "🔄 Self-Consistency 多路径执行...", "runId": run.id, "durationMs": 0})
+                            content, tokens, all_paths = await execute_with_self_consistency(
                                 db, expert_provider_id, expert_model_name, expert_prompt,
-                                temperature=expert_temperature,
-                            ),
-                            timeout=max_execution_time,
-                        )
+                                n_paths=3, base_temperature=0.3, timeout_seconds=max_execution_time,
+                            )
+                        else:
+                            content, tokens = await asyncio.wait_for(
+                                _call_llm(
+                                    db, expert_provider_id, expert_model_name, expert_prompt,
+                                    temperature=expert_temperature,
+                                ),
+                                timeout=max_execution_time,
+                            )
                         duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+
+                        # ── 进化: Guardrail 质量门禁 ──
+                        if _delegation_depth == 0:
+                            from app.agent.expert_team.guardrail import validate_output, retry_with_feedback
+                            if on_progress:
+                                await on_progress({"type": "expert_thinking", "expertName": expert_name, "expertRole": expert_role, "avatar": member.get("avatar", "🤖"), "round": round_num, "content": "✅ 正在校验输出质量...", "runId": run.id, "durationMs": 0})
+                            guardrail = await validate_output(
+                                db, expert_provider_id, expert_model_name,
+                                expert_name, subtask, content,
+                            )
+                            if not guardrail.passed:
+                                logger.info(f"专家 {expert_name} Guardrail 未通过: {guardrail.errors}，自动重试")
+                                content, retry_count = await retry_with_feedback(
+                                    db, expert_provider_id, expert_model_name,
+                                    expert_name, expert_role, subtask,
+                                    expert_prompt, content,
+                                    guardrail.errors, guardrail.suggestions,
+                                )
+                                if retry_count > 0:
+                                    logger.info(f"专家 {expert_name} Guardrail 重试 {retry_count} 次后通过")
 
                         # ── 改进2: 检测并处理委派请求（最多1层）──
                         if (member.get("is_delegation_allowed") and _delegation_depth < 1
@@ -574,18 +624,49 @@ class ExpertTeamService:
                         # 记录最终结果（只调用一次 _finish_role_run）
                         await self._finish_role_run(db, role_run.id, status=2, output=content, tokens=tokens)
 
-                        # 推送：专家完成
-                        await _ws_broadcast(team_id, "expert_thinking", {
-                            "expertName": expert_name, "expertRole": expert_role,
-                            "avatar": member.get("avatar", "🤖"),
-                            "round": round_num, "content": content, "runId": run.id, "durationMs": duration_ms,
-                        })
-                        await _ws_broadcast(team_id, "expert_status", {
-                            "expertName": expert_name, "expertRole": expert_role,
-                            "avatar": member.get("avatar", "🤖"),
-                            "status": "done", "round": round_num, "runId": run.id, "durationMs": duration_ms,
-                        })
+                        # ── 进化: Reflexion 事后反思 + 事实提取 + 经验存储 ──
+                        if _delegation_depth == 0 and content:
+                            try:
+                                from app.agent.expert_team.reflexion import generate_reflexion, store_reflexion_as_memory
+                                from app.agent.expert_team.memory import extract_facts, store_experience
+
+                                # Reflexion: 事后反思
+                                try:
+                                    _gp = guardrail.passed
+                                    _ge = guardrail.errors
+                                except (NameError, AttributeError):
+                                    _gp = True
+                                    _ge = []
+                                reflexion = await generate_reflexion(
+                                    db, expert_provider_id, expert_model_name,
+                                    expert_name, expert_role, subtask, content,
+                                    guardrail_passed=_gp,
+                                    guardrail_errors=_ge,
+                                    duration_ms=duration_ms,
+                                )
+                                if reflexion:
+                                    # 反思存入记忆
+                                    await store_reflexion_as_memory(member["id"], team_id, reflexion, db=db)
+                                    logger.info(f"专家 {expert_name} 反思完成: success={reflexion.success}")
+
+                                # 事实提取 + 经验存储
+                                facts = await extract_facts(
+                                    db, expert_provider_id, expert_model_name,
+                                    expert_name, expert_role, subtask, content,
+                                )
+                                if facts:
+                                    stored = await store_experience(member["id"], team_id, facts, db=db)
+                                    logger.info(f"专家 {expert_name} 存储 {stored} 条经验")
+                            except Exception as e:
+                                logger.warning(f"反思/经验存储失败（非致命）: {e}")
+
+                        # 推送：专家思考 + 完成
                         if on_progress:
+                            await on_progress({
+                                "type": "expert_thinking", "expertName": expert_name,
+                                "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
+                                "round": round_num, "content": content, "runId": run.id, "durationMs": duration_ms,
+                            })
                             await on_progress({
                                 "type": "expert_done", "expertName": expert_name,
                                 "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
@@ -602,11 +683,6 @@ class ExpertTeamService:
                         duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
                         timeout_msg = f"[执行超时: 超过 {max_execution_time} 秒]"
                         await self._finish_role_run(db, role_run.id, status=3, error=timeout_msg)
-                        await _ws_broadcast(team_id, "expert_status", {
-                            "expertName": expert_name, "expertRole": expert_role,
-                            "avatar": member.get("avatar", "🤖"),
-                            "status": "failed", "round": round_num, "runId": run.id, "durationMs": duration_ms,
-                        })
                         return {
                             "expert_id": member["id"], "expert_name": expert_name,
                             "expert_role": expert_role, "subtask": subtask,
@@ -677,10 +753,6 @@ class ExpertTeamService:
             # ─────────────────────────────────────────
             async def _pm_evaluate(expert_results: list[dict], round_num: int) -> dict:
                 """PM 评估专家结果，返回 {overall_pass, scores, reason}"""
-                await _ws_broadcast(team_id, "expert_status", {
-                    "expertName": leader.member_name, "expertRole": "PM/组长",
-                    "status": "running", "round": round_num, "runId": run.id,
-                })
 
                 results_text = "\n\n".join([
                     f"### {o['expert_name']}({o['expert_role']}) — 子任务: {o['subtask']}\n{o['output']}"
@@ -705,14 +777,6 @@ class ExpertTeamService:
                     timeout=120,
                 )
 
-                await _ws_broadcast(team_id, "expert_thinking", {
-                    "expertName": leader.member_name, "expertRole": "PM/组长",
-                    "round": round_num, "content": eval_content, "runId": run.id,
-                })
-                await _ws_broadcast(team_id, "expert_status", {
-                    "expertName": leader.member_name, "expertRole": "PM/组长",
-                    "status": "done", "round": round_num, "runId": run.id,
-                })
                 if on_progress:
                     await on_progress({"type": "pm_eval", "expertName": leader.member_name, "content": eval_content})
 
@@ -721,10 +785,6 @@ class ExpertTeamService:
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             # Step 1: PM 分析任务，输出分配计划
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            await _ws_broadcast(team_id, "expert_status", {
-                "expertName": leader.member_name, "expertRole": "PM/组长",
-                "status": "running", "round": 0, "runId": run.id,
-            })
 
             if not orchestrator_prompt:
                 orchestrator_prompt = (
@@ -757,18 +817,16 @@ class ExpertTeamService:
                 "expertRole": "PM/组长", "content": plan_content,
                 "timestamp": datetime.now().isoformat(),
             })
-            await _ws_broadcast(team_id, "expert_thinking", {
-                "expertName": leader.member_name, "expertRole": "PM/组长",
-                "round": 0, "content": plan_content, "runId": run.id,
-            })
-            await _ws_broadcast(team_id, "expert_status", {
-                "expertName": leader.member_name, "expertRole": "PM/组长",
-                "status": "done", "round": 0, "runId": run.id,
-            })
             if on_progress:
                 await on_progress({"type": "pm_done", "expertName": leader.member_name, "content": plan_content})
 
             assignments = self._parse_assignments(plan_content, experts_data)
+
+            # 保存检查点：PM 分配计划完成
+            from app.agent.expert_team.checkpoint import save_checkpoint, CheckpointStep
+            await save_checkpoint(db, run.id, CheckpointStep.PM_PLAN, "pm_plan_done", {
+                "assignments": assignments, "expert_count": len(assignments),
+            })
 
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             # Step 2-4: 多轮执行 + 评估 + 返工
@@ -801,6 +859,52 @@ class ExpertTeamService:
                         "expertRole": r["expert_role"], "content": r["output"],
                         "timestamp": datetime.now().isoformat(),
                     })
+
+                # ── 进化: Multi-Agent Debate 辩论机制 ──
+                if len(round_results) >= 2:
+                    try:
+                        from app.agent.expert_team.debate import run_debate_round, revise_opinion, format_debate_for_prompt
+                        if on_progress:
+                            await on_progress({"type": "expert_thinking", "expertName": leader.member_name, "expertRole": "PM/组长", "avatar": "🎯", "round": round_num, "content": "🗣️ 专家辩论中...", "runId": run.id, "durationMs": 0})
+
+                        debate_result = await run_debate_round(
+                            db, pm_provider_id, pm_model_name, round_results,
+                        )
+
+                        if debate_result and debate_result.reviews:
+                            # 记录辩论
+                            discussion.append({
+                                "round": round_num, "expertName": "辩论记录",
+                                "expertRole": "Multi-Agent Debate",
+                                "content": format_debate_for_prompt(debate_result),
+                                "timestamp": datetime.now().isoformat(),
+                            })
+
+                            # 推送辩论结果
+                            if on_progress:
+                                await on_progress({"type": "expert_thinking", "expertName": leader.member_name, "expertRole": "PM/组长", "avatar": "🎯", "round": round_num, "content": f"🗣️ 辩论完成，共识程度: {debate_result.consensus_level:.0%}", "runId": run.id, "durationMs": 0})
+
+                            # 共识程度低时，让专家修正观点
+                            if debate_result.consensus_level < 0.7:
+                                for r in round_results:
+                                    reviews_for_expert = [rev for rev in debate_result.reviews if rev.target_name == r["expert_name"]]
+                                    if reviews_for_expert:
+                                        revised = await revise_opinion(
+                                            db, pm_provider_id, pm_model_name,
+                                            r["expert_name"], r["expert_role"],
+                                            r["output"], reviews_for_expert,
+                                        )
+                                        if revised and revised.revised_content:
+                                            r["output"] = revised.revised_content
+                                            r["revised"] = True
+                    except Exception as e:
+                        logger.warning(f"辩论机制失败（降级为无辩论）: {e}")
+
+                # 保存检查点
+                from app.agent.expert_team.checkpoint import save_checkpoint, CheckpointStep
+                await save_checkpoint(db, run.id, CheckpointStep.EXPERT_DONE, f"round_{round_num}_experts_done", {
+                    "round": round_num, "expert_count": len(round_results),
+                })
 
                 # PM 评估
                 evaluation, eval_tokens = await _pm_evaluate(round_results, round_num)
@@ -855,13 +959,6 @@ class ExpertTeamService:
             )
             total_tokens += report_tokens
 
-            await _ws_broadcast(team_id, "expert_status", {
-                "expertName": leader.member_name, "expertRole": "PM/组长",
-                "status": "done", "round": -1, "runId": run.id,
-            })
-            await _ws_broadcast(team_id, "expert_progress", {
-                "status": "completed", "runId": run.id, "output": report_content[:500],
-            })
             if on_progress:
                 await on_progress({"type": "pm_report", "content": report_content})
 

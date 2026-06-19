@@ -52,6 +52,10 @@ export default function ExpertTeamPanel() {
     refreshTeams,
     refreshExperts,
     refreshRuns,
+    liveExperts,
+    liveStatus,
+    liveOutput,
+    resetLive,
   } = useExpertTeam()
 
   const [view, setView] = useState<ViewMode>('list')
@@ -138,16 +142,17 @@ export default function ExpertTeamPanel() {
       if (!executeTeam) return
       setView('monitor')
       setActiveTab('monitor')
-      setLiveRunId(undefined)
       setLiveMaxRounds(input.maxRounds || executeTeam.maxRounds)
       setExecuteDrawerOpen(false)
 
-      const result = await executeTeamMut(executeTeam.id, input)
-      setLiveRunId(result.runId)
-      message.success(`执行完成！共 ${result.rounds} 轮讨论，耗时 ${(result.durationMs / 1000).toFixed(1)}s`)
-      refreshRuns()
+      try {
+        await executeTeamMut(executeTeam.id, input)
+        message.success('专家团执行完成')
+      } catch (err) {
+        message.error(`专家团执行失败: ${(err as Error).message || '未知错误'}`)
+      }
     },
-    [executeTeam, executeTeamMut, setActiveTab, refreshRuns]
+    [executeTeam, executeTeamMut, setActiveTab]
   )
 
   // 创建专家
@@ -300,8 +305,10 @@ export default function ExpertTeamPanel() {
           <div>
             <ExpertTeamLivePanel
               teamId={executeTeam?.id}
-              runId={liveRunId}
               maxRounds={liveMaxRounds}
+              experts={liveExperts}
+              status={liveStatus}
+              output={liveOutput}
             />
             <div style={{ marginTop: 16 }}>
               <ExpertTeamMonitor
