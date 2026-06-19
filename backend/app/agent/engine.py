@@ -610,6 +610,21 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
         except Exception as e:
             logger.debug(f"[llm_call] 成本追踪失败（不影响主流程）: {e}")
 
+        # ── Goal 模式：累加 token 使用量 ──
+        goal_tokens_delta = 0
+        try:
+            usage = getattr(response, "usage_metadata", None) or getattr(response, "usage", None)
+            if usage:
+                _pt = getattr(usage, "input_tokens", 0) or (usage.get("input_tokens", 0) if isinstance(usage, dict) else 0)
+                _ct = getattr(usage, "output_tokens", 0) or (usage.get("output_tokens", 0) if isinstance(usage, dict) else 0)
+                goal_tokens_delta = _pt + _ct
+        except Exception:
+            pass
+
+        result_update = {}
+        if goal_tokens_delta and state.get("goal_mode"):
+            result_update["goal_tokens_used"] = state.get("goal_tokens_used", 0) + goal_tokens_delta
+
         if response.tool_calls:
             tool_names = [tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "") for tc in response.tool_calls]
             writer({"step": "llm", "status": "done", "message": f"需要调用工具: {', '.join(tool_names)} ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000), "has_tools": True})
@@ -618,6 +633,7 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
                 "tool_calls": response.tool_calls,
                 "final_answer": None,
                 "is_compacted": _compacted,
+                **result_update,
             }
         writer({"step": "llm", "status": "done", "message": f"回答生成完成 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000), "has_tools": False})
         return {
@@ -625,6 +641,7 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
             "final_answer": _content_to_str(response.content),
             "tool_calls": [],
             "is_compacted": _compacted,
+            **result_update,
         }
 
     return llm_call_node

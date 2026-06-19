@@ -303,7 +303,7 @@ class AgentService:
         tools_used = []
 
         try:
-            stream = self._graph.astream_events(
+            stream = await self._graph.astream_events(
                 Command(resume=resume_data),
                 config=config,
                 version="v3",
@@ -540,9 +540,8 @@ class AgentService:
 
             # [P0] LangGraph v3 Event Streaming — 官方推荐的 typed projection API
             # 文档: https://docs.langchain.com/oss/python/langgraph/event-streaming
-            # v3 核心优势: 每个 projection（messages/values/output）独立消费，天然去重
-            # 注意: astream_events 是 async generator，不需要 await（与 resume_stream 保持一致）
-            stream = self._graph.astream_events(
+            # 注意: astream_events 返回 coroutine，需要 await 获取 async generator
+            stream = await self._graph.astream_events(
                 initial_state,
                 config=config,
                 version="v3",
