@@ -9,6 +9,7 @@ import type { MenuProps } from 'antd'
 import {
   RobotOutlined,
   ThunderboltOutlined,
+  AimOutlined,
   SendOutlined,
   StopOutlined,
   CloseOutlined,
@@ -25,6 +26,7 @@ interface SendOptions {
   expertTeamId?: number
   skillId?: number
   teamMode?: 'off' | 'auto' | 'manual'
+  goalMode?: boolean
 }
 
 interface MessageInputProps {
@@ -55,6 +57,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
   const [teamMode, setTeamMode] = useState<'off' | 'auto' | 'manual'>('off')
   const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null)
+  const [goalMode, setGoalMode] = useState(false)
 
   // 加载专家团列表
   useEffect(() => {
@@ -109,6 +112,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       options.expertTeamId = selectedTeamId
     }
     if (selectedSkillId != null) options.skillId = selectedSkillId
+    if (goalMode) options.goalMode = true
 
     onSend(trimmed, options)
     setValue('')
@@ -119,7 +123,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         textareaRef.current.style.height = 'auto'
       }
     })
-  }, [value, disabled, onSend, teamMode, selectedTeamId, selectedSkillId])
+  }, [value, disabled, onSend, teamMode, selectedTeamId, selectedSkillId, goalMode])
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = useCallback(
@@ -178,9 +182,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     } else if (info.key === 'auto') {
       setTeamMode('auto')
       setSelectedTeamId(null)
+      setGoalMode(false) // 互斥：激活专家团时关闭 Goal
     } else {
       setTeamMode('manual')
       setSelectedTeamId(Number(info.key))
+      setGoalMode(false) // 互斥：激活专家团时关闭 Goal
     }
   }
 
@@ -223,7 +229,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="输入消息… (Enter 发送，Shift+Enter 换行)"
+          placeholder={goalMode ? '描述你的目标… (如：帮我分析竞品，出一份市场报告)' : '输入消息… (Enter 发送，Shift+Enter 换行)' }
           disabled={disabled}
           rows={1}
           aria-label="消息输入框"
@@ -261,6 +267,41 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 <DownOutlined className={styles.toolButtonArrow} />
               </button>
             </Dropdown>
+
+            {/* Goal 目标 */}
+            <button
+              type="button"
+              className={`${styles.toolButton} ${goalMode ? styles.toolButtonActive : ''}`}
+              onClick={() => {
+                const next = !goalMode
+                setGoalMode(next)
+                // 激活 Goal 时关闭专家团
+                if (next) {
+                  setTeamMode('off')
+                  setSelectedTeamId(null)
+                }
+                // 自动 focus 输入框
+                if (next && !value.trim()) {
+                  requestAnimationFrame(() => textareaRef.current?.focus())
+                }
+              }}
+            >
+              <AimOutlined />
+              <span className={styles.toolButtonLabel}>
+                {goalMode ? (value.trim() ? value.trim().slice(0, 10) + (value.trim().length > 10 ? '…' : '') : '目标') : '目标'}
+              </span>
+              {goalMode && (
+                <span
+                  className={styles.toolButtonClear}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); setGoalMode(false) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setGoalMode(false) } }}
+                >
+                  <CloseOutlined />
+                </span>
+              )}
+            </button>
 
             {/* 技能选择 */}
             <Dropdown

@@ -148,6 +148,18 @@ export interface Conversation {
   lastMessage?: string
 }
 
+/** 发送消息选项 */
+export interface SendMessageOptions {
+  /** 专家团 ID */
+  expertTeamId?: number
+  /** 技能 ID */
+  skillId?: number
+  /** 专家团模式 */
+  teamMode?: 'off' | 'auto' | 'manual'
+  /** 目标模式 */
+  goalMode?: boolean
+}
+
 /** 聊天请求 */
 export interface ChatRequest {
   /** 会话 ID */
@@ -168,6 +180,8 @@ export interface ChatRequest {
   teamId?: number
   /** 手动指定的技能 ID */
   skillId?: number
+  /** 目标模式 */
+  goalMode?: boolean
 }
 
 /** 聊天响应 */

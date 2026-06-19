@@ -166,6 +166,8 @@ def build_agent_graph(
     graph.add_node("approval_node", _make_approval_node(tool_registry))
     graph.add_node("evaluator", _make_evaluator_node(llm))
     graph.add_node("memory_saver", _make_memory_saver(memory_manager))
+    goal_evaluator = _make_goal_evaluator(llm)
+    graph.add_node("goal_evaluator", goal_evaluator)
 
     # 入口: model_selector → intent_router → ...
     graph.set_entry_point("model_selector")
@@ -193,7 +195,16 @@ def build_agent_graph(
         "pass": "memory_saver",
         "replan": "llm_call",
     })
-    graph.add_edge("memory_saver", END)
+    # memory_saver 之后：Goal 模式走 goal_evaluator，否则直接结束
+    graph.add_conditional_edges("memory_saver", _after_memory, {
+        "goal_evaluator": "goal_evaluator",
+        END: END,
+    })
+    # goal_evaluator 之后：达成/超限→结束，未达成→回到 model_selector 重试
+    graph.add_conditional_edges("goal_evaluator", _after_goal_eval, {
+        END: END,
+        "model_selector": "model_selector",
+    })
 
     checkpointer = _create_checkpointer() if enable_interrupt else MemorySaver()
     compile_kwargs = {"checkpointer": checkpointer}
@@ -1115,6 +1126,79 @@ def _make_memory_saver(memory_manager):
     return memory_saver_node
 
 
+def _make_goal_evaluator(llm):
+    """Goal 模式评估器 — 判断目标是否达成"""
+
+    async def goal_evaluator(state: dict) -> dict:
+        """评估当前结果是否达成目标"""
+        from app.core.logging import get_logger as _get_logger
+        _logger = _get_logger(__name__)
+
+        goal = state.get("goal_definition", "")
+        final_answer = state.get("final_answer", "")
+        iterations = state.get("goal_iterations", 0)
+        max_iterations = state.get("goal_max_iterations", 5)
+        tokens_used = state.get("goal_tokens_used", 0)
+        token_budget = state.get("goal_token_budget", 50000)
+
+        # Token 预算检查
+        if tokens_used >= token_budget:
+            return {"goal_status": "budget_exceeded"}
+
+        # 最大迭代检查
+        if iterations >= max_iterations:
+            return {"goal_status": "failed"}
+
+        # 如果没有 final_answer，说明还没执行过
+        if not final_answer:
+            return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
+
+        # LLM 评估是否达成目标
+        eval_prompt = f"""你是一个目标评估器。判断以下回答是否达成了用户的目标。
+
+用户目标：{goal}
+
+当前回答：{final_answer[:2000]}
+
+请严格按 JSON 格式输出：
+{{"achieved": true/false, "reason": "原因", "suggestion": "如果未达成，下一步建议"}}
+
+只输出 JSON，不要其他文字。"""
+
+        try:
+            response = await llm.ainvoke(eval_prompt)
+            content = _content_blocks_to_str(response.content if hasattr(response, 'content') else response)
+            import re
+            # 解析 JSON
+            match = re.search(r'\{.*?\}', content, re.DOTALL)
+            if match:
+                data = json.loads(match.group())
+                achieved = data.get("achieved", False)
+                if achieved:
+                    return {"goal_status": "achieved"}
+                else:
+                    # 记录历史
+                    history = list(state.get("goal_history", []))
+                    history.append({
+                        "iteration": iterations,
+                        "result": final_answer[:500],
+                        "evaluation": data.get("reason", ""),
+                        "suggestion": data.get("suggestion", ""),
+                    })
+                    return {
+                        "goal_status": "in_progress",
+                        "goal_iterations": iterations + 1,
+                        "goal_history": history,
+                        "goal_current_plan": data.get("suggestion", ""),
+                    }
+        except Exception as e:
+            _logger.warning(f"[goal_evaluator] 评估失败: {e}")
+
+        return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
+
+    return goal_evaluator
+
+
 # ── 条件路由 ──────────────────────────────────────────────
 
 def _route_after_intent(state: AgentState) -> str:
@@ -1164,6 +1248,21 @@ def _after_eval(state: AgentState) -> str:
     if state.get("final_answer"):
         return "pass"
     return "replan"
+
+
+def _after_memory(state: AgentState) -> str:
+    """memory_saver 之后的路由 — Goal 模式走评估器，否则结束"""
+    if state.get("goal_mode"):
+        return "goal_evaluator"
+    return END
+
+
+def _after_goal_eval(state: AgentState) -> str:
+    """goal_evaluator 之后的路由 — 达成/超限→结束，未达成→重试"""
+    status = state.get("goal_status", "")
+    if status in ("achieved", "budget_exceeded", "failed"):
+        return END
+    return "model_selector"
 
 
 # ── 辅助函数 ──────────────────────────────────────────────

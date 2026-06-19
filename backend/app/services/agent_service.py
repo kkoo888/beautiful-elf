@@ -399,8 +399,10 @@ class AgentService:
         team_mode: str = "off",
         team_id: int | None = None,
         skill_id: int | None = None,
+        goal_mode: bool = False,
+        goal_definition: str = "",
     ) -> AsyncIterator[Dict[str, Any]]:
-        """Agent 流式对话（v4.3 — 新增专家团/技能手动指定）"""
+        """Agent 流式对话（v4.4 — 新增 Goal 模式）"""
         if not self.is_ready:
             success = await self._lazy_init(provider_id, model_name)
             if not success:
@@ -503,6 +505,15 @@ class AgentService:
                 "selected_model": "",
                 "routing_confidence": 0.0,
                 "routing_reason": "default",
+                # Goal 模式
+                "goal_mode": goal_mode,
+                "goal_definition": goal_definition,
+                "goal_iterations": 0,
+                "goal_max_iterations": 5,
+                "goal_token_budget": 50000,
+                "goal_tokens_used": 0,
+                "goal_history": [],
+                "goal_status": "pending" if goal_mode else "",
                 # selected_tools 由 engine 动态选择，不传则 default_factory=list 自动给 []
             }
 

@@ -44,9 +44,11 @@ class ResumeRequest(BaseModel):
 
 
 class ChatRequestExtended(ChatRequest):
-    """扩展聊天请求 — 新增 reasoning_depth / skill_id"""
+    """扩展聊天请求 — 新增 reasoning_depth / skill_id / goal_mode"""
     reasoning_depth: Optional[str] = "balanced"
     skill_id: Optional[int] = Field(default=None, description="手动指定的技能 ID", alias="skillId")
+    goal_mode: bool = Field(default=False, description="是否启用 Goal 模式")
+    goal_definition: str = Field(default="", description="Goal 模式的目标描述")
 
 
 @router.post("/conversations/{conversation_id}/chat")
@@ -68,6 +70,8 @@ async def chat(
     team_mode = data.team_mode or "off"
     team_id = data.team_id
     skill_id = data.skill_id
+    goal_mode = data.goal_mode or False
+    goal_definition = data.goal_definition or ""
 
     # manual 模式：直接执行专家团，不走 Agent 流程
     if team_mode == "manual" and team_id:
@@ -77,7 +81,7 @@ async def chat(
         )
 
     return StreamingResponse(
-        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth, team_mode, team_id, skill_id),
+        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth, team_mode, team_id, skill_id, goal_mode, goal_definition),
         media_type="text/event-stream",
     )
 
@@ -432,6 +436,7 @@ async def _stream_response(
     conversation_id: int, user_id: int, messages: list,
     provider_id: int, model_name: str, reasoning_depth: str = "balanced",
     team_mode: str = "off", team_id: int | None = None, skill_id: int | None = None,
+    goal_mode: bool = False, goal_definition: str = "",
 ):
     """SSE 流式响应 — 带心跳保活 + 消息持久化
 
@@ -507,6 +512,8 @@ async def _stream_response(
                 team_mode=team_mode,
                 team_id=team_id,
                 skill_id=skill_id,
+                goal_mode=goal_mode,
+                goal_definition=goal_definition,
             ):
                 event_type = event.get("type", "")
                 if event_type == "token":

@@ -129,6 +129,17 @@ class AgentState(TypedDict, total=False):
     # ── Compaction 状态 ─────────────────────────────────
     is_compacted: bool  # 本轮是否已执行过 compaction（避免重复检查）
 
+    # ── Goal 模式 ─────────────────────────────────────────
+    goal_mode: bool              # 是否为 Goal 模式
+    goal_definition: str         # 用户定义的目标描述
+    goal_status: str             # "pending" | "in_progress" | "achieved" | "failed" | "budget_exceeded"
+    goal_iterations: int         # 当前迭代次数
+    goal_max_iterations: int     # 最大迭代次数（默认 5）
+    goal_token_budget: int       # Token 预算上限（默认 50000）
+    goal_tokens_used: int        # 已使用的 Token 数
+    goal_history: list           # 历史迭代记录 [{iteration, action, result, evaluation}]
+    goal_current_plan: str       # 当前执行计划
+
 
 # ── Runtime Context（P1: context_schema）────────────────────
 
