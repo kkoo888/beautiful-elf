@@ -514,9 +514,9 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
 
         lc_messages = [SystemMessage(content=system_prompt)]
 
-        # ── Auto-Compaction（压缩旧历史）─────────────
+        # ── Auto-Compaction（压缩旧历史，仅首次检查）──────
         raw_messages = state["messages"]
-        if len(raw_messages) > MAX_MESSAGE_WINDOW:
+        if len(raw_messages) > MAX_MESSAGE_WINDOW and not state.get("is_compacted"):
             try:
                 from app.agent.compaction import maybe_compact
                 raw_messages = await maybe_compact(
@@ -525,11 +525,14 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
                     user_id=state.get("user_id", 0),
                     conversation_id=state.get("conversation_id", 0),
                 )
+                _compacted = True
             except Exception as e:
                 logger.warning(f"[llm_call] compaction 失败，降级为窗口裁剪: {e}")
                 raw_messages = _trim_messages(raw_messages, MAX_MESSAGE_WINDOW)
+                _compacted = True
         else:
             raw_messages = _trim_messages(raw_messages, MAX_MESSAGE_WINDOW)
+            _compacted = state.get("is_compacted", False)
 
         for m in raw_messages:
             if isinstance(m, dict):
@@ -566,6 +569,7 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
                 "final_answer": f"抱歉，AI 服务暂时不可用：{e}",
                 "tool_calls": [],
                 "error": str(e),
+                "is_compacted": _compacted,
             }
 
         elapsed = time.time() - t0
@@ -602,12 +606,14 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
                 "messages": [AIMessage(content=response.content or "", tool_calls=response.tool_calls)],
                 "tool_calls": response.tool_calls,
                 "final_answer": None,
+                "is_compacted": _compacted,
             }
         writer({"step": "llm", "status": "done", "message": f"回答生成完成 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000), "has_tools": False})
         return {
             "messages": [AIMessage(content=response.content)],
             "final_answer": _content_to_str(response.content),
             "tool_calls": [],
+            "is_compacted": _compacted,
         }
 
     return llm_call_node

@@ -530,7 +530,8 @@ class AgentService:
             # [P0] LangGraph v3 Event Streaming — 官方推荐的 typed projection API
             # 文档: https://docs.langchain.com/oss/python/langgraph/event-streaming
             # v3 核心优势: 每个 projection（messages/values/output）独立消费，天然去重
-            stream = await self._graph.astream_events(
+            # 注意: astream_events 是 async generator，不需要 await（与 resume_stream 保持一致）
+            stream = self._graph.astream_events(
                 initial_state,
                 config=config,
                 version="v3",
@@ -627,32 +628,27 @@ class AgentService:
                             if isinstance(node_output, dict) and node_output.get("final_answer"):
                                 _final_answer = node_output["final_answer"]
 
-            # 获取最终状态（stream.output 等价于 get_state）
+            # 获取最终状态（一次 get_state，同时取 final_state + interrupt 检测）
             final_state = None
             try:
                 if self._graph and hasattr(self._graph, 'get_state'):
                     state_snapshot = self._graph.get_state(config)
-                    if state_snapshot and state_snapshot.values:
-                        final_state = state_snapshot.values
-            except Exception:
-                pass
-
-            # interrupt 检测（审批暂停）
-            try:
-                if self._graph and hasattr(self._graph, 'get_state'):
-                    state_snapshot = self._graph.get_state(config)
-                    if state_snapshot and hasattr(state_snapshot, 'next') and state_snapshot.next:
-                        for pending_node in state_snapshot.next:
-                            if pending_node == "approval_node":
-                                pending = (final_state or {}).get("pending_tool_call")
-                                if pending:
-                                    yield {
-                                        "type": "approval_required",
-                                        "tool": pending.get("name", ""),
-                                        "args": pending.get("args", {}),
-                                        "message": pending.get("message", "需要用户确认"),
-                                    }
-                                    return
+                    if state_snapshot:
+                        if state_snapshot.values:
+                            final_state = state_snapshot.values
+                        # interrupt 检测（审批暂停）
+                        if hasattr(state_snapshot, 'next') and state_snapshot.next:
+                            for pending_node in state_snapshot.next:
+                                if pending_node == "approval_node":
+                                    pending = (final_state or {}).get("pending_tool_call")
+                                    if pending:
+                                        yield {
+                                            "type": "approval_required",
+                                            "tool": pending.get("name", ""),
+                                            "args": pending.get("args", {}),
+                                            "message": pending.get("message", "需要用户确认"),
+                                        }
+                                        return
             except Exception:
                 pass
 

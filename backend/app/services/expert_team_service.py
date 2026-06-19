@@ -453,7 +453,7 @@ class ExpertTeamService:
                     await on_progress({
                         "type": "expert_start", "expertName": expert_name,
                         "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
-                        "subtask": subtask,
+                        "subtask": subtask, "round": round_num, "maxRounds": max_rounds,
                     })
 
                 role_run = await self._create_role_run(db, run.id, member["id"], expert_name, round_num)
@@ -671,6 +671,7 @@ class ExpertTeamService:
                                 "type": "expert_done", "expertName": expert_name,
                                 "expertRole": expert_role, "avatar": member.get("avatar", "🤖"),
                                 "content": content, "durationMs": duration_ms,
+                                "round": round_num, "maxRounds": max_rounds,
                             })
 
                         return {

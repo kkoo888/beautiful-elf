@@ -126,6 +126,9 @@ class AgentState(TypedDict, total=False):
     # ── 推理深度（前端传入，引擎内部暂未使用）─────────
     reasoning_depth: str
 
+    # ── Compaction 状态 ─────────────────────────────────
+    is_compacted: bool  # 本轮是否已执行过 compaction（避免重复检查）
+
 
 # ── Runtime Context（P1: context_schema）────────────────────
 

@@ -101,7 +101,7 @@ async def chat_resume(
       graph.astream(Command(resume=...), stream_mode=["messages","updates"], version="v2")
     """
     _full_content = []
-    _queue: asyncio.Queue = asyncio.Queue()
+    _queue: asyncio.Queue = asyncio.Queue(maxsize=200)
     _stream_done = asyncio.Event()
 
     # 流开始前保存用户审批消息
@@ -192,7 +192,12 @@ async def chat_resume(
                 yield item
         finally:
             heartbeat_task.cancel()
-            # 不取消 producer_task，让后端继续执行完成保存消息
+            if not producer_task.done():
+                producer_task.cancel()
+                try:
+                    await producer_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     return StreamingResponse(_sse_generator(), media_type="text/event-stream")
 
@@ -224,101 +229,204 @@ SSE_HEARTBEAT_INTERVAL = 15  # 心跳间隔（秒），小于 nginx 默认 60s p
 
 
 async def _stream_expert_team(conversation_id: int, team_id: int, messages: list, db: AsyncSession):
-    """手动专家团模式 — 直接执行专家团工作流，流式返回讨论过程"""
-    from app.services.expert_team_service import ExpertTeamService
-    from app.schemas.expert_team import ExpertTeamExecuteRequest
+    """手动专家团模式 — LangGraph 图 + Send API 并行 + get_stream_writer 直接 yield（无 Queue）
 
-    _queue: asyncio.Queue = asyncio.Queue()
-    _stream_done = asyncio.Event()
+    架构:
+      LangGraph StateGraph → pm_analyze → [Send(expert)] → pm_evaluate → pm_report
+      节点内 get_stream_writer() 推送事件 → astream_events(custom) → SSE 直达前端
+
+    反压机制:
+      Python generator 自带反压 — 消费者停止读取时，generator 在 yield 处暂停，
+      图执行自动暂停。无 Queue，无堆积，无内存泄漏。
+    """
+    from app.agent.expert_team_graph import build_expert_team_graph, ExpertTeamState
+    from app.services.expert_team_service import ExpertTeamService
 
     user_content = messages[-1]["content"] if messages else ""
 
-    async def _heartbeat():
+    # 加载专家团配置
+    service = ExpertTeamService()
+    team = await service.repo.find_team_by_id(db, team_id)
+    if not team:
+        yield f"data: {json.dumps({'error': '专家团不存在', 'done': True})}\n\n"
+        return
+
+    leader = None
+    if team.leader_id:
+        leader = await service.repo.find_expert_by_id(db, team.leader_id)
+    if not leader:
+        yield f"data: {json.dumps({'error': '专家团未设置组长', 'done': True})}\n\n"
+        return
+
+    experts = await service.repo.find_experts_by_team(db, team_id)
+    enabled_experts = [e for e in experts if e.is_enabled == 1 and e.id != leader.id]
+    if not enabled_experts:
+        yield f"data: {json.dumps({'error': '专家团没有可用的专家成员', 'done': True})}\n\n"
+        return
+
+    # 序列化专家信息
+    experts_data = [service._to_out_expert(e).model_dump() for e in enabled_experts]
+    leader_data = service._to_out_expert(leader).model_dump()
+
+    # 模型配置
+    from app.services.llm_provider_service import LLMProviderService
+    provider_service = LLMProviderService()
+    default_provider = await provider_service.get_default_provider(db)
+    default_provider_id = default_provider.id if default_provider else 0
+    default_model_name = ""
+    if default_provider and default_provider.models:
+        enabled_models = [m for m in default_provider.models if m.is_enabled == 1]
+        if enabled_models:
+            default_model_name = enabled_models[0].model_name
+
+    pm_provider_id = leader.provider_id or default_provider_id
+    pm_model_name = leader.model_name or default_model_name
+    pm_temperature = leader.temperature or 0.3
+
+    # 创建运行记录
+    run = await service.repo.create_run(db, {
+        "team_id": team_id,
+        "run_status": 1,
+        "trigger_type": 0,
+        "input_text": user_content,
+    })
+
+    # 构建初始状态
+    initial_state: ExpertTeamState = {
+        "input_text": user_content,
+        "team_id": team_id,
+        "run_id": run.id,
+        "max_rounds": team.max_rounds or 3,
+        "current_round": 1,
+        "db": db,
+        "experts_data": experts_data,
+        "leader_data": leader_data,
+        "pm_provider_id": pm_provider_id,
+        "pm_model_name": pm_model_name,
+        "pm_temperature": pm_temperature,
+        "expert_results": [],
+        "discussion": [],
+        "total_tokens": 0,
+        "feedback_map": {},
+    }
+
+    # 推送开始事件
+    yield f"data: {json.dumps({'progress': {'step': 'expert_team', 'status': 'running', 'message': '正在执行专家团...'}, 'done': False})}\n\n"
+
+    # 构建并执行图
+    graph = build_expert_team_graph()
+    t0 = __import__("time").time()
+    NL = "\n"
+
+    # 心跳保活：用 asyncio.Queue 合并心跳和图事件
+    _hb_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+    _graph_done = asyncio.Event()
+
+    async def _heartbeat_producer():
+        """心跳协程 — 定期发送 SSE 注释保活"""
         try:
-            while not _stream_done.is_set():
+            while not _graph_done.is_set():
                 await asyncio.sleep(SSE_HEARTBEAT_INTERVAL)
-                if not _stream_done.is_set():
-                    await _queue.put(": heartbeat\n\n")
+                if not _graph_done.is_set():
+                    await _hb_queue.put(": heartbeat\n\n")
         except asyncio.CancelledError:
             pass
 
-    async def _produce():
+    async def _graph_producer():
+        """图事件生产者 — 从 astream_events 读取 custom 事件放入队列"""
         try:
-            service = ExpertTeamService()
-            request = ExpertTeamExecuteRequest(input_text=user_content)
-
-            # 推送开始事件
-            await _queue.put(f"data: {json.dumps({'progress': {'step': 'expert_team', 'status': 'running', 'message': '正在执行专家团...'}, 'done': False})}\n\n")
-
-            # 进度回调 — 实时推送每个阶段的 SSE 事件
-            async def on_progress(event: dict):
-                event_type = event.get("type", "")
-                NL = "\n"
-                if event_type == "pm_done":
-                    name = event.get("expertName", "PM")
-                    content = event.get("content", "")
-                    header = f"**◆ {name}** 分析完成:{NL}"
-                    await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'progress': {'step': 'pm_plan', 'status': 'done', 'message': f'{name} 任务规划完成'}, 'done': False})}{NL}{NL}")
-                elif event_type == "expert_start":
-                    name = event.get("expertName", "")
-                    role = event.get("expertRole", "")
-                    avatar = event.get("avatar", "")
-                    subtask = event.get("subtask", "")
-                    prefix = "" if (avatar and avatar.startswith(("data:", "http"))) else (f"{avatar} " if avatar else "")
-                    msg = f"**{prefix}{name}** ({role}){NL}{subtask}{NL}{NL}"
-                    await _queue.put(f"data: {json.dumps({'content': msg, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'progress': {'step': f'expert_{name}', 'status': 'executing', 'message': f'{name}({role}) 正在分析...'}, 'done': False})}{NL}{NL}")
-                elif event_type == "expert_done":
-                    name = event.get("expertName", "")
-                    role = event.get("expertRole", "")
-                    avatar = event.get("avatar", "")
-                    content = event.get("content", "")
-                    duration = event.get("durationMs", 0)
-                    prefix = "" if (avatar and avatar.startswith(("data:", "http"))) else (f"{avatar} " if avatar else "")
-                    header = f"**{prefix}{name}** ({role}) · {duration}ms{NL}"
-                    await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'progress': {'step': f'expert_{name}', 'status': 'done', 'message': f'{name}({role}) 分析完成', 'elapsedMs': duration}, 'done': False})}{NL}{NL}")
-                elif event_type == "pm_eval":
-                    content = event.get("content", "")
-                    header = f"**◆ PM 评估:**{NL}"
-                    await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'progress': {'step': 'pm_eval', 'status': 'done', 'message': 'PM 评估完成'}, 'done': False})}{NL}{NL}")
-                elif event_type == "pm_report":
-                    content = event.get("content", "")
-                    header = f"---{NL}**◆ 最终报告:**{NL}{NL}"
-                    await _queue.put(f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'content': content, 'done': False})}{NL}{NL}")
-                    await _queue.put(f"data: {json.dumps({'progress': {'step': 'expert_team', 'status': 'done', 'message': '专家团执行完成'}, 'done': False})}{NL}{NL}")
-
-            result = await service.execute_team(db, team_id, request, on_progress=on_progress)
-
-            elapsed = result.get("durationMs", 0)
-            await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'duration_ms': elapsed})}\n\n")
-
-        except Exception as e:
-            logger.error(f"专家团执行失败: {e}", exc_info=True)
-            await _queue.put(f"data: {json.dumps({'error': f'专家团执行失败: {e}', 'done': True})}\n\n")
+            async for event in graph.astream_events(initial_state, version="v3"):
+                method = event.get("method", "")
+                if method == "custom":
+                    await _hb_queue.put(event)
         finally:
-            _stream_done.set()
-            await _queue.put(None)
+            _graph_done.set()
+            await _hb_queue.put(None)  # 哨兵值
 
-    heartbeat_task = asyncio.create_task(_heartbeat())
-    producer_task = asyncio.create_task(_produce())
+    heartbeat_task = asyncio.create_task(_heartbeat_producer())
+    graph_task = asyncio.create_task(_graph_producer())
 
     try:
         while True:
-            item = await _queue.get()
+            item = await _hb_queue.get()
             if item is None:
                 break
-            yield item
+            # 心跳注释行（字符串）
+            if isinstance(item, str):
+                yield item
+                continue
+
+            # 图事件（dict）
+            event = item
+            data = event.get("params", {}).get("data", {}) if isinstance(event.get("params"), dict) else {}
+
+            evt_type = data.get("type", "")
+
+
+            if evt_type == "pm_plan":
+                content = data.get("content", "")
+                header = f"**◆ PM** 分析完成:{NL}"
+                yield f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}"
+                yield f"data: {json.dumps({'content': content + NL + NL, 'done': False})}{NL}{NL}"
+                yield f"data: {json.dumps({'progress': {'step': 'pm_plan', 'status': 'done', 'message': 'PM 任务规划完成'}, 'done': False})}{NL}{NL}"
+
+            elif evt_type == "expert_start":
+                name = data.get("expertName", "")
+                round_num = data.get("round", 0)
+                avatar = data.get("avatar", "🤖")
+                role = data.get("expertRole", "")
+                subtask = data.get("subtask", "")
+                prefix = "" if (avatar and avatar.startswith(("data:", "http"))) else (f"{avatar} " if avatar else "")
+                msg = f"**{prefix}{name}** ({role}){NL}{subtask}{NL}{NL}"
+                yield f"data: {json.dumps({'content': msg, 'done': False})}{NL}{NL}"
+                _exp_progress = {'step': f'expert_{name}', 'status': 'executing', 'message': f'{name}({role}) 正在分析...', 'expertName': name, 'expertRole': role, 'avatar': avatar, 'round': round_num, 'maxRounds': initial_state.get('max_rounds', 3)}
+                yield f"data: {json.dumps({'progress': _exp_progress, 'done': False})}{NL}{NL}"
+
+            elif evt_type == "expert_done":
+                name = data.get("expertName", "")
+                duration = data.get("durationMs", 0)
+                round_num = data.get("round", 0)
+                avatar = data.get("avatar", "🤖")
+                role = data.get("expertRole", "")
+                expert_content = data.get("content", "")
+                prefix = "" if (avatar and avatar.startswith(("data:", "http"))) else (f"{avatar} " if avatar else "")
+                header = f"**{prefix}{name}** ({role}) · {duration}ms{NL}"
+                yield f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}"
+                if expert_content:
+                    yield f"data: {json.dumps({'content': expert_content + NL + NL, 'done': False})}{NL}{NL}"
+                _exp_progress = {'step': f'expert_{name}', 'status': 'done', 'message': f'{name}({role}) 分析完成', 'elapsedMs': duration, 'expertName': name, 'expertRole': role, 'avatar': avatar, 'round': round_num, 'maxRounds': initial_state.get('max_rounds', 3)}
+                yield f"data: {json.dumps({'progress': _exp_progress, 'done': False})}{NL}{NL}"
+
+            elif evt_type == "pm_eval":
+                evaluation = data.get("evaluation", {})
+                overall_pass = evaluation.get("overall_pass", False)
+                reason = evaluation.get("reason", "")
+                status_text = "✅ 达标" if overall_pass else "⚠️ 未达标，将返工"
+                yield f"data: {json.dumps({'content': f'**◆ PM 评估:** {status_text}{NL}{reason}{NL}{NL}', 'done': False})}{NL}{NL}"
+                yield f"data: {json.dumps({'progress': {'step': 'pm_eval', 'status': 'done', 'message': f'PM 评估: {status_text}'}, 'done': False})}{NL}{NL}"
+
+            elif evt_type == "pm_report":
+                content = data.get("content", "")
+                header = f"---{NL}**◆ 最终报告:**{NL}{NL}"
+                yield f"data: {json.dumps({'content': header, 'done': False})}{NL}{NL}"
+                yield f"data: {json.dumps({'content': content, 'done': False})}{NL}{NL}"
+                yield f"data: {json.dumps({'progress': {'step': 'expert_team', 'status': 'done', 'message': '专家团执行完成'}, 'done': False})}{NL}{NL}"
+
+        # 获取最终状态
+        elapsed = int((__import__("time").time() - t0) * 1000)
+        yield f"data: {json.dumps({'content': '', 'done': True, 'duration_ms': elapsed})}\n\n"
+
+    except Exception as e:
+        logger.error(f"专家团执行失败: {e}", exc_info=True)
+        yield f"data: {json.dumps({'error': f'专家团执行失败: {e}', 'done': True})}\n\n"
     finally:
         heartbeat_task.cancel()
-        # 不取消 producer_task，让后端继续执行完成保存消息
-
+        if not graph_task.done():
+            graph_task.cancel()
+            try:
+                await graph_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
 async def _stream_response(
     conversation_id: int, user_id: int, messages: list,
@@ -331,6 +439,8 @@ async def _stream_response(
       - 用户消息：流开始前保存（确保不丢）
       - 助手回复：done 事件时保存（数据完整 + 携带 token 统计）
       - 流中断/报错：助手回复不保存（前端本地有 token，刷新后丢失是预期行为）
+      - SSE 断开时：立即取消 producer_task，释放 Agent 资源
+        （每次对话都从 initial_state 全新执行，无需保留 producer）
 
     心跳机制（业内规范）:
       - 发送 SSE 注释行 ': heartbeat\\n\\n'，不触发前端 onmessage
@@ -338,7 +448,7 @@ async def _stream_response(
       - 用 asyncio.Queue 合并心跳和业务事件到同一个生成器
     """
     _full_content = []
-    _queue: asyncio.Queue = asyncio.Queue()
+    _queue: asyncio.Queue = asyncio.Queue(maxsize=200)  # 防止 SSE 断开后无限堆积
     _stream_done = asyncio.Event()
 
     # 流开始前保存用户消息（独立事务，确保不丢）
@@ -447,6 +557,12 @@ async def _stream_response(
             yield item
     finally:
         heartbeat_task.cancel()
-        # 注意：不取消 producer_task！
-        # SSE 断开时让后端继续执行完成，确保消息保存。
-        # producer_task 完成后会自行退出，_queue 中的 None 哨兵值会丢弃。
+        # SSE 断开时取消 producer_task，释放 Agent 资源。
+        # 每次对话都从 initial_state 全新执行，无需保留 producer 继续运行。
+        # 取消后 producer_task 在下一个 await 点抛出 CancelledError 并退出。
+        if not producer_task.done():
+            producer_task.cancel()
+            try:
+                await producer_task
+            except (asyncio.CancelledError, Exception):
+                pass

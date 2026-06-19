@@ -22,6 +22,7 @@ import type { Expert, ExpertFormInput } from '../types'
 import { getExpertRoleColor } from '../types'
 import { ExpertEditorModal } from './expert-editor'
 import { EmptyState } from '@/components/empty-state'
+import { ExpertAvatar } from '@/components/expert-avatar'
 import styles from './expert-team.module.css'
 
 const { Text } = Typography
@@ -209,20 +210,13 @@ export function ExpertList({
                 styles={{ body: { padding: '20px' } }}
               >
                 <div className={styles.teamCardHeader}>
-                  <div
+                  <ExpertAvatar
+                    avatar={expert.avatar}
+                    size={40}
+                    bgColor={roleColor + '18'}
+                    color={roleColor}
                     className={styles.teamCardAvatar}
-                    style={{
-                      backgroundColor: expert.avatar?.startsWith('data:image') ? 'transparent' : roleColor + '18',
-                      color: expert.avatar?.startsWith('data:image') ? 'transparent' : roleColor,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {expert.avatar?.startsWith('data:image') ? (
-                      <img src={expert.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      expert.avatar
-                    )}
-                  </div>
+                  />
                   <div className={styles.teamCardInfo}>
                     <div className={styles.teamCardName}>{expert.memberName}</div>
                     <div className={styles.teamCardDesc}>{expert.memberRole}</div>
