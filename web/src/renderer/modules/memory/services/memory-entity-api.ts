@@ -10,6 +10,7 @@
  */
 
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
+import type { MemoryEpisode, MemoryInsightHistory, OptimizationResult, MemoryEntry } from '../types/memory'
 
 // ── 类型定义 ──────────────────────────────────────────────
 
@@ -156,4 +157,74 @@ export async function triggerReflect(days = 7): Promise<ReflectResult> {
   return extractData(
     await apiClient.post('/memory/reflect', { days }) as any
   ) as ReflectResult
+}
+
+// ── Episode API ──────────────────────────────────────────────
+
+export async function listEpisodes(params?: {
+  entity_id?: number; start_time?: string; end_time?: string
+}): Promise<MemoryEpisode[]> {
+  return extractData(
+    await apiClient.get('/memory/episodes', { params }) as any
+  ) as MemoryEpisode[]
+}
+
+export async function getEpisode(id: number): Promise<MemoryEpisode> {
+  return extractData(
+    await apiClient.get(`/memory/episodes/${id}`) as any
+  ) as MemoryEpisode
+}
+
+export async function createEpisode(data: {
+  conversation_id: number; title: string; summary: string
+}): Promise<MemoryEpisode> {
+  return extractData(
+    await apiClient.post('/memory/episodes', data) as any
+  ) as MemoryEpisode
+}
+
+export async function searchEpisodes(q: string): Promise<MemoryEpisode[]> {
+  return extractData(
+    await apiClient.get('/memory/episodes/search', { params: { q } }) as any
+  ) as MemoryEpisode[]
+}
+
+// ── Insight History API ──────────────────────────────────────────────
+
+export async function getInsightHistory(insight_id: number): Promise<MemoryInsightHistory[]> {
+  return extractData(
+    await apiClient.get(`/memory/insights/${insight_id}/history`) as any
+  ) as MemoryInsightHistory[]
+}
+
+export async function getConflicts(): Promise<MemoryInsight[]> {
+  return extractData(
+    await apiClient.get('/memory/insights/conflicts') as any
+  ) as MemoryInsight[]
+}
+
+export async function arbitrateInsight(insight_id: number, data: {
+  importance?: number
+}): Promise<MemoryInsight> {
+  return extractData(
+    await apiClient.post(`/memory/insights/${insight_id}/arbitrate`, data) as any
+  ) as MemoryInsight
+}
+
+// ── Optimization API ──────────────────────────────────────────────
+
+export async function getOptimizedMemories(params: {
+  rerank?: boolean; decay?: boolean
+}): Promise<MemoryEntry[]> {
+  return extractData(
+    await apiClient.get('/memories/optimize', { params }) as any
+  ) as MemoryEntry[]
+}
+
+export async function triggerOptimization(data: {
+  importance_boost?: number
+}): Promise<OptimizationResult> {
+  return extractData(
+    await apiClient.post('/memories/optimize', data) as any
+  ) as OptimizationResult
 }

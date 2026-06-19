@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { App, Tabs } from 'antd'
 import {
   SearchOutlined, CalendarOutlined, BookOutlined,
+  PlusOutlined, BarChartOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { MemorySearch } from './memory-search'
@@ -11,6 +12,8 @@ import { MemoryList } from './memory-list'
 import { MemoryDetail } from './memory-detail'
 import { DailyLogTab } from './daily-log-tab'
 import { LongTermTab } from './longterm-tab'
+import { EpisodeTab } from './episode-tab'
+import { OptimizationTab } from './optimization-tab'
 import { useMemory } from '../hooks/use-memory'
 import type { MemoryEntry } from '../types/memory'
 import styles from './memory-panel.module.css'
@@ -100,6 +103,26 @@ export default function MemoryPanel() {
           />
         </div>
       ),
+    },
+    {
+      key: 'episode',
+      label: (
+        <span>
+          <PlusOutlined />
+          经历
+        </span>
+      ),
+      children: <EpisodeTab />,
+    },
+    {
+      key: 'optimization',
+      label: (
+        <span>
+          <BarChartOutlined />
+          优化
+        </span>
+      ),
+      children: <OptimizationTab />,
     },
     {
       key: 'daily',

@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # MCP Server
     MCP_SERVER_HOST: str = "0.0.0.0"
-    MCP_SERVER_PORT: int = 8765
+    MCP_SERVER_PORT: int = 6880
 
     # Workspace
     WORKSPACE_DIR: str = "/workspace"

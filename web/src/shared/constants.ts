@@ -8,14 +8,14 @@ export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.1.0'
 
 // ---------- API 配置 ----------
 const API_HOST = import.meta.env.VITE_API_HOST || 'localhost'
-const API_PORT = import.meta.env.VITE_API_PORT || '8000'
+const API_PORT = import.meta.env.VITE_API_PORT || '6680'
 export const API_BASE_URL = `http://${API_HOST}:${API_PORT}`
 export const API_VERSION = 'v1'
 export const API_PREFIX = import.meta.env.VITE_API_PREFIX || `/api/${API_VERSION}`
 
 // ---------- WebSocket 配置 ----------
 const WS_HOST = import.meta.env.VITE_WS_HOST || 'localhost'
-const WS_PORT = import.meta.env.VITE_WS_PORT || '8000'
+const WS_PORT = import.meta.env.VITE_WS_PORT || '6680'
 const WS_PATH = import.meta.env.VITE_WS_PATH || `/api/${API_VERSION}/ws`
 export const WS_URL = `ws://${WS_HOST}:${WS_PORT}${WS_PATH}`
 export const WS_HEARTBEAT_INTERVAL = 30000 // 30秒

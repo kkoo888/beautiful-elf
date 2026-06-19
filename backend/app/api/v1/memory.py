@@ -3,7 +3,7 @@
 职责：参数校验 + 调用 service + 返回统一格式响应
 业务逻辑全部在 memory_service 中
 """
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -44,6 +44,81 @@ async def search_memories(
 
     result = await memory_service.search(db, query=q, limit=limit)
     return ApiResult(data=result)
+
+
+@router.get("/optimize", response_model=ApiResult)
+async def get_optimized_memories(
+    rerank: bool = Query(default=True, description="启用 Rerank 精排"),
+    decay: bool = Query(default=True, description="启用时间衰减"),
+    limit: int = Query(default=20, ge=1, le=100, description="返回数量"),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """获取优化后的记忆列表（Rerank + Decay 效果展示）"""
+    if not memory_service.memory_manager:
+        return api_error("MEMORY_NOT_READY", "记忆管理器未初始化")
+
+    try:
+        results = await memory_service.memory_manager.search_with_scores(
+            query="优化展示", user_id=0, limit=limit,
+        )
+
+        items = []
+        for r in results:
+            items.append({
+                "id": r.get("id", ""),
+                "summary": r.get("summary", ""),
+                "score": round(r.get("score", 0), 4),
+                "rerankScore": round(r.get("rerank_score", 0), 4) if r.get("rerank_score") else None,
+                "decayFactor": round(r.get("decay_factor", 1.0), 4),
+                "importance": r.get("importance", 5),
+                "activation": r.get("activation", 1.0),
+                "tags": r.get("tags", []),
+                "savedAt": r.get("saved_at", ""),
+            })
+
+        return ApiResult(data=items)
+    except Exception as e:
+        logger.error(f"获取优化记忆失败: {e}", exc_info=True)
+        return api_error("MEMORY_OPTIMIZE_FAILED", str(e))
+
+
+@router.post("/optimize", response_model=ApiResult)
+async def trigger_optimization(
+    data: dict = Body(default={}),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """触发记忆优化（重新计算 activation 并写回 Qdrant）"""
+    if not memory_service.memory_manager:
+        return api_error("MEMORY_NOT_READY", "记忆管理器未初始化")
+
+    importance_boost = data.get("importance_boost", 1)
+
+    try:
+        from app.services.memory_decay_service import MemoryDecayService
+        from app.mappers.qdrant_mapper import QdrantMapper
+
+        qdrant = QdrantMapper()
+        decay_svc = MemoryDecayService()
+
+        # 1. 批量标记 dormant
+        dormant_count = decay_svc.batch_mark_dormant(qdrant)
+
+        # 2. 存量回填
+        backfilled = decay_svc.backfill_existing(qdrant)
+
+        # 3. 统计结果
+        result = {
+            "optimizedCount": dormant_count + backfilled,
+            "rerankImproved": 0,
+            "decayApplied": dormant_count,
+            "newInsights": 0,
+        }
+
+        logger.info(f"[optimize] 完成: dormant={dormant_count} backfilled={backfilled}")
+        return ApiResult(data=result)
+    except Exception as e:
+        logger.error(f"触发优化失败: {e}", exc_info=True)
+        return api_error("MEMORY_OPTIMIZE_FAILED", str(e))
 
 
 @router.get("/{memory_id}", response_model=ApiResult[MemoryOut])

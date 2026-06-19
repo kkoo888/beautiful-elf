@@ -95,7 +95,7 @@ export function NodeDetailDrawer() {
       }
       open={detailDrawerOpen}
       onClose={closeDetailDrawer}
-      width={380}
+      size="default"
       destroyOnHidden
       extra={
         isObservation ? (

@@ -830,7 +830,7 @@ async def init_mcp_server(tool_registry):
         raise
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8765):
+def run_server(host: str = "0.0.0.0", port: int = 6880):
     """启动 MCP Server（Streamable HTTP 传输）
 
     来源: https://gofastmcp.com/getting-started/quickstart

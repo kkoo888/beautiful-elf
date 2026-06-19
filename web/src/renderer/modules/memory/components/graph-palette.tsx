@@ -11,6 +11,7 @@ import { Typography, Divider } from 'antd'
 import {
   FileTextOutlined,
   BulbOutlined,
+  DragOutlined,
 } from '@ant-design/icons'
 import { useGraphStore } from './graph-store'
 import type { Node } from 'reactflow'

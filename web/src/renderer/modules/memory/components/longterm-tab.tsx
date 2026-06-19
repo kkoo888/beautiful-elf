@@ -20,7 +20,7 @@ import {
   EditOutlined, SaveOutlined, BookOutlined,
   ExperimentOutlined, DeleteOutlined, ReloadOutlined,
   LinkOutlined, FileTextOutlined, BulbOutlined,
-  CaretDownOutlined, CaretRightOutlined,
+  CaretDownOutlined, CaretRightOutlined, HistoryOutlined,
 } from '@ant-design/icons'
 import {
   fetchLongTermMemory, updateLongTermMemory,
@@ -32,6 +32,7 @@ import type {
 import { MemoryGraphTab } from './memory-graph-tab'
 import { EntityTab } from './entity-tab'
 import { InsightTab } from './insight-tab'
+import { InsightHistoryTab } from './insight-history-tab'
 
 import { EmptyState } from '@/components/empty-state'
 
@@ -86,7 +87,7 @@ export function LongTermTab() {
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [viewMode, setViewMode] = useState<'observations' | 'entities' | 'insights' | 'memory' | 'graph'>('observations')
+  const [viewMode, setViewMode] = useState<'observations' | 'entities' | 'insights' | 'history' | 'memory' | 'graph'>('observations')
   const [observations, setObservations] = useState<Observation[]>([])
   const [obsLoading, setObsLoading] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
@@ -243,6 +244,7 @@ export function LongTermTab() {
             { label: '提炼记忆', value: 'observations' },
             { label: '实体', value: 'entities' },
             { label: '洞察', value: 'insights' },
+            { label: '历史', value: 'history' },
             { label: '关系图', value: 'graph' },
             { label: 'MEMORY.md', value: 'memory' },
           ]}
@@ -319,6 +321,13 @@ export function LongTermTab() {
       {viewMode === 'insights' && (
         <div style={{ flex: 1, minHeight: 0 }}>
           <InsightTab />
+        </div>
+      )}
+
+      {/* ── 历史视图 ── */}
+      {viewMode === 'history' && (
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <InsightHistoryTab />
         </div>
       )}
 

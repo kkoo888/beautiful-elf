@@ -196,7 +196,7 @@ export function EntityTab() {
         title={editingEntity ? '编辑实体' : '新建实体'}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={380}
+        size="default"
         destroyOnHidden
         extra={
           <Button type="primary" onClick={handleSave}>

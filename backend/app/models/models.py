@@ -31,6 +31,9 @@ from app.models.user import User
 from app.models.markdown_memory import MarkdownMemory
 from app.models.cost_tracking import CostRecord
 from app.models.image_gallery import ImageGallery
+from app.models.agent_profile import AgentProfile
+from app.models.memory_episode import MemoryEpisode
+from app.models.insight_history import MemoryInsightHistory
 
 __all__ = [
     "Conversation", "Message",
@@ -59,4 +62,7 @@ __all__ = [
     "MarkdownMemory",
     "CostRecord",
     "ImageGallery",
+    "AgentProfile",
+    "MemoryEpisode",
+    "MemoryInsightHistory",
 ]

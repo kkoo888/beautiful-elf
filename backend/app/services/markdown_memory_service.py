@@ -41,10 +41,18 @@ class MarkdownMemoryService:
         self.repo = MarkdownMemoryRepository()
         self.obs_repo = ObservationRepository()
         self._memory_manager = None
+        self._episode_repo = None
 
     def set_memory_manager(self, manager):
         """注入 MemoryManager 实例（应用启动时调用）"""
         self._memory_manager = manager
+
+    @property
+    def episode_repo(self):
+        if self._episode_repo is None:
+            from app.repository.episode_repo import EpisodeRepository
+            self._episode_repo = EpisodeRepository()
+        return self._episode_repo
 
     # ── Markdown 记忆 CRUD ──────────────────────────────
 
@@ -287,6 +295,7 @@ class MarkdownMemoryService:
 
         # 9. 写入 observation + source 表
         created_observations: List[ObservationOut] = []
+        obs_orm_objects = []  # 保留 ORM 对象用于后续实体抽取和信念演化
         for obs_data in obs_list:
             content = obs_data.get("content", "").strip()
             if not content:
@@ -300,6 +309,10 @@ class MarkdownMemoryService:
             source_dates = obs_data.get("source_dates", [])
             evidence_quotes = obs_data.get("evidence_quotes", [])
 
+            # P2-10: 时间感知 — 自动填充 valid_from
+            earliest_date = min(source_dates) if source_dates else ""
+            valid_from = f"{earliest_date}T00:00:00" if earliest_date else ""
+
             # 写入 observation
             obs = await self.obs_repo.create(db, {
                 "user_id": user_id,
@@ -307,7 +320,9 @@ class MarkdownMemoryService:
                 "category": category,
                 "freshness": freshness,
                 "source_days": len(source_dates),
+                "valid_from": valid_from,
             })
+            obs_orm_objects.append(obs)
 
             # 写入关联 source
             sources_out: List[ObservationSourceOut] = []
@@ -340,7 +355,32 @@ class MarkdownMemoryService:
                 updated_at=str(obs.updated_at) if obs.updated_at else None,
             ))
 
+            # P1-6: Observation 向量化 — 同步到 Qdrant
+            try:
+                await self._sync_observation_to_vector(
+                    obs.id, user_id, content, category,
+                )
+            except Exception as e:
+                logger.warning(f"[distill] observation 向量同步失败: {e}")
+
         logger.info(f"[distill] 写入完成: {len(created_observations)} 条 observation")
+
+        # ── v5.0: distill 后置 —— 关联 observation 到经历 ──
+        if obs_orm_objects and self._memory_manager:
+            try:
+                await self._link_observations_to_episodes(db, obs_orm_objects)
+            except Exception as e:
+                logger.warning(f"[distill] 经历关联失败(非致命): {e}")
+
+        # ── 后置管道: 实体自动抽取 + 信念演化（借鉴 Hindsight TEMPR + CARA）──
+        entity_stats = {"entities": 0, "relations": 0}
+        reinforce_stats = {"reinforced": 0, "weakened": 0, "contradicted": 0}
+        try:
+            if obs_orm_objects:
+                entity_stats = await self.extract_entities(db, obs_orm_objects, user_id)
+                reinforce_stats = await self.reinforce_insights(db, obs_orm_objects, user_id)
+        except Exception as e:
+            logger.warning(f"[distill] 后置管道失败（不影响主流程）: {e}")
 
         return DistillResult(
             observations=created_observations,
@@ -494,6 +534,646 @@ class MarkdownMemoryService:
         """获取分类统计"""
         return await self.obs_repo.count_by_category(db, user_id)
 
+    # ── Reflect（深度反思 — 借鉴 Hindsight CARA）──────────
+
+    async def reflect(
+        self, db: AsyncSession, user_id: int = 0, days: int = 7,
+    ) -> dict:
+        """深度反思 — LLM 驱动的 Insight 生成
+
+        借鉴 Hindsight CARA:
+          - 输入近期 Observations + 已有 Insights
+          - LLM 发现跨时间模式、矛盾、趋势
+          - 输出结构化 Insight（pattern/trend/risk/contradiction）
+
+        Returns:
+            {"insights": [...], "analyzed": int, "stats": {...}}
+        """
+        from app.services.llm_provider_service import LLMProviderService
+        from app.agent.llm_service import llm_service
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from app.models.memory_insight import MemoryInsight
+        from sqlalchemy import select
+
+        # 1. 获取近期 observations
+        recent_obs = await self.obs_repo.find_all(db, user_id=user_id, limit=50)
+        if not recent_obs:
+            return {"insights": [], "analyzed": 0, "stats": {}, "message": "没有近期记忆可供分析"}
+
+        # 2. 获取已有 active insights（避免重复 + 支持强化/弱化）
+        stmt = select(MemoryInsight).where(
+            MemoryInsight.is_deleted == 0, MemoryInsight.status == "active"
+        ).order_by(MemoryInsight.confidence.desc()).limit(20)
+        existing_insights = list((await db.execute(stmt)).scalars().all())
+
+        # 3. 构建观测文本
+        obs_text = "\n".join(
+            f"- [{o.category}|{o.freshness}] {o.content[:200]}"
+            for o in recent_obs
+        )
+        insight_text = "\n".join(
+            f"- [{i.insight_type}|置信度:{i.confidence}%] {i.content[:200]}"
+            for i in existing_insights
+        ) if existing_insights else "（暂无已有洞察）"
+
+        # 4. 统计信息（保留用于返回）
+        category_counts: dict[str, int] = {}
+        freshness_counts: dict[str, int] = {}
+        for o in recent_obs:
+            category_counts[o.category] = category_counts.get(o.category, 0) + 1
+            freshness_counts[o.freshness] = freshness_counts.get(o.freshness, 0) + 1
+
+        # 5. 加载 Agent 行为画像（P2-8: 借鉴 Hindsight CARA）
+        profile_context = ""
+        try:
+            from app.models.agent_profile import AgentProfile
+            profile = (await db.execute(
+                select(AgentProfile).where(
+                    AgentProfile.is_deleted == 0, AgentProfile.is_active == 1
+                ).limit(1)
+            )).scalar_one_or_none()
+            if profile and profile.id:
+                profile_context = f"""
+## Agent 行为画像（Disposition Profile）
+- 怀疑性(S): {profile.skepticism}/5  字面性(L): {profile.literalism}/5  共情性(E): {profile.empathy}/5
+- 偏见强度: {profile.bias_strength}
+- 背景: {profile.background or '（未设置）'}
+"""
+        except Exception:
+            pass
+
+        # 6. LLM 调用
+        provider_service = LLMProviderService()
+        provider = await provider_service.get_default_provider(db)
+        if not provider:
+            raise ValueError("请先在设置中配置默认 AI 供应商")
+        model_name = ""
+        if provider.models:
+            enabled = [m for m in provider.models if m.is_enabled == 1]
+            if enabled:
+                model_name = enabled[0].model_name
+        if not model_name:
+            raise ValueError("没有可用的模型")
+
+        system_prompt = f"""你是一个高级记忆反思系统（借鉴 Hindsight CARA 架构）。
+你的任务是分析 Agent 近期的提炼记忆，产生有深度的洞察。
+{profile_context}
+## 分析维度
+1. **模式识别（pattern）**: 跨时间的重复行为、偏好倾向、技术选择模式
+2. **趋势检测（trend）**: 正在增强或减弱的主题，关注方向变化
+3. **风险预警（risk）**: 反复出现的问题、潜在隐患、需要注意的偏差
+4. **矛盾发现（contradiction）**: 新旧信息之间的冲突、立场变化
+
+## 输出要求
+严格按以下 JSON 格式输出，不要输出任何其他内容：
+
+```json
+{{
+  "insights": [
+    {{
+      "content": "洞察内容（有深度、有具体发现，不要泛泛而谈）",
+      "insight_type": "pattern/trend/risk/contradiction",
+      "confidence": 70,
+      "related_obs_indices": [1, 3],
+      "rationale": "为什么得出这个结论（引用具体记忆）"
+    }}
+  ]
+}}
+```
+
+## 规则
+1. 每条洞察必须有具体证据支撑（引用 related_obs_indices）
+2. confidence: 0-100，证据越充分越高
+3. 优先发现人类难以察觉的跨时间模式
+4. 与已有洞察对比：支持则 confidence 应高于已有的，矛盾则标记为 contradiction
+5. 如果记忆数据太少无法得出有意义的洞察，返回空列表
+6. 不要生成模板化的通用建议，每个洞察必须与具体记忆内容相关"""
+
+        user_prompt = f"""## 近期提炼记忆（{len(recent_obs)} 条）
+{obs_text}
+
+## 已有洞察（{len(existing_insights)} 条）
+{insight_text}
+
+请分析以上记忆，产生有深度的洞察。严格按 JSON 格式输出。"""
+
+        llm = await llm_service.get_chat_llm(
+            db, provider_id=provider.id, model_name=model_name,
+            temperature=0.4, max_tokens=4096,
+        )
+        response = await llm.ainvoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
+        raw = response.content if isinstance(response.content, str) else str(response.content)
+
+        tokens = 0
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            tokens = response.usage_metadata.get("total_tokens", 0)
+        logger.info(f"[reflect] LLM 完成: {len(recent_obs)} obs, raw={len(raw)} 字, tokens={tokens}")
+
+        # 6. 解析 + 写入
+        parsed = self._parse_distill_json(raw)
+        insight_items = parsed.get("insights", [])
+
+        created: list[dict] = []
+        for item in insight_items:
+            content = (item.get("content", "") or "").strip()
+            if not content:
+                continue
+            insight_type = item.get("insight_type", "insight")
+            if insight_type not in ("pattern", "trend", "risk", "contradiction"):
+                insight_type = "insight"
+            confidence = max(0, min(100, int(item.get("confidence", 50))))
+
+            insight = MemoryInsight(
+                user_id=user_id,
+                content=content,
+                insight_type=insight_type,
+                confidence=confidence,
+                evidence_count=len(item.get("related_obs_indices", [])),
+                source_period=f"最近 {len(recent_obs)} 条记忆",
+                status="active",
+            )
+            db.add(insight)
+            created.append({
+                "content": content,
+                "insightType": insight_type,
+                "confidence": confidence,
+                "rationale": item.get("rationale", ""),
+            })
+
+        await db.flush()
+
+        logger.info(f"[reflect] 生成 {len(created)} 条洞察")
+        return {
+            "insights": created,
+            "analyzed": len(recent_obs),
+            "existingInsights": len(existing_insights),
+            "categoryBreakdown": category_counts,
+            "freshnessBreakdown": freshness_counts,
+        }
+
+    # ── 实体自动抽取（借鉴 Hindsight TEMPR）──────────────
+
+    async def extract_entities(
+        self, db: AsyncSession, observations: list, user_id: int = 0,
+    ) -> dict:
+        """从新 Observation 中自动抽取实体和关系
+
+        借鉴 Hindsight TEMPR:
+          - LLM 识别命名实体（PERSON/TECH/PROJECT/TOOL/CONCEPT/ORG）
+          - 自动消歧（匹配已有实体 + 字符串相似度）
+          - 自动构建关系（含因果链接 causes/enables/prevents）
+
+        Args:
+            observations: 新产生的 Observation ORM 对象列表
+            user_id: 用户 ID
+
+        Returns:
+            {"entities": int, "relations": int}
+        """
+        from app.services.llm_provider_service import LLMProviderService
+        from app.agent.llm_service import llm_service
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from app.models.memory_entity import MemoryEntity
+        from app.models.memory_entity_relation import MemoryEntityRelation
+        from sqlalchemy import select
+
+        if not observations:
+            return {"entities": 0, "relations": 0}
+
+        obs_text = "\n".join(
+            f"[obs_id={o.id}][{o.category}] {o.content[:300]}"
+            for o in observations
+        )
+
+        # 获取已有实体（用于消歧匹配）
+        existing = (await db.execute(
+            select(MemoryEntity).where(MemoryEntity.is_deleted == 0)
+        )).scalars().all()
+        existing_text = "\n".join(
+            f"- {e.name} ({e.entity_type}, id={e.id})" for e in existing
+        ) if existing else "（暂无已有实体）"
+
+        provider_service = LLMProviderService()
+        provider = await provider_service.get_default_provider(db)
+        if not provider:
+            return {"entities": 0, "relations": 0}
+        model_name = ""
+        if provider.models:
+            enabled = [m for m in provider.models if m.is_enabled == 1]
+            if enabled:
+                model_name = enabled[0].model_name
+        if not model_name:
+            return {"entities": 0, "relations": 0}
+
+        system_prompt = """你是一个实体和关系抽取专家。从记忆中识别实体并建立关系图谱。
+
+## 实体类型
+person（人）、tech（技术/框架）、project（项目）、tool（工具）、concept（概念）、org（组织）
+
+## 关系类型
+- uses（使用）: A 使用 B
+- depends（依赖）: A 依赖 B
+- belongs（属于）: A 属于 B
+- creates（创建）: A 创建了 B
+- works_at（就职）: A 就职于 B
+- related（相关）: A 和 B 有关联
+- causes（导致）: A 导致 B（因果）
+- enables（使能）: A 使 B 成为可能（因果）
+- prevents（阻止）: A 阻止了 B（因果）
+
+## 输出 JSON
+
+```json
+{
+  "entities": [
+    {"name": "实体名称", "entity_type": "tech", "description": "简短描述", "aliases": ["别名1"]}
+  ],
+  "relations": [
+    {"source": "实体名称1", "target": "实体名称2", "relation_type": "uses", "evidence": "来源依据"}
+  ]
+}
+```
+
+## 规则
+1. 如果实体在已有列表中存在，使用已有名称（自动消歧）
+2. 不要抽取过于泛化的实体（如"代码"、"系统"）
+3. 因果关系（causes/enables/prevents）仅在证据明确时标注
+4. 每个实体名称保持简洁规范"""
+
+        user_prompt = f"""## 已有实体
+{existing_text}
+
+## 新提炼记忆
+{obs_text}
+
+请抽取实体和关系，严格按 JSON 格式输出。"""
+
+        llm = await llm_service.get_chat_llm(
+            db, provider_id=provider.id, model_name=model_name,
+            temperature=0.2, max_tokens=2048,
+        )
+        response = await llm.ainvoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
+        raw = response.content if isinstance(response.content, str) else str(response.content)
+        parsed = self._parse_distill_json(raw)
+
+        # 写入实体
+        entity_name_map: dict[str, MemoryEntity] = {e.name: e for e in existing}
+        new_entities = parsed.get("entities", [])
+        created_count = 0
+
+        for ent_data in new_entities:
+            name = (ent_data.get("name", "") or "").strip()
+            if not name or len(name) > 128:
+                continue
+            etype = ent_data.get("entity_type", "concept")
+            if etype not in ("person", "tech", "project", "tool", "concept", "org"):
+                etype = "concept"
+
+            if name in entity_name_map:
+                # 消歧命中：更新提及次数
+                existing_ent = entity_name_map[name]
+                existing_ent.mention_count += 1
+                existing_ent.last_mentioned_at = datetime.now().isoformat()
+            else:
+                # 新实体
+                new_ent = MemoryEntity(
+                    user_id=user_id, name=name, entity_type=etype,
+                    description=(ent_data.get("description", "") or "")[:500],
+                    aliases=",".join(ent_data.get("aliases", []) or [])[:500],
+                    mention_count=1,
+                    last_mentioned_at=datetime.now().isoformat(),
+                )
+                db.add(new_ent)
+                await db.flush()
+                entity_name_map[name] = new_ent
+                created_count += 1
+
+        # 写入关系
+        new_relations = parsed.get("relations", [])
+        rel_count = 0
+        valid_rel_types = {
+            "uses", "depends", "belongs", "creates", "works_at",
+            "related", "causes", "enables", "prevents",
+        }
+
+        for rel_data in new_relations:
+            src_name = (rel_data.get("source", "") or "").strip()
+            tgt_name = (rel_data.get("target", "") or "").strip()
+            rtype = rel_data.get("relation_type", "related")
+            if rtype not in valid_rel_types:
+                rtype = "related"
+
+            src_ent = entity_name_map.get(src_name)
+            tgt_ent = entity_name_map.get(tgt_name)
+            if not src_ent or not tgt_ent or src_ent.id == tgt_ent.id:
+                continue
+
+            # 检查是否已存在
+            dup = (await db.execute(
+                select(MemoryEntityRelation).where(
+                    MemoryEntityRelation.source_entity_id == src_ent.id,
+                    MemoryEntityRelation.target_entity_id == tgt_ent.id,
+                    MemoryEntityRelation.relation_type == rtype,
+                    MemoryEntityRelation.is_deleted == 0,
+                )
+            )).scalar_one_or_none()
+
+            if dup:
+                dup.weight += 1
+            else:
+                rel = MemoryEntityRelation(
+                    user_id=user_id,
+                    source_entity_id=src_ent.id,
+                    target_entity_id=tgt_ent.id,
+                    relation_type=rtype,
+                    evidence=(rel_data.get("evidence", "") or "")[:500],
+                    weight=1,
+                )
+                db.add(rel)
+                rel_count += 1
+
+        await db.flush()
+        logger.info(f"[extract_entities] 新建 {created_count} 实体, {rel_count} 关系")
+        return {"entities": created_count, "relations": rel_count}
+
+    # ── 信念自动演化（借鉴 Hindsight Opinion Reinforcement）──────
+
+    async def reinforce_insights(
+        self, db: AsyncSession, new_observations: list, user_id: int = 0,
+    ) -> dict:
+        """信念自动演化 — 新证据到达时更新 Insight 置信度
+
+        借鉴 Hindsight Opinion Reinforcement:
+          - 通过语义相似度找到相关 Insight
+          - LLM 评估关系：reinforce / weaken / contradict / neutral
+          - 更新置信度：reinforce +10, weaken -10, contradict -20
+          - 矛盾时更新状态为 superseded
+
+        Args:
+            new_observations: 新产生的 Observation ORM 对象列表
+            user_id: 用户 ID
+
+        Returns:
+            {"reinforced": int, "weakened": int, "contradicted": int}
+        """
+        from app.services.llm_provider_service import LLMProviderService
+        from app.agent.llm_service import llm_service
+        from langchain_core.messages import HumanMessage, SystemMessage
+        from app.models.memory_insight import MemoryInsight
+        from sqlalchemy import select
+
+        if not new_observations:
+            return {"reinforced": 0, "weakened": 0, "contradicted": 0}
+
+        # 获取 active insights
+        stmt = select(MemoryInsight).where(
+            MemoryInsight.is_deleted == 0, MemoryInsight.status == "active"
+        ).order_by(MemoryInsight.confidence.desc()).limit(30)
+        active_insights = list((await db.execute(stmt)).scalars().all())
+        if not active_insights:
+            return {"reinforced": 0, "weakened": 0, "contradicted": 0}
+
+        new_obs_text = "\n".join(
+            f"- [{o.category}] {o.content[:200]}" for o in new_observations
+        )
+        insight_text = "\n".join(
+            f"[id={i.id}] [{i.insight_type}|置信度:{i.confidence}%] {i.content[:200]}"
+            for i in active_insights
+        )
+
+        provider_service = LLMProviderService()
+        provider = await provider_service.get_default_provider(db)
+        if not provider:
+            return {"reinforced": 0, "weakened": 0, "contradicted": 0}
+        model_name = ""
+        if provider.models:
+            enabled = [m for m in provider.models if m.is_enabled == 1]
+            if enabled:
+                model_name = enabled[0].model_name
+        if not model_name:
+            return {"reinforced": 0, "weakened": 0, "contradicted": 0}
+
+        system_prompt = """你是一个信念演化评估系统（借鉴 Hindsight Opinion Reinforcement）。
+评估新证据对已有洞察（信念）的影响。
+
+## 评估维度
+- reinforce: 新证据支持该洞察，增强置信度
+- weaken: 新证据削弱该洞察，降低置信度
+- contradict: 新证据与该洞察矛盾，需要大幅修正或替代
+- neutral: 新证据与该洞察无关
+
+## 输出 JSON
+
+```json
+{
+  "assessments": [
+    {"insight_id": 123, "verdict": "reinforce", "reason": "简要原因"}
+  ]
+}
+```
+
+## 规则
+1. 只评估与已有洞察相关的新证据
+2. 每个已有多达评估一次（如果有多条相关证据，取最强影响）
+3. 只输出有相关性的评估，不要对每条洞察都输出
+4. contradict 仅在证据明确矛盾时使用"""
+
+        user_prompt = f"""## 新提炼记忆
+{new_obs_text}
+
+## 已有洞察
+{insight_text}
+
+请评估新证据对已有洞察的影响，严格按 JSON 格式输出。"""
+
+        llm = await llm_service.get_chat_llm(
+            db, provider_id=provider.id, model_name=model_name,
+            temperature=0.2, max_tokens=2048,
+        )
+        response = await llm.ainvoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
+        raw = response.content if isinstance(response.content, str) else str(response.content)
+        parsed = self._parse_distill_json(raw)
+
+        stats = {"reinforced": 0, "weakened": 0, "contradicted": 0}
+        insight_map = {i.id: i for i in active_insights}
+        ALPHA = 10  # 置信度调整步长
+
+        # v5.0: 初始化仲裁服务 + history 审计
+        from app.services.insight_arbitration_service import InsightArbitrationService
+        arbiter = InsightArbitrationService()
+
+        # 收集新 observation 的 obs_ids（用于仲裁）
+        new_obs_ids = [o.id for o in new_observations if hasattr(o, 'id') and o.id]
+
+        for assessment in parsed.get("assessments", []):
+            iid = assessment.get("insight_id")
+            verdict = assessment.get("verdict", "neutral")
+            reason = assessment.get("reason", "")
+            if iid not in insight_map or verdict == "neutral":
+                continue
+
+            insight = insight_map[iid]
+            old_confidence = insight.confidence
+
+            if verdict == "reinforce":
+                insight.confidence = min(100, insight.confidence + ALPHA)
+                insight.evidence_count += 1
+                stats["reinforced"] += 1
+                await arbiter.record_history(
+                    db, insight.id, "reinforced",
+                    old_confidence=old_confidence,
+                    new_confidence=insight.confidence,
+                    reason=reason[:500],
+                    trigger_obs_ids=new_obs_ids,
+                )
+            elif verdict == "weaken":
+                insight.confidence = max(0, insight.confidence - ALPHA)
+                if insight.confidence < 20:
+                    insight.status = "dismissed"
+                stats["weakened"] += 1
+                await arbiter.record_history(
+                    db, insight.id, "weakened",
+                    old_confidence=old_confidence,
+                    new_confidence=insight.confidence,
+                    reason=reason[:500],
+                    trigger_obs_ids=new_obs_ids,
+                )
+            elif verdict == "contradict":
+                # v5.0: 调用仲裁引擎而非简单标记 superseded
+                try:
+                    arb_result = await arbiter.arbitrate_contradiction(
+                        db, insight,
+                        new_evidence_text=new_obs_text[:500],
+                        new_evidence_obs_ids=new_obs_ids,
+                        contradiction_reason=reason[:500],
+                        user_id=user_id,
+                    )
+                    if arb_result.get("action") == "superseded":
+                        stats["contradicted"] += 1
+                    else:
+                        # 旧 Insight 保留，仅记录矛盾
+                        stats["weakened"] += 1  # 统计为弱化
+                except Exception as arb_err:
+                    # 仲裁失败时降级为原始逻辑
+                    logger.warning(f"[reinforce] 仲裁失败，降级: {arb_err}")
+                    insight.confidence = max(0, insight.confidence - 2 * ALPHA)
+                    insight.status = "superseded"
+                    stats["contradicted"] += 1
+                    await arbiter.record_history(
+                        db, insight.id, "contradicted",
+                        old_confidence=old_confidence,
+                        new_confidence=insight.confidence,
+                        reason=f"仲裁失败降级: {reason[:200]}",
+                        trigger_obs_ids=new_obs_ids,
+                    )
+
+        await db.flush()
+        logger.info(f"[reinforce] 强化={stats['reinforced']} 弱化={stats['weakened']} 矛盾={stats['contradicted']}")
+        return stats
+
+    # ── v5.0: 经历创建 + Observation 关联 ─────────────
+
+    async def create_episode_from_conversation(
+        self, db, conversation_id: int, user_id: int, messages: list,
+    ) -> Optional[dict]:
+        """从对话创建经历（借鉴 Zep Graphiti Episode Node）
+
+        幂等: 同一 conversation_id 只创建一个经历。
+        """
+        if not messages or not self._memory_manager:
+            return None
+
+        existing = await self.episode_repo.find_by_conversation(db, conversation_id)
+        if existing:
+            return None
+
+        started_at = datetime.utcnow()
+        ended_at = datetime.utcnow()
+        try:
+            first_msg = messages[0]
+            if isinstance(first_msg, dict) and first_msg.get("timestamp"):
+                started_at = datetime.fromisoformat(first_msg["timestamp"])
+            last_msg = messages[-1]
+            if isinstance(last_msg, dict) and last_msg.get("timestamp"):
+                ended_at = datetime.fromisoformat(last_msg["timestamp"])
+        except (ValueError, TypeError, KeyError):
+            pass
+
+        msg_count = len(messages)
+        text = "\n".join(
+            f"{m.get('role', 'user')}: {(m.get('content', '') or '')[:100]}"
+            for m in messages[:10]
+        )
+        title = f"对话 #{conversation_id} ({msg_count} 条消息)"
+        summary = text[:1000] if text else title
+
+        tags = []
+        all_text = " ".join(str(m.get("content", ""))[:200] for m in messages[:20]).lower()
+        tag_keywords = ["python", "javascript", "react", "vue", "架构", "部署", "bug", "重构"]
+        for kw in tag_keywords:
+            if kw in all_text:
+                tags.append(kw)
+
+        entity_ids = []
+        try:
+            from app.models.memory_entity import MemoryEntity
+            from sqlalchemy import select
+            entities = (await db.execute(
+                select(MemoryEntity).where(MemoryEntity.is_deleted == 0)
+            )).scalars().all()
+            for ent in entities:
+                ent_names = [ent.name.lower()] + [
+                    a.strip().lower() for a in (ent.aliases or "").split(",") if a.strip()
+                ]
+                if any(name in all_text for name in ent_names):
+                    entity_ids.append(ent.id)
+        except Exception:
+            pass
+
+        qdrant_point_id = await self._memory_manager.save_episode(
+            user_id=user_id, conversation_id=conversation_id,
+            title=title, summary=summary,
+            started_at=started_at.isoformat(), ended_at=ended_at.isoformat(),
+            message_count=msg_count, entity_ids=entity_ids, tags=tags,
+        )
+
+        episode = await self.episode_repo.create(db, {
+            "user_id": user_id, "conversation_id": conversation_id,
+            "title": title, "summary": summary,
+            "started_at": started_at, "ended_at": ended_at,
+            "message_count": msg_count,
+            "entity_ids": ",".join(str(e) for e in entity_ids),
+            "observation_ids": "", "tags": tags,
+            "qdrant_point_id": qdrant_point_id,
+        })
+
+        logger.info(f"[episode] 创建: id={episode.id} conv={conversation_id}")
+        return {"id": episode.id, "title": title}
+
+    async def _link_observations_to_episodes(self, db, observations: list):
+        """将新创建的 observation 关联到来源对话的经历"""
+        for obs in observations:
+            if not obs.valid_from:
+                continue
+            try:
+                episodes = await self.episode_repo.find_by_time_range(
+                    db, user_id=obs.user_id,
+                    start_time=obs.valid_from, end_time=obs.valid_from, limit=1,
+                )
+                for ep in episodes:
+                    await self.episode_repo.append_observation(db, ep.id, obs.id)
+            except Exception as e:
+                logger.debug(f"[episode-link] obs_id={obs.id} 关联失败: {e}")
+
     # ── 向量同步 ────────────────────────────────────────
 
     async def _sync_to_vector(self, memory_id: int, user_id: int, title: str, content: str):
@@ -508,6 +1188,19 @@ class MarkdownMemoryService:
         )
         await self.repo.mark_synced(None, memory_id)
 
+    async def _sync_observation_to_vector(
+        self, obs_id: int, user_id: int, content: str, category: str,
+    ):
+        """将 Observation 同步到 Qdrant 向量（P1-6: 打通提炼记忆的语义检索）"""
+        if not self._memory_manager:
+            return
+        await self._memory_manager.save_memory(
+            user_id=user_id,
+            summary=f"[observation:{category}] {content[:500]}",
+            tags=["observation", f"category:{category}"],
+            importance=8,  # 提炼记忆权重高于原始 detail
+            network="observation",
+        )
     # ── 转换 ────────────────────────────────────────────
 
     @staticmethod

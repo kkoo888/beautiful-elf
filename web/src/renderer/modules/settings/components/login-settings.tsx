@@ -64,13 +64,14 @@ export function LoginSettings() {
   const { message } = App.useApp()
 
   // 启动时恢复记住的账号密码
+  const [savedCredentials, setSavedCredentials] = useState<{ username: string; password: string } | null>(null)
   useEffect(() => {
     const saved = loadCredentials()
     if (saved) {
-      form.setFieldsValue({ username: saved.username, password: saved.password })
+      setSavedCredentials(saved)
       setRemember(true)
     }
-  }, [form])
+  }, [])
 
   // 启动时用 token 拉取最新用户信息
   useEffect(() => {
@@ -211,7 +212,13 @@ export function LoginSettings() {
         </Button>
       </Space>
 
-      <Form form={form} layout="vertical" onFinish={mode === 'login' ? handleLogin : handleRegister} autoComplete="off">
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={mode === 'login' ? handleLogin : handleRegister}
+        autoComplete="off"
+        initialValues={savedCredentials ? { username: savedCredentials.username, password: savedCredentials.password } : undefined}
+      >
         <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }, { min: 2, message: '用户名至少 2 个字符' }]}>
           <Input prefix={<UserOutlined />} placeholder="用户名" size="large" />
         </Form.Item>

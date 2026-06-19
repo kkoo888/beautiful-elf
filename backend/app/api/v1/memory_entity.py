@@ -5,7 +5,13 @@
   - /entities/relations: 关系 CRUD
   - /entities/graph: 图谱数据（前端 React Flow 用）
   - /insights: 洞察 CRUD
+  - /insights/{id}/history: Insight 演化历史
+  - /insights/conflicts: 矛盾 Insight 列表
   - /reflect: 触发反思（从近期记忆提取洞察）
+  - /episodes: 经历列表
+  - /episodes/{id}: 经历详情
+  - /episodes/by-entity/{entity_id}: 按实体查经历
+  - /episodes/search: 经历语义检索
 """
 from typing import Optional, List
 from datetime import datetime
@@ -17,7 +23,6 @@ from app.core.database import get_db
 from app.models.memory_entity import MemoryEntity
 from app.models.memory_entity_relation import MemoryEntityRelation
 from app.models.memory_insight import MemoryInsight
-from app.models.observation import MemoryObservation
 from app.schemas.response import ApiResult, ApiPageResult, api_error
 
 router = APIRouter()
@@ -333,7 +338,7 @@ async def delete_insight(insight_id: int, db: AsyncSession = Depends(get_db)):
 
 
 # ═══════════════════════════════════════════════════
-# Reflect — 触发反思（从近期记忆提取洞察）
+# Reflect — LLM 深度反思（借鉴 Hindsight CARA）
 # ═══════════════════════════════════════════════════
 
 @router.post("/reflect", response_model=ApiResult)
@@ -341,82 +346,19 @@ async def trigger_reflect(
     days: int = Body(default=7),
     db: AsyncSession = Depends(get_db),
 ):
-    """触发反思：从近期 observations 中提取模式和洞察
+    """触发深度反思 — LLM 驱动，从近期 Observations 提取深度洞察
 
-    这是一个简化版的 Reflect —— 实际生产中应调用 LLM。
-    这里先做基础的统计分析。
+    借鉴 Hindsight CARA Reflect:
+      - 输入近期提炼记忆 + 已有洞察
+      - LLM 分析跨时间模式、矛盾、趋势、风险
+      - 产生语义深度洞察（非模板化）
     """
-    # 获取近期 observations
-    stmt = select(MemoryObservation).where(
-        MemoryObservation.is_deleted == 0
-    ).order_by(MemoryObservation.id.desc()).limit(50)
-    observations = (await db.execute(stmt)).scalars().all()
-
-    if not observations:
-        return ApiResult(data={"insights": [], "message": "没有近期记忆可供分析"})
-
-    # 统计分析
-    category_counts = {}
-    freshness_counts = {}
-    for obs in observations:
-        category_counts[obs.category] = category_counts.get(obs.category, 0) + 1
-        freshness_counts[obs.freshness] = freshness_counts.get(obs.freshness, 0) + 1
-
-    insights = []
-
-    # 模式检测：某分类占比过高
-    total = len(observations)
-    for cat, count in category_counts.items():
-        ratio = count / total
-        if ratio > 0.5:
-            cat_label = {"decisions": "决策", "pitfalls": "踩坑", "preferences": "偏好", "status": "状态"}.get(cat, cat)
-            insight = MemoryInsight(
-                content=f"近期 {ratio:.0%} 的记忆集中在「{cat_label}」领域，建议关注平衡。",
-                insight_type="pattern",
-                confidence=int(ratio * 100),
-                source_period=f"最近 {total} 条记忆",
-                evidence_count=count,
-                status="active",
-            )
-            db.add(insight)
-            insights.append(insight)
-
-    # 趋势检测：weakening 记忆过多
-    weakening = freshness_counts.get("weakening", 0) + freshness_counts.get("stale", 0)
-    if weakening > total * 0.3:
-        insight = MemoryInsight(
-            content=f"有 {weakening} 条记忆正在衰减（weakening/stale），可能需要更新或归档。",
-            insight_type="trend",
-            confidence=70,
-            source_period=f"最近 {total} 条记忆",
-            evidence_count=weakening,
-            status="active",
-        )
-        db.add(insight)
-        insights.append(insight)
-
-    # 风险检测：踩坑记忆较多
-    pitfalls = category_counts.get("pitfalls", 0)
-    if pitfalls > 3:
-        insight = MemoryInsight(
-            content=f"近期有 {pitfalls} 条踩坑记录，建议总结共性问题形成最佳实践。",
-            insight_type="risk",
-            confidence=60,
-            source_period=f"最近 {total} 条记忆",
-            evidence_count=pitfalls,
-            status="active",
-        )
-        db.add(insight)
-        insights.append(insight)
-
-    await db.flush()
-
-    return ApiResult(data={
-        "insights": [_insight_to_dict(i) for i in insights],
-        "analyzed": total,
-        "categoryBreakdown": category_counts,
-        "freshnessBreakdown": freshness_counts,
-    })
+    from app.services.markdown_memory_service import markdown_memory_service
+    try:
+        result = await markdown_memory_service.reflect(db, user_id=0, days=days)
+    except ValueError as e:
+        return api_error("MEMORY_REFLECT_FAILED", str(e))
+    return ApiResult(data=result)
 
 
 # ═══════════════════════════════════════════════════
@@ -459,3 +401,215 @@ def _insight_to_dict(i: MemoryInsight) -> dict:
         "status": i.status,
         "createdAt": str(i.created_at) if i.created_at else None,
     }
+
+
+# ═══════════════════════════════════════════════════
+# Agent 行为画像（借鉴 Hindsight CARA Disposition Profile）
+# ═══════════════════════════════════════════════════
+
+from app.models.agent_profile import AgentProfile
+
+
+@router.get("/profile", response_model=ApiResult)
+async def get_active_profile(
+    db: AsyncSession = Depends(get_db),
+):
+    """获取当前活跃的 Agent 行为画像"""
+    profile = (await db.execute(
+        select(AgentProfile).where(
+            AgentProfile.is_deleted == 0, AgentProfile.is_active == 1
+        ).limit(1)
+    )).scalar_one_or_none()
+
+    if not profile:
+        # 返回默认画像
+        return ApiResult(data=_profile_to_dict_default())
+    return ApiResult(data=_profile_to_dict(profile))
+
+
+@router.post("/profile", response_model=ApiResult)
+async def create_or_update_profile(
+    name: str = Body(default="default"),
+    background: str = Body(default=""),
+    skepticism: int = Body(default=2, ge=1, le=5),
+    literalism: int = Body(default=3, ge=1, le=5),
+    empathy: int = Body(default=4, ge=1, le=5),
+    bias_strength: float = Body(default=0.5, ge=0.0, le=1.0),
+    db: AsyncSession = Depends(get_db),
+):
+    """创建或更新 Agent 行为画像"""
+    existing = (await db.execute(
+        select(AgentProfile).where(
+            AgentProfile.is_deleted == 0, AgentProfile.is_active == 1
+        ).limit(1)
+    )).scalar_one_or_none()
+
+    if existing:
+        existing.name = name
+        existing.background = background
+        existing.skepticism = skepticism
+        existing.literalism = literalism
+        existing.empathy = empathy
+        existing.bias_strength = bias_strength
+        await db.flush()
+        await db.refresh(existing)
+        return ApiResult(data=_profile_to_dict(existing))
+
+    profile = AgentProfile(
+        name=name, background=background,
+        skepticism=skepticism, literalism=literalism,
+        empathy=empathy, bias_strength=bias_strength,
+        is_active=1,
+    )
+    db.add(profile)
+    await db.flush()
+    await db.refresh(profile)
+    return ApiResult(data=_profile_to_dict(profile))
+
+
+def _profile_to_dict(p: AgentProfile) -> dict:
+    """AgentProfile ORM → dict（camelCase）"""
+    return {
+        "id": p.id,
+        "name": p.name,
+        "background": p.background,
+        "skepticism": p.skepticism,
+        "literalism": p.literalism,
+        "empathy": p.empathy,
+        "biasStrength": p.bias_strength,
+        "isActive": bool(p.is_active),
+        "createdAt": str(p.created_at) if p.created_at else None,
+    }
+
+
+def _profile_to_dict_default() -> dict:
+    """默认行为画像"""
+    return {
+        "id": 0,
+        "name": "default",
+        "background": "",
+        "skepticism": 2,
+        "literalism": 3,
+        "empathy": 4,
+        "biasStrength": 0.5,
+        "isActive": False,
+        "createdAt": None,
+    }
+
+
+# ═══════════════════════════════════════════════════
+# v5.0: 经历对话分组（借鉴 Zep Graphiti）
+# ═══════════════════════════════════════════════════
+
+from app.models.memory_episode import MemoryEpisode
+from app.repository.episode_repo import EpisodeRepository
+
+
+@router.get("/episodes", response_model=ApiPageResult)
+async def list_episodes(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    db: AsyncSession = Depends(get_db),
+):
+    """经历列表（分页）"""
+    repo = EpisodeRepository()
+    items = await repo.find_all(db, user_id=0, offset=(page - 1) * page_size, limit=page_size)
+    total = await repo.count(db, user_id=0)
+    return ApiPageResult(
+        data=[_episode_to_dict(e) for e in items],
+        total=total, page=page, page_size=page_size,
+    )
+
+
+@router.get("/episodes/{episode_id}", response_model=ApiResult)
+async def get_episode(
+    episode_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """经历详情"""
+    repo = EpisodeRepository()
+    episode = await repo.find_by_id(db, episode_id)
+    if not episode:
+        return api_error("NOT_FOUND", "经历不存在")
+    return ApiResult(data=_episode_to_dict(episode))
+
+
+@router.get("/episodes/by-entity/{entity_id}", response_model=ApiResult)
+async def get_episodes_by_entity(
+    entity_id: int,
+    limit: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """按实体 ID 查找关联经历"""
+    repo = EpisodeRepository()
+    episodes = await repo.find_by_entity(db, entity_id, limit=limit)
+    return ApiResult(data=[_episode_to_dict(e) for e in episodes])
+
+
+@router.get("/episodes/search", response_model=ApiResult)
+async def search_episodes(
+    q: str = Query(..., min_length=1, description="搜索关键词"),
+    limit: int = Query(default=10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    """经历语义检索（通过 Qdrant）"""
+    # 简单的 LIKE 查询实现（语义检索需要 embedding + Qdrant）
+    def _escape_like(s: str) -> str:
+        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    
+    like = f"%{_escape_like(q)}%"
+    stmt = select(MemoryEpisode).where(
+        MemoryEpisode.is_deleted == 0,
+        or_(MemoryEpisode.title.like(like), MemoryEpisode.summary.like(like)),
+    ).order_by(MemoryEpisode.started_at.desc()).limit(limit)
+    rows = (await db.execute(stmt)).scalars().all()
+    return ApiResult(data=[_episode_to_dict(e) for e in rows])
+
+
+def _episode_to_dict(e: MemoryEpisode) -> dict:
+    return {
+        "id": e.id,
+        "userId": e.user_id,
+        "conversationId": e.conversation_id,
+        "title": e.title,
+        "summary": e.summary,
+        "startedAt": str(e.started_at) if e.started_at else None,
+        "endedAt": str(e.ended_at) if e.ended_at else None,
+        "messageCount": e.message_count,
+        "entityIds": e.entity_ids,
+        "observationIds": e.observation_ids,
+        "tags": e.tags,
+        "qdrantPointId": e.qdrant_point_id,
+        "createdAt": str(e.created_at) if e.created_at else None,
+        "updatedAt": str(e.updated_at) if e.updated_at else None,
+    }
+
+
+# ═══════════════════════════════════════════════════
+# v5.0: Insight 演化历史 + 冲突查询
+# ═══════════════════════════════════════════════════
+
+from app.services.insight_arbitration_service import InsightArbitrationService
+
+
+@router.get("/insights/{insight_id}/history", response_model=ApiResult)
+async def get_insight_history(
+    insight_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """Insight 演化历史（审计追踪）"""
+    arbiter = InsightArbitrationService()
+    history = await arbiter.get_insight_history(db, insight_id, limit=limit)
+    return ApiResult(data=history)
+
+
+@router.get("/insights/conflicts", response_model=ApiResult)
+async def get_insight_conflicts(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """矛盾 Insight 列表"""
+    arbiter = InsightArbitrationService()
+    conflicts = await arbiter.get_conflicts(db, user_id=0, limit=limit)
+    return ApiResult(data=conflicts)

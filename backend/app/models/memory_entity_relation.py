@@ -16,7 +16,7 @@ class MemoryEntityRelation(BaseModel):
     source_entity_id = Column(BigInteger, nullable=False, comment="源实体 ID")
     target_entity_id = Column(BigInteger, nullable=False, comment="目标实体 ID")
     relation_type = Column(String(32), nullable=False, default="related",
-                           comment="关系类型: uses/depends/belongs/creates/works_at/related")
+                           comment="关系类型: uses/depends/belongs/creates/works_at/related/causes/enables/prevents")
     weight = Column(Integer, nullable=False, default=1, comment="权重（被验证次数）")
     evidence = Column(Text, nullable=False, default="", comment="关系证据（来源内容摘要）")
     source_obs_id = Column(BigInteger, nullable=False, default=0,

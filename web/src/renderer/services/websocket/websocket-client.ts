@@ -20,7 +20,7 @@ import type {
 import { MessageQueue } from './message-queue'
 
 const DEFAULT_CONFIG: Required<WebSocketConfig> = {
-  url: 'ws://localhost:8080/ws',
+  url: 'ws://localhost:6680/api/v1/ws',
   heartbeatInterval: 30_000,
   heartbeatTimeout: 3,
   reconnectInitialDelay: 1_000,

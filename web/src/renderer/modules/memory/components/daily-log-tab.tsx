@@ -1,7 +1,7 @@
 /** 每日日志 Tab — Markdown 日记视图 */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Typography, List, Card, Empty, Spin, Tag } from 'antd'
+import { Typography, Card, Empty, Spin, Tag } from 'antd'
 import { CalendarOutlined, FileTextOutlined } from '@ant-design/icons'
 import { fetchDailyLogs, fetchMarkdownMemory } from '../services/memory-api'
 import type { MarkdownMemoryEntry } from '../services/memory-api'
@@ -43,33 +43,30 @@ export function DailyLogTab() {
     <div style={{ display: 'flex', gap: 16, height: '100%', minHeight: 0 }}>
       {/* 左侧：日期列表 */}
       <div style={{ width: 200, flexShrink: 0, overflowY: 'auto', minHeight: 0 }}>
-        <List
-          size="small"
-          dataSource={logs}
-          renderItem={item => (
-            <List.Item
-              style={{
-                cursor: 'pointer',
-                background: selected?.id === item.id ? '#e6f4ff' : 'transparent',
-                borderRadius: 6,
-                padding: '8px 12px',
-                marginBottom: 4,
-              }}
-              onClick={() => handleSelect(item)}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CalendarOutlined style={{ color: '#1677ff' }} />
-                <div>
-                  <Text strong style={{ fontSize: 13 }}>{item.title}</Text>
-                  <br />
-                  <Text type="secondary" style={{ fontSize: 11 }}>
-                    {item.wordCount} 字
-                  </Text>
-                </div>
+        {logs.map(item => (
+          <div
+            key={item.id}
+            style={{
+              cursor: 'pointer',
+              background: selected?.id === item.id ? '#e6f4ff' : 'transparent',
+              borderRadius: 6,
+              padding: '8px 12px',
+              marginBottom: 4,
+            }}
+            onClick={() => handleSelect(item)}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarOutlined style={{ color: '#1677ff' }} />
+              <div>
+                <Text strong style={{ fontSize: 13 }}>{item.title}</Text>
+                <br />
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  {item.wordCount} 字
+                </Text>
               </div>
-            </List.Item>
-          )}
-        />
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* 右侧：日志内容 */}
