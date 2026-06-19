@@ -298,7 +298,7 @@ class MemoryManager:
                 query_vector=query_vector,
                 limit=limit * 4,
                 score_threshold=0.25,
-                filter_payload=user_filter,
+                raw_filter=user_filter,
             )
 
         if not vector_results:

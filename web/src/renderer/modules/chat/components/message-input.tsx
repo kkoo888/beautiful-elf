@@ -288,7 +288,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             >
               <AimOutlined />
               <span className={styles.toolButtonLabel}>
-                {goalMode ? (value.trim() ? value.trim().slice(0, 10) + (value.trim().length > 10 ? '…' : '') : '目标') : '目标'}
+                {'目标'}
               </span>
               {goalMode && (
                 <span
