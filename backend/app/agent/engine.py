@@ -167,7 +167,11 @@ def build_agent_graph(
     graph.add_node("evaluator", _make_evaluator_node(llm))
     graph.add_node("memory_saver", _make_memory_saver(memory_manager))
     goal_evaluator = _make_goal_evaluator(llm)
+    goal_status_updater = _make_goal_status_updater()
+    goal_replanner = _make_goal_replanner(llm)
     graph.add_node("goal_evaluator", goal_evaluator)
+    graph.add_node("goal_status_updater", goal_status_updater)
+    graph.add_node("goal_replanner", goal_replanner)
 
     # 入口: model_selector → intent_router → ...
     graph.set_entry_point("model_selector")
@@ -195,12 +199,17 @@ def build_agent_graph(
         "pass": "memory_saver",
         "replan": "llm_call",
     })
-    # memory_saver 之后：Goal 模式走 goal_evaluator，否则直接结束
+    # memory_saver 之后：Goal 模式走状态更新器
     graph.add_conditional_edges("memory_saver", _after_memory, {
-        "goal_evaluator": "goal_evaluator",
+        "goal_status_updater": "goal_status_updater",
         END: END,
     })
-    # goal_evaluator 之后：达成/超限→结束，未达成→回到 model_selector 重试
+    graph.add_edge("goal_status_updater", "goal_replanner")
+    graph.add_conditional_edges("goal_replanner", _after_goal_replan, {
+        "goal_evaluator": "goal_evaluator",
+        "model_selector": "model_selector",
+        END: END,
+    })
     graph.add_conditional_edges("goal_evaluator", _after_goal_eval, {
         END: END,
         "model_selector": "model_selector",
@@ -533,6 +542,13 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
             goal_subtasks = state.get("goal_subtasks", [])
 
             if iterations == 0:
+                # 输入校验
+                is_valid, validation_error = _validate_goal_definition(goal_def)
+                if not is_valid:
+                    writer({"step": "goal_validation", "status": "error",
+                            "message": f"目标校验失败: {validation_error}"})
+                    return {"final_answer": f"❌ 目标校验失败: {validation_error}", "is_error": True}
+
                 # ── 第0轮：规划阶段（纯文本输出，不调用工具）──
                 system_prompt = f"""{system_prompt}
 
@@ -544,7 +560,14 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
 {goal_def}
 
 ## 你的唯一任务
-分析目标，将其拆解为具体的、可执行的子任务列表。
+分析目标，制定一个分步执行计划。如果每个步骤都正确执行，最终将得出正确答案。
+
+## 规划原则（LangGraph Plan-and-Execute 官方规范）
+1. 不要添加任何多余的步骤 — 每个步骤都必须是达成目标的必要条件
+2. 确保每个步骤包含所需的所有信息 — 不要跳过步骤
+3. 最后一个步骤的结果应为最终答案
+4. 每个步骤必须是可通过一次工具调用完成的原子操作
+5. 每个步骤必须有明确的成功标准（输出什么、验证什么）
 
 ## 输出格式（必须严格遵循，前端依赖此格式解析）
 [目标拆解]
@@ -552,23 +575,15 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
 • [子任务描述] - [pending] (0%) -> 依赖: 1
 • [子任务描述] - [pending] (0%) -> 依赖: 1,2
 
-## 格式说明
-- 状态标记：[pending]=待执行
-- 百分比：(0%)=未开始
-- 依赖：-> 依赖: N 表示需要第N个子任务完成后才能开始
-- 每个子任务应该是一个独立的、可通过工具执行的具体动作
+## 格式规则
+- 每行一个子任务，以 • 开头
+- [pending] = 待执行状态，(0%) = 初始进度
+- -> 依赖: N = 需要第N个子任务完成后才能开始（可选）
 
-## 子任务设计原则
-1. 每个子任务必须是一个具体的工具调用动作（如"搜索 XXX 的最新信息"、"浏览 XXX 页面"）
-2. 粒度适中：一个子任务 = 一次工具调用 + 结果整理
-3. 有依赖关系的子任务要明确标注前置任务
-4. 数量不限，根据目标复杂度自行决定
-
-## 重要约束
-1. 本阶段只输出 [目标拆解] 格式的计划，不要执行任何操作
-2. 不要输出"我来帮你搜索"等承诺性语句
-3. 直接输出计划，不要有其他前言或解释
-4. 计划中的每个子任务必须是可执行的具体动作"""
+## 约束
+- 本阶段只输出计划，不要执行任何操作
+- 不要输出承诺性语句
+- 直接输出计划，不要有前言或解释"""
             else:
                 # ── 后续轮：执行阶段（强制使用工具，禁止跳过）──
                 # 找出未完成的子任务
@@ -597,6 +612,17 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
 - 评估：{last.get('evaluation', '无')}
 - 建议：{last.get('suggestion', '无')}"""
 
+                # Self-Healing: 注入自愈记忆到 prompt
+                healing_context = ""
+                try:
+                    from app.agent.self_healing import get_healing_memory
+                    healing_context = await get_healing_memory().to_prompt_context(
+                        user_id=state.get("user_id", 0),
+                        goal_id=str(state.get("conversation_id", 0)),
+                    )
+                except Exception as e:
+                    logger.debug(f"[llm_call] 自愈记忆注入跳过: {e}")
+
                 system_prompt = f"""{system_prompt}
 
 ══════════════════════════════════════════════════
@@ -606,29 +632,24 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
 ## 目标
 {goal_def}
 
-## 已完成的子任务
-{done_text if done_text else "无"}
-
-## 待执行的子任务（按顺序执行）
-{pending_text if pending_text else "所有子任务已完成"}
-
+## 当前进度
+{progress_text if progress_text else "尚未开始"}
+{current_task_text}
 {history_text}
 
-## 你的唯一任务
-逐个执行上面的待执行子任务。对每个子任务：
+## 执行方式（ReAct 模式）
+对当前子任务，按以下步骤执行：
+Thought: 分析需要调用什么工具，为什么
+Action: 调用工具获取真实数据
+Observation: 检查工具返回结果
+Answer: 基于结果输出该子任务的成果
 
-1. **Thought**：分析这个子任务需要调用什么工具
-2. **Action**：立即调用工具（搜索、浏览等）获取真实数据
-3. **Observation**：检查工具返回的结果
-4. **Answer**：基于工具结果输出该子任务的成果
+## 核心规则
+1. **工具优先** — 先尝试调用工具获取实时数据；工具不可用时基于已有知识降级回答，注明"（降级回答）"
+2. **只做一件事** — 只执行上面列出的当前子任务，不要跳到其他任务
+3. **完成后标记** — 输出: • [子任务描述] - [done] (100%)
 
-## 重要约束（违反任何一条即为失败）
-1. **优先使用工具** — 每个子任务应先尝试调用工具获取实时数据
-2. **工具失败时的降级策略** — 如果工具调用失败（如网络错误、服务不可用），则基于你的知识直接回答该子任务，并在结果中注明"（基于已有知识，工具不可用时的降级回答）"
-3. **禁止承诺性回复** — 不要输出"我来帮你搜索"、"让我查找"等语句，直接调用工具
-4. **每次只执行一个子任务** — 完成一个再执行下一个
-5. **更新状态标记** — 每完成一个子任务，输出更新后的状态：
-   • [子任务描述] - [done] (100%)"""
+{healing_context}"""
 
 
             # 注意：iterations == 0 的 prompt 已在上方行 535-571 定义，此处不再重复
@@ -992,6 +1013,12 @@ def _make_evaluator_node(llm=None):
         from langgraph.config import get_stream_writer
         writer = get_stream_writer()
 
+        # Goal 模式: 跳过常规评估
+        if state.get("goal_mode"):
+            writer({"step": "eval", "status": "skipped", "message": "Goal 模式，跳过常规评估"})
+            return {"evaluation": {"passed": True, "reason": "goal_mode_skip", "score": 8},
+                    "iterations": state.get("iterations", 0) + 1}
+
         final_answer = state.get("final_answer", "")
         if not final_answer:
             writer({"step": "eval", "status": "skipped", "message": "无回答，跳过评估"})
@@ -1102,6 +1129,10 @@ def _make_memory_saver(memory_manager):
     async def memory_saver_node(state: AgentState) -> dict:
         from langgraph.config import get_stream_writer
         writer = get_stream_writer()
+
+        # Goal 模式: 跳过中间轮次的记忆保存
+        if state.get("goal_mode") and state.get("goal_status") not in ("achieved", "failed", "budget_exceeded"):
+            return {}
 
         if not state.get("final_answer"):
             return {}
@@ -1327,6 +1358,16 @@ def _make_goal_evaluator(llm):
 
                 if achieved:
                     writer({"step": "goal_eval", "status": "done", "message": "目标已达成！"})
+                    # Self-Healing: 标记反思成功
+                    try:
+                        from app.agent.self_healing import get_healing_memory
+                        healing_memory = get_healing_memory()
+                        for st in (state.get("goal_subtasks") or []):
+                            if st.get("status") == "done":
+                                await healing_memory.mark_successful(
+                                    user_id=state.get("user_id", 0), subtask_id=st.get("id", 0))
+                    except Exception:
+                        pass
                     return {"goal_status": "achieved"}
                 else:
                     history = list(state.get("goal_history", []))
@@ -1350,6 +1391,161 @@ def _make_goal_evaluator(llm):
         return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
 
     return goal_evaluator
+
+def _make_goal_status_updater():
+    """Goal 模式子任务状态更新器"""
+
+    async def goal_status_updater_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
+        if state.get("goal_iterations", 0) == 0:
+            _loop_detector.reset()
+
+        goal_subtasks = list(state.get("goal_subtasks") or [])
+        if not goal_subtasks:
+            return {}
+
+        final_answer = state.get("final_answer", "")
+        answer_text = _content_to_str(final_answer) if final_answer else ""
+
+        # 找到当前正在执行的子任务
+        current_subtask = None
+        for st in goal_subtasks:
+            if st.get("status") == "in_progress":
+                current_subtask = st
+            elif not current_subtask and st.get("status") == "pending":
+                done_ids = {t["id"] for t in goal_subtasks if t.get("status") == "done"}
+                deps = st.get("dependencies", [])
+                if all(d in done_ids for d in deps):
+                    current_subtask = st
+
+        # Guardrail 校验 + Self-Healing
+        if current_subtask:
+            task_id = current_subtask["id"]
+            passed, reason = _guardrail_check_subtask(answer_text, current_subtask["title"])
+            if passed:
+                goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "done", 100)
+                _loop_detector.record(task_id, "done")
+                writer({"step": "goal_task_done", "status": "done",
+                        "message": f"子任务完成: {current_subtask['title']}",
+                        "taskId": task_id, "taskTitle": current_subtask["title"]})
+                logger.info(f"[goal_status_updater] 子任务 #{task_id} → done")
+            else:
+                goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "failed", 0)
+                try:
+                    from app.agent.self_healing import analyze_failure, get_healing_memory
+                    reflection = analyze_failure(
+                        subtask_title=current_subtask["title"], subtask_id=task_id,
+                        failure_source="guardrail", answer_text=answer_text,
+                        guardrail_reason=reason,
+                        user_id=state.get("user_id", 0),
+                        goal_definition=state.get("goal_definition", ""),
+                    )
+                    await get_healing_memory().store(reflection, goal_id=str(state.get("conversation_id", 0)))
+                    _loop_detector.record(task_id, "failed")
+                    is_loop, loop_reason = _loop_detector.is_looping()
+                    if is_loop:
+                        writer({"step": "loop_detected", "status": "error",
+                                "message": f"检测到循环: {loop_reason}"})
+                except Exception as e:
+                    logger.debug(f"[goal_status_updater] 自愈分析跳过: {e}")
+                writer({"step": "goal_task_failed", "status": "error",
+                        "message": f"子任务未通过校验: {current_subtask['title']} ({reason})",
+                        "taskId": task_id, "taskTitle": current_subtask["title"]})
+
+        # 批量标记可并行的子任务
+        parallel_tasks = _get_parallel_ready_tasks(goal_subtasks)
+        if parallel_tasks:
+            for task in parallel_tasks:
+                goal_subtasks = _update_subtask_status(goal_subtasks, task["id"], "in_progress", 0)
+                writer({"step": "goal_task_start", "status": "executing",
+                        "message": f"开始执行: {task['title']}",
+                        "taskId": task["id"], "taskTitle": task["title"]})
+
+        writer({"step": "goal_subtasks", "status": "done",
+                "message": "子任务状态更新", "subtasks": goal_subtasks})
+        return {"goal_subtasks": goal_subtasks}
+
+    return goal_status_updater_node
+
+
+def _make_goal_replanner(llm):
+    """Goal 模式 Re-planner"""
+
+    async def goal_replanner_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
+        goal_def = state.get("goal_definition", "")
+        goal_subtasks = list(state.get("goal_subtasks") or [])
+        iterations = state.get("goal_iterations", 0)
+        max_iterations = state.get("goal_max_iterations", 5)
+        tokens_used = state.get("goal_tokens_used", 0)
+        token_budget = state.get("goal_token_budget", 50000)
+        goal_history = list(state.get("goal_history") or [])
+
+        done_count = sum(1 for t in goal_subtasks if t.get("status") == "done")
+        failed_count = sum(1 for t in goal_subtasks if t.get("status") == "failed")
+        total = len(goal_subtasks)
+
+        # Token 预算 + 成本预估
+        avg_tokens = tokens_used / max(done_count, 1) if done_count > 0 else 5000
+        remaining_tasks = sum(1 for t in goal_subtasks if t.get("status") == "pending")
+        estimated_remaining = int(avg_tokens * remaining_tasks)
+
+        if tokens_used >= token_budget:
+            writer({"step": "goal_replan", "status": "done", "message": "已达 Token 预算上限"})
+            return {"goal_status": "budget_exceeded"}
+
+        if iterations >= max_iterations:
+            writer({"step": "goal_replan", "status": "done", "message": f"已达最大迭代次数 ({max_iterations})"})
+            return {"goal_status": "failed"}
+
+        # 全部完成
+        if done_count == total and total > 0:
+            writer({"step": "goal_replan", "status": "done", "message": f"所有子任务已完成 ({done_count}/{total})"})
+            return {"goal_status": "achieved"}
+
+        # 有失败 → 生成自愈反思
+        failed_tasks = [t for t in goal_subtasks if t.get("status") == "failed"]
+        if failed_tasks:
+            try:
+                from app.agent.self_healing import analyze_failure, get_healing_memory
+                healing_memory = get_healing_memory()
+                goal_id = str(state.get("conversation_id", 0))
+                for ft in failed_tasks:
+                    reflection = analyze_failure(
+                        subtask_title=ft.get("title", ""), subtask_id=ft.get("id", 0),
+                        failure_source="eval", error_message="子任务执行失败",
+                        user_id=state.get("user_id", 0), goal_definition=goal_def,
+                    )
+                    reflection.retry_count = iterations
+                    await healing_memory.store(reflection, goal_id=goal_id)
+            except Exception as e:
+                logger.debug(f"[goal_replanner] 自愈反思跳过: {e}")
+
+        # 所有任务已处理但未全部完成
+        pending_tasks = [t for t in goal_subtasks if t.get("status") == "pending"]
+        if not pending_tasks and done_count < total:
+            return {"goal_status": "failed", "goal_iterations": iterations + 1, "goal_subtasks": goal_subtasks}
+
+        writer({"step": "goal_replan", "status": "done",
+                "message": f"继续执行 ({done_count}/{total} 完成, 第{iterations+1}轮)"})
+        return {
+            "goal_status": "in_progress",
+            "goal_iterations": iterations + 1,
+            "goal_subtasks": goal_subtasks,
+            "goal_history": goal_history + [{
+                "iteration": iterations,
+                "result": f"{done_count}/{total} done, {failed_count} failed",
+                "evaluation": "需要继续执行",
+                "suggestion": f"还有 {len(pending_tasks)} 个子任务待执行",
+            }],
+        }
+
+    return goal_replanner_node
+
 
 
 # ── 条件路由 ──────────────────────────────────────────────
@@ -1404,9 +1600,9 @@ def _after_eval(state: AgentState) -> str:
 
 
 def _after_memory(state: AgentState) -> str:
-    """memory_saver 之后的路由 — Goal 模式走评估器，否则结束"""
+    """memory_saver 之后的路由 — Goal 模式走状态更新器，否则结束"""
     if state.get("goal_mode"):
-        return "goal_evaluator"
+        return "goal_status_updater"
     return END
 
 
@@ -1414,6 +1610,16 @@ def _after_goal_eval(state: AgentState) -> str:
     """goal_evaluator 之后的路由 — 达成/超限→结束，未达成→重试"""
     status = state.get("goal_status", "")
     if status in ("achieved", "budget_exceeded", "failed"):
+        return END
+    return "model_selector"
+
+
+def _after_goal_replan(state: AgentState) -> str:
+    """goal_replanner 之后的路由"""
+    status = state.get("goal_status", "")
+    if status == "achieved":
+        return "goal_evaluator"
+    if status in ("budget_exceeded", "failed"):
         return END
     return "model_selector"
 
@@ -1496,6 +1702,155 @@ def _parse_goal_subtasks(text: str) -> list:
                 "dependencies": dependencies,
             })
     return tasks
+
+
+
+# ── 循环检测器 ─────────────────────────────────────────────
+
+class LoopDetector:
+    """检测同一子任务连续失败，防止死循环"""
+    def __init__(self, max_consecutive: int = 3):
+        self._history: list[tuple[int, str]] = []
+        self._max = max_consecutive
+
+    def record(self, subtask_id: int, status: str):
+        self._history.append((subtask_id, status))
+        if len(self._history) > self._max * 2:
+            self._history = self._history[-self._max * 2:]
+
+    def is_looping(self) -> tuple:
+        if len(self._history) < self._max:
+            return False, ""
+        recent = self._history[-self._max:]
+        ids = [r[0] for r in recent]
+        statuses = [r[1] for r in recent]
+        if len(set(ids)) == 1 and all(s == "failed" for s in statuses):
+            return True, f"子任务 #{ids[0]} 连续失败 {self._max} 次"
+        return False, ""
+
+    def get_stuck_task_id(self):
+        if len(self._history) < self._max:
+            return None
+        recent = self._history[-self._max:]
+        ids = [r[0] for r in recent]
+        statuses = [r[1] for r in recent]
+        if len(set(ids)) == 1 and all(s == "failed" for s in statuses):
+            return ids[0]
+        return None
+
+    def reset(self):
+        self._history.clear()
+
+
+_loop_detector = LoopDetector()
+
+
+# ── 输入校验 ───────────────────────────────────────────────
+
+def _validate_goal_definition(goal_definition: str) -> tuple:
+    """Goal 定义前置校验"""
+    if not goal_definition or not goal_definition.strip():
+        return False, "目标定义不能为空"
+    cleaned = goal_definition.strip()
+    if len(cleaned) < 10:
+        return False, f"目标定义过短（{len(cleaned)} 字符），至少需要 10 个字符"
+    if len(cleaned) > 2000:
+        return False, f"目标定义过长（{len(cleaned)} 字符），请精简到 2000 字符以内"
+    meaningful = re.sub(r'[?!？！.。，,\s]+', '', cleaned)
+    if len(meaningful) < 5:
+        return False, "目标定义缺少实质内容，请描述具体要做什么"
+    return True, ""
+
+
+# ── 子任务辅助函数 ─────────────────────────────────────────
+
+def _get_next_pending_subtask(goal_subtasks: list) -> "dict | None":
+    """获取下一个待执行子任务（DAG 拓扑排序）"""
+    if not goal_subtasks:
+        return None
+    done_ids = {t["id"] for t in goal_subtasks if t.get("status") == "done"}
+    for task in goal_subtasks:
+        if task.get("status") != "pending":
+            continue
+        deps = task.get("dependencies", [])
+        if all(d in done_ids for d in deps):
+            return task
+    for task in goal_subtasks:
+        if task.get("status") == "pending":
+            return task
+    return None
+
+
+def _get_parallel_ready_tasks(goal_subtasks: list, max_parallel: int = 3) -> list:
+    """获取可并行执行的 pending 子任务"""
+    if not goal_subtasks:
+        return []
+    done_ids = {t["id"] for t in goal_subtasks if t.get("status") == "done"}
+    ready = []
+    for task in goal_subtasks:
+        if task.get("status") != "pending":
+            continue
+        deps = task.get("dependencies", [])
+        if all(d in done_ids for d in deps):
+            ready.append(task)
+        if len(ready) >= max_parallel:
+            break
+    return ready
+
+
+def _update_subtask_status(goal_subtasks: list, task_id: int, status: str, progress: int = 0) -> list:
+    """更新指定子任务状态"""
+    return [
+        {**t, "status": status, "progress": progress} if t.get("id") == task_id else t
+        for t in goal_subtasks
+    ]
+
+
+def _build_goal_progress_text(goal_subtasks: list) -> str:
+    """构建进度文本"""
+    if not goal_subtasks:
+        return ""
+    done = [t for t in goal_subtasks if t.get("status") == "done"]
+    failed = [t for t in goal_subtasks if t.get("status") == "failed"]
+    in_progress = [t for t in goal_subtasks if t.get("status") == "in_progress"]
+    pending = [t for t in goal_subtasks if t.get("status") == "pending"]
+    lines = []
+    if done:
+        lines.append("### ✅ 已完成")
+        for t in done:
+            lines.append(f"  ✅ #{t['id']} {t['title']}")
+    if failed:
+        lines.append("### ❌ 失败")
+        for t in failed:
+            lines.append(f"  ❌ #{t['id']} {t['title']}")
+    if in_progress:
+        lines.append("### 🔄 执行中")
+        for t in in_progress:
+            lines.append(f"  🔄 #{t['id']} {t['title']}")
+    if pending:
+        lines.append("### ⏳ 待执行")
+        for t in pending:
+            deps = t.get('dependencies', [])
+            dep_str = f" (依赖: {','.join(str(d) for d in deps)})" if deps else ""
+            lines.append(f"  ⏳ #{t['id']} {t['title']}{dep_str}")
+    return "\n".join(lines)
+
+
+# ── Guardrail 校验 ─────────────────────────────────────────
+
+def _guardrail_check_subtask(answer_text: str, subtask_title: str) -> tuple:
+    """子任务输出 Guardrail 校验"""
+    if not answer_text or len(answer_text.strip()) < 20:
+        return False, "输出内容过短或为空"
+    failure_markers = ["抱歉", "无法", "失败", "错误", "不可用", "unable", "error", "failed"]
+    marker_count = sum(1 for m in failure_markers if m in answer_text)
+    if marker_count >= 3 and len(answer_text) < 100:
+        return False, f"输出包含多个失败标记 ({marker_count} 个)"
+    promise_patterns = [r"^我来帮你", r"^让我", r"^我将要", r"^接下来我会"]
+    for pattern in promise_patterns:
+        if re.match(pattern, answer_text.strip()):
+            return False, "输出为承诺性回复，缺少实质内容"
+    return True, ""
 
 
 def _content_to_str(content) -> str:

@@ -73,6 +73,10 @@ async def chat(
     goal_mode = data.goal_mode or False
     goal_definition = data.goal_definition or ""
 
+    # Goal 模式与 manual 专家团模式互斥
+    if goal_mode and team_mode == "manual":
+        return api_error("CONFLICT", "Goal 模式与手动专家团模式不能同时启用", "请关闭其中一个模式")
+
     # manual 模式：直接执行专家团，不走 Agent 流程
     if team_mode == "manual" and team_id:
         return StreamingResponse(

@@ -306,14 +306,10 @@ export function useChat(): UseChatReturn {
           )
           setMessages(updatedMessages)
 
-          // Goal 模式：从累积内容中解析子任务列表
-          if (goalMode) {
-            const fullContent = updatedMessages.find((m) => m.id === aiMessageId)?.content || ''
-            const parsedTasks = parseGoalTasks(fullContent)
-            if (parsedTasks.length > 0) {
-              setGoalTasks(parsedTasks)
-            }
-          }
+          // Goal 模式：子任务状态由后端 goal_subtasks SSE 事件权威推送
+          // 不再从前端文本解析，避免与后端状态竞态覆盖
+          // parseGoalTasks 仅作为 SSE 事件未到达时的降级兜底
+          // （后端 goal_status_updater 节点会在每次迭代后推送完整的子任务列表）
         },
         (error) => {
           console.error('[Chat] Stream error:', error)
