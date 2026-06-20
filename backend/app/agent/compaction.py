@@ -242,17 +242,18 @@ class AutoCompactor:
     async def _flush_important_memory(
         self, messages: List[dict], user_id: int, conversation_id: int
     ) -> None:
-        """pre-flush: 将重要信息保存到长期记忆"""
+        """pre-flush: 将重要信息保存到长期记忆（异步入队）"""
         if not self.memory_manager:
             return
 
         try:
-            await self.memory_manager.save_summary(
+            # v5.1: 使用异步入队，不阻塞 compaction 流程
+            await self.memory_manager.enqueue_summary(
                 conversation_id=conversation_id,
                 user_id=user_id,
                 messages=messages,
             )
-            logger.info(f"[compactor] pre-flush: 已保存长期记忆")
+            logger.info(f"[compactor] pre-flush: 长期记忆已入队(异步)")
         except Exception as e:
             logger.warning(f"[compactor] pre-flush 失败: {e}")
 

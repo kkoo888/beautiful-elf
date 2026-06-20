@@ -1,13 +1,16 @@
 /** 新增图片弹窗 */
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Modal, Form, Input, Select, Button, Space, Tag, App, InputNumber,
 } from 'antd'
-import { ThunderboltOutlined, PlusOutlined, LoadingOutlined, PictureOutlined } from '@ant-design/icons'
+import {
+  ThunderboltOutlined, PlusOutlined, LoadingOutlined, PictureOutlined,
+  LeftOutlined, RightOutlined,
+} from '@ant-design/icons'
 import { CompactModelSelect, getProvidersCached } from '@/modules/shared/components/model-selector'
 import { polishPrompt } from '@/modules/expert-team/services/expert-team-api'
 import { fetchImageTags, generateImagePrompt } from '../services/image-gallery-api'
-import type { ImageGalleryFormInput, ImageGenerateInput } from '../types'
+import type { ImageGalleryFormInput, ImageGenerateInput, ImageGenerateResult } from '../types'
 import styles from './image-gallery.module.css'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 
@@ -51,10 +54,21 @@ const SIZE_OPTIONS = [
   { label: '自定义', value: 'custom' },
 ]
 
+/** 兼容 snake_case / camelCase 返回 */
+function normalizeResult(r: any): ImageGenerateResult {
+  return {
+    name: r.name,
+    filePath: r.filePath || r.file_path || '',
+    thumbnailPath: r.thumbnailPath || r.thumbnail_path || '',
+    width: r.width,
+    height: r.height,
+  }
+}
+
 interface ImageCreateModalProps {
   open: boolean
   onOk: (input: ImageGalleryFormInput) => void
-  onGenerate: (input: ImageGenerateInput) => Promise<{ name: string; filePath: string; thumbnailPath: string; width: number; height: number }>
+  onGenerate: (input: ImageGenerateInput) => Promise<ImageGenerateResult>
   isGenerating: boolean
   onCancel: () => void
 }
@@ -68,9 +82,9 @@ export function ImageCreateModal({
 }: ImageCreateModalProps) {
   const { message } = App.useApp()
   const [form] = Form.useForm()
-  const [generatedResult, setGeneratedResult] = useState<{
-    name: string; filePath: string; thumbnailPath: string
-  } | null>(null)
+  const [generatedResults, setGeneratedResults] = useState<ImageGenerateResult[]>([])
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null)
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [existingTags, setExistingTags] = useState<string[]>([])
@@ -80,12 +94,20 @@ export function ImageCreateModal({
   const [customWidth, setCustomWidth] = useState(1024)
   const [customHeight, setCustomHeight] = useState(1024)
   const [selectedModel, setSelectedModel] = useState('')
+  const [imageCount, setImageCount] = useState(1)
+  const [selectedSlides, setSelectedSlides] = useState<Set<number>>(new Set([0]))
+  const abortRef = useRef(false)
 
   // 打开弹窗时设置默认模型 + 加载已有标签
   useEffect(() => {
     if (open) {
       setTags([])
       setSelectedModel('')
+      setGeneratedResults([])
+      setCurrentSlide(0)
+      setSelectedSlides(new Set([0]))
+      setBatchProgress(null)
+      abortRef.current = false
       // 加载已有标签
       fetchImageTags().then((t) => setExistingTags(t)).catch(() => {})
       // 查找默认模型
@@ -113,29 +135,80 @@ export function ImageCreateModal({
       const [w, h] = sizeMode === 'custom'
         ? [customWidth, customHeight]
         : sizeMode.split('x').map(Number)
-      const result = await onGenerate({
+      const generateInput: ImageGenerateInput = {
         prompt: values.prompt,
         negativePrompt: values.negativePrompt || '',
         modelName: values.modelName || '',
         providerId: values.providerId || 0,
         width: w,
         height: h,
-      })
-      setGeneratedResult({
-        name: result.name,
-        filePath: result.filePath || (result as any).file_path,
-        thumbnailPath: result.thumbnailPath || (result as any).thumbnail_path,
-      })
-      form.setFieldValue('name', result.name)
-      message.success('生成成功')
+      }
+
+      if (imageCount <= 1) {
+        // 单张直接生成
+        const raw = await onGenerate(generateInput)
+        const result = normalizeResult(raw)
+        setGeneratedResults([result])
+        setCurrentSlide(0)
+        form.setFieldValue('name', result.name)
+        message.success('生成成功')
+      } else {
+        // 批量生成：每 50ms 发一个请求，回来一个放一个
+        abortRef.current = false
+        setBatchProgress({ current: 0, total: imageCount })
+        let completed = 0
+        const results: ImageGenerateResult[] = []
+        let firstResult = true
+
+        const fireOne = (index: number) => {
+          onGenerate(generateInput).then((raw) => {
+            if (abortRef.current) return
+            const result = normalizeResult(raw)
+            results.push(result)
+            completed++
+            setBatchProgress({ current: completed, total: imageCount })
+            setGeneratedResults([...results])
+            if (firstResult) {
+              firstResult = false
+              setCurrentSlide(0)
+              form.setFieldValue('name', result.name)
+            }
+            if (completed === imageCount) {
+              setBatchProgress(null)
+              message.success(`生成完成，共 ${results.length} 张`)
+            }
+          }).catch(() => {
+            if (abortRef.current) return
+            completed++
+            setBatchProgress({ current: completed, total: imageCount })
+            if (completed === imageCount) {
+              setBatchProgress(null)
+              if (results.length > 0) {
+                message.success(`生成完成，共 ${results.length} 张`)
+              } else {
+                message.error('生成失败')
+              }
+            }
+          })
+        }
+
+        for (let i = 0; i < imageCount; i++) {
+          if (abortRef.current) break
+          fireOne(i)
+          // 50ms 间隔发下一个请求
+          if (i < imageCount - 1 && !abortRef.current) {
+            await new Promise((r) => setTimeout(r, 50))
+          }
+        }
+      }
     } catch (err: any) {
       if (err?.errorFields) return
       message.error(err?.message || '生成失败')
     }
-  }, [form, onGenerate, message])
+  }, [form, onGenerate, message, sizeMode, customWidth, customHeight, imageCount])
 
   const handleOk = useCallback(async () => {
-    if (!generatedResult) {
+    if (generatedResults.length === 0) {
       message.warning('请先生成图片')
       return
     }
@@ -143,25 +216,39 @@ export function ImageCreateModal({
     const [w, h] = sizeMode === 'custom'
       ? [customWidth, customHeight]
       : sizeMode.split('x').map(Number)
-    onOk({
-      name: values.name || generatedResult.name,
-      prompt: values.prompt,
-      negativePrompt: values.negativePrompt || '',
-      modelName: values.modelName || '',
-      providerId: values.providerId || 0,
-      filePath: generatedResult.filePath,
-      thumbnailPath: generatedResult.thumbnailPath,
-      tags: tags.join(','),
-      width: w,
-      height: h,
-    })
-    setGeneratedResult(null)
+    // 只保存选中的图片
+    const toSave = generatedResults.filter((_, i) => selectedSlides.has(i))
+    if (toSave.length === 0) {
+      message.warning('请至少选择一张图片')
+      return
+    }
+    for (const result of toSave) {
+      await onOk({
+        name: values.name || result.name,
+        prompt: values.prompt,
+        negativePrompt: values.negativePrompt || '',
+        modelName: values.modelName || '',
+        providerId: values.providerId || 0,
+        filePath: result.filePath,
+        thumbnailPath: result.thumbnailPath,
+        tags: tags.join(','),
+        width: w,
+        height: h,
+      })
+    }
+    setGeneratedResults([])
+    setCurrentSlide(0)
+    setSelectedSlides(new Set([0]))
     setTags([])
     form.resetFields()
-  }, [generatedResult, form, tags, onOk, message])
+  }, [generatedResults, form, tags, onOk, message, sizeMode, customWidth, customHeight])
 
   const handleCancel = useCallback(() => {
-    setGeneratedResult(null)
+    abortRef.current = true
+    setGeneratedResults([])
+    setCurrentSlide(0)
+    setSelectedSlides(new Set([0]))
+    setBatchProgress(null)
     setTags([])
     form.resetFields()
     onCancel()
@@ -203,6 +290,10 @@ export function ImageCreateModal({
     }
   }, [form])
 
+  const isBatching = batchProgress !== null
+  const hasResults = generatedResults.length > 0
+  const currentResult = hasResults ? generatedResults[currentSlide] : null
+
   return (
     <Modal
       open={open}
@@ -212,28 +303,91 @@ export function ImageCreateModal({
       onCancel={handleCancel}
     >
       <div className={styles.createLayout}>
-        {/* 左侧：预览区 */}
-        <div className={styles.detailImageWrap} style={{ flex: '0 0 380px' }}>
-          {isGenerating ? (
-            <div style={{ textAlign: 'center', color: '#999' }}>
-              <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--ant-color-primary)' }}><LoadingOutlined spin /></div>
-              <div>正在生成中...</div>
-            </div>
-          ) : generatedResult ? (
-            <>
-              <img src={toImageUrl(generatedResult.filePath)} alt="预览" />
-              <div style={{
-                position: 'absolute', top: 8, left: 8,
-                background: '#52c41a', color: '#fff', padding: '2px 8px',
-                borderRadius: 4, fontSize: 12,
-              }}>
-                生成完成
+        {/* 左侧：预览区（轮播图）+ 圆圈选择器 */}
+        <div style={{ flex: '0 0 380px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className={styles.detailImageWrap}>
+            {hasResults ? (
+              <div className={styles.carouselWrap}>
+                <img
+                  className={styles.carouselImage}
+                  src={toImageUrl(currentResult!.filePath)}
+                  alt={`预览 ${currentSlide + 1}`}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+                {/* 生成完成标签 */}
+                <div style={{
+                  position: 'absolute', top: 8, left: 8,
+                  background: '#52c41a', color: '#fff', padding: '2px 8px',
+                  borderRadius: 4, fontSize: 12,
+                }}>
+                  {selectedSlides.has(currentSlide) ? '已选中' : '未选中'}
+                </div>
+                {/* 多张时显示轮播控制 */}
+                {generatedResults.length > 1 && (
+                  <>
+                    <button
+                      className={`${styles.carouselArrow} ${styles.carouselArrowLeft}`}
+                      onClick={() => setCurrentSlide((s) => (s > 0 ? s - 1 : generatedResults.length - 1))}
+                    >
+                      <LeftOutlined />
+                    </button>
+                    <button
+                      className={`${styles.carouselArrow} ${styles.carouselArrowRight}`}
+                      onClick={() => setCurrentSlide((s) => (s < generatedResults.length - 1 ? s + 1 : 0))}
+                    >
+                      <RightOutlined />
+                    </button>
+                    <div className={styles.carouselCounter}>
+                      {currentSlide + 1} / {generatedResults.length}
+                    </div>
+                  </>
+                )}
+                {/* 批量生成进度 */}
+                {isBatching && batchProgress && (
+                  <div className={styles.carouselProgress}>
+                    {batchProgress.current}/{batchProgress.total}
+                  </div>
+                )}
               </div>
-            </>
-          ) : (
-            <div style={{ textAlign: 'center', color: '#999' }}>
-              <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--ant-color-text-tertiary)' }}><PictureOutlined /></div>
-              <div>输入提示词后点击「生成图片」</div>
+            ) : isBatching || isGenerating ? (
+              <div style={{ textAlign: 'center', color: '#999' }}>
+                <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--ant-color-primary)' }}><LoadingOutlined spin /></div>
+                <div>正在生成中...</div>
+                {isBatching && batchProgress && (
+                  <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ant-color-primary)' }}>
+                    {batchProgress.current} / {batchProgress.total}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', color: '#999' }}>
+                <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--ant-color-text-tertiary)' }}><PictureOutlined /></div>
+                <div>输入提示词后点击「生成图片」</div>
+              </div>
+            )}
+          </div>
+          {/* 圆圈选择器 — 在图片容器外面，不受 overflow:hidden 影响 */}
+          {hasResults && generatedResults.length > 1 && (
+            <div className={styles.carouselDots}>
+              {generatedResults.map((_, i) => (
+                <button
+                  key={i}
+                  className={`${styles.carouselDot} ${selectedSlides.has(i) ? styles.carouselDotSelected : ''}`}
+                  onClick={() => {
+                    setCurrentSlide(i)
+                    setSelectedSlides((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(i)) next.delete(i)
+                      else next.add(i)
+                      return next
+                    })
+                  }}
+                >
+                  {i + 1}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -284,10 +438,14 @@ export function ImageCreateModal({
 
           {/* 操作按钮 */}
           <div style={{ textAlign: 'center', paddingTop: 4 }}>
-            {generatedResult ? (
+            {hasResults && !isBatching ? (
               <Space>
-                <Button onClick={() => setGeneratedResult(null)}>重新生成</Button>
-                <Button type="primary" onClick={handleOk}>保存</Button>
+                <Button onClick={() => { setGeneratedResults([]); setCurrentSlide(0); setSelectedSlides(new Set([0])) }}>重新生成</Button>
+                <Button
+                  type="primary"
+                  onClick={handleOk}
+                  disabled={selectedSlides.size === 0}
+                >保存{generatedResults.length > 1 ? ` (${selectedSlides.size}/${generatedResults.length})` : ''}</Button>
               </Space>
             ) : (
               <Button
@@ -296,8 +454,9 @@ export function ImageCreateModal({
                 loading={isGenerating}
                 onClick={handleGenerate}
                 size="large"
+                disabled={isBatching}
               >
-                生成图片
+                {isBatching ? `生成中 ${batchProgress?.current}/${batchProgress?.total}` : '生成图片'}
               </Button>
             )}
           </div>
@@ -353,6 +512,27 @@ export function ImageCreateModal({
                 </div>
               </div>
             )}
+
+            <Form.Item label="生成张数">
+              <Space.Compact style={{ width: '100%' }}>
+                <InputNumber
+                  value={imageCount}
+                  onChange={(v) => setImageCount(v || 1)}
+                  min={1}
+                  max={20}
+                  style={{ flex: 1 }}
+                />
+                <span style={{
+                  display: 'flex', alignItems: 'center', padding: '0 12px',
+                  background: 'var(--ant-color-fill-secondary)',
+                  border: '1px solid var(--ant-color-border)',
+                  borderLeft: 'none',
+                  borderRadius: '0 6px 6px 0',
+                  fontSize: 13, color: 'var(--ant-color-text-secondary)',
+                  whiteSpace: 'nowrap',
+                }}>张</span>
+              </Space.Compact>
+            </Form.Item>
 
             <Form.Item label="标签">
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>

@@ -144,3 +144,26 @@ class ObservationRepository:
         )
         result = await db.execute(stmt)
         return {row[0]: row[1] for row in result.all()}
+
+    # ── v5.1: 新鲜度衰减批量查询 ──────────────────────────
+
+    async def find_stale_by_freshness(
+        self, db: AsyncSession, freshness: str, age_days: int, limit: int = 200,
+    ) -> List[MemoryObservation]:
+        """查找指定 freshness 且 updated_at 超过 age_days 天的 observation
+
+        用于新鲜度自动衰减扫描。
+        """
+        from datetime import datetime, timedelta
+        cutoff = datetime.utcnow() - timedelta(days=age_days)
+        stmt = (
+            select(MemoryObservation)
+            .where(
+                MemoryObservation.is_deleted == 0,
+                MemoryObservation.freshness == freshness,
+                MemoryObservation.updated_at < cutoff,
+            )
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())

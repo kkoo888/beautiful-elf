@@ -262,3 +262,16 @@ export async function createObservationSource(
 export async function deleteObservationSource(sourceId: number): Promise<void> {
   await apiClient.delete(`/markdown_memories/sources/${sourceId}`)
 }
+
+/** 重新评分记忆重要性（LLM 精确评分） */
+export async function rescoreMemories(params: {
+  pointIds?: string[]
+  userId?: number
+}): Promise<{ rescored: number; updated: number }> {
+  return extractData(
+    await apiClient.post('/memories/rescore', {
+      point_ids: params.pointIds || [],
+      user_id: params.userId || 0,
+    }) as any
+  ) as { rescored: number; updated: number }
+}

@@ -769,6 +769,99 @@ async def memory_search(query: str, max_results: int = 5) -> dict:
     return {"results": results}
 
 
+async def memory_edit(point_id: str, new_content: str, reason: str = "") -> dict:
+    """编辑已有记忆的内容（自编辑机制）
+
+    Args:
+        point_id: Qdrant 记忆点 ID
+        new_content: 更新后的内容摘要
+        reason: 修改原因（可选，用于审计）
+    """
+    try:
+        from app.mappers.qdrant_mapper import QdrantMapper
+        qdrant = QdrantMapper()
+
+        # 读取当前记忆
+        current = qdrant.get_by_id("memory_vectors", point_id)
+        if not current:
+            return {"error": f"记忆不存在: {point_id}"}
+
+        old_summary = current.get("summary", "")
+
+        # 重新生成 embedding 并 upsert（内容变了，向量也要更新）
+        try:
+            from app.services.onnx_embedding_service import get_onnx_embedding_service
+            from datetime import datetime
+            onnx_svc = await get_onnx_embedding_service()
+            new_vector = await onnx_svc.get_embedding(new_content)
+            qdrant.upsert(
+                collection="memory_vectors",
+                point_id=point_id,
+                vector=new_vector,
+                payload={
+                    **current,
+                    "summary": new_content,
+                    "updated_at": datetime.utcnow().isoformat(),
+                    "edit_reason": reason,
+                },
+            )
+        except Exception:
+            # embedding 不可用时只更新 payload
+            from datetime import datetime
+            qdrant._client.set_payload(
+                collection_name="memory_vectors",
+                payload={
+                    "summary": new_content,
+                    "updated_at": datetime.utcnow().isoformat(),
+                    "edit_reason": reason,
+                },
+                points=[point_id],
+            )
+
+        return {
+            "success": True,
+            "point_id": point_id,
+            "old_content": old_summary[:200],
+            "new_content": new_content[:200],
+            "reason": reason,
+        }
+    except Exception as e:
+        return {"error": f"编辑记忆失败: {e}"}
+
+
+async def memory_delete(point_id: str, reason: str = "") -> dict:
+    """删除记忆（自编辑机制）
+
+    Args:
+        point_id: Qdrant 记忆点 ID
+        reason: 删除原因（可选，用于审计）
+    """
+    try:
+        from app.mappers.qdrant_mapper import QdrantMapper
+        from qdrant_client.models import PointIdsList
+        qdrant = QdrantMapper()
+
+        # 先验证记忆存在
+        current = qdrant.get_by_id("memory_vectors", point_id)
+        if not current:
+            return {"error": f"记忆不存在: {point_id}"}
+
+        # 物理删除
+        qdrant._client.delete(
+            collection_name="memory_vectors",
+            points_selector=PointIdsList(points=[point_id]),
+        )
+
+        return {
+            "success": True,
+            "point_id": point_id,
+            "deleted_content": current.get("summary", "")[:200],
+            "reason": reason,
+        }
+    except Exception as e:
+        return {"error": f"删除记忆失败: {e}"}
+
+
 # ── 会话工具 ────────────────────────────────────────────
 
 async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: int = 300) -> dict:
@@ -924,6 +1017,8 @@ _EXEC_FUNC_MAP = {
     # 记忆
     "memory_save": memory_save,
     "memory_search": memory_search,
+    "memory_edit": memory_edit,
+    "memory_delete": memory_delete,
     # 会话
     "spawn_agent": spawn_agent,
     "list_sessions": list_sessions,

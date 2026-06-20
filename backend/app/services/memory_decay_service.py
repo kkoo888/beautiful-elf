@@ -211,3 +211,149 @@ class MemoryDecayService:
             )
         except Exception as e:
             logger.warning(f"[decay] sync_qdrant_activation 失败: {point_id}: {e}")
+
+    def archive_old_dormant(self, qdrant, base_days: int = 90) -> int:
+        """将 dormant 超过保留期的记忆标记为 archived
+
+        分级保留策略（重要记忆永不删除）：
+          - importance 1-4: 90 天后归档
+          - importance 5-7: 180 天后归档
+          - importance 8-10: 永不归档（高价值记忆保留）
+
+        幂等操作：已 archived 的不会重复处理。
+
+        Returns:
+            标记为 archived 的记忆数量
+        """
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        from datetime import timedelta
+
+        # importance → 保留天数映射
+        RETENTION_DAYS = {
+            range(1, 5): 90,     # 低价值: 90 天
+            range(5, 8): 180,    # 中价值: 180 天
+            range(8, 11): 9999,  # 高价值: 永不归档（用超大值兜底）
+        }
+
+        archived = 0
+        offset = None
+        batch_size = 100
+        now = datetime.utcnow()
+
+        while True:
+            scroll_filter = Filter(must=[
+                FieldCondition(key="decay_status", match=MatchValue(value="dormant")),
+            ])
+
+            try:
+                points, next_offset = qdrant._client.scroll(
+                    collection_name=MEMORY_COLLECTION,
+                    scroll_filter=scroll_filter,
+                    limit=batch_size,
+                    offset=offset,
+                    with_vectors=False,
+                )
+            except Exception as e:
+                logger.warning(f"[archive] scroll 失败: {e}")
+                break
+
+            if not points:
+                break
+
+            archive_ids = []
+            for p in points:
+                payload = p.payload or {}
+                saved_at = payload.get("saved_at", "")
+                importance = int(payload.get("importance", 5))
+                if not saved_at:
+                    continue
+
+                # 根据 importance 确定保留天数
+                retention_days = base_days  # 默认
+                for importance_range, days in RETENTION_DAYS.items():
+                    if importance in importance_range:
+                        retention_days = days
+                        break
+
+                # 高价值记忆跳过归档
+                if retention_days >= 9999:
+                    continue
+
+                cutoff = now - timedelta(days=retention_days)
+                try:
+                    saved_dt = datetime.fromisoformat(
+                        saved_at.replace("Z", "+00:00").replace("+00:00", "")
+                    )
+                    if saved_dt < cutoff:
+                        archive_ids.append(str(p.id))
+                except (ValueError, TypeError):
+                    pass
+
+            if archive_ids:
+                try:
+                    qdrant._client.set_payload(
+                        collection_name=MEMORY_COLLECTION,
+                        payload={"decay_status": "archived"},
+                        points=archive_ids,
+                    )
+                    archived += len(archive_ids)
+                except Exception as e:
+                    logger.warning(f"[archive] 批量更新失败: {e}")
+
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        return archived
+
+    def cleanup_archived(self, qdrant) -> int:
+        """物理删除所有 archived 记忆
+
+        最终清理步骤：archived 记忆从 Qdrant 永久移除。
+        幂等操作：无 archived 记忆时返回 0。
+
+        Returns:
+            物理删除的记忆数量
+        """
+        from qdrant_client.models import Filter, FieldCondition, MatchValue, PointIdsList
+
+        deleted = 0
+        offset = None
+        batch_size = 100
+
+        while True:
+            scroll_filter = Filter(must=[
+                FieldCondition(key="decay_status", match=MatchValue(value="archived")),
+            ])
+
+            try:
+                points, next_offset = qdrant._client.scroll(
+                    collection_name=MEMORY_COLLECTION,
+                    scroll_filter=scroll_filter,
+                    limit=batch_size,
+                    offset=offset,
+                    with_vectors=False,
+                )
+            except Exception as e:
+                logger.warning(f"[cleanup] scroll 失败: {e}")
+                break
+
+            if not points:
+                break
+
+            ids_to_delete = [p.id for p in points]
+            if ids_to_delete:
+                try:
+                    qdrant._client.delete(
+                        collection_name=MEMORY_COLLECTION,
+                        points_selector=PointIdsList(points=ids_to_delete),
+                    )
+                    deleted += len(ids_to_delete)
+                except Exception as e:
+                    logger.warning(f"[cleanup] 批量删除失败: {e}")
+
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        return deleted

@@ -12,13 +12,16 @@
   flex-shrink: 0;
 }
 
-/* ── Tabs 固定导航 + 内容滚动 ── */
+/* ── Tab 导航栏美化样式 ── */
 
 .tabWrapper {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 /* 让 ant-tabs 整体撑满 tabWrapper */
@@ -29,10 +32,157 @@
   min-height: 0;
 }
 
+
+
 /* tab 导航栏固定在顶部 */
 .tabWrapper :global(.ant-tabs-nav) {
   flex-shrink: 0;
+  padding: 8px 20px;
+  background: transparent;
+  margin-bottom: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: none;
 }
+
+.tabWrapper :global(.ant-tabs-nav::before) {
+  border: none;
+}
+
+/* 强制隐藏 Ant Design 默认的 ink-bar */
+.tabWrapper :global(.ant-tabs-nav-list) {
+  display: flex;
+  border: none;
+  background: transparent;
+}
+
+.tabWrapper :global(.ant-tabs-ink-bar) {
+  display: none;
+}
+
+/* Tab 按钮样式 */
+.tabWrapper :global(.ant-tabs-tab) {
+  position: relative;
+  padding: 12px 20px;
+  margin-right: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #8c8c8c;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.tabWrapper :global(.ant-tabs-tab::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(232, 145, 58, 0.1) 0%, rgba(232, 145, 58, 0.05) 100%);
+  transition: width 0.3s ease;
+  border-radius: 12px;
+}
+
+.tabWrapper :global(.ant-tabs-tab:hover) {
+  color: #595959;
+  background: rgba(255, 247, 237, 0.3);
+  transform: translateY(-1px);
+}
+
+.tabWrapper :global(.ant-tabs-tab:hover::before) {
+  width: 100%;
+}
+
+/* Tab 激活状态 */
+.tabWrapper :global(.ant-tabs-tab.ant-tabs-tab-active) {
+  color: #e8913a;
+  font-weight: 600;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.8) 0%, rgba(255, 241, 224, 0.8) 100%);
+  border: 1px solid transparent;
+  box-shadow: 0 2px 8px rgba(232, 145, 58, 0.1);
+}
+
+.tabWrapper :global(.ant-tabs-tab.ant-tabs-tab-active::before) {
+  width: 100%;
+  background: linear-gradient(135deg, rgba(232, 145, 58, 0.05) 0%, rgba(232, 145, 58, 0.02) 100%);
+}
+
+.tabWrapper :global(.ant-tabs-tab.ant-tabs-tab-active:hover) {
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.9) 0%, rgba(255, 241, 224, 0.9) 100%);
+  border: 1px solid transparent;
+  box-shadow: 0 4px 12px rgba(232, 145, 58, 0.15);
+}
+
+/* Tab 按钮内的图标 */
+.tabWrapper :global(.ant-tabs-tab .anticon) {
+  margin-right: 8px;
+  font-size: 16px;
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tabWrapper :global(.ant-tabs-tab.ant-tabs-tab-active .anticon) {
+  color: #e8913a;
+  transform: scale(1.1);
+}
+
+
+
+/* 图标悬停效果 */
+.tabWrapper :global(.ant-tabs-tab:hover .anticon) {
+  transform: scale(1.05);
+}
+
+/* 文字阴影和图标光晕效果 */
+.tabWrapper :global(.ant-tabs-tab.ant-tabs-tab-active) {
+  text-shadow: 0 1px 2px rgba(232, 145, 58, 0.1);
+}
+
+.tabWrapper :global(.ant-tabs-tab.ant-tabs-tab-active .anticon) {
+  filter: drop-shadow(0 1px 2px rgba(232, 145, 58, 0.2));
+}
+
+/* 图标微动画 */
+.tabWrapper :global(.ant-tabs-tab .anticon) {
+  display: inline-block;
+}
+
+.tabWrapper :global(.ant-tabs-tab:hover .anticon) {
+  animation: iconPulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes iconPulse {
+  from {
+    transform: scale(1.05);
+  }
+  to {
+    transform: scale(1.1);
+  }
+}
+
+/* 激活状态图标呼吸灯效果 */
+.tabWrapper :global(.ant-tabs-tab.ant-tabs-tab-active .anticon) {
+  animation: iconGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes iconGlow {
+  from {
+    filter: drop-shadow(0 1px 2px rgba(232, 145, 58, 0.2));
+  }
+  to {
+    filter: drop-shadow(0 2px 4px rgba(232, 145, 58, 0.4));
+  }
+}
+
 
 /* 内容区撑满剩余空间并可滚动 */
 .tabWrapper :global(.ant-tabs-content-holder) {
@@ -237,4 +387,363 @@
   display: flex;
   justify-content: flex-end;
   padding-top: 8px;
+}
+
+/* ── 长期记忆子菜单 Segmented 美化样式 ── */
+
+/* 子菜单 Segmented 组件 */
+.memorySubmenuSegmented {
+  background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.memorySubmenuSegmented :global(.ant-segmented) {
+  background: transparent;
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item) {
+  position: relative;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #8c8c8c;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 8px 16px;
+  overflow: hidden;
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(232, 145, 58, 0.08) 0%, rgba(232, 145, 58, 0.04) 100%);
+  transition: all 0.3s ease;
+  border-radius: 8px;
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item:hover) {
+  color: #595959;
+  background: rgba(255, 247, 237, 0.2);
+  transform: translateY(-1px);
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item:hover::before) {
+  width: 100%;
+}
+
+/* 激活状态 */
+.memorySubmenuSegmented :global(.ant-segmented-item.ant-segmented-item-selected) {
+  color: #e8913a;
+  font-weight: 600;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.7) 0%, rgba(255, 241, 224, 0.7) 100%);
+  box-shadow: 0 2px 6px rgba(232, 145, 58, 0.1);
+  position: relative;
+}
+
+/* 激活状态光泽动画 */
+.memorySubmenuSegmented :global(.ant-segmented-item.ant-segmented-item-selected::after) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  animation: submenuItemShine 2s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+@keyframes submenuItemShine {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* 点击波纹效果 */
+.memorySubmenuSegmented :global(.ant-segmented-item) {
+  position: relative;
+  overflow: hidden;
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item::before) {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(232, 145, 58, 0.1);
+  transform: translate(-50%, -50%);
+  transition: all 0.6s ease;
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item:hover::before) {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item.ant-segmented-item-selected::before) {
+  width: 100%;
+  background: linear-gradient(135deg, rgba(232, 145, 58, 0.03) 0%, rgba(232, 145, 58, 0.01) 100%);
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item.ant-segmented-item-selected:hover) {
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.8) 0%, rgba(255, 241, 224, 0.8) 100%);
+  box-shadow: 0 3px 8px rgba(232, 145, 58, 0.15);
+}
+
+/* 分隔线 */
+.memorySubmenuSegmented :global(.ant-segmented-item:not(:last-child)) {
+  margin-right: 4px;
+}
+
+/* 图标样式 */
+.memorySubmenuSegmented :global(.ant-segmented-item .anticon) {
+  margin-right: 6px;
+  font-size: 14px;
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
+}
+
+.memorySubmenuSegmented :global(.ant-segmented-item.ant-segmented-item-selected .anticon) {
+  color: #e8913a;
+  transform: scale(1.1);
+}
+
+/* 子菜单图标和文字布局优化 */
+.memorySubmenuSegmented :global(.ant-segmented-item) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 子菜单图标悬停效果 */
+.memorySubmenuSegmented :global(.ant-segmented-item:hover .anticon) {
+  transform: scale(1.05);
+}
+
+/* 子菜单图标微动画 */
+.memorySubmenuSegmented :global(.ant-segmented-item:hover .anticon) {
+  animation: iconSubmenuPulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes iconSubmenuPulse {
+  from {
+    transform: scale(1.05);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+/* 子菜单激活状态图标光晕效果 */
+.memorySubmenuSegmented :global(.ant-segmented-item.ant-segmented-item-selected .anticon) {
+  filter: drop-shadow(0 1px 2px rgba(232, 145, 58, 0.15));
+  animation: iconSubmenuGlow 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes iconSubmenuGlow {
+  from {
+    filter: drop-shadow(0 1px 2px rgba(232, 145, 58, 0.15));
+  }
+  to {
+    filter: drop-shadow(0 2px 3px rgba(232, 145, 58, 0.25));
+  }
+}
+
+/* 小尺寸版本 */
+.memorySubmenuSegmented.small :global(.ant-segmented-item) {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.memorySubmenuSegmented.small :global(.ant-segmented-item .anticon) {
+  margin-right: 4px;
+  font-size: 12px;
+}
+
+/* 侧边栏 Segmented 组件 */
+.sidebarSegmented {
+  background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
+  border-radius: 10px;
+  padding: 3px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.sidebarSegmented :global(.ant-segmented) {
+  background: transparent;
+}
+
+.sidebarSegmented :global(.ant-segmented-item) {
+  position: relative;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #8c8c8c;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 6px 10px;
+  overflow: hidden;
+}
+
+.sidebarSegmented :global(.ant-segmented-item::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(232, 145, 58, 0.06) 0%, rgba(232, 145, 58, 0.03) 100%);
+  transition: all 0.25s ease;
+  border-radius: 6px;
+}
+
+.sidebarSegmented :global(.ant-segmented-item:hover) {
+  color: #595959;
+  background: rgba(255, 247, 237, 0.15);
+  transform: translateX(1px);
+}
+
+.sidebarSegmented :global(.ant-segmented-item:hover::before) {
+  width: 100%;
+}
+
+/* 激活状态 */
+.sidebarSegmented :global(.ant-segmented-item.ant-segmented-item-selected) {
+  color: #e8913a;
+  font-weight: 600;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.6) 0%, rgba(255, 241, 224, 0.6) 100%);
+  box-shadow: 0 1px 4px rgba(232, 145, 58, 0.08);
+  position: relative;
+}
+
+/* 侧边栏激活状态光泽动画 */
+.sidebarSegmented :global(.ant-segmented-item.ant-segmented-item-selected::after) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.25) 50%, transparent 100%);
+  animation: sidebarItemShine 2.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes sidebarItemShine {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* 侧边栏点击波纹效果 */
+.sidebarSegmented :global(.ant-segmented-item) {
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebarSegmented :global(.ant-segmented-item::before) {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(232, 145, 58, 0.08);
+  transform: translate(-50%, -50%);
+  transition: all 0.5s ease;
+}
+
+.sidebarSegmented :global(.ant-segmented-item:hover::before) {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+}
+
+.sidebarSegmented :global(.ant-segmented-item.ant-segmented-item-selected::before) {
+  width: 100%;
+  background: linear-gradient(135deg, rgba(232, 145, 58, 0.02) 0%, rgba(232, 145, 58, 0.01) 100%);
+}
+
+.sidebarSegmented :global(.ant-segmented-item.ant-segmented-item-selected:hover) {
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.7) 0%, rgba(255, 241, 224, 0.7) 100%);
+  box-shadow: 0 2px 6px rgba(232, 145, 58, 0.12);
+}
+
+.sidebarSegmented :global(.ant-segmented-item:not(:last-child)) {
+  margin-right: 3px;
+}
+
+.sidebarSegmented :global(.ant-segmented-item .anticon) {
+  margin-right: 4px;
+  font-size: 12px;
+  position: relative;
+  z-index: 1;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
+}
+
+.sidebarSegmented :global(.ant-segmented-item.ant-segmented-item-selected .anticon) {
+  color: #e8913a;
+  transform: scale(1.08);
+}
+
+/* 侧边栏图标和文字布局优化 */
+.sidebarSegmented :global(.ant-segmented-item) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 侧边栏图标悬停效果 */
+.sidebarSegmented :global(.ant-segmented-item:hover .anticon) {
+  transform: scale(1.05);
+}
+
+/* 侧边栏图标微动画 */
+.sidebarSegmented :global(.ant-segmented-item:hover .anticon) {
+  animation: iconSidebarPulse 0.4s ease-in-out infinite alternate;
+}
+
+@keyframes iconSidebarPulse {
+  from {
+    transform: scale(1.05);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
+/* 侧边栏激活状态图标光晕效果 */
+.sidebarSegmented :global(.ant-segmented-item.ant-segmented-item-selected .anticon) {
+  filter: drop-shadow(0 1px 1px rgba(232, 145, 58, 0.1));
+  animation: iconSidebarGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes iconSidebarGlow {
+  from {
+    filter: drop-shadow(0 1px 1px rgba(232, 145, 58, 0.1));
+  }
+  to {
+    filter: drop-shadow(0 1px 2px rgba(232, 145, 58, 0.2));
+  }
 }

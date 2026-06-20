@@ -159,3 +159,119 @@ async def delete_memory(
         return ApiResult(message="删除成功")
     except Exception as e:
         return api_error("MEMORY_NOT_FOUND", str(e), "请检查记忆 ID")
+
+
+@router.post("/rescore", response_model=ApiResult)
+async def rescore_memories(
+    data: dict = Body(default={}),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResult:
+    """重新评分记忆重要性（LLM 精确评分）
+
+    Body:
+      - point_ids: string[] — 要重新评分的 Qdrant 点 ID 列表（空=全部）
+      - user_id: int — 用户 ID（默认 0）
+
+    Returns:
+      - rescored: int — 重新评分数
+      - updated: int — 实际更新数
+    """
+    from app.mappers.qdrant_mapper import QdrantMapper
+    from app.agent.memory_manager import MemoryManager
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+    point_ids = data.get("point_ids", [])
+    user_id = data.get("user_id", 0)
+
+    qdrant = QdrantMapper()
+
+    # 获取 LLM 客户端
+    llm_client = None
+    try:
+        from llama_index.llms.ollama import Ollama as OllamaLLM
+        from app.core.config import get_settings
+        settings = get_settings()
+        llm_client = OllamaLLM(model="qwen3.5:7b", base_url=settings.OLLAMA_HOST)
+    except Exception:
+        pass
+
+    rescored = 0
+    updated = 0
+
+    if point_ids:
+        # 指定 ID 重新评分
+        for pid in point_ids:
+            try:
+                payload = qdrant.get_by_id("memory_vectors", pid)
+                if not payload:
+                    continue
+
+                summary = payload.get("summary", "")
+                old_importance = int(payload.get("importance", 5))
+
+                # 用 summary 作为"对话"让 LLM 评分
+                fake_messages = [{"role": "user", "content": summary}]
+                new_importance = await MemoryManager._llm_score_importance(
+                    fake_messages, llm_client=llm_client,
+                )
+                rescored += 1
+
+                if new_importance != old_importance:
+                    qdrant._client.set_payload(
+                        collection_name="memory_vectors",
+                        payload={"importance": new_importance},
+                        points=[pid],
+                    )
+                    updated += 1
+            except Exception as e:
+                logger.warning(f"rescore 失败: {pid}: {e}")
+    else:
+        # 全部重新评分（scroll 分页）
+        offset = None
+        batch_size = 50
+        while True:
+            conditions = [
+                FieldCondition(key="user_id", match=MatchValue(value=user_id)),
+                FieldCondition(key="decay_status", match=MatchValue(value="active")),
+            ]
+            try:
+                points, next_offset = qdrant._client.scroll(
+                    collection_name="memory_vectors",
+                    scroll_filter=Filter(must=conditions),
+                    limit=batch_size,
+                    offset=offset,
+                    with_vectors=False,
+                )
+            except Exception:
+                break
+
+            if not points:
+                break
+
+            for p in points:
+                try:
+                    payload = p.payload or {}
+                    summary = payload.get("summary", "")
+                    old_importance = int(payload.get("importance", 5))
+
+                    fake_messages = [{"role": "user", "content": summary}]
+                    new_importance = await MemoryManager._llm_score_importance(
+                        fake_messages, llm_client=llm_client,
+                    )
+                    rescored += 1
+
+                    if new_importance != old_importance:
+                        qdrant._client.set_payload(
+                            collection_name="memory_vectors",
+                            payload={"importance": new_importance},
+                            points=[p.id],
+                        )
+                        updated += 1
+                except Exception as e:
+                    logger.warning(f"rescore 失败: {p.id}: {e}")
+
+            if next_offset is None:
+                break
+            offset = next_offset
+
+    return ApiResult(data={"rescored": rescored, "updated": updated})

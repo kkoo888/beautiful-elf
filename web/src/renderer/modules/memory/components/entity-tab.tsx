@@ -22,6 +22,7 @@ import {
   listRelations, createRelation, deleteRelation,
   type MemoryEntity, type EntityRelation,
 } from '../services/memory-entity-api'
+import memoryPanelStyles from './memory-panel.module.css'
 
 const { Text } = Typography
 const { TextArea } = Input
@@ -128,12 +129,14 @@ export function EntityTab() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 12 }}>
       {/* 工具栏 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <Segmented
-          value={typeFilter}
-          onChange={v => setTypeFilter(v as string)}
-          options={typeOptions}
-          size="small"
-        />
+        <div className={memoryPanelStyles.memorySubmenuSegmented}>
+          <Segmented
+            value={typeFilter}
+            onChange={v => setTypeFilter(v as string)}
+            options={typeOptions}
+            size="small"
+          />
+        </div>
         <Space size={8}>
           <Tooltip title="刷新"><Button type="text" size="small" icon={<ReloadOutlined />} onClick={loadEntities} /></Tooltip>
           <Button type="primary" size="small" icon={<PlusOutlined />} onClick={handleCreate}>新建实体</Button>

@@ -490,6 +490,19 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
         except Exception as e:
             logger.debug(f"[context_builder] 跨线程记忆检索跳过: {e}")
 
+        # ── v5.2: 主动回忆注入（高价值、低访问的记忆提醒）──
+        if memory_manager:
+            try:
+                proactive_text = await memory_manager.proactive_recall(
+                    user_id=state.get("user_id", 0),
+                    max_items=3,
+                )
+                if proactive_text:
+                    system_prompt += proactive_text
+                    logger.info("[context_builder] 主动回忆已注入")
+            except Exception as e:
+                logger.debug(f"[context_builder] 主动回忆跳过: {e}")
+
         return {
             "system_prompt": system_prompt,
             "context": system_prompt,
@@ -1160,7 +1173,6 @@ def _make_memory_saver(memory_manager):
                 )
 
             tools_used = state.get("tools_used", [])
-            meta = None  # 预初始化，避免 should_save=False 时 NameError
 
             # 保存条件（三选一）:
             #   1. 有工具调用 → 实际执行了任务，值得记录
@@ -1174,39 +1186,17 @@ def _make_memory_saver(memory_manager):
 
             if should_save:
                 try:
-                    meta = await memory_manager.save_summary(
+                    enqueued = await memory_manager.enqueue_summary(
                         conversation_id=state["conversation_id"],
                         user_id=state.get("user_id", 0),
                         messages=messages + [{"role": "assistant", "content": state["final_answer"]}],
                     )
-                    logger.info(f"[memory_saver] 已保存长期记忆: importance={importance} tools={bool(tools_used)} msgs={len(messages)}")
-
-                    # ── 同步写入 MySQL memory_entry 表 ──
-                    if meta and meta.get("point_id"):
-                        try:
-                            from app.core.database import AsyncSessionLocal
-                            from app.repository.memory_repo import MemoryRepository
-                            async with AsyncSessionLocal() as db:
-                                repo = MemoryRepository()
-                                # 拼接原始对话内容
-                                content_text = "\n".join(
-                                    f"{m.get('role', 'unknown')}: {m.get('content', '')}"
-                                    for m in messages[-10:]  # 最近 10 条
-                                )
-                                await repo.create(db, {
-                                    "conversation_id": state["conversation_id"],
-                                    "content": content_text[:2000],
-                                    "summary": meta["summary"],
-                                    "tags": meta["tags"],
-                                    "importance": meta["importance"],
-                                    "qdrant_point_id": meta["point_id"],
-                                })
-                                await db.commit()
-                                logger.info(f"[memory_saver] MySQL memory_entry 已同步: point_id={meta['point_id'][:8]}")
-                        except Exception as e:
-                            logger.warning(f"[memory_saver] MySQL 同步失败: {e}")
+                    if enqueued:
+                        logger.info(f"[memory_saver] 长期记忆已入队(异步): importance={importance} tools={bool(tools_used)} msgs={len(messages)}")
+                    else:
+                        logger.debug(f"[memory_saver] 跳过保存: importance={importance} tools={bool(tools_used)} msgs={len(messages)}")
                 except Exception as e:
-                    logger.warning(f"[memory_saver] Qdrant 长期记忆保存失败: {e}")
+                    logger.warning(f"[memory_saver] 摘要入队失败: {e}")
             else:
                 logger.debug(f"[memory_saver] 跳过保存: importance={importance} tools={bool(tools_used)} msgs={len(messages)}")
 
@@ -1223,9 +1213,8 @@ def _make_memory_saver(memory_manager):
                         break
 
                 assistant_answer = state.get("final_answer", "")
-                summary_text = meta.get("summary", "") if meta else ""
-                if not summary_text:
-                    summary_text = (user_content[:100] + "...") if len(user_content) > 100 else user_content
+                # enqueue_summary 异步模式下无 meta，用用户首条消息作为摘要
+                summary_text = (user_content[:100] + "...") if len(user_content) > 100 else user_content
 
                 now = datetime.utcnow()
                 time_str = now.strftime("%H:%M")

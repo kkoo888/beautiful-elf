@@ -139,8 +139,47 @@ class MarkdownMemoryService:
         return [self._to_list_out(i) for i in items]
 
     async def delete_memory(self, db: AsyncSession, memory_id: int) -> bool:
-        """软删除记忆"""
-        return await self.repo.soft_delete(db, memory_id)
+        """软删除记忆 + 同步删除 Qdrant 向量"""
+        # 先查出记忆信息（用于 Qdrant 清理）
+        from app.models.markdown_memory import MarkdownMemory
+        from sqlalchemy import select
+        stmt = select(MarkdownMemory).where(
+            MarkdownMemory.id == memory_id,
+            MarkdownMemory.is_deleted == 0,
+        )
+        result = await db.execute(stmt)
+        item = result.scalar_one_or_none()
+
+        deleted = await self.repo.soft_delete(db, memory_id)
+
+        # 同步删除 Qdrant 中对应的向量
+        if deleted and item and self._memory_manager:
+            try:
+                from app.mappers.qdrant_mapper import QdrantMapper
+                from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchText
+                qdrant = QdrantMapper()
+                tag = f"markdown:{item.title}"
+                search_filter = Filter(must=[
+                    FieldCondition(key="tags", match=MatchText(text=tag)),
+                    FieldCondition(key="user_id", match=MatchValue(value=item.user_id)),
+                ])
+                results = qdrant._client.scroll(
+                    collection_name="memory_vectors",
+                    scroll_filter=search_filter,
+                    limit=5,
+                    with_vectors=False,
+                )
+                points = results[0] if results else []
+                if points:
+                    point_ids = [p.id for p in points]
+                    qdrant._client.delete(
+                        collection_name="memory_vectors",
+                        points_selector=point_ids,
+                    )
+            except Exception as e:
+                logger.warning(f"delete_memory: Qdrant 同步删除失败(非致命): {e}")
+
+        return deleted
 
     # ── 提炼记忆（Observations）────────────────────────
 
@@ -358,7 +397,7 @@ class MarkdownMemoryService:
             # P1-6: Observation 向量化 — 同步到 Qdrant
             try:
                 await self._sync_observation_to_vector(
-                    obs.id, user_id, content, category,
+                    obs.id, user_id, content, category, freshness,
                 )
             except Exception as e:
                 logger.warning(f"[distill] observation 向量同步失败: {e}")
@@ -533,6 +572,81 @@ class MarkdownMemoryService:
     async def get_category_stats(self, db: AsyncSession, user_id: int) -> dict:
         """获取分类统计"""
         return await self.obs_repo.count_by_category(db, user_id)
+
+    # ── v5.1: Observation 新鲜度自动衰减 ────────────────────
+
+    async def sweep_freshness(self, db: AsyncSession) -> dict:
+        """扫描 observation 并自动更新 freshness 状态
+
+        衰减规则（基于 updated_at 距今天数）:
+          - new >14天 → stable
+          - stable >60天无更新 → weakening
+          - weakening >30天 → stale
+
+        strengthening 不自动衰减（持续被强化的信念应保持活跃）。
+        stale observation 同步更新 Qdrant payload，检索时降权 0.5。
+
+        Returns:
+            {"new_to_stable": int, "stable_to_weakening": int, "weakening_to_stale": int}
+        """
+        stats = {"new_to_stable": 0, "stable_to_weakening": 0, "weakening_to_stale": 0}
+
+        # 1. new >14天 → stable
+        stale_new = await self.obs_repo.find_stale_by_freshness(db, "new", 14)
+        for obs in stale_new:
+            await self.obs_repo.update(db, obs.id, {"freshness": "stable"})
+            stats["new_to_stable"] += 1
+
+        # 2. stable >60天无更新 → weakening
+        stale_stable = await self.obs_repo.find_stale_by_freshness(db, "stable", 60)
+        for obs in stale_stable:
+            await self.obs_repo.update(db, obs.id, {"freshness": "weakening"})
+            stats["stable_to_weakening"] += 1
+
+        # 3. weakening >30天 → stale
+        stale_weakening = await self.obs_repo.find_stale_by_freshness(db, "weakening", 30)
+        for obs in stale_weakening:
+            await self.obs_repo.update(db, obs.id, {"freshness": "stale"})
+            stats["weakening_to_stale"] += 1
+
+        # 4. 同步 stale 状态到 Qdrant payload（用于检索时降权）
+        # v5.1 fix: 通过内容匹配找到对应的 Qdrant point_id（observation.id != Qdrant UUID）
+        if self._memory_manager and stale_weakening:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchText
+            for obs in stale_weakening:
+                try:
+                    # 通过 observation 内容关键词 + type=user_memory + network=observation 查找对应 point
+                    search_text = f"observation:{obs.category}"
+                    content_snippet = (obs.content or "")[:100].strip()
+                    if content_snippet:
+                        search_text = content_snippet
+
+                    obs_filter = Filter(must=[
+                        FieldCondition(key="type", match=MatchValue(value="user_memory")),
+                        FieldCondition(key="network", match=MatchValue(value="observation")),
+                        FieldCondition(key="user_id", match=MatchValue(value=obs.user_id)),
+                        FieldCondition(key="summary", match=MatchText(text=search_text)),
+                    ])
+
+                    results = self._memory_manager.qdrant.search(
+                        collection="memory_vectors",
+                        query_vector=[0.0] * 1024,  # dummy vector
+                        limit=1,
+                        score_threshold=0.0,
+                        raw_filter=obs_filter,
+                    )
+
+                    if results:
+                        point_id = results[0].id
+                        self._memory_manager.qdrant._client.set_payload(
+                            collection_name="memory_vectors",
+                            payload={"freshness": "stale"},
+                            points=[point_id],
+                        )
+                except Exception:
+                    pass  # fire-and-forget
+
+        return stats
 
     # ── Reflect（深度反思 — 借鉴 Hindsight CARA）──────────
 
@@ -784,6 +898,12 @@ person（人）、tech（技术/框架）、project（项目）、tool（工具�
 - enables（使能）: A 使 B 成为可能（因果）
 - prevents（阻止）: A 阻止了 B（因果）
 
+## 时间推断 (v5.1 Bi-Temporal)
+如果记忆内容暗示了时间信息，推断 valid_at（关系生效时间）。
+例如: "2024年开始使用Python" → valid_at: "2024-01-01"
+例如: "去年换了工作" → 推断为大约一年前的时间
+没有明确时间信息时，valid_at 填 null。
+
 ## 输出 JSON
 
 ```json
@@ -792,7 +912,7 @@ person（人）、tech（技术/框架）、project（项目）、tool（工具�
     {"name": "实体名称", "entity_type": "tech", "description": "简短描述", "aliases": ["别名1"]}
   ],
   "relations": [
-    {"source": "实体名称1", "target": "实体名称2", "relation_type": "uses", "evidence": "来源依据"}
+    {"source": "实体名称1", "target": "实体名称2", "relation_type": "uses", "evidence": "来源依据", "valid_at": "2024-01-01"}
   ]
 }
 ```
@@ -801,7 +921,8 @@ person（人）、tech（技术/框架）、project（项目）、tool（工具�
 1. 如果实体在已有列表中存在，使用已有名称（自动消歧）
 2. 不要抽取过于泛化的实体（如"代码"、"系统"）
 3. 因果关系（causes/enables/prevents）仅在证据明确时标注
-4. 每个实体名称保持简洁规范"""
+4. 每个实体名称保持简洁规范
+5. valid_at 格式为 "YYYY-MM-DD" 或 null"""
 
         user_prompt = f"""## 已有实体
 {existing_text}
@@ -874,7 +995,17 @@ person（人）、tech（技术/框架）、project（项目）、tool（工具�
             if not src_ent or not tgt_ent or src_ent.id == tgt_ent.id:
                 continue
 
-            # 检查是否已存在
+            # v5.1: 解析 valid_at 时间
+            valid_at = None
+            valid_at_str = rel_data.get("valid_at")
+            if valid_at_str:
+                try:
+                    from datetime import datetime as dt_parse
+                    valid_at = dt_parse.strptime(str(valid_at_str)[:10], "%Y-%m-%d")
+                except (ValueError, TypeError):
+                    valid_at = None
+
+            # 检查是否已存在（含时间冲突检测）
             dup = (await db.execute(
                 select(MemoryEntityRelation).where(
                     MemoryEntityRelation.source_entity_id == src_ent.id,
@@ -886,7 +1017,31 @@ person（人）、tech（技术/框架）、project（项目）、tool（工具�
 
             if dup:
                 dup.weight += 1
+                # v5.1: 如果新的有 valid_at 而旧的没有，更新
+                if valid_at and not dup.valid_at:
+                    dup.valid_at = valid_at
             else:
+                # v5.1: 时间冲突检测 — 检查同对实体是否有不同类型的关系
+                # 如果新关系与已有关系冲突（如 works_at 从 A 公司变为 B 公司）
+                conflicting = (await db.execute(
+                    select(MemoryEntityRelation).where(
+                        MemoryEntityRelation.source_entity_id == src_ent.id,
+                        MemoryEntityRelation.relation_type == rtype,
+                        MemoryEntityRelation.target_entity_id != tgt_ent.id,
+                        MemoryEntityRelation.invalid_at == None,  # noqa: E711
+                        MemoryEntityRelation.is_deleted == 0,
+                    )
+                )).scalars().all()
+
+                # 对某些关系类型（如 works_at, belongs），新关系可能意味着旧关系已失效
+                if conflicting and rtype in ("works_at", "belongs", "uses"):
+                    for old_rel in conflicting:
+                        old_rel.invalid_at = datetime.now()
+                        logger.info(
+                            f"[extract_entities] 时间冲突检测: 关系 {src_name} -> {old_rel.target_entity_id} "
+                            f"({rtype}) 已标记 invalid_at"
+                        )
+
                 rel = MemoryEntityRelation(
                     user_id=user_id,
                     source_entity_id=src_ent.id,
@@ -894,6 +1049,7 @@ person（人）、tech（技术/框架）、project（项目）、tool（工具�
                     relation_type=rtype,
                     evidence=(rel_data.get("evidence", "") or "")[:500],
                     weight=1,
+                    valid_at=valid_at,
                 )
                 db.add(rel)
                 rel_count += 1
@@ -1189,9 +1345,12 @@ person（人）、tech（技术/框架）、project（项目）、tool（工具�
         await self.repo.mark_synced(None, memory_id)
 
     async def _sync_observation_to_vector(
-        self, obs_id: int, user_id: int, content: str, category: str,
+        self, obs_id: int, user_id: int, content: str, category: str, freshness: str = "new",
     ):
-        """将 Observation 同步到 Qdrant 向量（P1-6: 打通提炼记忆的语义检索）"""
+        """将 Observation 同步到 Qdrant 向量（P1-6: 打通提炼记忆的语义检索）
+
+        v5.1: 同步 freshness 字段到 payload，用于检索时 stale 降权。
+        """
         if not self._memory_manager:
             return
         await self._memory_manager.save_memory(
@@ -1200,6 +1359,7 @@ person（人）、tech（技术/框架）、project（项目）、tool（工具�
             tags=["observation", f"category:{category}"],
             importance=8,  # 提炼记忆权重高于原始 detail
             network="observation",
+            freshness=freshness,
         )
     # ── 转换 ────────────────────────────────────────────
 
