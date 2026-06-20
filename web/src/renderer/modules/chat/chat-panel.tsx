@@ -14,6 +14,7 @@ import { AgentProgressIndicator } from './components/agent-progress'
 import { ToolProgressIndicator } from './components/tool-progress'
 import { ContextSourcesDisplay } from './components/context-sources'
 import { TokenStatsBar } from './components/token-stats-bar'
+import { GoalTaskBoard } from './components/goal-task-board'
 import { useChat } from './hooks/use-chat'
 import styles from './chat-sidebar.module.css'
 
@@ -34,6 +35,8 @@ export default function ChatPanel() {
     contextSources,
     tokenStats,
     progressSteps,
+    goalMode,
+    goalTasks,
   } = chat
 
   const toggleSidebar = useCallback(() => {
@@ -48,7 +51,8 @@ export default function ChatPanel() {
     toolProgress.length > 0 ||
     progressSteps.length > 0 ||
     contextSources.length > 0 ||
-    tokenStats !== null
+    tokenStats !== null ||
+    goalMode
 
   return (
     <div className={styles.layout}>
@@ -104,6 +108,17 @@ export default function ChatPanel() {
         >
           {!progressCollapsed && (
             <div className={styles.progressPanelInner}>
+              {/* Goal 模式任务看板 — Goal 模式激活时立即显示 */}
+              {goalMode && (
+                <GoalTaskBoard
+                  tasks={goalTasks}
+                  iterations={progressSteps.find((s) => s.step === 'goal_progress')?.['iterations'] as number || 0}
+                  maxIterations={5}
+                  tokensUsed={tokenStats ? tokenStats.promptTokens + tokenStats.completionTokens : 0}
+                  tokenBudget={50000}
+                />
+              )}
+
               <h4 className={styles.progressPanelTitle}>
                 <ThunderboltOutlined /> 执行进展
               </h4>

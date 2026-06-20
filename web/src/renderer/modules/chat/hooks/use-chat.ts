@@ -17,10 +17,52 @@ import type {
   ApprovalRequest,
   ContextSource,
   ProgressStep,
+  GoalTask,
 } from '../types/chat'
 
 /** 生成唯一 ID */
 const generateId = (): string => crypto.randomUUID()
+
+/** 从 AI 回复中解析 [目标拆解] 格式的子任务列表 */
+function parseGoalTasks(content: string): GoalTask[] {
+  const tasks: GoalTask[] = []
+  // 匹配 [目标拆解] 后面的任务行（支持多种分隔符）
+  const planMatch = content.match(/\[目标拆解\]\s*\n([\s\S]*?)(?=\n\n|═|$)/)
+  if (!planMatch) return tasks
+
+  const lines = planMatch[1].split('\n')
+  let id = 1
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+
+    // 匹配格式: • [任务描述] - [pending] (0%) -> 依赖: 1,2
+    // 或简化格式: • [任务描述] - [pending]
+    const taskMatch = trimmed.match(
+      /^[•\-\d\.]+\s*(.+?)\s*-\s*\[(pending|in_progress|done|failed)\](?:\s*\((\d+)%\))?(?:\s*->\s*依赖:\s*([\d,\s]+))?/
+    )
+    if (taskMatch) {
+      const title = taskMatch[1].replace(/^\[|\]$/g, '').trim()
+      const statusStr = taskMatch[2]
+      const progress = taskMatch[3] ? parseInt(taskMatch[3], 10) : undefined
+      const depsStr = taskMatch[4]
+
+      let status: GoalTask['status'] = 'pending'
+      if (statusStr === 'done') status = 'done'
+      else if (statusStr === 'failed') status = 'failed'
+      else if (statusStr === 'in_progress') status = 'in_progress'
+
+      // 解析依赖关系
+      let dependencies: number[] | undefined
+      if (depsStr) {
+        dependencies = depsStr.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+      }
+
+      tasks.push({ id: id++, title, status, progress, dependencies })
+    }
+  }
+  return tasks
+}
 
 export interface UseChatReturn {
   /** 消息列表 */
@@ -49,8 +91,12 @@ export interface UseChatReturn {
   tokenStats: { promptTokens: number; completionTokens: number } | null
   /** Agent 执行进展 */
   progressSteps: ProgressStep[]
+  /** Goal 模式是否激活 */
+  goalMode: boolean
+  /** Goal 模式子任务列表 */
+  goalTasks: GoalTask[]
   /** 发送消息（流式） */
-  sendMessage: (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual' }) => void
+  sendMessage: (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual'; goalMode?: boolean }) => void
 
   /** 设置推理深度 */
   setReasoningDepth: (depth: ReasoningDepth) => void
@@ -97,6 +143,8 @@ export function useChat(): UseChatReturn {
   const [contextSources, setContextSources] = useState<ContextSource[]>([])
   const [tokenStats, setTokenStats] = useState<{ promptTokens: number; completionTokens: number } | null>(null)
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([])
+  const [goalMode, setGoalMode] = useState(false)
+  const [goalTasks, setGoalTasks] = useState<GoalTask[]>([])
 
   // 缓存 providerId -> providerType 映射，避免每次请求都拉 Provider 列表
   const providerTypeCacheRef = useRef<Record<number, string | undefined>>({})
@@ -169,8 +217,14 @@ export function useChat(): UseChatReturn {
 
   /** 发送消息（流式） */
   const sendMessage = useCallback(
-    async (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual' }) => {
+    async (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual'; goalMode?: boolean }) => {
       if (isLoading || !content.trim()) return
+
+      // 设置 Goal 模式状态
+      if (options?.goalMode) {
+        setGoalMode(true)
+        setGoalTasks([])
+      }
 
       const convId = await ensureConversationId()
 
@@ -225,6 +279,7 @@ export function useChat(): UseChatReturn {
           teamMode: options?.teamMode,
           teamId: options?.expertTeamId,
           skillId: options?.skillId,
+          goalMode: options?.goalMode,
         },
         (token: StreamToken) => {
           if (token.done) {
@@ -250,6 +305,15 @@ export function useChat(): UseChatReturn {
             msg.id === aiMessageId ? { ...msg, content: msg.content + token.content } : msg
           )
           setMessages(updatedMessages)
+
+          // Goal 模式：从累积内容中解析子任务列表
+          if (goalMode) {
+            const fullContent = updatedMessages.find((m) => m.id === aiMessageId)?.content || ''
+            const parsedTasks = parseGoalTasks(fullContent)
+            if (parsedTasks.length > 0) {
+              setGoalTasks(parsedTasks)
+            }
+          }
         },
         (error) => {
           console.error('[Chat] Stream error:', error)
@@ -287,6 +351,9 @@ export function useChat(): UseChatReturn {
           onIntentHit: (name, score) => {
             setContextSources((prev) => [...prev, { type: 'intent', name, score }])
           },
+          onGoalSubtasks: (subtasks) => {
+            setGoalTasks(subtasks as GoalTask[])
+          },
           onProgress: (progress) => {
             setProgressSteps((prev) => {
               const idx = prev.findIndex((s) => s.step === progress.step)
@@ -297,11 +364,15 @@ export function useChat(): UseChatReturn {
               }
               return [...prev, progress]
             })
+            // 处理子任务更新事件
+            if (progress.subtasks && Array.isArray(progress.subtasks)) {
+              setGoalTasks(progress.subtasks as GoalTask[])
+            }
           },
         }
       )
     },
-    [isLoading, reasoningDepth, selectedProviderId, selectedModelName, ensureConversationId, addMessage, setMessages, setIsLoading]
+    [isLoading, reasoningDepth, selectedProviderId, selectedModelName, ensureConversationId, addMessage, setMessages, setIsLoading, goalMode]
   )
 
   /** 设置推理深度 */
@@ -359,6 +430,8 @@ export function useChat(): UseChatReturn {
     abortRef.current?.abort()
     abortRef.current = null
     setIsLoading(false)
+    setGoalMode(false)
+    setGoalTasks([])
   }, [storeClearMessages, setIsLoading])
 
   /** 停止生成 */
@@ -381,6 +454,10 @@ export function useChat(): UseChatReturn {
   const switchConversation = useCallback(async (id: string) => {
     const store = useChatStore.getState()
     store.setCurrentConversation(id)
+
+    // 重置 Goal 模式状态
+    setGoalMode(false)
+    setGoalTasks([])
 
     // 从会话的 modelName 恢复模型选择
     const conv = store.conversations.find((c) => c.id === id)
@@ -489,6 +566,8 @@ export function useChat(): UseChatReturn {
     contextSources,
     tokenStats,
     progressSteps,
+    goalMode,
+    goalTasks,
     sendMessage,
     setReasoningDepth,
     setModelSelection,

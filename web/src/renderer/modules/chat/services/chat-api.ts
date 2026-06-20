@@ -138,6 +138,7 @@ export function chatStream(
     onCostUpdate?: (promptTokens: number, completionTokens: number) => void
     onIntentHit?: (name: string, score: number) => void
     onProgress?: (progress: ProgressStep) => void
+    onGoalSubtasks?: (subtasks: Array<{ id: number; title: string; description?: string; status: string }>) => void
   }
 ): { abort: () => void } {
   const controller = new AbortController()
@@ -159,6 +160,8 @@ export function chatStream(
           team_mode: request.teamMode ?? 'off',
           team_id: request.teamId ?? null,
           skill_id: request.skillId ?? null,
+          goal_mode: request.goalMode ?? false,
+          goal_definition: request.goalMode ? request.message : '',
         }),
         signal: controller.signal,
       })
@@ -225,10 +228,19 @@ export function chatStream(
               callbacks?.onProgress?.(data.progress as ProgressStep)
               continue
             }
+            // Goal 模式子任务更新事件
+            if (data.goal_subtasks) {
+              callbacks?.onGoalSubtasks?.(data.goal_subtasks)
+              continue
+            }
             // token 事件
             if (data.content || data.done) {
               onToken({ content: data.content ?? '', done: data.done, messageId: firstToken ? messageId : undefined })
               firstToken = false
+            }
+            // done 事件中可能包含 goal_subtasks
+            if (data.done && data.goal_subtasks) {
+              callbacks?.onGoalSubtasks?.(data.goal_subtasks)
             }
             if (data.done) return
           } catch { /* skip malformed JSON */ }

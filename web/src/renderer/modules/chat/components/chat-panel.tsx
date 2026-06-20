@@ -41,7 +41,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
   } = chat
 
   const handleSend = useCallback(
-    (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual' }) => {
+    (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual'; goalMode?: boolean }) => {
       sendMessage(content, options)
     },
     [sendMessage],

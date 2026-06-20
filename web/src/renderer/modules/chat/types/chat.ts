@@ -90,6 +90,22 @@ export interface ProgressStep {
   [key: string]: unknown
 }
 
+/** Goal 模式子任务 */
+export interface GoalTask {
+  /** 子任务 ID */
+  id: number
+  /** 子任务标题 */
+  title: string
+  /** 子任务描述 */
+  description?: string
+  /** 状态: pending/in_progress/done/failed */
+  status: 'pending' | 'in_progress' | 'done' | 'failed'
+  /** 进度百分比 0-100 */
+  progress?: number
+  /** 依赖的子任务 ID 列表 */
+  dependencies?: number[]
+}
+
 /** 审批请求 */
 export interface ApprovalRequest {
   /** 工具名称 */

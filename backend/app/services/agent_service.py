@@ -513,6 +513,7 @@ class AgentService:
                 "goal_token_budget": 50000,
                 "goal_tokens_used": 0,
                 "goal_history": [],
+                "goal_subtasks": [],
                 "goal_status": "pending" if goal_mode else "",
                 # selected_tools 由 engine 动态选择，不传则 default_factory=list 自动给 []
             }
@@ -629,6 +630,9 @@ class AgentService:
                 # ── custom 通道: get_stream_writer() 发射的进展事件 ──
                 elif method == "custom":
                     if isinstance(data, dict):
+                        # Goal 模式子任务更新事件 — 单独推送，前端实时更新看板
+                        if data.get("step") == "goal_subtasks":
+                            yield {"type": "goal_subtasks", "subtasks": data.get("subtasks", [])}
                         yield {"type": "progress", **data}
 
                 # ── updates 通道: 节点状态更新 ──
@@ -698,12 +702,18 @@ class AgentService:
             except Exception:
                 pass
 
+            # 获取 goal_subtasks（从最终状态）
+            goal_subtasks = []
+            if final_state:
+                goal_subtasks = final_state.get("goal_subtasks", []) or []
+
             yield {
                 "type": "done",
                 "tools_used": tools_used,
                 "duration_ms": elapsed,
                 "prompt_tokens": total_prompt_tokens,
                 "completion_tokens": total_completion_tokens,
+                "goal_subtasks": goal_subtasks,
             }
 
         except Exception as e:

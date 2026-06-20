@@ -535,13 +535,17 @@ async def _stream_response(
                     # Agent 执行进展事件（AG-UI 协议兼容）
                     progress = {k: v for k, v in event.items() if k != "type"}
                     await _queue.put(f"data: {json.dumps({'progress': progress, 'done': False})}\n\n")
+                elif event_type == "goal_subtasks":
+                    # Goal 模式子任务更新事件
+                    await _queue.put(f"data: {json.dumps({'goal_subtasks': event.get('subtasks', []), 'done': False})}\n\n")
                 elif event_type == "done":
                     prompt_tokens = event.get("prompt_tokens", 0)
                     completion_tokens = event.get("completion_tokens", 0)
                     total_tokens = prompt_tokens + completion_tokens
+                    goal_subtasks = event.get("goal_subtasks", [])
                     # done 时保存助手回复（数据完整）
                     await _save_assistant_message("".join(_full_content), total_tokens)
-                    await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens})}\n\n")
+                    await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens, 'goal_subtasks': goal_subtasks})}\n\n")
                 elif event_type == "error":
                     await _queue.put(f"data: {json.dumps({'error': event['message'], 'done': True})}\n\n")
         except Exception as e:

@@ -139,6 +139,7 @@ class AgentState(TypedDict, total=False):
     goal_tokens_used: int        # 已使用的 Token 数
     goal_history: list           # 历史迭代记录 [{iteration, action, result, evaluation}]
     goal_current_plan: str       # 当前执行计划
+    goal_subtasks: list          # 目标拆分子任务 [{id, title, description, status: "pending"|"in_progress"|"done"|"failed"}]
 
 
 # ── Runtime Context（P1: context_schema）────────────────────
@@ -171,6 +172,9 @@ class InputState(TypedDict, total=False):
     model_name: str
     messages: Annotated[list, operator.add]
     reasoning_depth: str
+    # ── Goal 模式 ─────────────────────────────────────
+    goal_mode: bool
+    goal_definition: str
 
 
 class OutputState(TypedDict, total=False):

@@ -523,6 +523,117 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
         if prompt_hint:
             system_prompt = f"{system_prompt}\n\n【指令】{prompt_hint}"
 
+        # ── Goal 模式：注入任务拆解与执行指令 ──
+        # 规划执行分离：第0轮只输出计划，后续轮强制使用工具执行
+        if state.get("goal_mode"):
+            goal_def = state.get("goal_definition", "")
+            iterations = state.get("goal_iterations", 0)
+            history = state.get("goal_history", [])
+            current_plan = state.get("goal_current_plan", "")
+            goal_subtasks = state.get("goal_subtasks", [])
+
+            if iterations == 0:
+                # ── 第0轮：规划阶段（纯文本输出，不调用工具）──
+                system_prompt = f"""{system_prompt}
+
+══════════════════════════════════════════════════
+【目标驱动模式 — 第0轮：规划】
+══════════════════════════════════════════════════
+
+## 目标
+{goal_def}
+
+## 你的唯一任务
+分析目标，将其拆解为具体的、可执行的子任务列表。
+
+## 输出格式（必须严格遵循，前端依赖此格式解析）
+[目标拆解]
+• [子任务描述] - [pending] (0%)
+• [子任务描述] - [pending] (0%) -> 依赖: 1
+• [子任务描述] - [pending] (0%) -> 依赖: 1,2
+
+## 格式说明
+- 状态标记：[pending]=待执行
+- 百分比：(0%)=未开始
+- 依赖：-> 依赖: N 表示需要第N个子任务完成后才能开始
+- 每个子任务应该是一个独立的、可通过工具执行的具体动作
+
+## 子任务设计原则
+1. 每个子任务必须是一个具体的工具调用动作（如"搜索 XXX 的最新信息"、"浏览 XXX 页面"）
+2. 粒度适中：一个子任务 = 一次工具调用 + 结果整理
+3. 有依赖关系的子任务要明确标注前置任务
+4. 数量不限，根据目标复杂度自行决定
+
+## 重要约束
+1. 本阶段只输出 [目标拆解] 格式的计划，不要执行任何操作
+2. 不要输出"我来帮你搜索"等承诺性语句
+3. 直接输出计划，不要有其他前言或解释
+4. 计划中的每个子任务必须是可执行的具体动作"""
+            else:
+                # ── 后续轮：执行阶段（强制使用工具，禁止跳过）──
+                # 找出未完成的子任务
+                pending_tasks = []
+                done_tasks = []
+                for st in goal_subtasks:
+                    if st.get("status") == "done":
+                        done_tasks.append(st)
+                    else:
+                        pending_tasks.append(st)
+
+                pending_text = ""
+                for pt in pending_tasks:
+                    deps = pt.get("dependencies", [])
+                    dep_str = f" -> 依赖: {','.join(str(d) for d in deps)}" if deps else ""
+                    pending_text += f"• [{pt.get('title', '')}] - [pending]{dep_str}\n"
+
+                done_text = ""
+                for dt in done_tasks:
+                    done_text += f"• [{dt.get('title', '')}] - [done] (100%)\n"
+
+                history_text = ""
+                if history:
+                    last = history[-1]
+                    history_text = f"""上一轮执行结果：
+- 评估：{last.get('evaluation', '无')}
+- 建议：{last.get('suggestion', '无')}"""
+
+                system_prompt = f"""{system_prompt}
+
+══════════════════════════════════════════════════
+【目标驱动模式 — 第{iterations}轮：执行】
+══════════════════════════════════════════════════
+
+## 目标
+{goal_def}
+
+## 已完成的子任务
+{done_text if done_text else "无"}
+
+## 待执行的子任务（按顺序执行）
+{pending_text if pending_text else "所有子任务已完成"}
+
+{history_text}
+
+## 你的唯一任务
+逐个执行上面的待执行子任务。对每个子任务：
+
+1. **Thought**：分析这个子任务需要调用什么工具
+2. **Action**：立即调用工具（搜索、浏览等）获取真实数据
+3. **Observation**：检查工具返回的结果
+4. **Answer**：基于工具结果输出该子任务的成果
+
+## 重要约束（违反任何一条即为失败）
+1. **优先使用工具** — 每个子任务应先尝试调用工具获取实时数据
+2. **工具失败时的降级策略** — 如果工具调用失败（如网络错误、服务不可用），则基于你的知识直接回答该子任务，并在结果中注明"（基于已有知识，工具不可用时的降级回答）"
+3. **禁止承诺性回复** — 不要输出"我来帮你搜索"、"让我查找"等语句，直接调用工具
+4. **每次只执行一个子任务** — 完成一个再执行下一个
+5. **更新状态标记** — 每完成一个子任务，输出更新后的状态：
+   • [子任务描述] - [done] (100%)"""
+
+
+            # 注意：iterations == 0 的 prompt 已在上方行 535-571 定义，此处不再重复
+
+
         lc_messages = [SystemMessage(content=system_prompt)]
 
         # ── Auto-Compaction（压缩旧历史，仅首次检查）──────
@@ -624,6 +735,15 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
         result_update = {}
         if goal_tokens_delta and state.get("goal_mode"):
             result_update["goal_tokens_used"] = state.get("goal_tokens_used", 0) + goal_tokens_delta
+
+        # ── Goal 模式：从 LLM 回复中解析 [目标拆解] 并更新 goal_subtasks ──
+        if state.get("goal_mode") and response.content:
+            answer_text = _content_to_str(response.content)
+            parsed = _parse_goal_subtasks(answer_text)
+            if parsed:
+                result_update["goal_subtasks"] = parsed
+                logger.info(f"[llm_call] Goal 模式解析到 {len(parsed)} 个子任务")
+                writer({"step": "goal_subtasks", "status": "done", "message": f"任务拆解完成: {len(parsed)} 个子任务", "subtasks": parsed})
 
         if response.tool_calls:
             tool_names = [tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "") for tc in response.tool_calls]
@@ -931,6 +1051,10 @@ def _make_evaluator_node(llm=None):
                 HumanMessage(content=eval_prompt),
             ])
 
+            if result is None:
+                logger.warning("[evaluator] LLM 返回 None，降级为规则评估")
+                return _rule_based_eval(state)
+
             evaluation = {
                 "score": result.score,
                 "passed": result.passed,
@@ -954,10 +1078,10 @@ def _make_evaluator_node(llm=None):
                 writer({"step": "eval", "status": "done", "message": f"质量评估未通过 (评分 {score}/10, {reason})", "score": score})
 
             # 评分太低（<4）的回答替换为兜底
-            result = {"evaluation": evaluation}
+            eval_result = {"evaluation": evaluation}
             if evaluation["score"] < 4 and state.get("final_answer"):
                 logger.warning(f"[evaluator] 评估不通过(score={evaluation['score']})，替换为兜底回答")
-                result["final_answer"] = (
+                eval_result["final_answer"] = (
                     "抱歉，我暂时无法准确回答这个问题。"
                     "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
                     "你可以试试：\n"
@@ -965,7 +1089,7 @@ def _make_evaluator_node(llm=None):
                     "2. 稍后再试\n"
                     "3. 如果是天气等实时信息，可以直接告诉我你的城市"
                 )
-            return result
+            return eval_result
 
         except Exception as e:
             logger.warning(f"[evaluator] LLM 评估失败，降级为规则评估: {e}")
@@ -1148,6 +1272,8 @@ def _make_goal_evaluator(llm):
 
     async def goal_evaluator(state: dict) -> dict:
         """评估当前结果是否达成目标"""
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
         from app.core.logging import get_logger as _get_logger
         _logger = _get_logger(__name__)
 
@@ -1160,10 +1286,12 @@ def _make_goal_evaluator(llm):
 
         # Token 预算检查
         if tokens_used >= token_budget:
+            writer({"step": "goal_eval", "status": "done", "message": "已达 Token 预算上限"})
             return {"goal_status": "budget_exceeded"}
 
         # 最大迭代检查
         if iterations >= max_iterations:
+            writer({"step": "goal_eval", "status": "done", "message": "已达最大迭代次数"})
             return {"goal_status": "failed"}
 
         # 如果没有 final_answer，说明还没执行过
@@ -1177,6 +1305,12 @@ def _make_goal_evaluator(llm):
 
 当前回答：{final_answer[:2000]}
 
+评估说明：
+1. 优先评估回答内容是否实质上回答了用户的问题
+2. 如果回答中包含"基于已有知识"、"工具不可用时的降级回答"等说明，且内容合理准确，应视为有效回答
+3. 工具调用失败时的降级回答（基于大模型知识）是可接受的
+4. 只有当回答完全无关、空白或明显错误时才判定为未达成
+
 请严格按 JSON 格式输出：
 {{"achieved": true/false, "reason": "原因", "suggestion": "如果未达成，下一步建议"}}
 
@@ -1186,15 +1320,15 @@ def _make_goal_evaluator(llm):
             response = await llm.ainvoke(eval_prompt)
             content = _content_blocks_to_str(response.content if hasattr(response, 'content') else response)
             import re
-            # 解析 JSON
             match = re.search(r'\{.*?\}', content, re.DOTALL)
             if match:
                 data = json.loads(match.group())
                 achieved = data.get("achieved", False)
+
                 if achieved:
+                    writer({"step": "goal_eval", "status": "done", "message": "目标已达成！"})
                     return {"goal_status": "achieved"}
                 else:
-                    # 记录历史
                     history = list(state.get("goal_history", []))
                     history.append({
                         "iteration": iterations,
@@ -1202,6 +1336,8 @@ def _make_goal_evaluator(llm):
                         "evaluation": data.get("reason", ""),
                         "suggestion": data.get("suggestion", ""),
                     })
+                    writer({"step": "goal_eval", "status": "done",
+                            "message": f"目标未达成 (第{iterations+1}轮): {data.get('reason', '')[:50]}"})
                     return {
                         "goal_status": "in_progress",
                         "goal_iterations": iterations + 1,
@@ -1319,6 +1455,47 @@ def _extract_last_message(state) -> str:
         content = last_msg.get("content", "") if isinstance(last_msg, dict) else getattr(last_msg, "content", "")
         return _content_to_str(content)
     return ""
+
+
+def _parse_goal_subtasks(text: str) -> list:
+    """从 LLM 回复中解析 [目标拆解] 格式的子任务列表。
+
+    格式示例：
+        [目标拆解]
+        • 搜索 Loop Engineering 公司信息 - [pending] (0%)
+        • 分析技术路线 - [pending] (0%) -> 依赖: 1
+    """
+    import re
+    tasks = []
+    match = re.search(r'\[目标拆解\]\s*\n([\s\S]*?)(?=\n\n|═|$)', text)
+    if not match:
+        return tasks
+
+    lines = match[1].split('\n')
+    task_id = 0
+    for line in lines:
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        task_match = re.match(
+            r'^[•\-\d\.]+\s*(.+?)\s*-\s*\[(pending|in_progress|done|failed)\](?:\s*\((\d+)%\))?(?:\s*->\s*依赖:\s*([\d,\s]+))?',
+            trimmed
+        )
+        if task_match:
+            task_id += 1
+            title = task_match[1].strip()
+            status_str = task_match[2]
+            progress = int(task_match[3]) if task_match[3] else 0
+            deps_str = task_match[4]
+            dependencies = [int(d.strip()) for d in deps_str.split(',') if d.strip().isdigit()] if deps_str else []
+            tasks.append({
+                "id": task_id,
+                "title": title,
+                "status": status_str,
+                "progress": progress,
+                "dependencies": dependencies,
+            })
+    return tasks
 
 
 def _content_to_str(content) -> str:
