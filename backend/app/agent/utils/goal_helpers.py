@@ -1,6 +1,6 @@
 """Goal 模式辅助函数 — 循环检测、DAG 排序、Guardrail 校验"""
 import re
-from typing import Optional
+from typing import Optional, Any
 
 from langchain_core.messages import HumanMessage
 
