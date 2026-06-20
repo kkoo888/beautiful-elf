@@ -10,7 +10,7 @@
 
 迁移自: Pydantic BaseModel 版 AgentState（2026-06-10）
 """
-from typing import Annotated, Optional, Any
+from typing import Annotated, Optional, Union
 import operator
 from dataclasses import dataclass
 
@@ -19,7 +19,7 @@ from typing_extensions import TypedDict
 
 # ── 辅助函数（保留，供 engine 节点归一化用）──────────────────
 
-def _content_blocks_to_str(content: Any) -> str:
+def _content_blocks_to_str(content: Union[str, list, dict, None]) -> str:
     """将 LLM content 统一转为字符串。
 
     处理所有模型返回格式：
@@ -45,7 +45,7 @@ def _content_blocks_to_str(content: Any) -> str:
     return str(content)
 
 
-def _normalize_memory_context(value: Any) -> Optional[dict]:
+def _normalize_memory_context(value: Union[dict, str, None]) -> Optional[dict]:
     """归一化 memory_context — 处理 fallback 路径返回的 str。"""
     if value is None:
         return None

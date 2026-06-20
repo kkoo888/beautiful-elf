@@ -1,5 +1,5 @@
 """公共工具函数 — 无业务依赖，可被所有模块复用"""
-from typing import Any, List, Dict
+from typing import List, Dict, Union
 import json
 import time
 
@@ -7,6 +7,9 @@ from app.core.logging import get_logger
 from app.agent.state import _content_blocks_to_str
 
 logger = get_logger(__name__)
+
+# ── 通用常量 ─────────────────────────────────────────────
+MAX_MESSAGE_WINDOW = 30
 
 
 # ── 错误契约 ──────────────────────────────────────────────
@@ -97,7 +100,7 @@ def _trim_messages(messages: list, max_count: int) -> list:
     return trimmed
 
 
-def _format_tool_result_json(result: Any, tool_name: str, last_error: str = None) -> str:
+def _format_tool_result_json(result: Union[str, dict, list, tuple, None], tool_name: str, last_error: str = None) -> str:
     """格式化工具结果为 JSON 字符串（MCP 规范: content[text] 序列化 JSON）"""
     if result is None:
         return json.dumps(ErrorContract.retryable(tool_name, last_error or "未知错误", attempt=2), ensure_ascii=False)

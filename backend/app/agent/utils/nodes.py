@@ -1,5 +1,5 @@
 """普通节点工厂 + 路由函数"""
-from typing import Dict, Any, List
+from typing import Dict, List
 import time
 import json
 
@@ -12,7 +12,7 @@ from app.core.logging import get_logger
 from app.agent.state import AgentState, _content_blocks_to_str
 from app.agent.context_engine import MAX_CONTEXT_CHARS
 from app.agent.utils.common import (
-    ErrorContract, CircuitBreaker, _circuit_breaker,
+    ErrorContract, CircuitBreaker, _circuit_breaker, MAX_MESSAGE_WINDOW,
     _content_to_str, _build_message_dicts,
     _trim_messages, _format_tool_result_json,
 )

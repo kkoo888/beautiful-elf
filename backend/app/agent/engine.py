@@ -12,10 +12,10 @@ v4.0 重构清单:
   9. Error Contract 三级分类
   10. 全链路可观测 + trace 回放
 """
-from typing import Any
 import os
 
 from langgraph.graph import StateGraph, END
+from langgraph.graph.state import CompiledGraph
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.core.logging import get_logger
@@ -39,7 +39,6 @@ from app.agent.utils.goal_nodes import (
 
 logger = get_logger(__name__)
 
-MAX_MESSAGE_WINDOW = 30
 DEFAULT_AGENT_TIMEOUT = 300
 
 
@@ -76,7 +75,7 @@ def build_agent_graph(
     model_selector=None,
     enable_interrupt: bool = False,
     timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
-) -> Any:
+) -> CompiledGraph:
     """
     构建 Agent 工作流图。
 

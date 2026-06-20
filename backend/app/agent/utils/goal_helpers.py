@@ -1,6 +1,6 @@
 """Goal 模式辅助函数 — 循环检测、DAG 排序、Guardrail 校验"""
 import re
-from typing import Optional, Any
+from typing import Optional
 
 from langchain_core.messages import HumanMessage
 
@@ -63,7 +63,7 @@ def _get_loop_detector(thread_id: str) -> LoopDetector:
 
 
 # P2 fix: 按 LLM 实例 ID 缓存，避免跨模型共享
-_semantic_llm_caches: dict[int, Any] = {}  # {id(llm): structured_llm}
+_semantic_llm_caches: dict[int, object] = {}  # {id(llm): structured_llm Runnable}
 
 
 def _get_semantic_llm(llm):
