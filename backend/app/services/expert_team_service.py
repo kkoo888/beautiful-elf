@@ -458,8 +458,10 @@ class ExpertTeamService:
 
                 role_run = await self._create_role_run(db, run.id, member["id"], expert_name, round_num)
 
-                # ── 改进1: 工具注册（从技能中提取 tools，临时注册到 tool_registry）──
+                # ── 改进1: 工具注册（快照隔离，并发安全）──
+                # P1+P3 fix: 用快照+恢复替代直接修改+pop，避免并发竞态
                 temp_tool_ids: list[str] = []
+                _original_tools_snapshot: dict = {}
                 try:
                     skill_text = ""
                     tool_usage_text = ""
@@ -468,8 +470,9 @@ class ExpertTeamService:
                         skill_lines = [f"- {s.get('display_name', s.get('name', ''))}: {s.get('description', '')}" for s in skills]
                         skill_text = f"\n\n## 你可用的技能\n{chr(10).join(skill_lines)}"
 
-                        # 收集技能附带的工具并临时注册
+                        # 收集技能附带的工具，用快照隔离注册
                         from app.agent.tool_registry import ToolDef, RiskLevel as _RiskLevel
+                        _original_tools_snapshot = dict(tool_registry._tools)
                         for s in skills:
                             skill_tools = s.get("tools") or []
                             for tool_def in skill_tools:
@@ -574,6 +577,13 @@ class ExpertTeamService:
                                 db, expert_provider_id, expert_model_name, expert_prompt,
                                 n_paths=3, base_temperature=0.3, timeout_seconds=max_execution_time,
                             )
+                            # P5 fix: Self-Consistency 全失败时降级为单路径
+                            if not content:
+                                logger.warning(f"专家 {expert_name} Self-Consistency 全部失败，降级为单路径")
+                                content, tokens = await asyncio.wait_for(
+                                    _call_llm(db, expert_provider_id, expert_model_name, expert_prompt, temperature=expert_temperature),
+                                    timeout=max_execution_time,
+                                )
                         else:
                             content, tokens = await asyncio.wait_for(
                                 _call_llm(
@@ -699,9 +709,10 @@ class ExpertTeamService:
                             "output": f"[执行失败: {e}]", "tokens": 0, "status": "failed",
                         }
                 finally:
-                    # 清理临时注册的工具
-                    for tid in temp_tool_ids:
-                        tool_registry._tools.pop(tid, None)
+                    # P1+P3 fix: 从快照恢复工具表（而非逐个 pop，避免并发竞态）
+                    if _original_tools_snapshot:
+                        tool_registry._tools.clear()
+                        tool_registry._tools.update(_original_tools_snapshot)
 
             # ─────────────────────────────────────────
             # 内部方法：并行执行一批专家
@@ -773,10 +784,15 @@ class ExpertTeamService:
 输出 JSON 格式：
 {{"scores": [{{"expert_id": ID, "score": 分数, "feedback": "评价"}}], "overall_pass": true/false, "reason": "总体评价"}}"""
 
-                eval_content, eval_tokens = await asyncio.wait_for(
-                    _call_llm(db, pm_provider_id, pm_model_name, eval_prompt, temperature=pm_temperature),
-                    timeout=120,
-                )
+                try:
+                    eval_content, eval_tokens = await asyncio.wait_for(
+                        _call_llm(db, pm_provider_id, pm_model_name, eval_prompt, temperature=pm_temperature),
+                        timeout=120,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("PM 评估超时，降级为通过")
+                    eval_content = json.dumps({"overall_pass": True, "scores": [], "reason": "PM 评估超时，自动通过"}, ensure_ascii=False)
+                    eval_tokens = 0
 
                 if on_progress:
                     await on_progress({"type": "pm_eval", "expertName": leader.member_name, "content": eval_content})
@@ -807,10 +823,15 @@ class ExpertTeamService:
 
 请分析任务并输出分配计划（JSON 格式）。"""
 
-            plan_content, plan_tokens = await asyncio.wait_for(
-                _call_llm(db, pm_provider_id, pm_model_name, analyze_prompt, temperature=pm_temperature),
-                timeout=120,
-            )
+            try:
+                plan_content, plan_tokens = await asyncio.wait_for(
+                    _call_llm(db, pm_provider_id, pm_model_name, analyze_prompt, temperature=pm_temperature),
+                    timeout=120,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("PM 分析超时，降级为全员分配")
+                plan_content = json.dumps({"assignments": [{"expert_id": e["id"], "subtask": request.input_text} for e in experts_data], "analysis": "PM 超时，全员分配原始任务"}, ensure_ascii=False)
+                plan_tokens = 0
             total_tokens += plan_tokens
 
             discussion.append({
@@ -954,10 +975,15 @@ class ExpertTeamService:
 
 请生成最终报告。"""
 
-            report_content, report_tokens = await asyncio.wait_for(
-                _call_llm(db, pm_provider_id, pm_model_name, report_prompt, temperature=pm_temperature),
-                timeout=120,
-            )
+            try:
+                report_content, report_tokens = await asyncio.wait_for(
+                    _call_llm(db, pm_provider_id, pm_model_name, report_prompt, temperature=pm_temperature),
+                    timeout=120,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("PM 报告生成超时，降级为拼接专家结果")
+                report_content = final_results_text[:5000] if final_results_text else "报告生成超时，请查看各专家输出。"
+                report_tokens = 0
             total_tokens += report_tokens
 
             if on_progress:
@@ -1022,9 +1048,11 @@ class ExpertTeamService:
             except json.JSONDecodeError:
                 pass
 
-        # 最终降级：关键词判断
+        # 最终降级：关键词判断（P2 fix: 排除否定词）
         lower = eval_output.lower()
-        passed = '"overall_pass": true' in lower or '达标' in eval_output or '"pass"' in lower
+        passed = ('"overall_pass": true' in lower
+                  or ('达标' in eval_output and '不达标' not in eval_output)
+                  or '"pass": true' in lower)
         return {"overall_pass": passed, "scores": [], "reason": eval_output[:200]}
 
     @staticmethod
