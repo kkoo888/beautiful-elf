@@ -15,6 +15,7 @@ v4.0 重构清单:
 import os
 
 from langgraph.graph import StateGraph, END
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.core.logging import get_logger
@@ -74,7 +75,7 @@ def build_agent_graph(
     model_selector=None,
     enable_interrupt: bool = False,
     timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
-) -> "CompiledGraph":
+) -> CompiledStateGraph:
     """
     构建 Agent 工作流图。
 
