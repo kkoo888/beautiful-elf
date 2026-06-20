@@ -518,7 +518,10 @@ class MemoryManager:
 
         return "\n".join(parts)
 
-    async def search_with_scores(self, query: str, user_id: int, limit: int = 10) -> List[dict]:
+    async def search_with_scores(
+        self, query: str, user_id: int, limit: int = 10,
+        rerank: bool = True, decay: bool = True,
+    ) -> List[dict]:
         """检索记忆并返回带分数的结果
 
         v4.0 多策略融合（借鉴 Hindsight TEMPR Recall）:
@@ -530,6 +533,10 @@ class MemoryManager:
           → 时间衰减
           → MMR 去重
           → Top-K
+
+        Args:
+            rerank: 是否启用 Cross-Encoder 精排
+            decay: 是否启用时间衰减
         """
         query_vector = await self.embedding_func(query)
 
@@ -631,11 +638,12 @@ class MemoryManager:
         fused = self._rrf_fusion(channels, k=60)
 
         # ── v5.0 Cross-Encoder Rerank（先精排）──
-        if len(fused) > 1:
+        if rerank and len(fused) > 1:
             fused = await self._apply_rerank(fused, query, top_n=min(20, len(fused)))
 
         # ── 时间衰减（结合持久化 activation + importance 动态半衰期）──
-        fused = self._apply_temporal_decay(fused, half_life_days=30)
+        if decay:
+            fused = self._apply_temporal_decay(fused, half_life_days=30)
 
         # ── MMR 去重（后多样化）──
         fused = self._apply_mmr(fused, query, lambda_param=0.7)

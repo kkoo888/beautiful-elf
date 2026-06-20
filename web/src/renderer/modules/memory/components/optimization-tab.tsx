@@ -237,10 +237,22 @@ export function OptimizationTab() {
                   description={optimizationResult.newInsights}
                 />
               </Card>
+              {optimizationResult.recalculated > 0 && (
+                <Card style={{ flex: 1, minWidth: 150 }}>
+                  <Meta
+                    title="重算激活度"
+                    description={optimizationResult.recalculated}
+                  />
+                </Card>
+              )}
             </div>
             <div style={{ marginTop: 16 }}>
               <Text>
-                优化完成！Rerank 提升了 {optimizationResult.rerankImproved} 个记忆的排序，
+                优化完成！
+                {optimizationResult.recalculated > 0 && (
+                  <>Importance Boost 重算了 {optimizationResult.recalculated} 个记忆的激活度，</>
+                )}
+                Rerank 提升了 {optimizationResult.rerankImproved} 个记忆的排序，
                 Decay 应用于 {optimizationResult.decayApplied} 个记忆，
                 并发现了 {optimizationResult.newInsights} 个新洞察。
               </Text>

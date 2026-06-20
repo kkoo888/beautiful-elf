@@ -96,4 +96,6 @@ export interface OptimizationResult {
   decayApplied: number
   /** 新增洞察数量 */
   newInsights: number
+  /** importance_boost 重算数量 */
+  recalculated: number
 }

@@ -24,12 +24,17 @@ import {
   LinkOutlined, FileTextOutlined, BulbOutlined,
   CaretDownOutlined, CaretRightOutlined, HistoryOutlined,
   ApartmentOutlined, EyeOutlined, DatabaseOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 import {
   fetchLongTermMemory, updateLongTermMemory,
   distillMemories, listObservations, deleteObservation,
   rescoreMemories,
 } from '../services/memory-api'
+import {
+  getProfile, updateProfile,
+} from '../services/memory-entity-api'
+import type { AgentProfile } from '../services/memory-entity-api'
 import type {
   MarkdownMemoryEntry, DistillRequest, Observation,
 } from '../services/memory-api'
@@ -84,7 +89,7 @@ const DEFAULT_MISSION = '提取技术决策、架构选型、踩坑经验、主�
 
 // ── 侧栏导航配置 ─────────────────────────────────────────
 
-type ViewMode = 'observations' | 'entities' | 'insights' | 'history' | 'memory' | 'graph'
+type ViewMode = 'observations' | 'entities' | 'insights' | 'history' | 'memory' | 'graph' | 'profile'
 
 const NAV_ITEMS: { key: ViewMode; icon: React.ReactNode; label: string }[] = [
   { key: 'observations', icon: <BulbOutlined />, label: '提炼记忆' },
@@ -92,6 +97,7 @@ const NAV_ITEMS: { key: ViewMode; icon: React.ReactNode; label: string }[] = [
   { key: 'insights', icon: <EyeOutlined />, label: '洞察' },
   { key: 'history', icon: <HistoryOutlined />, label: '历史' },
   { key: 'graph', icon: <ApartmentOutlined />, label: '关系图' },
+  { key: 'profile', icon: <UserOutlined />, label: 'Agent 画像' },
   { key: 'memory', icon: <DatabaseOutlined />, label: 'MEMORY.md' },
 ]
 
@@ -123,6 +129,10 @@ export function LongTermTab() {
 
   const [rescoring, setRescoring] = useState(false)
 
+  const [profile, setProfile] = useState<AgentProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+
   // ── 重新评分 ────────────────────────────────────────────
 
   const handleRescore = useCallback(async () => {
@@ -146,6 +156,7 @@ export function LongTermTab() {
       .finally(() => setLoading(false))
     loadObservations()
     loadCounts()
+    loadProfile()
   }, [])
 
   const loadObservations = useCallback(async (category?: string) => {
@@ -234,6 +245,33 @@ export function LongTermTab() {
       setDistilling(false)
     }
   }, [distillDays, distillMission, distillDirectives, distillCategories, categoryFilter])
+
+  // ── Agent Profile ──────────────────────────────────────────
+
+  const loadProfile = useCallback(async () => {
+    setProfileLoading(true)
+    try {
+      const p = await getProfile()
+      setProfile(p)
+    } catch {} finally { setProfileLoading(false) }
+  }, [])
+
+  const handleSaveProfile = useCallback(async () => {
+    if (!profile) return
+    setProfileSaving(true)
+    try {
+      const updated = await updateProfile({
+        name: profile.name,
+        background: profile.background,
+        skepticism: profile.skepticism,
+        literalism: profile.literalism,
+        empathy: profile.empathy,
+        biasStrength: profile.biasStrength,
+      })
+      setProfile(updated)
+      message.success('画像已保存')
+    } catch { message.error('保存失败') } finally { setProfileSaving(false) }
+  }, [profile])
 
   const handleCategoryFilter = useCallback((value: string) => {
     setCategoryFilter(value)
@@ -412,6 +450,91 @@ export function LongTermTab() {
         {viewMode === 'graph' && (
           <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
             <MemoryGraphTab />
+          </div>
+        )}
+
+        {/* ── Agent 画像视图 ── */}
+        {viewMode === 'profile' && (
+          <div style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: '0 16px' }}>
+            {profileLoading ? (
+              <div className={styles.loadingWrapInline}><Spin /></div>
+            ) : profile ? (
+              <div style={{ maxWidth: 520 }}>
+                <div style={{ marginBottom: 16 }}>
+                  <Text strong style={{ fontSize: 14 }}>Agent 行为画像</Text>
+                  <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                    影响 Agent 反思时的推理风格。调整参数后点击保存。
+                  </Text>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* 背景描述 */}
+                  <div>
+                    <Text strong style={{ fontSize: 13 }}>背景描述</Text>
+                    <textarea
+                      value={profile.background}
+                      onChange={e => setProfile({ ...profile, background: e.target.value })}
+                      rows={3}
+                      style={{
+                        width: '100%', marginTop: 6, padding: '8px 10px',
+                        borderRadius: 6, border: '1px solid #d9d9d9',
+                        fontSize: 13, resize: 'vertical', fontFamily: 'inherit',
+                      }}
+                      placeholder="Agent 的背景设定（第一人称）"
+                    />
+                  </div>
+
+                  {/* 四维参数滑块 */}
+                  {[
+                    { key: 'skepticism' as const, label: '怀疑性 (S)', desc: '1=轻信, 5=怀疑', min: 1, max: 5 },
+                    { key: 'literalism' as const, label: '字面性 (L)', desc: '1=灵活解读, 5=字面理解', min: 1, max: 5 },
+                    { key: 'empathy' as const, label: '共情性 (E)', desc: '1=超脱, 5=共情', min: 1, max: 5 },
+                    { key: 'biasStrength' as const, label: '偏见强度 (β)', desc: '0=客观, 1=强烈偏好', min: 0, max: 1, step: 0.1 },
+                  ].map(param => (
+                    <div key={param.key}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <Text strong style={{ fontSize: 13 }}>{param.label}</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {param.key === 'biasStrength'
+                            ? profile[param.key].toFixed(1)
+                            : profile[param.key]}
+                        </Text>
+                      </div>
+                      <Text type="secondary" style={{ fontSize: 11 }}>{param.desc}</Text>
+                      <input
+                        type="range"
+                        min={param.min}
+                        max={param.max}
+                        step={param.step ?? 1}
+                        value={profile[param.key]}
+                        onChange={e => setProfile({
+                          ...profile,
+                          [param.key]: param.key === 'biasStrength'
+                            ? parseFloat(e.target.value)
+                            : parseInt(e.target.value),
+                        })}
+                        style={{ width: '100%', marginTop: 4, accentColor: COLORS.primary }}
+                      />
+                    </div>
+                  ))}
+
+                  <Button
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    loading={profileSaving}
+                    onClick={handleSaveProfile}
+                    style={{ alignSelf: 'flex-start' }}
+                  >
+                    保存画像
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <EmptyState
+                icon={<UserOutlined style={{ fontSize: 28, color: COLORS.primary }} />}
+                description="暂无 Agent 画像"
+              />
+            )}
           </div>
         )}
 

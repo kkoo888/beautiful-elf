@@ -66,6 +66,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"MCP Server 启动失败（MCP 功能不可用）: {e}")
 
+    # 启动记忆定时任务调度器（替代 Celery Beat）
+    try:
+        from app.tasks.scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        logger.warning(f"定时任务调度器启动失败: {e}")
+
     # 启动性能监控自动采集（后台任务，每 30 秒采样一次）
     try:
         _start_perf_collector()
@@ -80,6 +87,13 @@ async def lifespan(app: FastAPI):
         logger.warning(f"可观测性初始化失败: {e}")
 
     yield
+
+    # 停止定时任务调度器
+    try:
+        from app.tasks.scheduler import stop_scheduler
+        await stop_scheduler()
+    except Exception:
+        pass
 
     # 清理资源
     from app.services.ollama_service import close_ollama_client

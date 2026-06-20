@@ -51,6 +51,7 @@ async def get_optimized_memories(
     rerank: bool = Query(default=True, description="启用 Rerank 精排"),
     decay: bool = Query(default=True, description="启用时间衰减"),
     limit: int = Query(default=20, ge=1, le=100, description="返回数量"),
+    q: str = Query(default="", description="搜索关键词（空=全量展示）"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult:
     """获取优化后的记忆列表（Rerank + Decay 效果展示）"""
@@ -58,8 +59,10 @@ async def get_optimized_memories(
         return api_error("MEMORY_NOT_READY", "记忆管理器未初始化")
 
     try:
+        query = q.strip() or "记忆 活跃 重要"
         results = await memory_service.memory_manager.search_with_scores(
-            query="优化展示", user_id=0, limit=limit,
+            query=query, user_id=0, limit=limit,
+            rerank=rerank, decay=decay,
         )
 
         items = []
@@ -91,7 +94,7 @@ async def trigger_optimization(
     if not memory_service.memory_manager:
         return api_error("MEMORY_NOT_READY", "记忆管理器未初始化")
 
-    importance_boost = data.get("importance_boost", 1)
+    importance_boost = float(data.get("importance_boost", 1))
 
     try:
         from app.services.memory_decay_service import MemoryDecayService
@@ -100,21 +103,27 @@ async def trigger_optimization(
         qdrant = QdrantMapper()
         decay_svc = MemoryDecayService()
 
-        # 1. 批量标记 dormant
+        # 1. importance_boost 重算激活度（核心功能）
+        recalcuated = 0
+        if importance_boost != 1.0:
+            recalcuated = decay_svc.recalculate_all_activation(qdrant, importance_boost)
+
+        # 2. 批量标记 dormant
         dormant_count = decay_svc.batch_mark_dormant(qdrant)
 
-        # 2. 存量回填
+        # 3. 存量回填
         backfilled = decay_svc.backfill_existing(qdrant)
 
-        # 3. 统计结果
+        # 4. 统计结果
         result = {
-            "optimizedCount": dormant_count + backfilled,
+            "optimizedCount": recalcuated + dormant_count + backfilled,
             "rerankImproved": 0,
             "decayApplied": dormant_count,
             "newInsights": 0,
+            "recalculated": recalcuated,
         }
 
-        logger.info(f"[optimize] 完成: dormant={dormant_count} backfilled={backfilled}")
+        logger.info(f"[optimize] 完成: recalc={recalcuated} dormant={dormant_count} backfilled={backfilled}")
         return ApiResult(data=result)
     except Exception as e:
         logger.error(f"触发优化失败: {e}", exc_info=True)

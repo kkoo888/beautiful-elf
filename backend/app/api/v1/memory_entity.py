@@ -337,6 +337,36 @@ async def delete_insight(insight_id: int, db: AsyncSession = Depends(get_db)):
     return ApiResult(message="删除成功")
 
 
+@router.post("/insights/{insight_id}/arbitrate", response_model=ApiResult)
+async def arbitrate_insight(
+    insight_id: int,
+    importance: int = Body(default=50, ge=0, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """仲裁洞察 — 手动调整 confidence 并记录历史"""
+    insight = (await db.execute(
+        select(MemoryInsight).where(MemoryInsight.id == insight_id, MemoryInsight.is_deleted == 0)
+    )).scalar_one_or_none()
+    if not insight:
+        return api_error("NOT_FOUND", "洞察不存在")
+
+    old_confidence = insight.confidence
+    insight.confidence = max(0, min(100, importance))
+    await db.flush()
+
+    # 记录仲裁历史
+    arbiter = InsightArbitrationService()
+    await arbiter.record_history(
+        db, insight_id, "arbitrated",
+        old_confidence=old_confidence,
+        new_confidence=insight.confidence,
+        reason=f"手动仲裁: confidence {old_confidence} → {insight.confidence}",
+    )
+    await db.flush()
+
+    return ApiResult(data=_insight_to_dict(insight))
+
+
 # ═══════════════════════════════════════════════════
 # Reflect — LLM 深度反思（借鉴 Hindsight CARA）
 # ═══════════════════════════════════════════════════
@@ -509,16 +539,56 @@ from app.repository.episode_repo import EpisodeRepository
 async def list_episodes(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100, alias="pageSize"),
+    entity_id: Optional[int] = Query(default=None, description="按实体 ID 筛选"),
+    start_time: Optional[str] = Query(default=None, description="开始时间 YYYY-MM-DD"),
+    end_time: Optional[str] = Query(default=None, description="结束时间 YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
 ):
-    """经历列表（分页）"""
+    """经历列表（分页 + 可选筛选）"""
     repo = EpisodeRepository()
-    items = await repo.find_all(db, user_id=0, offset=(page - 1) * page_size, limit=page_size)
-    total = await repo.count(db, user_id=0)
+
+    if entity_id:
+        items = await repo.find_by_entity(db, entity_id, user_id=0, limit=page_size)
+        total = len(items)
+    elif start_time and end_time:
+        items = await repo.find_by_time_range(db, user_id=0, start_time=start_time, end_time=end_time, limit=page_size)
+        total = len(items)
+    else:
+        items = await repo.find_all(db, user_id=0, offset=(page - 1) * page_size, limit=page_size)
+        total = await repo.count(db, user_id=0)
+
     return ApiPageResult(
         data=[_episode_to_dict(e) for e in items],
         total=total, page=page, page_size=page_size,
     )
+
+
+@router.post("/episodes", response_model=ApiResult)
+async def create_episode(
+    conversation_id: int = Body(...),
+    title: str = Body(...),
+    summary: str = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """创建经历"""
+    repo = EpisodeRepository()
+
+    # 按 conversation_id 去重
+    existing = await repo.find_by_conversation(db, conversation_id)
+    if existing:
+        return ApiResult(data=_episode_to_dict(existing))
+
+    from datetime import datetime
+    episode = await repo.create(db, {
+        "user_id": 0,
+        "conversation_id": conversation_id,
+        "title": title,
+        "summary": summary,
+        "started_at": datetime.now(),
+        "ended_at": datetime.now(),
+        "message_count": 0,
+    })
+    return ApiResult(data=_episode_to_dict(episode))
 
 
 @router.get("/episodes/{episode_id}", response_model=ApiResult)

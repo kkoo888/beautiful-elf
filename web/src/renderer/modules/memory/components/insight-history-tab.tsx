@@ -265,8 +265,8 @@ export function InsightHistoryTab() {
                 },
                 {
                   title: '时间',
-                  dataIndex: 'timestamp',
-                  key: 'timestamp',
+                  dataIndex: 'createdAt',
+                  key: 'createdAt',
                 },
               ]}
               dataSource={selectedHistory}

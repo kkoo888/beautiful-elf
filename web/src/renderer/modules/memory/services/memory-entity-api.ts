@@ -211,10 +211,39 @@ export async function arbitrateInsight(insight_id: number, data: {
   ) as MemoryInsight
 }
 
+// ── Profile API（Agent 行为画像）──────────────────────────────────────
+
+export interface AgentProfile {
+  id: number
+  name: string
+  background: string
+  skepticism: number
+  literalism: number
+  empathy: number
+  biasStrength: number
+  isActive: boolean
+  createdAt?: string
+}
+
+export async function getProfile(): Promise<AgentProfile> {
+  return extractData(
+    await apiClient.get('/memory/profile') as any
+  ) as AgentProfile
+}
+
+export async function updateProfile(data: {
+  name?: string; background?: string
+  skepticism?: number; literalism?: number; empathy?: number; biasStrength?: number
+}): Promise<AgentProfile> {
+  return extractData(
+    await apiClient.post('/memory/profile', data) as any
+  ) as AgentProfile
+}
+
 // ── Optimization API ──────────────────────────────────────────────
 
 export async function getOptimizedMemories(params: {
-  rerank?: boolean; decay?: boolean
+  rerank?: boolean; decay?: boolean; q?: string
 }): Promise<MemoryEntry[]> {
   return extractData(
     await apiClient.get('/memories/optimize', { params }) as any
