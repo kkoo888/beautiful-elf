@@ -86,6 +86,7 @@ class AgentState(TypedDict, total=False):
     final_answer: Optional[str]
     tool_calls: list
     tools_used: Annotated[list, operator.add]
+    current_tools_used: list         # 当前迭代的工具（非 reducer，每轮覆盖）
     iterations: int
     error: Optional[str]
 
@@ -140,6 +141,7 @@ class AgentState(TypedDict, total=False):
     goal_history: list           # 历史迭代记录 [{iteration, action, result, evaluation}]
     goal_current_plan: str       # 当前执行计划
     goal_subtasks: list          # 目标拆分子任务 [{id, title, description, status: "pending"|"in_progress"|"done"|"failed"}]
+    goal_working_memory: list    # 子任务执行结果累积 [{task_id, title, result_summary, tools_used}]
 
 
 # ── Runtime Context（P1: context_schema）────────────────────

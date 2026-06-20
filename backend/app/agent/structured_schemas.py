@@ -63,3 +63,45 @@ class RewrittenQuery(BaseModel):
     """查询改写结果"""
     rewritten_query: str = Field(description="改写后的精确查询，如果无需改写则返回原文")
     reason: str = Field(default="", description="改写原因（调试用）")
+
+
+# ── Goal 模式结构化输出 ──────────────────────────────────
+
+class SubtaskItem(BaseModel):
+    """计划中的单个子任务"""
+    id: int = Field(description="子任务编号，从 1 开始")
+    title: str = Field(description="子任务标题，简明扼要")
+    description: str = Field(default="", description="子任务详细描述")
+    dependencies: List[int] = Field(default_factory=list, description="依赖的子任务 ID 列表")
+
+
+class SubtaskPlan(BaseModel):
+    """结构化执行计划 — 替代正则解析 [目标拆解]"""
+    reasoning: str = Field(default="", description="规划思路（简要说明为什么这样拆解）")
+    subtasks: List[SubtaskItem] = Field(description="子任务列表，按执行顺序排列")
+
+
+class SubtaskResultItem(BaseModel):
+    """单个子任务的执行结果摘要"""
+    id: int = Field(description="子任务编号")
+    title: str = Field(description="子任务标题")
+    result_summary: str = Field(description="执行结果摘要，100字以内")
+    tools_used: List[str] = Field(default_factory=list, description="使用的工具列表")
+    success: bool = Field(description="是否成功完成")
+
+
+class GoalReplanResult(BaseModel):
+    """动态重规划结果 — 失败时 LLM 重新生成计划"""
+    analysis: str = Field(default="", description="失败原因分析")
+    strategy_change: str = Field(default="", description="策略调整说明")
+    subtasks: List[SubtaskItem] = Field(description="重新规划的子任务列表")
+
+
+class SemanticSubtaskValidation(BaseModel):
+    """子任务语义校验结果"""
+    completed: bool = Field(description="子任务是否实质完成")
+    relevance: int = Field(description="与子任务目标的相关性 1-10", ge=1, le=10)
+    quality_score: int = Field(description="输出质量 1-10", ge=1, le=10)
+    has_hallucination: bool = Field(default=False, description="是否包含幻觉/捏造")
+    issues: List[str] = Field(default_factory=list, description="发现的问题")
+    suggestion: str = Field(default="", description="改进建议")
