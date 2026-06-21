@@ -967,47 +967,6 @@ def _make_evaluator_node(llm=None):
         from langgraph.config import get_stream_writer
         writer = get_stream_writer()
 
-        # Goal 模式: 执行评估但不替换 final_answer（反馈给 status_updater 使用）
-        if state.get("goal_mode"):
-            # 仍然执行评估以产生质量反馈
-            if not llm or not state.get("final_answer"):
-                writer({"step": "eval", "status": "skipped", "message": "Goal 模式，无 LLM 或无回答，跳过评估"})
-                return {"evaluation": {"passed": True, "reason": "goal_mode_skip", "score": 8}}
-
-            writer({"step": "eval", "status": "checking", "message": "Goal 模式质量检查..."})
-            # 复用 LLM-as-Judge 评估
-            user_query = _extract_last_message(state)
-            final_answer = state.get("final_answer", "")
-            eval_prompt = f"""评估以下子任务执行质量。
-
-【子任务】
-{user_query}
-
-【执行结果】
-{final_answer[:1500]}
-
-评分标准：
-- score >= 6: 通过，执行结果有效
-- score < 6: 未通过，需要重试
-
-严格按 JSON 输出：
-{{"score": 8, "passed": true, "reason": "简短说明", "suggestion": "改进建议（如果未通过）"}}
-"""
-            try:
-                from app.agent.structured_schemas import EvaluationResult
-                structured_llm = llm.with_structured_output(EvaluationResult)
-                result = await structured_llm.ainvoke([HumanMessage(content=eval_prompt)])
-                if result:
-                    evaluation = {"score": result.score, "passed": result.passed, "reason": result.reason}
-                    writer({"step": "eval", "status": "done",
-                            "message": f"Goal 质量检查: {result.score}/10 {'通过' if result.passed else '未通过'}"})
-                    # 注意：不替换 final_answer，让 status_updater 处理
-                    return {"evaluation": evaluation}
-            except Exception as e:
-                logger.debug(f"[evaluator] Goal 模式评估失败: {e}")
-
-            return {"evaluation": {"passed": True, "reason": "goal_mode_skip", "score": 8}}
-
         final_answer = state.get("final_answer", "")
         if not final_answer:
             writer({"step": "eval", "status": "skipped", "message": "无回答，跳过评估"})
@@ -1015,139 +974,101 @@ def _make_evaluator_node(llm=None):
 
         writer({"step": "eval", "status": "checking", "message": "正在评估回答质量..."})
 
-        # 无 LLM 时降级为规则评估
-        if not llm:
-            return _rule_based_eval(state)
-
-        # LLM-as-Judge
-        user_query = _extract_last_message(state)
+        # ── 纯代码规则评估（零 LLM 调用）──
+        score = 7  # 基础分
+        reasons = []
         tools_used = state.get("tools_used", [])
         memory_ctx = state.get("memory_context") or {}
 
-        # 记忆质量上下文
-        memory_info = ""
-        if memory_ctx.get("count", 0) > 0:
-            avg_score = memory_ctx.get("avg_score", 0)
-            memory_info = f"\n【检索到的记忆】{memory_ctx['count']}条，平均相关度: {avg_score:.2f}"
+        # 规则 1: 回答长度
+        ans_len = len(final_answer.strip())
+        if ans_len < 10:
+            score = 1
+            reasons.append("回答过短")
+        elif ans_len < 50:
+            score -= 2
+            reasons.append("回答较短")
+        elif ans_len > 200:
+            score += 1  # 长回答加分
 
-        eval_prompt = f"""你是一个严格的质量评估专家。请评估以下 AI 回答的质量。
+        # 规则 2: 错误关键词
+        error_keywords = ["抱歉", "不可用", "服务异常", "暂时无法", "出错了", "失败了"]
+        error_count = sum(1 for kw in error_keywords if kw in final_answer)
+        if error_count >= 2:
+            score -= 3
+            reasons.append("包含多个错误关键词")
+        elif error_count >= 1:
+            score -= 1
+            reasons.append("包含错误关键词")
 
-【用户问题】
-{user_query}
-
-【AI 回答】
-{final_answer[:2000]}
-
-【使用的工具】
-{', '.join(tools_used) if tools_used else '无'}{memory_info}
-
-请从以下维度评估（1-10分）:
-1. 准确性 — 回答是否正确、是否有事实错误
-2. 完整性 — 是否完整回答了用户的问题
-3. 幻觉检测 — 是否包含捏造的信息或数据
-4. 工具使用 — 如果使用了工具，结果是否被正确引用
-5. 记忆引用 — 如果检索到了记忆，回答中是否正确引用了记忆内容（无记忆时给 7 分）
-
-严格按以下 JSON 格式返回（不要输出其他内容）:
-{{"score": 8, "passed": true, "reason": "简短说明", "dimensions": {{"accuracy": 8, "completeness": 7, "hallucination": 9, "tool_usage": 8, "memory_usage": 7}}}}
-
-注意:
-- score >= 6 为通过
-- 如果回答包含明显的错误信息或"服务不可用"等，score <= 3
-- 如果使用了工具但回答中没有引用工具结果，tool_usage <= 4
-- 如果检索到了相关记忆但回答完全没体现，memory_usage <= 4"""
-
-        try:
-            from app.agent.structured_schemas import EvaluationResult
-            from langchain_core.messages import HumanMessage, SystemMessage
-
-            structured_llm = llm.with_structured_output(EvaluationResult)
-            result = await structured_llm.ainvoke([
-                SystemMessage(content="你是一个严格的质量评估专家。"),
-                HumanMessage(content=eval_prompt),
-            ])
-
-            if result is None:
-                logger.warning("[evaluator] LLM 返回 None，降级为规则评估")
-                return _rule_based_eval(state)
-
-            evaluation = {
-                "score": result.score,
-                "passed": result.passed,
-                "reason": result.reason,
-                "dimensions": {
-                    "accuracy": result.dimensions.accuracy,
-                    "completeness": result.dimensions.completeness,
-                    "hallucination": result.dimensions.hallucination,
-                    "tool_usage": result.dimensions.tool_usage,
-                    "memory_usage": result.dimensions.memory_usage,
-                },
-            }
-            logger.info(f"[evaluator] LLM-as-Judge: score={evaluation['score']} passed={evaluation['passed']} reason={evaluation['reason'][:50]}")
-
-            score = evaluation['score']
-            passed = evaluation['passed']
-            if passed:
-                writer({"step": "eval", "status": "done", "message": f"质量评估通过 (评分 {score}/10)", "score": score})
+        # 规则 3: 工具使用
+        if tools_used:
+            score += 1  # 使用了工具加分
+            # 检查回答是否引用了工具结果
+            tool_ref_keywords = ["根据", "检索", "查询", "搜索", "工具", "返回", "结果显示"]
+            has_tool_ref = any(kw in final_answer for kw in tool_ref_keywords)
+            if has_tool_ref:
+                score += 1
             else:
-                reason = evaluation.get('reason', '')
-                writer({"step": "eval", "status": "done", "message": f"质量评估未通过 (评分 {score}/10, {reason})", "score": score})
+                score -= 1
+                reasons.append("使用了工具但未引用结果")
 
-            # 评分太低（<4）的回答替换为兜底
-            eval_result = {"evaluation": evaluation}
-            if evaluation["score"] < 4 and state.get("final_answer"):
-                logger.warning(f"[evaluator] 评估不通过(score={evaluation['score']})，替换为兜底回答")
-                eval_result["final_answer"] = (
-                    "抱歉，我暂时无法准确回答这个问题。"
-                    "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
-                    "你可以试试：\n"
-                    "1. 换个方式描述你的问题\n"
-                    "2. 稍后再试\n"
-                    "3. 如果是天气等实时信息，可以直接告诉我你的城市"
-                )
+        # 规则 4: 记忆引用
+        if memory_ctx.get("count", 0) > 0:
+            mem_ref_keywords = ["之前", "上次", "记得", "历史", "记忆"]
+            has_mem_ref = any(kw in final_answer for kw in mem_ref_keywords)
+            if has_mem_ref:
+                score += 1
 
-            # ── P0: 自评修正循环（score 4-5 时尝试一次修正）──
-            if 4 <= evaluation['score'] < 6 and state.get("final_answer") and llm:
-                try:
-                    reason = evaluation.get("reason", "质量不够高")
-                    dimensions = evaluation.get("dimensions", {})
-                    weak_dims = [k for k, v in dimensions.items() if isinstance(v, (int, float)) and v < 6]
-                    weak_hint = f"主要问题: {', '.join(weak_dims)}" if weak_dims else ""
+        # 规则 5: 结构化检查
+        struct_markers = ["\n-", "\n*", "\n1.", "\n2.", "##", "**"]
+        has_structure = any(m in final_answer for m in struct_markers)
+        if has_structure:
+            score += 1
 
-                    correct_prompt = f"""你之前的回答质量不够高，请根据反馈修正。
+        # 规则 6: 不确定性标注
+        uncertainty_markers = ["可能", "也许", "据我了解", "不确定", "推测"]
+        has_uncertainty = any(m in final_answer for m in uncertainty_markers)
+        if has_uncertainty:
+            score += 0.5  # 诚实加分
 
-【用户问题】
-{user_query}
+        # 限制分数范围
+        score = max(1, min(10, int(score)))
+        passed = score >= 6
+        reason = "、".join(reasons) if reasons else "质量合格"
 
-【你之前的回答】
-{final_answer[:1500]}
+        evaluation = {
+            "score": score,
+            "passed": passed,
+            "reason": reason,
+            "dimensions": {
+                "accuracy": score,
+                "completeness": score,
+                "hallucination": score,
+                "tool_usage": score,
+                "memory_usage": score,
+            },
+        }
 
-【评估反馈】
-评分: {evaluation['score']}/10
-原因: {reason}
-{weak_hint}
+        if passed:
+            writer({"step": "eval", "status": "done", "message": f"质量评估通过 ({score}/10)", "score": score})
+        else:
+            writer({"step": "eval", "status": "done", "message": f"质量评估未通过 ({score}/10, {reason})", "score": score})
 
-请修正以上问题，给出改进后的回答。要求:
-1. 修正评估指出的具体问题
-2. 保持回答的结构和完整性
-3. 不要编造信息，不确定时说明不确定性"""
-                    from langchain_core.messages import HumanMessage
-                    response = await llm.ainvoke([HumanMessage(content=correct_prompt)])
-                    corrected = _content_blocks_to_str(response.content)
-                    if corrected and len(corrected.strip()) > 20:
-                        eval_result["final_answer"] = corrected
-                        eval_result["evaluation"]["corrected"] = True
-                        writer({"step": "eval", "status": "corrected",
-                                "message": f"自评修正完成 (原评分 {evaluation['score']}/10)"})
-                        logger.info(f"[evaluator] 自评修正: score={evaluation['score']} → 修正后输出")
-                except Exception as e:
-                    logger.warning(f"[evaluator] 自评修正失败: {e}")
+        # 评分太低（<4）的回答替换为兜底
+        eval_result = {"evaluation": evaluation}
+        if score < 4 and final_answer:
+            logger.warning(f"[evaluator] 评估不通过(score={score})，替换为兜底回答")
+            eval_result["final_answer"] = (
+                "抱歉，我暂时无法准确回答这个问题。"
+                "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
+                "你可以试试：\n"
+                "1. 换个方式描述你的问题\n"
+                "2. 稍后再试\n"
+                "3. 如果是天气等实时信息，可以直接告诉我你的城市"
+            )
 
-            return eval_result
-
-        except Exception as e:
-            logger.warning(f"[evaluator] LLM 评估失败，降级为规则评估: {e}")
-            return _rule_based_eval(state)
+        return eval_result
 
     return evaluator_node
 

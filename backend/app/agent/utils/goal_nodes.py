@@ -49,87 +49,63 @@ def _make_goal_evaluator(llm):
         if not final_answer:
             return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
 
-        # LLM 评估是否达成目标
-        # ── P2: Rubric 评估（对标 MetaGPT QAEngineer + 风险识别维度）──
-        eval_prompt = f"""你是一个严格的目标评估器。按以下维度评估回答是否达成用户目标。
+        # 纯代码规则评估（零 LLM 调用）
+        score = 7
+        reasons = []
 
-## 评估维度（每项 1-10 分）
-1. **完整性**（completeness）：是否覆盖了目标的所有要求？
-2. **准确性**（accuracy）：信息是否准确、有依据？
-3. **可用性**（usability）：输出是否可直接使用？建议是否可操作？
-4. **风险识别**（risk_awareness）：是否识别了潜在风险和不确定性？
+        # 规则 1: 长度
+        ans_len = len(final_answer.strip())
+        if ans_len < 10:
+            score = 1; reasons.append("回答过短")
+        elif ans_len < 50:
+            score -= 2; reasons.append("回答较短")
+        elif ans_len > 200:
+            score += 1
 
-## 评分标准
-- 8-10：优秀，目标达成
-- 6-7：合格，基本达成
-- 1-5：不合格，需要改进
+        # 规则 2: 错误关键词
+        error_kws = ["抱歉", "不可用", "服务异常", "暂时无法", "出错"]
+        err_count = sum(1 for kw in error_kws if kw in final_answer)
+        if err_count >= 2: score -= 3; reasons.append("多个错误关键词")
+        elif err_count >= 1: score -= 1
 
-## 达标条件
-- 四项均分 >= 6 且无单项低于 4 → achieved = true
-- 否则 → achieved = false
+        # 规则 3: 结构化
+        if any(m in final_answer for m in ["\n-", "\n*", "\n1.", "##", "**"]): score += 1
 
-## 特殊情况
-- 工具调用失败时的降级回答，如果内容合理准确，可用性酌情给分
-- 回答完全无关、空白或明显错误 → 直接判定未达成
+        # 规则 4: 不确定性标注
+        if any(m in final_answer for m in ["可能", "也许", "据我了解", "不确定"]): score += 0.5
 
-## 用户目标
-{goal}
+        score = max(1, min(10, int(score)))
+        achieved = score >= 6
+        reason = "、".join(reasons) if reasons else "质量合格"
 
-## 当前回答
-{final_answer[:2000]}
-
-请严格按 JSON 格式输出：
-{{"achieved": true/false, "scores": {{"completeness": N, "accuracy": N, "usability": N, "risk_awareness": N}}, "avg_score": 平均分, "reason": "原因", "suggestion": "具体改进建议"}}
-
-只输出 JSON，不要其他文字。"""
-
-        try:
-            response = await llm.ainvoke(eval_prompt)
-            content = _content_blocks_to_str(response.content if hasattr(response, 'content') else response)
-            import re
-            match = re.search(r'\{[\s\S]*\}', content)
-            if match:
-                data = json.loads(match.group())
-                achieved = data.get("achieved", False)
-                scores = data.get("scores", {})
-                avg_score = data.get("avg_score", 0)
-                # 如果没有 avg_score，从 scores 计算
-                if not avg_score and scores:
-                    avg_score = sum(scores.values()) / max(len(scores), 1)
-
-                if achieved:
-                    writer({"step": "goal_eval", "status": "done", "message": "目标已达成！"})
-                    # Self-Healing: 标记反思成功
-                    try:
-                        from app.agent.self_healing import get_healing_memory
-                        healing_memory = get_healing_memory()
-                        for st in (state.get("goal_subtasks") or []):
-                            if st.get("status") == "done":
-                                await healing_memory.mark_successful(
-                                    user_id=state.get("user_id", 0), subtask_id=st.get("id", 0))
-                    except Exception:
-                        pass
-                    return {"goal_status": "achieved"}
-                else:
-                    history = list(state.get("goal_history", []))
-                    history.append({
-                        "iteration": iterations,
-                        "result": final_answer[:500],
-                        "evaluation": data.get("reason", ""),
-                        "suggestion": data.get("suggestion", ""),
-                    })
-                    writer({"step": "goal_eval", "status": "done",
-                            "message": f"目标未达成 (第{iterations+1}轮): {data.get('reason', '')[:50]}"})
-                    return {
-                        "goal_status": "in_progress",
-                        "goal_iterations": iterations + 1,
-                        "goal_history": history,
-                        "goal_current_plan": data.get("suggestion", ""),
-                    }
-        except Exception as e:
-            _logger.warning(f"[goal_evaluator] 评估失败: {e}")
-
-        return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
+        if achieved:
+            writer({"step": "goal_eval", "status": "done", "message": "目标已达成！"})
+            try:
+                from app.agent.self_healing import get_healing_memory
+                healing_memory = get_healing_memory()
+                for st in (state.get("goal_subtasks") or []):
+                    if st.get("status") == "done":
+                        await healing_memory.mark_successful(
+                            user_id=state.get("user_id", 0), subtask_id=st.get("id", 0))
+            except Exception:
+                pass
+            return {"goal_status": "achieved"}
+        else:
+            history = list(state.get("goal_history", []))
+            history.append({
+                "iteration": iterations,
+                "result": final_answer[:500],
+                "evaluation": reason,
+                "suggestion": "提高回答长度和结构化程度",
+            })
+            writer({"step": "goal_eval", "status": "done",
+                    "message": f"目标未达成 (第{iterations+1}轮): {reason}"})
+            return {
+                "goal_status": "in_progress",
+                "goal_iterations": iterations + 1,
+                "goal_history": history,
+                "goal_current_plan": "提高回答质量",
+            }
 
     return goal_evaluator
 
