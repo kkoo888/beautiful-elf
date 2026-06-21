@@ -33,8 +33,17 @@ from app.agent.state import _content_blocks_to_str
 from app.core.logging import get_logger
 from app.agent.expert_team.reasoning import generate_reasoning, format_reasoning_for_prompt
 from app.agent.expert_team.tot import explore_thoughts, format_tot_for_prompt
+from app.agent.expert_team.reflexion import generate_reflexion, format_reflexion_for_prompt, store_reflexion_as_memory
+from app.agent.expert_team.consistency import execute_with_self_consistency
+from app.agent.fact_verifier import verify_facts
 
 logger = get_logger(__name__)
+
+
+async def _get_llm_for_verify(db, provider_id: int, model_name: str, temperature: float):
+    """获取 LLM 实例（供 fact_verify 使用）"""
+    from app.agent.llm_service import llm_service
+    return await llm_service.get_chat_llm(db, provider_id=provider_id, model_name=model_name, temperature=temperature)
 
 
 # ─── State 定义 ─────────────────────────────────────────
@@ -450,11 +459,25 @@ async def expert_execute(state: ExpertTeamState) -> dict:
 
     exp_start = datetime.now()
     try:
-        content, tokens = await asyncio.wait_for(
-            _call_llm(state.get("db"), expert_provider_id, expert_model_name, expert_prompt, temperature=expert_temperature),
-            timeout=max_execution_time,
-        )
-        content = _content_blocks_to_str(content)
+        # ── Self-Consistency: 多路径投票（NeurIPS 2023, GSM8K +17.9%）──
+        n_paths = int(expert_conf.get("consistency_paths", 1) or 1)
+        if n_paths > 1:
+            content, consistency_tokens, all_paths = await execute_with_self_consistency(
+                db=state.get("db"), provider_id=expert_provider_id,
+                model_name=expert_model_name, prompt=expert_prompt,
+                n_paths=n_paths, base_temperature=0.3, temperature_step=0.2,
+                timeout_seconds=max_execution_time,
+            )
+            tokens = consistency_tokens
+            writer({"type": "expert_consistency", "expertId": expert_id,
+                    "expertName": expert_name, "paths": n_paths,
+                    "selected": f"best_of_{len(all_paths)}"})
+        else:
+            content, tokens = await asyncio.wait_for(
+                _call_llm(state.get("db"), expert_provider_id, expert_model_name, expert_prompt, temperature=expert_temperature),
+                timeout=max_execution_time,
+            )
+            content = _content_blocks_to_str(content)
         duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
 
         # ── Delegation 解析（对标 CrewAI allow_delegation）──
@@ -488,6 +511,43 @@ async def expert_execute(state: ExpertTeamState) -> dict:
 
         if delegation_results:
             content += "\n".join(delegation_results)
+
+        # ── Reflexion: 事后反思（NeurIPS 2023, HumanEval 67→91%）──
+        try:
+            reflexion_obj = await generate_reflexion(
+                db=state.get("db"), provider_id=expert_provider_id,
+                model_name=expert_model_name, expert_name=expert_name,
+                expert_role=expert_role, subtask=subtask,
+                output=content, duration_ms=duration_ms, temperature=0.3,
+            )
+            if reflexion_obj:
+                reflexion_text = format_reflexion_for_prompt(reflexion_obj)
+                # 存入记忆（跨轮次可召回）
+                await store_reflexion_as_memory(
+                    expert_id=expert_id, team_id=team_id,
+                    reflexion=reflexion_obj, db=state.get("db"),
+                )
+                writer({"type": "expert_reflexion", "expertId": expert_id,
+                        "expertName": expert_name, "success": reflexion_obj.success,
+                        "insights": reflexion_obj.key_insights[:2]})
+        except Exception as e:
+            logger.debug(f"Reflexion 生成失败（非致命）: {e}")
+
+        # ── Fact Verify: 原子声明验证（幻觉检测与修正）──
+        try:
+            fact_result = await verify_facts(
+                llm=await _get_llm_for_verify(state.get("db"), expert_provider_id, expert_model_name, 0.2),
+                text=content, context=context_text, temperature=0.2,
+            )
+            if fact_result and fact_result.refuted > 0:
+                content = fact_result.corrected_text
+                writer({"type": "expert_fact_verify", "expertId": expert_id,
+                        "expertName": expert_name,
+                        "total": fact_result.total_claims,
+                        "refuted": fact_result.refuted,
+                        "hallucination_rate": f"{fact_result.hallucination_rate:.1%}"})
+        except Exception as e:
+            logger.debug(f"Fact Verify 失败（非致命）: {e}")
 
         # 推送完成事件
         writer({"type": "expert_done", "expertId": expert_id, "expertName": expert_name, "expertRole": expert_role, "avatar": avatar, "content": content, "round": current_round, "durationMs": duration_ms})
