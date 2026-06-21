@@ -1213,7 +1213,7 @@ class MemoryManager:
             conditions = [
                 FieldCondition(key="user_id", match=MatchValue(value=user_id)),
                 FieldCondition(key="decay_status", match=MatchValue(value="active")),
-                FieldCondition(key="importance", match=Range(gte=7)),
+                FieldCondition(key="importance", range=Range(gte=7)),
                 FieldCondition(key="type", match=MatchValue(value="summary")),
             ]
 
