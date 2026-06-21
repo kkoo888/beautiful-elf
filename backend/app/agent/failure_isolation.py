@@ -40,31 +40,29 @@ async def generate_degraded_output(
     memory_context: str = "",
     rag_context: str = "",
 ) -> DegradedOutput:
-    """上游失败时生成降级输出
+    """上游失败时 LLM 自主推理替代（不降级）
 
-    策略优先级:
-    1. 从记忆中提取相关经验
-    2. 从 RAG 知识中提取相关信息
-    3. 从上下文中提取片段
-    4. 生成默认占位输出
+    策略: 直接用 LLM 知识推理，不用缓存/降级
     """
-    # 策略 1: 记忆
-    if memory_context and len(memory_context.strip()) > 20:
+    # 策略 1: LLM 自主推理（首选）
+    if llm:
         try:
-            prompt = f"""上游任务「{failed_task_title}」失败了。
-原因: {failed_task_reason}
+            prompt = f"""任务「{failed_task_title}」的前置依赖失败了（原因: {failed_task_reason}）。
+请用你自己的知识直接完成这个任务的分析。
 
-以下是从记忆中检索到的相关经验，请提取有用信息作为替代输出:
+{f'上下文信息: {context[:500]}' if context else ''}
+{f'相关记忆: {memory_context[:300]}' if memory_context else ''}
 
-{memory_context[:1000]}
-
-请输出一段简洁的替代分析（100-200字），标注这是基于历史经验的推测。"""
+要求:
+1. 用你的知识直接推理，给出有价值的分析
+2. 涉及实时数据时说明是基于训练数据的推测
+3. 给出明确的结论和建议"""
             response = await llm.ainvoke(prompt)
             content = response.content if isinstance(response.content, str) else str(response.content)
             if content and len(content.strip()) > 20:
                 return DegradedOutput(
-                    source="memory", content=content.strip(),
-                    confidence=0.4, strategy="从历史经验中提取相关信息",
+                    source="llm_reasoning", content=content.strip(),
+                    confidence=0.6, strategy="LLM 自主推理替代",
                 )
         except Exception:
             pass
@@ -72,23 +70,23 @@ async def generate_degraded_output(
     # 策略 2: RAG
     if rag_context and len(rag_context.strip()) > 20:
         return DegradedOutput(
-            source="rag", content=f"[降级] 基于知识库检索: {rag_context[:300]}",
-            confidence=0.3, strategy="从 RAG 知识中提取相关片段",
+            source="rag", content=f"[推理] 基于知识库: {rag_context[:300]}",
+            confidence=0.3, strategy="从 RAG 知识中提取",
         )
 
     # 策略 3: 上下文
     if context and len(context.strip()) > 20:
         return DegradedOutput(
-            source="context", content=f"[降级] 基于上下文: {context[:300]}",
-            confidence=0.2, strategy="从对话上下文中提取片段",
+            source="context", content=f"[推理] 基于上下文: {context[:300]}",
+            confidence=0.2, strategy="从对话上下文中提取",
         )
 
     # 策略 4: 默认
     return DegradedOutput(
         source="default",
-        content=f"[降级] 任务「{failed_task_title}」执行失败，无法提供有效分析。建议跳过此部分或重新执行。",
+        content=f"[注意] 任务「{failed_task_title}」的前置依赖失败，模型无法独立推理此任务。",
         confidence=0.1,
-        strategy="默认占位输出，提示下游任务注意",
+        strategy="无法推理，提示下游注意",
     )
 
 

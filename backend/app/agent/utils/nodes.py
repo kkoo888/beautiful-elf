@@ -702,17 +702,15 @@ Answer: 基于工具结果输出该子任务的成果
     return llm_call_node
 
 
-def _make_tool_executor(tool_registry):
-    """工具执行节点（v5.0 — LangGraph ToolNode 规范化）
+def _make_tool_executor(tool_registry, llm=None):
+    """工具执行节点（v5.1 — 工具失败自动 LLM 推理）
 
-    v5.0 重构:
-      - 并行执行: 使用 LangGraph 内置并行机制（ToolNode 底层 asyncio.gather）
-      - 风险分级: 保留自研（ToolNode 无此能力）
-      - 熔断器: 保留自研（ToolNode 无此能力）
-      - 重试: 保留自研 2 次重试（ToolNode retry_policy 需要额外配置）
+    v5.1: 工具失败 → LLM 自主推理替代（不降级）
+    v5.0: LangGraph ToolNode 并行 + 风险分级 + 熔断器 + 重试
     """
     from langgraph.prebuilt import ToolNode
     from langchain_core.tools import StructuredTool
+    llm_ref = llm  # 供 fallback 使用
 
     async def tool_executor_node(state: AgentState) -> dict:
         from langgraph.config import get_stream_writer
@@ -839,6 +837,47 @@ def _make_tool_executor(tool_registry):
         # 工具执行完成（无论成功失败都发 done 事件）
         all_names = [name for _, name, _, _ in executable_calls]
         failed_names = [n for n in all_names if n not in tools_succeeded]
+
+        # ── 工具失败 → LLM 自主推理（不降级，直接用大模型查资料）──
+        if failed_names and llm_ref:
+            llm_fallback_results = []
+            for tc, tool_name, tool_args, tool_id in executable_calls:
+                if tool_name in failed_names:
+                    try:
+                        query = tool_args.get("query", "") or tool_args.get("input", "") or tool_args.get("question", "") or str(tool_args)[:200]
+                        fallback_prompt = f"""工具 "{tool_name}" 执行失败。请用你自己的知识直接回答以下问题。
+
+问题: {query}
+
+要求:
+1. 用你训练数据中的知识直接回答
+2. 如果涉及实时信息（天气、股价等），说明这是基于你训练数据的推测
+3. 给出尽可能具体和有用的回答
+4. 在回答末尾注明: [注意: 此回答来自模型推理，非实时工具查询]"""
+                        from langchain_core.messages import HumanMessage
+                        resp = await llm_ref.ainvoke([HumanMessage(content=fallback_prompt)])
+                        fallback_content = _content_to_str(resp.content)
+                        if fallback_content and len(fallback_content.strip()) > 20:
+                            # 替换失败结果为 LLM 推理结果
+                            for r in results:
+                                if isinstance(r, dict) and r.get("tool_call_id") == tool_id:
+                                    r["content"] = json.dumps({
+                                        "source": "llm_reasoning",
+                                        "tool_failed": tool_name,
+                                        "result": fallback_content,
+                                        "note": "工具失败，此结果来自模型自主推理"
+                                    }, ensure_ascii=False)
+                                    tools_succeeded.append(fallback_content[:20] + "...")
+                                    break
+                            llm_fallback_results.append(tool_name)
+                            writer({"step": "tools", "status": "llm_fallback",
+                                    "message": f"工具 {tool_name} 失败，已用模型推理替代",
+                                    "tool": tool_name})
+                    except Exception as fb_err:
+                        logger.warning(f"[tool_executor] LLM fallback 失败: {fb_err}")
+            if llm_fallback_results:
+                failed_names = [n for n in failed_names if n not in llm_fallback_results]
+
         if failed_names:
             writer({"step": "tools", "status": "error", "message": f"工具执行完成: {', '.join(tools_succeeded)} 成功, {', '.join(failed_names)} 失败", "succeeded": tools_succeeded, "failed": failed_names})
         else:
