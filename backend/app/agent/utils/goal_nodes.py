@@ -50,13 +50,14 @@ def _make_goal_evaluator(llm):
             return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
 
         # LLM 评估是否达成目标
-        # ── P2: Rubric 评估（对标 MetaGPT QAEngineer 评估标准）──
+        # ── P2: Rubric 评估（对标 MetaGPT QAEngineer + 风险识别维度）──
         eval_prompt = f"""你是一个严格的目标评估器。按以下维度评估回答是否达成用户目标。
 
 ## 评估维度（每项 1-10 分）
 1. **完整性**（completeness）：是否覆盖了目标的所有要求？
 2. **准确性**（accuracy）：信息是否准确、有依据？
 3. **可用性**（usability）：输出是否可直接使用？建议是否可操作？
+4. **风险识别**（risk_awareness）：是否识别了潜在风险和不确定性？
 
 ## 评分标准
 - 8-10：优秀，目标达成
@@ -64,7 +65,7 @@ def _make_goal_evaluator(llm):
 - 1-5：不合格，需要改进
 
 ## 达标条件
-- 三项均分 >= 6 且无单项低于 4 → achieved = true
+- 四项均分 >= 6 且无单项低于 4 → achieved = true
 - 否则 → achieved = false
 
 ## 特殊情况
@@ -78,7 +79,7 @@ def _make_goal_evaluator(llm):
 {final_answer[:2000]}
 
 请严格按 JSON 格式输出：
-{{"achieved": true/false, "scores": {{"completeness": N, "accuracy": N, "usability": N}}, "avg_score": 平均分, "reason": "原因", "suggestion": "具体改进建议"}}
+{{"achieved": true/false, "scores": {{"completeness": N, "accuracy": N, "usability": N, "risk_awareness": N}}, "avg_score": 平均分, "reason": "原因", "suggestion": "具体改进建议"}}
 
 只输出 JSON，不要其他文字。"""
 
@@ -360,10 +361,14 @@ def _make_goal_replanner(llm):
 ## 执行历史
 {chr(10).join(f'- 轮次{h.get("iteration", "?")}: {h.get("result", "")[:100]} | 评估: {h.get("evaluation", "")[:100]}' for h in goal_history)}
 
+## Working Memory（已完成任务的结果）
+{chr(10).join(f'- 任务{w["task_id"]}「{w["title"]}」: {w["result_summary"][:80]}' for w in goal_working_memory) if goal_working_memory else '无'}
+
 请输出：
 1. **失败根因**：为什么这些任务失败了？（2-3 个核心原因）
 2. **成功策略**：如果重来，应该怎么做？（具体可执行的策略）
 3. **避坑指南**：下次执行时必须避免什么？
+4. **资源评估**：剩余资源是否足够完成目标？（Token 预算、迭代次数）
 
 简洁输出，每点 2-3 句话。"""
 
@@ -398,8 +403,13 @@ def _make_goal_replanner(llm):
 ## Reflexion 反思（必须参考）
 {reflexion_text}
 
-## 执行经验
+## Working Memory（执行经验）
 {wm_text}
+
+## 资源约束
+- 已用 Token: {tokens_used}，预算: {token_budget}，剩余: {token_budget - tokens_used}
+- 当前轮次: {iterations}，最大轮次: {max_iterations}
+- 平均每任务消耗: {int(avg_tokens)} Token
 
 ## 要求
 1. 基于 Reflexion 反思调整策略
@@ -410,7 +420,8 @@ def _make_goal_replanner(llm):
 3. 已完成的任务不要重复
 4. 保持依赖关系合理
 5. 子任务数量控制在 3-8 个
-6. 避免反思中指出的「避坑指南」"""
+6. 避免反思中指出的「避坑指南」
+7. 考虑资源约束，优先完成高价值任务"""
 
                 replan_result = await replan_llm.ainvoke([HumanMessage(content=replan_prompt)])
 

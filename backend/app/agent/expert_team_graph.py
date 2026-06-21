@@ -51,6 +51,8 @@ class ExpertTeamState(TypedDict, total=False):
     run_id: int
     max_rounds: int
     current_round: int
+    max_debate_rounds: int   # 最大辩论轮次（默认 1，可配置）
+    current_debate_round: int  # 当前辩论轮次
     db: Any  # AsyncSession（运行时注入，不参与 checkpoint）
 
     # ── PM 输出 ──────────────────────────────────────
@@ -197,12 +199,13 @@ async def pm_analyze(state: ExpertTeamState) -> dict:
         "runId": state.get("run_id"),
     })
 
-    # 构建专家列表文本
+    # 构建专家列表文本（对标 CrewAI role+goal+backstory 三要素）
     experts_data = state["experts_data"]
     expert_list_str = "\n".join([
         f"- ID={e['id']} {e['member_name']}({e['member_role']})"
         + (f" — 目标: {e['goal']}" if e.get('goal') else "")
         + (f" — 背景: {e['backstory']}" if e.get('backstory') else "")
+        + (f" — 可委派" if e.get('is_delegation_allowed') else "")
         for e in experts_data
     ])
 
@@ -350,6 +353,34 @@ async def expert_execute(state: ExpertTeamState) -> dict:
         f"{expert_conf.get('goal', '') or ''}\n"
         f"{expert_conf.get('backstory', '') or ''}"
     ).strip()
+
+    # Verbose 控制（对标 CrewAI verbose 参数）
+    is_verbose = expert_conf.get("verbose", False)
+    detail_instruction = (
+        "请详细展示你的推理过程和中间步骤。"
+        if is_verbose else
+        "直接给出分析结论，省略中间推理过程。"
+    )
+
+    # 可委派的队友列表
+    is_delegation_allowed = expert_conf.get("is_delegation_allowed", 0)
+    delegate_section = ""
+    if is_delegation_allowed:
+        teammates = [
+            f"- ID={e['id']} {e['member_name']}({e['member_role']}): {e.get('goal', '')}"
+            for e in state["experts_data"]
+            if e["id"] != expert_id
+        ]
+        if teammates:
+            delegate_section = (
+                "\n\n## 可委派的队友\n"
+                + "\n".join(teammates)
+                + "\n\n如果你认为某个子任务更适合其他专家处理，"
+                "请在回答末尾用以下格式标注委派请求：\n"
+                "`[DELEGATE] expert_id=<ID> subtask=<任务描述>`\n"
+                "不要委派核心分析任务，只委派辅助性工作。"
+            )
+
     expert_prompt = f"""{expert_system}
 
 ## 你的任务
@@ -369,7 +400,8 @@ async def expert_execute(state: ExpertTeamState) -> dict:
 ## 输出要求
 - 结构清晰，使用标题和要点列表
 - 给出具体数据/案例支撑，避免空泛
-- 结论明确，建议可操作"""
+- 结论明确，建议可操作
+- {detail_instruction}{delegate_section}"""
 
     expert_provider_id = expert_conf.get("provider_id") or state["pm_provider_id"]
     expert_model_name = expert_conf.get("model_name") or state["pm_model_name"]
@@ -384,6 +416,38 @@ async def expert_execute(state: ExpertTeamState) -> dict:
         )
         content = _content_blocks_to_str(content)
         duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+
+        # ── Delegation 解析（对标 CrewAI allow_delegation）──
+        delegation_results = []
+        if is_delegation_allowed:
+            import re as _re
+            delegate_matches = _re.findall(r'\[DELEGATE]\s*expert_id=(\d+)\s*subtask=(.+?)(?:\n|$)', content)
+            for match in delegate_matches:
+                target_id = int(match[0])
+                delegate_subtask = match[1].strip()
+                target_expert = next((e for e in state["experts_data"] if e["id"] == target_id), None)
+                if target_expert:
+                    try:
+                        delegate_prompt = f"你是{target_expert['member_name']}，角色是{target_expert['member_role']}。\n{target_expert.get('goal', '') or ''}\n{target_expert.get('backstory', '') or ''}\n\n## 委派任务（来自 {expert_name}）\n{delegate_subtask}\n\n请简洁完成此任务。"
+                        delegate_content, delegate_tokens = await _call_llm(
+                            state.get("db"), target_expert.get("provider_id") or expert_provider_id,
+                            target_expert.get("model_name") or expert_model_name,
+                            delegate_prompt, temperature=float(target_expert.get("temperature") or 0.7),
+                        )
+                        delegate_content = _content_blocks_to_str(delegate_content)
+                        delegation_results.append(f"\n\n[委派结果 - {target_expert['member_name']}({target_expert['member_role']})]:\n{delegate_content}")
+                        tokens += delegate_tokens
+                        writer({"type": "delegation", "from": expert_name, "to": target_expert['member_name'], "subtask": delegate_subtask})
+                    except Exception as e:
+                        logger.warning(f"委派给 {target_expert['member_name']} 失败: {e}")
+                        delegation_results.append(f"\n\n[委派失败 - {target_expert['member_name']}]: {e}")
+
+            # 从输出中移除 DELEGATE 标记
+            if delegate_matches:
+                content = _re.sub(r'\[DELEGATE]\s*expert_id=\d+\s*subtask=.+?(?:\n|$)', '', content).strip()
+
+        if delegation_results:
+            content += "\n".join(delegation_results)
 
         # 推送完成事件
         writer({"type": "expert_done", "expertId": expert_id, "expertName": expert_name, "expertRole": expert_role, "avatar": avatar, "content": content, "round": current_round, "durationMs": duration_ms})
@@ -471,7 +535,7 @@ async def pm_evaluate(state: ExpertTeamState) -> dict:
         for r in expert_results
     ])
 
-    # ── P0: PM 评估升级（Rubric 评分 + 结构化反馈）──
+    # ── P0: PM 评估升级（Rubric 评分 + 结构化反馈，对标 MetaGPT QAEngineer）──
     eval_prompt = f"""{pm_system}
 
 ## 用户原始任务
@@ -485,6 +549,7 @@ async def pm_evaluate(state: ExpertTeamState) -> dict:
 2. **准确性**（accuracy）：信息是否准确、有依据、无明显错误？
 3. **深度**（depth）：分析是否深入，是否有独到见解？
 4. **可用性**（usability）：输出是否可直接使用，建议是否可操作？
+5. **风险识别**（risk_awareness）：是否识别了潜在风险和不确定性？
 
 ## 评分标准
 - 8-10：优秀，超出预期
@@ -498,7 +563,7 @@ async def pm_evaluate(state: ExpertTeamState) -> dict:
 
 你必须严格按照 JSON 格式输出，不要添加其他文字。
 输出 JSON 格式：
-{{"scores": [{{"expert_id": ID, "score": 分数, "completeness": N, "accuracy": N, "depth": N, "usability": N, "feedback": "具体改进建议"}}], "overall_pass": true/false, "reason": "总体评价", "avg_score": 平均分}}"""
+{{"scores": [{{"expert_id": ID, "score": 分数, "completeness": N, "accuracy": N, "depth": N, "usability": N, "risk_awareness": N, "feedback": "具体改进建议"}}], "overall_pass": true/false, "reason": "总体评价", "avg_score": 平均分}}"""
 
     content, tokens = await _call_llm(
         state.get("db"),
@@ -550,9 +615,9 @@ async def debate_round(state: ExpertTeamState) -> dict:
       - 修正自己的观点
 
     设计原则：
-      - 只在第 1 轮专家结果完成后执行（返工轮不辩论，直接评估）
+      - 支持多轮辩论（max_debate_rounds 可配置，默认 1 轮）
       - 辩论结果追加到 discussion，供 PM 评估参考
-      - 最多一轮辩论，避免无限循环
+      - 只在首轮执行辩论（返工轮不辩论，直接评估）
     """
     from app.services.expert_team_service import _call_llm, _ws_broadcast
     from langgraph.config import get_stream_writer
@@ -561,9 +626,13 @@ async def debate_round(state: ExpertTeamState) -> dict:
     team_id = state["team_id"]
     expert_results = state.get("expert_results", [])
     current_round = state.get("current_round", 1)
+    max_debate_rounds = state.get("max_debate_rounds", 1)
+    current_debate_round = state.get("current_debate_round", 0)
 
-    # 只在第 1 轮且有 2+ 专家结果时执行辩论
+    # 只在第 1 轮且有 2+ 专家结果时执行辩论，且未超过最大辩论轮次
     if current_round > 1 or len(expert_results) < 2:
+        return {}
+    if current_debate_round >= max_debate_rounds:
         return {}
 
     writer({"type": "debate_start", "round": current_round, "message": "开始交叉质询..."})
@@ -644,7 +713,7 @@ async def debate_round(state: ExpertTeamState) -> dict:
         "status": "debate_done", "round": current_round, "runId": state.get("run_id"),
     })
 
-    return {"discussion": debate_results}
+    return {"discussion": debate_results, "current_debate_round": current_debate_round + 1}
 
 
 async def pm_report(state: ExpertTeamState) -> dict:
@@ -657,15 +726,16 @@ async def pm_report(state: ExpertTeamState) -> dict:
     leader = state["leader_data"]
 
     pm_system = leader.get("system_prompt") or "你是一位资深项目经理（PM），擅长任务拆解和资源调度。"
-    # ── P0: 报告生成升级（结构化输出 + 多视角综合）──
+    # ── P0: 报告生成升级（结构化输出 + 多视角综合 + 风险提示）──
     synthesizer_prompt = leader.get("synthesizer_prompt") or (
         "请综合所有专家的分析结果，生成结构化的最终报告。\n\n"
         "## 报告结构\n"
         "1. **核心结论**（3-5 条关键发现）\n"
         "2. **各专家观点摘要**（每人 2-3 句核心观点）\n"
-        "3. **共识与分歧**（哪些观点一致？哪些存在分歧？）\n"
-        "4. **关键建议**（可操作的具体建议）\n"
-        "5. **风险提示**（需要注意的不确定性和风险）"
+        "3. **共识与分歧**（哪些观点一致？哪些存在分歧？分歧的原因是什么？）\n"
+        "4. **关键建议**（可操作的具体建议，按优先级排序）\n"
+        "5. **风险提示**（需要注意的不确定性和风险）\n"
+        "6. **执行路线图**（如果需要落地，推荐的步骤和顺序）"
     )
 
     expert_results = state.get("expert_results", [])
@@ -741,6 +811,8 @@ def fan_out_experts(state: ExpertTeamState) -> list[Send]:
         "run_id": state["run_id"],
         "max_rounds": state["max_rounds"],
         "current_round": state.get("current_round", 1),
+        "max_debate_rounds": state.get("max_debate_rounds", 1),
+        "current_debate_round": state.get("current_debate_round", 0),
         "db": state["db"],
         "experts_data": state["experts_data"],
         "leader_data": state["leader_data"],

@@ -99,12 +99,19 @@ class ContextEngine:
 
     @staticmethod
     def _compose_soul_prompt(config) -> str:
-        """从 SoulConfig 结构化字段组装 prompt"""
+        """从 SoulConfig 结构化字段组装 prompt（对标 CrewAI role+goal+backstory 三要素）
+
+        角色深度增强:
+          - role: name + personality（身份定位）
+          - goal: 从 background 中提取或使用默认目标（驱动决策方向）
+          - backstory: background 字段（丰富角色人格）
+          - speaking_style: 说话风格约束
+        """
         # 优先使用自定义 system_prompt
         if config.system_prompt and config.system_prompt.strip():
             return config.system_prompt.strip()
 
-        # 否则从结构化字段组装
+        # 否则从结构化字段组装（对标 CrewAI role+goal+backstory 三要素）
         parts = []
         if config.name:
             parts.append(f"你是{config.name}。")
@@ -114,8 +121,11 @@ class ContextEngine:
                 parts.append(f"你的性格{'又'.join(traits)}。")
         if config.speaking_style:
             parts.append(f"说话风格：{config.speaking_style}。")
+        # goal: 明确目标驱动（CrewAI 核心要素）
+        parts.append("你的核心目标是：理解用户需求的本质，提供准确、深入、可操作的回答。")
+        # backstory: background 字段作为背景故事
         if config.background:
-            parts.append(config.background)
+            parts.append(f"背景：{config.background}")
         return "".join(parts) if parts else ""
 
     async def assemble(
@@ -241,6 +251,16 @@ class ContextEngine:
             "- 不确定时明确说明不确定性，不要编造\n"
             "- 涉及数据/事实时，给出来源或依据\n"
             "- 长任务分步骤执行，每步完成后汇报进展\n"
+        )
+
+        # ── P0: 自评机制（对标 MetaGPT QAEngineer + LLM-as-Judge）──
+        base += (
+            "\n\n## 自评清单（回答前自查）\n"
+            "生成最终回答前，请按以下维度自查：\n\n"
+            "1. **完整性**：是否覆盖了用户问题的所有方面？有无遗漏？\n"
+            "2. **准确性**：信息是否准确？是否有依据支撑？有无编造？\n"
+            "3. **可用性**：回答是否可直接使用？建议是否可操作？\n\n"
+            "如果自查发现明显不足，请补充后再输出最终回答。\n"
         )
 
         # 工具使用规则（始终追加）
