@@ -324,6 +324,9 @@ class ContextEngine:
                 score = r.get("score", 0)
                 if ptype in ("summary", "user_memory"):
                     parts.append(f"[记忆 | 相关度:{score:.2f} | {r.get('saved_at', '')}] {r.get('summary', '')}")
+                elif ptype == "reflexion":
+                    # Reflexion 经验优先展示
+                    parts.append(f"[历史反思 | 相关度:{score:.2f}] {r.get('summary', '')}")
                 else:
                     msg_count = len(r.get("messages", []))
                     parts.append(f"[对话记录 | 相关度:{score:.2f} | {r.get('saved_at', '')} | {msg_count}条消息]")

@@ -35,6 +35,7 @@ from app.agent.expert_team.reasoning import generate_reasoning, format_reasoning
 from app.agent.expert_team.tot import explore_thoughts, format_tot_for_prompt
 from app.agent.expert_team.reflexion import generate_reflexion, format_reflexion_for_prompt, store_reflexion_as_memory
 from app.agent.expert_team.consistency import execute_with_self_consistency
+from app.agent.expert_team.memory import recall_experience
 from app.agent.fact_verifier import verify_facts
 
 logger = get_logger(__name__)
@@ -365,6 +366,19 @@ async def expert_execute(state: ExpertTeamState) -> dict:
         f"{expert_conf.get('backstory', '') or ''}"
     ).strip()
 
+    # ── Reflexion 经验召回: 从 Memory 中检索该专家的历史反思 ──
+    reflexion_recall = ""
+    try:
+        past_experience = await recall_experience(
+            expert_id=expert_id, subtask=subtask, top_k=3,
+        )
+        if past_experience:
+            reflexion_recall = past_experience
+            writer({"type": "expert_recall", "expertId": expert_id,
+                    "expertName": expert_name, "has_experience": True})
+    except Exception as e:
+        logger.debug(f"经验召回失败（跳过）: {e}")
+
     # Verbose 控制（对标 CrewAI verbose 参数）
     is_verbose = expert_conf.get("verbose", False)
     detail_instruction = (
@@ -430,7 +444,7 @@ async def expert_execute(state: ExpertTeamState) -> dict:
             )
 
     expert_prompt = f"""{expert_system}
-{reasoning_text}{tot_text}
+{reasoning_text}{tot_text}{reflexion_recall}
 
 ## 你的任务
 {subtask}
@@ -479,6 +493,31 @@ async def expert_execute(state: ExpertTeamState) -> dict:
             )
             content = _content_blocks_to_str(content)
         duration_ms = int((datetime.now() - exp_start).total_seconds() * 1000)
+
+        # ── Self-Correct: 自评修正（评分不足时自动修正一次）──
+        if content and len(content.strip()) < 100:
+            try:
+                correct_prompt = f"""你的输出过短（{len(content.strip())}字），请重新执行任务。
+
+## 任务
+{subtask}
+
+## 原始用户问题
+{state['input_text']}
+
+请给出详细、完整的分析（至少200字）。"""
+                corrected_content, correct_tokens = await asyncio.wait_for(
+                    _call_llm(state.get("db"), expert_provider_id, expert_model_name, correct_prompt, temperature=expert_temperature),
+                    timeout=max_execution_time,
+                )
+                corrected_content = _content_blocks_to_str(corrected_content)
+                if corrected_content and len(corrected_content.strip()) > len(content.strip()):
+                    content = corrected_content
+                    tokens += correct_tokens
+                    writer({"type": "expert_self_correct", "expertId": expert_id,
+                            "expertName": expert_name, "reason": "output_too_short"})
+            except Exception as e:
+                logger.debug(f"Self-Correct 失败（保留原输出）: {e}")
 
         # ── Delegation 解析（对标 CrewAI allow_delegation）──
         delegation_results = []
