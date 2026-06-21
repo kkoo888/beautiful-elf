@@ -128,6 +128,7 @@ class ChatLLMProvider(BaseChatModel):
     temperature: float = 0.7
     max_tokens: int = 4096
     _bound_tools: list[Any] = PrivateAttr(default=[])  # 存储 bind_tools 绑定的工具
+    _bound_tool_choice: Any = PrivateAttr(default=None)  # 存储 tool_choice
 
     class Config:
         arbitrary_types_allowed = True
@@ -139,6 +140,7 @@ class ChatLLMProvider(BaseChatModel):
         """
         new = self.model_copy()
         new._bound_tools = list(tools)
+        new._bound_tool_choice = kwargs.get("tool_choice", None)
         return new
 
     def with_structured_output(self, schema: Any, method: str = "json_schema", **kwargs: Any) -> Any:
@@ -204,7 +206,7 @@ class ChatLLMProvider(BaseChatModel):
                         "parameters": json_schema,
                     }
                 }
-                llm = self.bind_tools([tool_def])
+                llm = self.bind_tools([tool_def], tool_choice={"type": "function", "function": {"name": schema_name}})
                 resp = await llm.ainvoke(msgs)
                 result = _parse_response(resp)
                 if result:
@@ -266,6 +268,7 @@ class ChatLLMProvider(BaseChatModel):
             temperature=temperature,
             system=system or None,
             stop_sequences=stop or [],
+            tool_choice=self._bound_tool_choice,
         )
 
         text_parts: list[str] = []
@@ -379,6 +382,7 @@ class ChatLLMProvider(BaseChatModel):
             temperature=temperature,
             system=system or None,
             stop_sequences=stop or [],
+            tool_choice=self._bound_tool_choice,
         )
 
         # 累积工具调用状态（一个流式 tool_call 分多个事件到达）
