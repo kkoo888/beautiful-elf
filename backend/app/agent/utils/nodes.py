@@ -970,13 +970,14 @@ def _make_evaluator_node(llm=None):
         # Goal 模式: 执行评估但不替换 final_answer（反馈给 status_updater 使用）
         if state.get("goal_mode"):
             # 仍然执行评估以产生质量反馈
-            if not llm or not final_answer:
+            if not llm or not state.get("final_answer"):
                 writer({"step": "eval", "status": "skipped", "message": "Goal 模式，无 LLM 或无回答，跳过评估"})
                 return {"evaluation": {"passed": True, "reason": "goal_mode_skip", "score": 8}}
 
             writer({"step": "eval", "status": "checking", "message": "Goal 模式质量检查..."})
             # 复用 LLM-as-Judge 评估
             user_query = _extract_last_message(state)
+            final_answer = state.get("final_answer", "")
             eval_prompt = f"""评估以下子任务执行质量。
 
 【子任务】
