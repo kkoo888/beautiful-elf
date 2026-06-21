@@ -141,6 +141,91 @@ class ChatLLMProvider(BaseChatModel):
         new._bound_tools = list(tools)
         return new
 
+    def with_structured_output(self, schema: Any, method: str = "json_schema", **kwargs: Any) -> Any:
+        """结构化输出 — 降级链: function_calling → json_mode
+
+        对标 LangChain with_structured_output() 标准接口。
+        ChatLLMProvider 通过 function_calling 实现结构化输出（兼容性最好）。
+
+        Args:
+            schema: Pydantic 模型 / TypedDict / JSON Schema
+            method: "json_schema" | "function_calling" | "json_mode"（自动降级）
+        """
+        from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+        from langchain_core.runnables import RunnableLambda
+        import json
+
+        # 获取 JSON schema
+        if hasattr(schema, "model_json_schema"):
+            json_schema = schema.model_json_schema()
+        elif hasattr(schema, "schema"):
+            json_schema = schema.schema()
+        else:
+            json_schema = schema
+
+        schema_name = getattr(schema, "__name__", "structured_output")
+
+        def _parse_response(response: Any) -> Any:
+            """从 LLM 响应中解析结构化数据"""
+            # 从 tool_calls 解析（function_calling 模式）
+            if hasattr(response, "tool_calls") and response.tool_calls:
+                for tc in response.tool_calls:
+                    args = tc.get("args", {})
+                    if args:
+                        try:
+                            return schema(**args)
+                        except Exception:
+                            pass
+            # 从 content 解析（json_mode 模式）
+            content = ""
+            if hasattr(response, "content"):
+                content = response.content if isinstance(response.content, str) else str(response.content)
+            try:
+                import re
+                match = re.search(r'\{[\s\S]*\}', content)
+                if match:
+                    data = json.loads(match.group())
+                    return schema(**data)
+            except Exception:
+                pass
+            return None
+
+        async def _invoke_with_schema(messages: list) -> Any:
+            """尝试两种模式，返回第一个成功的"""
+            msgs = messages if isinstance(messages, list) else [messages]
+
+            # 模式 1: function_calling（把 schema 包装成 tool，强制调用）
+            try:
+                tool_def = {
+                    "type": "function",
+                    "function": {
+                        "name": schema_name,
+                        "description": f"Return structured output for {schema_name}",
+                        "parameters": json_schema,
+                    }
+                }
+                llm = self.bind_tools([tool_def])
+                resp = await llm.ainvoke(msgs)
+                result = _parse_response(resp)
+                if result:
+                    return result
+            except Exception:
+                pass
+
+            # 模式 2: json_mode（prompt 要求返回 JSON）
+            json_instruction = f"\n\n请严格按以下 JSON schema 返回数据，只输出 JSON，不要添加其他文字:\n{json.dumps(json_schema, ensure_ascii=False)}"
+            prompt_msgs = list(msgs)
+            if prompt_msgs:
+                last = prompt_msgs[-1]
+                if hasattr(last, "content"):
+                    prompt_msgs[-1] = HumanMessage(content=str(last.content) + json_instruction)
+                else:
+                    prompt_msgs.append(HumanMessage(content=json_instruction))
+            resp = await self.ainvoke(prompt_msgs)
+            return _parse_response(resp)
+
+        return RunnableLambda(lambda msgs: _invoke_with_schema(msgs if isinstance(msgs, list) else [msgs]))
+
     @property
     def _llm_type(self) -> str:
         return f"llm-provider-{self.provider.provider_name}"
