@@ -56,3 +56,8 @@ backend/data/
 # 上传文件目录
 backend/uploads/
 uploads/
+docs/simulation-2000-analysis.md
+docs/analysis-3mode-evolution.md
+docs/evolution-blueprint.md
+scripts/simulate_*.py
+scripts/sim_*.py
