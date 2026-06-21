@@ -7,7 +7,7 @@
 
 模型:
   - cross-encoder/ms-marco-MiniLM-L-6-v2 ONNX 版 (~80MB, 512 tokens)
-  - 放在 backend/app/router/models/cross-encoder-ms-marco-MiniLM-L-6-v2-ONNX/
+  - 放在 backend/app/router/models/Qwen3-Reranker-0.6B/
 """
 import asyncio
 import logging
@@ -18,7 +18,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-_MODEL_DIR = Path(__file__).resolve().parent.parent / "router" / "models" / "cross-encoder-ms-marco-MiniLM-L-6-v2-ONNX"
+_MODEL_DIR = Path(__file__).resolve().parent.parent / "router" / "models" / "Qwen3-Reranker-0.6B"
 _MAX_LENGTH = 512
 
 _instance: Optional["OnnxRerankerService"] = None
