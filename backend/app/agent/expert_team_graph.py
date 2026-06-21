@@ -206,11 +206,28 @@ async def pm_analyze(state: ExpertTeamState) -> dict:
         for e in experts_data
     ])
 
-    pm_system = leader.get("system_prompt") or "你是一位资深项目经理（PM），擅长任务拆解和资源调度。"
+    # ── P0: PM 角色升级（对标 MetaGPT PM + CrewAI Hierarchical）──
+    pm_system = leader.get("system_prompt") or (
+        "你是一位资深项目经理（PM），擅长任务拆解、资源调度和质量把控。\n"
+        "你的核心能力：\n"
+        "1. 快速理解用户需求的本质\n"
+        "2. 将复杂任务拆解为可执行的子任务\n"
+        "3. 根据团队成员的专业能力精准分配\n"
+        "4. 设定明确的质量标准和验收条件"
+    )
     orchestrator_prompt = leader.get("orchestrator_prompt") or (
-        "请分析用户任务，决定分配给团队中的哪些专家，以及每个专家需要完成的子任务。\n"
-        "输出 JSON 格式：\n"
-        '{"assignments": [{"expert_id": ID, "subtask": "具体子任务描述", "priority": 1}], "analysis": "任务分析"}'
+        "## 任务分析框架\n"
+        "1. **核心问题**：用户真正想要解决什么问题？\n"
+        "2. **关键维度**：需要哪些专业视角来全面分析？\n"
+        "3. **依赖关系**：子任务之间是否有先后依赖？\n"
+        "4. **质量标准**：什么样的结果算「达标」？\n\n"
+        "## 分配原则\n"
+        "- 每个子任务必须有明确的交付物描述\n"
+        "- 优先分配给最匹配的专家（按专长匹配）\n"
+        "- 可并行的任务分配给不同专家同时执行\n"
+        "- 子任务数量控制在 2-6 个，避免过度拆解\n\n"
+        "## 输出要求\n"
+        "严格按 JSON 格式输出分配计划。"
     )
 
     # 返工反馈注入
@@ -327,7 +344,12 @@ async def expert_execute(state: ExpertTeamState) -> dict:
     feedback_section = f"\n\n## PM 改进建议（请务必参考）\n{feedback_text}" if feedback_text else ""
     context_section = f"\n\n## 之前讨论\n{context_text}" if context_text else ""
 
-    expert_system = expert_conf.get("system_prompt") or f"你是{expert_name}，角色是{expert_role}。"
+    # ── P0: 专家角色升级（对标 CrewAI role+goal+backstory + ReAct CoT）──
+    expert_system = expert_conf.get("system_prompt") or (
+        f"你是{expert_name}，角色是{expert_role}。\n"
+        f"{expert_conf.get('goal', '') or ''}\n"
+        f"{expert_conf.get('backstory', '') or ''}"
+    ).strip()
     expert_prompt = f"""{expert_system}
 
 ## 你的任务
@@ -336,7 +358,18 @@ async def expert_execute(state: ExpertTeamState) -> dict:
 ## 原始用户问题
 {state['input_text']}{context_section}{feedback_section}
 
-请从你的专业角度，完成以上任务。"""
+## 思考框架
+请按以下步骤完成任务：
+
+1. **背景分析**：这个问题的背景和上下文是什么？
+2. **关键要素**：从你的专业角度，需要关注哪些关键点？
+3. **深度分析**：基于你的专业知识，给出详细分析
+4. **结论建议**：给出明确的结论和可操作的建议
+
+## 输出要求
+- 结构清晰，使用标题和要点列表
+- 给出具体数据/案例支撑，避免空泛
+- 结论明确，建议可操作"""
 
     expert_provider_id = expert_conf.get("provider_id") or state["pm_provider_id"]
     expert_model_name = expert_conf.get("model_name") or state["pm_model_name"]
@@ -438,6 +471,7 @@ async def pm_evaluate(state: ExpertTeamState) -> dict:
         for r in expert_results
     ])
 
+    # ── P0: PM 评估升级（Rubric 评分 + 结构化反馈）──
     eval_prompt = f"""{pm_system}
 
 ## 用户原始任务
@@ -446,10 +480,25 @@ async def pm_evaluate(state: ExpertTeamState) -> dict:
 ## 专家完成情况（第 {current_round} 轮）
 {results_text}
 
-请评估每个专家的完成质量，打分（1-10），并判断是否达标。
+## 评估维度（每项 1-10 分）
+1. **完整性**（completeness）：是否覆盖了子任务的所有要求？
+2. **准确性**（accuracy）：信息是否准确、有依据、无明显错误？
+3. **深度**（depth）：分析是否深入，是否有独到见解？
+4. **可用性**（usability）：输出是否可直接使用，建议是否可操作？
+
+## 评分标准
+- 8-10：优秀，超出预期
+- 6-7：合格，基本达标
+- 4-5：一般，需要改进
+- 1-3：不合格，需要返工
+
+## 达标条件
+- 所有专家平均分 >= 6 且无单项低于 4 → overall_pass = true
+- 否则 → overall_pass = false
+
 你必须严格按照 JSON 格式输出，不要添加其他文字。
 输出 JSON 格式：
-{{"scores": [{{"expert_id": ID, "score": 分数, "feedback": "评价"}}], "overall_pass": true/false, "reason": "总体评价"}}"""
+{{"scores": [{{"expert_id": ID, "score": 分数, "completeness": N, "accuracy": N, "depth": N, "usability": N, "feedback": "具体改进建议"}}], "overall_pass": true/false, "reason": "总体评价", "avg_score": 平均分}}"""
 
     content, tokens = await _call_llm(
         state.get("db"),
@@ -492,6 +541,112 @@ async def pm_evaluate(state: ExpertTeamState) -> dict:
     }
 
 
+async def debate_round(state: ExpertTeamState) -> dict:
+    """P1: 辩论轮 — 专家交叉质询，提升分析深度
+
+    对标 AutoGen GroupChat Debate 模式：
+      - 每个专家审阅其他专家的结论
+      - 提出质疑、补充或反驳
+      - 修正自己的观点
+
+    设计原则：
+      - 只在第 1 轮专家结果完成后执行（返工轮不辩论，直接评估）
+      - 辩论结果追加到 discussion，供 PM 评估参考
+      - 最多一轮辩论，避免无限循环
+    """
+    from app.services.expert_team_service import _call_llm, _ws_broadcast
+    from langgraph.config import get_stream_writer
+    writer = get_stream_writer()
+
+    team_id = state["team_id"]
+    expert_results = state.get("expert_results", [])
+    current_round = state.get("current_round", 1)
+
+    # 只在第 1 轮且有 2+ 专家结果时执行辩论
+    if current_round > 1 or len(expert_results) < 2:
+        return {}
+
+    writer({"type": "debate_start", "round": current_round, "message": "开始交叉质询..."})
+    await _ws_broadcast(team_id, "expert_progress", {
+        "status": "debating", "round": current_round, "runId": state.get("run_id"),
+    })
+
+    # 构建其他专家结论的摘要
+    results_summaries = []
+    for r in expert_results:
+        if r.get("status") == "done" and r.get("output"):
+            summary = r["output"][:500]  # 取前 500 字
+            results_summaries.append(f"**{r['expert_name']}({r['expert_role']})**: {summary}")
+
+    if len(results_summaries) < 2:
+        return {}
+
+    all_summaries = "\n\n".join(results_summaries)
+
+    # 每个专家审阅其他人结论，提出质疑
+    debate_results = []
+    for r in expert_results:
+        if r.get("status") != "done" or not r.get("output"):
+            continue
+
+        expert_conf = next((e for e in state["experts_data"] if e["id"] == r["expert_id"]), None)
+        expert_system = expert_conf.get("system_prompt") if expert_conf else ""
+        if not expert_system:
+            expert_system = f"你是{r['expert_name']}，角色是{r['expert_role']}。"
+
+        # 构建其他专家结论（排除自己）
+        other_summaries = []
+        for s in expert_results:
+            if s["expert_id"] != r["expert_id"] and s.get("status") == "done":
+                other_summaries.append(f"**{s['expert_name']}({s['expert_role']})**: {s['output'][:300]}")
+        others_text = "\n\n".join(other_summaries)
+
+        debate_prompt = f"""{expert_system}
+
+## 你的原始分析
+{r['output'][:500]}
+
+## 其他专家的分析
+{others_text}
+
+## 交叉质询任务
+请从你的专业角度：
+1. **认同点**：其他专家哪些观点你是认同的？为什么？
+2. **质疑点**：哪些观点你认为有问题或不够全面？具体指出
+3. **补充**：基于其他专家的分析，你能补充什么新视角？
+4. **修正**：综合所有观点后，你是否需要修正自己的结论？
+
+请简洁回答，每点 2-3 句话即可。"""
+
+        expert_provider_id = (expert_conf.get("provider_id") if expert_conf else None) or state["pm_provider_id"]
+        expert_model_name = (expert_conf.get("model_name") if expert_conf else None) or state["pm_model_name"]
+        expert_temperature = float((expert_conf.get("temperature") if expert_conf else None) or 0.5)
+
+        try:
+            content, tokens = await _call_llm(
+                state.get("db"), expert_provider_id, expert_model_name,
+                debate_prompt, temperature=expert_temperature,
+            )
+            content = _content_blocks_to_str(content)
+            debate_results.append({
+                "round": current_round,
+                "expertName": r["expert_name"],
+                "expertRole": r["expert_role"],
+                "content": f"【交叉质询】\n{content}",
+                "timestamp": datetime.now().isoformat(),
+                "is_debate": True,
+            })
+            writer({"type": "debate_done", "expertName": r["expert_name"], "content": content[:200]})
+        except Exception as e:
+            logger.warning(f"辩论轮 {r['expert_name']} 失败: {e}")
+
+    await _ws_broadcast(team_id, "expert_progress", {
+        "status": "debate_done", "round": current_round, "runId": state.get("run_id"),
+    })
+
+    return {"discussion": debate_results}
+
+
 async def pm_report(state: ExpertTeamState) -> dict:
     """PM 汇总最终报告"""
     from app.services.expert_team_service import _call_llm, _ws_broadcast
@@ -502,8 +657,15 @@ async def pm_report(state: ExpertTeamState) -> dict:
     leader = state["leader_data"]
 
     pm_system = leader.get("system_prompt") or "你是一位资深项目经理（PM），擅长任务拆解和资源调度。"
+    # ── P0: 报告生成升级（结构化输出 + 多视角综合）──
     synthesizer_prompt = leader.get("synthesizer_prompt") or (
-        "请综合所有专家的分析结果，生成结构化的最终报告，包含：核心结论、各专家观点摘要、关键建议。"
+        "请综合所有专家的分析结果，生成结构化的最终报告。\n\n"
+        "## 报告结构\n"
+        "1. **核心结论**（3-5 条关键发现）\n"
+        "2. **各专家观点摘要**（每人 2-3 句核心观点）\n"
+        "3. **共识与分歧**（哪些观点一致？哪些存在分歧？）\n"
+        "4. **关键建议**（可操作的具体建议）\n"
+        "5. **风险提示**（需要注意的不确定性和风险）"
     )
 
     expert_results = state.get("expert_results", [])
@@ -641,6 +803,7 @@ def build_expert_team_graph(enable_interrupt: bool = False) -> CompiledGraph:
     graph.add_node("pm_analyze", pm_analyze)
     graph.add_node("expert_execute", expert_execute)
     graph.add_node("passthrough_evaluate", passthrough_evaluate)
+    graph.add_node("debate_round", debate_round)  # P1: 辩论轮
     graph.add_node("pm_evaluate", pm_evaluate)
     graph.add_node("pm_report", pm_report)
     graph.add_node("increment_round", increment_round)
@@ -651,10 +814,12 @@ def build_expert_team_graph(enable_interrupt: bool = False) -> CompiledGraph:
     # 条件边：pm_analyze → [Send("expert_execute", ...)] (动态 fan-out)
     graph.add_conditional_edges("pm_analyze", fan_out_experts, ["expert_execute", "passthrough_evaluate"])
 
-    # 边：expert_execute → pm_evaluate（所有专家完成后）
-    graph.add_edge("expert_execute", "pm_evaluate")
-    # 边：passthrough_evaluate → pm_evaluate（无分配时透传）
+    # 边：expert_execute → debate_round（所有专家完成后，先辩论再评估）
+    graph.add_edge("expert_execute", "debate_round")
+    # 边：passthrough_evaluate → pm_evaluate（无分配时透传，跳过辩论）
     graph.add_edge("passthrough_evaluate", "pm_evaluate")
+    # 边：debate_round → pm_evaluate（辩论后评估）
+    graph.add_edge("debate_round", "pm_evaluate")
 
     # 条件边：pm_evaluate → pm_report (pass) / increment_round → pm_analyze (fail)
     graph.add_conditional_edges("pm_evaluate", route_after_evaluate, {

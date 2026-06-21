@@ -50,20 +50,35 @@ def _make_goal_evaluator(llm):
             return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
 
         # LLM 评估是否达成目标
-        eval_prompt = f"""你是一个目标评估器。判断以下回答是否达成了用户的目标。
+        # ── P2: Rubric 评估（对标 MetaGPT QAEngineer 评估标准）──
+        eval_prompt = f"""你是一个严格的目标评估器。按以下维度评估回答是否达成用户目标。
 
-用户目标：{goal}
+## 评估维度（每项 1-10 分）
+1. **完整性**（completeness）：是否覆盖了目标的所有要求？
+2. **准确性**（accuracy）：信息是否准确、有依据？
+3. **可用性**（usability）：输出是否可直接使用？建议是否可操作？
 
-当前回答：{final_answer[:2000]}
+## 评分标准
+- 8-10：优秀，目标达成
+- 6-7：合格，基本达成
+- 1-5：不合格，需要改进
 
-评估说明：
-1. 优先评估回答内容是否实质上回答了用户的问题
-2. 如果回答中包含"基于已有知识"、"工具不可用时的降级回答"等说明，且内容合理准确，应视为有效回答
-3. 工具调用失败时的降级回答（基于大模型知识）是可接受的
-4. 只有当回答完全无关、空白或明显错误时才判定为未达成
+## 达标条件
+- 三项均分 >= 6 且无单项低于 4 → achieved = true
+- 否则 → achieved = false
+
+## 特殊情况
+- 工具调用失败时的降级回答，如果内容合理准确，可用性酌情给分
+- 回答完全无关、空白或明显错误 → 直接判定未达成
+
+## 用户目标
+{goal}
+
+## 当前回答
+{final_answer[:2000]}
 
 请严格按 JSON 格式输出：
-{{"achieved": true/false, "reason": "原因", "suggestion": "如果未达成，下一步建议"}}
+{{"achieved": true/false, "scores": {{"completeness": N, "accuracy": N, "usability": N}}, "avg_score": 平均分, "reason": "原因", "suggestion": "具体改进建议"}}
 
 只输出 JSON，不要其他文字。"""
 
@@ -71,10 +86,15 @@ def _make_goal_evaluator(llm):
             response = await llm.ainvoke(eval_prompt)
             content = _content_blocks_to_str(response.content if hasattr(response, 'content') else response)
             import re
-            match = re.search(r'\{.*?\}', content, re.DOTALL)
+            match = re.search(r'\{[\s\S]*\}', content)
             if match:
                 data = json.loads(match.group())
                 achieved = data.get("achieved", False)
+                scores = data.get("scores", {})
+                avg_score = data.get("avg_score", 0)
+                # 如果没有 avg_score，从 scores 计算
+                if not avg_score and scores:
+                    avg_score = sum(scores.values()) / max(len(scores), 1)
 
                 if achieved:
                     writer({"step": "goal_eval", "status": "done", "message": "目标已达成！"})
@@ -310,10 +330,10 @@ def _make_goal_replanner(llm):
 
         failed_tasks = [t for t in goal_subtasks if t.get("status") == "failed"]
 
-        # ── 有失败任务 → 动态重规划（核心进化）──
+        # ── 有失败任务 → Reflexion + 动态重规划（P2: 正式 Reflexion 模式）──
         if failed_tasks and llm:
             try:
-                # 1. 生成自愈反思
+                # 1. 生成 Reflexion 反思（不只是自愈，是正式的 "经验→反思→改进" 闭环）
                 from app.agent.self_healing import analyze_failure, get_healing_memory
                 healing_memory = get_healing_memory()
                 goal_id = str(state.get("conversation_id", 0))
@@ -328,7 +348,30 @@ def _make_goal_replanner(llm):
                     await healing_memory.store(reflection, goal_id=goal_id)
                     failure_summaries.append(f"- 任务{ft.get('id')}「{ft.get('title', '')}」: {reflection.what_not_to_do}")
 
-                # 2. 调用 LLM 动态重规划
+                # 2. P2: Reflexion 反思（对标 Reflexion 论文：失败原因→成功策略→改进方向）
+                reflexion_prompt = f"""你是一个反思专家。分析以下失败案例，提炼经验教训。
+
+## 原始目标
+{goal_def}
+
+## 失败案例
+{chr(10).join(failure_summaries)}
+
+## 执行历史
+{chr(10).join(f'- 轮次{h.get("iteration", "?")}: {h.get("result", "")[:100]} | 评估: {h.get("evaluation", "")[:100]}' for h in goal_history)}
+
+请输出：
+1. **失败根因**：为什么这些任务失败了？（2-3 个核心原因）
+2. **成功策略**：如果重来，应该怎么做？（具体可执行的策略）
+3. **避坑指南**：下次执行时必须避免什么？
+
+简洁输出，每点 2-3 句话。"""
+
+                reflexion_content, _ = await llm.ainvoke(reflexion_prompt)
+                reflexion_text = _content_blocks_to_str(reflexion_content if hasattr(reflexion_content, 'content') else reflexion_content)
+                logger.info(f"[goal_replanner] Reflexion 完成: {reflexion_text[:100]}")
+
+                # 3. 调用 LLM 动态重规划（带 Reflexion 上下文）
                 from app.agent.structured_schemas import GoalReplanResult
                 replan_llm = llm.with_structured_output(GoalReplanResult)
 
@@ -341,7 +384,7 @@ def _make_goal_replanner(llm):
                     for w in goal_working_memory
                 ) if goal_working_memory else "无"
 
-                replan_prompt = f"""你需要重新规划执行计划。
+                replan_prompt = f"""你需要基于反思结果重新规划执行计划。
 
 ## 原始目标
 {goal_def}
@@ -352,18 +395,22 @@ def _make_goal_replanner(llm):
 ## 失败的任务（需要重新规划）
 {failed_text}
 
+## Reflexion 反思（必须参考）
+{reflexion_text}
+
 ## 执行经验
 {wm_text}
 
 ## 要求
-1. 分析失败原因
+1. 基于 Reflexion 反思调整策略
 2. 对于失败的任务，可以选择：
-   a) 用不同策略重试
+   a) 用不同策略重试（参考反思中的「成功策略」）
    b) 拆解为更小的子任务
    c) 跳过（如果不可行且不影响最终目标）
 3. 已完成的任务不要重复
 4. 保持依赖关系合理
-5. 子任务数量控制在 3-8 个"""
+5. 子任务数量控制在 3-8 个
+6. 避免反思中指出的「避坑指南」"""
 
                 replan_result = await replan_llm.ainvoke([HumanMessage(content=replan_prompt)])
 
