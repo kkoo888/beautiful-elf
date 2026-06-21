@@ -68,12 +68,30 @@ def _lc_messages_to_messages(messages: list[BaseMessage]) -> tuple[str, list[Mes
 
 
 def _build_tool_definitions(tools: list[Any] | None) -> list[ToolDefinition] | None:
-    """LangChain tool schema → ToolDefinition"""
+    """LangChain tool / OpenAI dict → ToolDefinition"""
     if not tools:
         return None
 
     defs = []
     for tool in tools:
+        # ── 原始 OpenAI dict 格式（with_structured_output 传入）──
+        if isinstance(tool, dict):
+            func = tool.get("function", {})
+            name = func.get("name", "")
+            desc = func.get("description", "")
+            schema = func.get("parameters", {"type": "object", "properties": {}})
+            defs.append(ToolDefinition(
+                name=name,
+                description=desc,
+                input_schema=ToolInputSchema(
+                    type="object",
+                    properties=schema.get("properties", {}),
+                    required=schema.get("required", []),
+                ),
+            ))
+            continue
+
+        # ── LangChain StructuredTool 格式 ──
         name = getattr(tool, "name", "")
         desc = getattr(tool, "description", "")
         args_schema = getattr(tool, "args_schema", None)
