@@ -36,6 +36,7 @@ from app.agent.expert_team.tot import explore_thoughts, format_tot_for_prompt
 from app.agent.expert_team.reflexion import generate_reflexion, format_reflexion_for_prompt, store_reflexion_as_memory
 from app.agent.expert_team.consistency import execute_with_self_consistency
 from app.agent.expert_team.memory import recall_experience
+from app.agent.expert_team.lats import run_lats, format_lats_for_prompt
 from app.agent.fact_verifier import verify_facts
 
 logger = get_logger(__name__)
@@ -424,6 +425,23 @@ async def expert_execute(state: ExpertTeamState) -> dict:
                 "branches": len(tot_obj.branches) if tot_obj else 0,
                 "best_approach": tot_obj.branches[tot_obj.best_index].approach if tot_obj and tot_obj.branches else ""})
 
+    # 3. LATS: 蒙特卡洛树搜索（仅复杂任务，由配置启用）
+    lats_text = ""
+    use_lats = expert_conf.get("use_lats", False)
+    if use_lats:
+        try:
+            lats_llm = await _get_llm_for_verify(state.get("db"), expert_provider_id, expert_model_name, 0.7)
+            lats_result = await run_lats(
+                llm=lats_llm, problem=subtask, context=context_text,
+                max_iterations=5, max_children=3, temperature=0.7,
+            )
+            lats_text = format_lats_for_prompt(lats_result)
+            if lats_text:
+                writer({"type": "expert_lats", "expertId": expert_id,
+                        "expertName": expert_name, "nodes": lats_result.total_nodes if lats_result else 0})
+        except Exception as e:
+            logger.debug(f"LATS 失败（降级为 ToT）: {e}")
+
     # 可委派的队友列表
     is_delegation_allowed = expert_conf.get("is_delegation_allowed", 0)
     delegate_section = ""
@@ -444,7 +462,7 @@ async def expert_execute(state: ExpertTeamState) -> dict:
             )
 
     expert_prompt = f"""{expert_system}
-{reasoning_text}{tot_text}{reflexion_recall}
+{reasoning_text}{tot_text}{lats_text}{reflexion_recall}
 
 ## 你的任务
 {subtask}
@@ -714,6 +732,25 @@ async def pm_evaluate(state: ExpertTeamState) -> dict:
 
     content = _content_blocks_to_str(content)
     evaluation = _parse_evaluation(content)
+
+    # ── 元评估: 检测评估器偏差（Agent-as-a-Judge）──
+    try:
+        from app.agent.meta_evaluator import meta_evaluate
+        meta_result = await meta_evaluate(
+            llm=await _get_llm_for_verify(state.get("db"), state["pm_provider_id"], state["pm_model_name"], 0.2),
+            evaluations=[{"score": s.get("score", 5), "passed": s.get("score", 5) >= 6, "reason": s.get("feedback", "")} for s in evaluation.get("scores", [])],
+        )
+        if meta_result:
+            evaluation["meta_eval"] = {
+                "bias": meta_result.bias_direction,
+                "calibration": meta_result.calibration_score,
+                "recommendation": meta_result.recommendation,
+            }
+            writer({"type": "pm_meta_eval", "round": current_round,
+                    "bias": meta_result.bias_direction,
+                    "calibration": meta_result.calibration_score})
+    except Exception as e:
+        logger.debug(f"元评估失败（非致命）: {e}")
 
     # 推送评估事件
     writer({"type": "pm_eval", "round": current_round, "evaluation": evaluation})

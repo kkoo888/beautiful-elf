@@ -390,6 +390,19 @@ def _make_goal_replanner(llm):
 
                 # 2. P2: Reflexion 反思（对标 Reflexion 论文：失败原因→成功策略→改进方向）
                 rca_section = "\n\n## 根因分析（5-Why）\n" + "\n".join(root_cause_texts) if root_cause_texts else ""
+
+                # 跨 Goal 经验召回: 从全局 Memory 中检索类似任务的历史经验
+                cross_goal_experience = ""
+                try:
+                    from app.agent.expert_team.memory import recall_experience
+                    global_exp = await recall_experience(
+                        expert_id=0, subtask=goal_def[:200], top_k=3,
+                    )
+                    if global_exp:
+                        cross_goal_experience = global_exp
+                except Exception:
+                    pass
+
                 reflexion_prompt = f"""你是一个反思专家。分析以下失败案例，提炼经验教训。
 
 ## 原始目标
@@ -403,6 +416,7 @@ def _make_goal_replanner(llm):
 
 ## Working Memory（已完成任务的结果）
 {chr(10).join(f'- 任务{w["task_id"]}「{w["title"]}」: {w["result_summary"][:80]}' for w in goal_working_memory) if goal_working_memory else '无'}
+{cross_goal_experience}
 
 请输出：
 1. **失败根因**：为什么这些任务失败了？（参考 5-Why 分析）
