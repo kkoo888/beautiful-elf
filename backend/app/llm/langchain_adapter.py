@@ -224,7 +224,25 @@ class ChatLLMProvider(BaseChatModel):
             resp = await self.ainvoke(prompt_msgs)
             return _parse_response(resp)
 
-        return RunnableLambda(lambda msgs: _invoke_with_schema(msgs if isinstance(msgs, list) else [msgs]))
+        def _sync_invoke(messages):
+            """同步调用 — 在 event loop 中运行异步函数"""
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            coro = _invoke_with_schema(messages if isinstance(messages, list) else [messages])
+            if loop and loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(asyncio.run, coro).result(timeout=60)
+            return asyncio.run(coro)
+
+        async def _async_invoke(messages):
+            """异步调用"""
+            return await _invoke_with_schema(messages if isinstance(messages, list) else [messages])
+
+        return RunnableLambda(func=_sync_invoke, afunc=_async_invoke)
 
     @property
     def _llm_type(self) -> str:
