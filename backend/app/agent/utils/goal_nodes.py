@@ -239,6 +239,27 @@ def _make_goal_status_updater(llm=None):
                 else:
                     # Guardrail 失败 或 evaluator 失败且重试已耗尽
                     fail_reason = reason if not passed else f"质量不合格: {eval_reason}"
+
+                    # ── 失败隔离: 生成降级输出而非直接标记 failed ──
+                    # 切断级联失败，让下游任务仍能基于降级信息继续
+                    degraded_output = ""
+                    try:
+                        from app.agent.failure_isolation import generate_degraded_output
+                        if llm:
+                            degraded = await generate_degraded_output(
+                                llm=llm,
+                                failed_task_title=current_subtask["title"],
+                                failed_task_reason=fail_reason,
+                                context=answer_text[:500] if answer_text else "",
+                                memory_context=str(state.get("goal_working_memory", ""))[:500],
+                            )
+                            degraded_output = degraded.content
+                            writer({"step": "goal_task_degraded", "status": "degraded",
+                                    "message": f"子任务降级: {current_subtask['title']} → {degraded.strategy}",
+                                    "taskId": task_id, "confidence": degraded.confidence})
+                    except Exception as e:
+                        logger.debug(f"[goal_status_updater] 降级输出生成失败: {e}")
+
                     goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "failed", 0)
                     try:
                         from app.agent.self_healing import analyze_failure, get_healing_memory
@@ -259,9 +280,10 @@ def _make_goal_status_updater(llm=None):
                     new_wm_entries.append({
                         "task_id": task_id,
                         "title": current_subtask["title"],
-                        "result_summary": f"失败: {fail_reason}",
+                        "result_summary": degraded_output if degraded_output else f"失败: {fail_reason}",
                         "tools_used": [],
                         "success": False,
+                        "degraded": bool(degraded_output),  # 标记为降级输出
                     })
 
         # 批量标记可并行的子任务
@@ -403,7 +425,8 @@ def _make_goal_replanner(llm):
                 )
                 failed_text = "\n".join(failure_summaries)
                 wm_text = "\n".join(
-                    f"- 任务{w['task_id']}「{w['title']}」: {w['result_summary']}"
+                    f"- 任务{w['task_id']}「{w['title']}」: {w['result_summary'][:80]}"
+                    + (" [降级输出]" if w.get('degraded') else "")
                     for w in goal_working_memory
                 ) if goal_working_memory else "无"
 
