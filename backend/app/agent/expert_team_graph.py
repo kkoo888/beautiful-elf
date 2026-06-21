@@ -31,6 +31,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.state import _content_blocks_to_str
 from app.core.logging import get_logger
+from app.agent.expert_team.reasoning import generate_reasoning, format_reasoning_for_prompt
+from app.agent.expert_team.tot import explore_thoughts, format_tot_for_prompt
 
 logger = get_logger(__name__)
 
@@ -362,6 +364,43 @@ async def expert_execute(state: ExpertTeamState) -> dict:
         "直接给出分析结论，省略中间推理过程。"
     )
 
+    # ── P0: 执行前反思 + ToT 多路径探索 ──
+    expert_goal = expert_conf.get("goal", "")
+    skills_desc = ""
+    try:
+        skills_desc = ", ".join(
+            s.get("name", "") for s in (expert_conf.get("skills") or expert_conf.get("tools_json") or [])
+        )
+    except Exception:
+        pass
+
+    # 1. Reasoning: 执行前反思（挑战/策略/工具/风险/关键点）
+    reasoning_obj = await generate_reasoning(
+        db=state.get("db"), provider_id=expert_conf.get("provider_id") or state["pm_provider_id"],
+        model_name=expert_conf.get("model_name") or state["pm_model_name"],
+        expert_name=expert_name, expert_role=expert_role, expert_goal=expert_goal,
+        subtask=subtask, skills_desc=skills_desc, context=context_text,
+        temperature=0.3,
+    )
+    reasoning_text = format_reasoning_for_prompt(reasoning_obj)
+    if reasoning_text:
+        writer({"type": "expert_reasoning", "expertId": expert_id, "expertName": expert_name,
+                "challenges": reasoning_obj.challenges if reasoning_obj else [],
+                "strategy": reasoning_obj.strategy if reasoning_obj else ""})
+
+    # 2. ToT: 多路径探索（3 条思路 → 评估 → 选最优）
+    tot_obj = await explore_thoughts(
+        db=state.get("db"), provider_id=expert_conf.get("provider_id") or state["pm_provider_id"],
+        model_name=expert_conf.get("model_name") or state["pm_model_name"],
+        expert_name=expert_name, expert_role=expert_role,
+        subtask=subtask, context=context_text, n_branches=3, temperature=0.7,
+    )
+    tot_text = format_tot_for_prompt(tot_obj)
+    if tot_text:
+        writer({"type": "expert_tot", "expertId": expert_id, "expertName": expert_name,
+                "branches": len(tot_obj.branches) if tot_obj else 0,
+                "best_approach": tot_obj.branches[tot_obj.best_index].approach if tot_obj and tot_obj.branches else ""})
+
     # 可委派的队友列表
     is_delegation_allowed = expert_conf.get("is_delegation_allowed", 0)
     delegate_section = ""
@@ -382,6 +421,7 @@ async def expert_execute(state: ExpertTeamState) -> dict:
             )
 
     expert_prompt = f"""{expert_system}
+{reasoning_text}{tot_text}
 
 ## 你的任务
 {subtask}

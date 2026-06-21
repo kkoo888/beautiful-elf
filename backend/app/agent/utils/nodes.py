@@ -1065,6 +1065,44 @@ def _make_evaluator_node(llm=None):
                     "2. 稍后再试\n"
                     "3. 如果是天气等实时信息，可以直接告诉我你的城市"
                 )
+
+            # ── P0: 自评修正循环（score 4-5 时尝试一次修正）──
+            if 4 <= evaluation['score'] < 6 and state.get("final_answer") and llm:
+                try:
+                    reason = evaluation.get("reason", "质量不够高")
+                    dimensions = evaluation.get("dimensions", {})
+                    weak_dims = [k for k, v in dimensions.items() if isinstance(v, (int, float)) and v < 6]
+                    weak_hint = f"主要问题: {', '.join(weak_dims)}" if weak_dims else ""
+
+                    correct_prompt = f"""你之前的回答质量不够高，请根据反馈修正。
+
+【用户问题】
+{user_query}
+
+【你之前的回答】
+{final_answer[:1500]}
+
+【评估反馈】
+评分: {evaluation['score']}/10
+原因: {reason}
+{weak_hint}
+
+请修正以上问题，给出改进后的回答。要求:
+1. 修正评估指出的具体问题
+2. 保持回答的结构和完整性
+3. 不要编造信息，不确定时说明不确定性"""
+                    from langchain_core.messages import HumanMessage
+                    response = await llm.ainvoke([HumanMessage(content=correct_prompt)])
+                    corrected = _content_blocks_to_str(response.content)
+                    if corrected and len(corrected.strip()) > 20:
+                        eval_result["final_answer"] = corrected
+                        eval_result["evaluation"]["corrected"] = True
+                        writer({"step": "eval", "status": "corrected",
+                                "message": f"自评修正完成 (原评分 {evaluation['score']}/10)"})
+                        logger.info(f"[evaluator] 自评修正: score={evaluation['score']} → 修正后输出")
+                except Exception as e:
+                    logger.warning(f"[evaluator] 自评修正失败: {e}")
+
             return eval_result
 
         except Exception as e:

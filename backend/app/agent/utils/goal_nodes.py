@@ -336,9 +336,11 @@ def _make_goal_replanner(llm):
             try:
                 # 1. 生成 Reflexion 反思（不只是自愈，是正式的 "经验→反思→改进" 闭环）
                 from app.agent.self_healing import analyze_failure, get_healing_memory
+                from app.agent.root_cause_analyzer import analyze_root_cause, format_root_cause_for_prompt, store_root_cause
                 healing_memory = get_healing_memory()
                 goal_id = str(state.get("conversation_id", 0))
                 failure_summaries = []
+                root_cause_texts = []
                 for ft in failed_tasks:
                     reflection = analyze_failure(
                         subtask_title=ft.get("title", ""), subtask_id=ft.get("id", 0),
@@ -349,14 +351,30 @@ def _make_goal_replanner(llm):
                     await healing_memory.store(reflection, goal_id=goal_id)
                     failure_summaries.append(f"- 任务{ft.get('id')}「{ft.get('title', '')}」: {reflection.what_not_to_do}")
 
+                    # P0: 5-Why 根因分析
+                    rca = await analyze_root_cause(
+                        llm=llm,
+                        symptom=f"子任务「{ft.get('title', '')}」执行失败",
+                        failure_context={
+                            "subtask": ft.get("title", ""),
+                            "error": ft.get("last_eval_feedback", ""),
+                        },
+                        temperature=0.3,
+                    )
+                    if rca:
+                        root_cause_texts.append(format_root_cause_for_prompt(rca))
+                        await store_root_cause(rca, user_id=state.get("user_id", 0),
+                                               conversation_id=state.get("conversation_id", 0), db=None)
+
                 # 2. P2: Reflexion 反思（对标 Reflexion 论文：失败原因→成功策略→改进方向）
+                rca_section = "\n\n## 根因分析（5-Why）\n" + "\n".join(root_cause_texts) if root_cause_texts else ""
                 reflexion_prompt = f"""你是一个反思专家。分析以下失败案例，提炼经验教训。
 
 ## 原始目标
 {goal_def}
 
 ## 失败案例
-{chr(10).join(failure_summaries)}
+{chr(10).join(failure_summaries)}{rca_section}
 
 ## 执行历史
 {chr(10).join(f'- 轮次{h.get("iteration", "?")}: {h.get("result", "")[:100]} | 评估: {h.get("evaluation", "")[:100]}' for h in goal_history)}
@@ -365,7 +383,7 @@ def _make_goal_replanner(llm):
 {chr(10).join(f'- 任务{w["task_id"]}「{w["title"]}」: {w["result_summary"][:80]}' for w in goal_working_memory) if goal_working_memory else '无'}
 
 请输出：
-1. **失败根因**：为什么这些任务失败了？（2-3 个核心原因）
+1. **失败根因**：为什么这些任务失败了？（参考 5-Why 分析）
 2. **成功策略**：如果重来，应该怎么做？（具体可执行的策略）
 3. **避坑指南**：下次执行时必须避免什么？
 4. **资源评估**：剩余资源是否足够完成目标？（Token 预算、迭代次数）
