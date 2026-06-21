@@ -77,7 +77,7 @@ async def generate_expert_plan(
 {{"objective": "核心目标", "steps": [{{"step": 1, "action": "具体行动", "expected_output": "预期产出"}}], "risk_notes": "风险提示"}}
 
 要求：
-1. 步骤 3-5 个，每个步骤是具体可执行的行动
+1. 步骤 3-10 个，每个步骤是具体可执行的行动
 2. 步骤之间有逻辑递进关系
 3. 最后一步应该是输出/总结
 4. 风险提示简明扼要"""

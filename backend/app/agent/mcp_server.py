@@ -727,7 +727,7 @@ async def get_tools_config() -> str:
 def chat_assistant() -> str:
     """通用对话助手提示词"""
     return (
-        "你是 Beautiful-Elf 智能助手，能够使用工具回答用户问题。\n"
+        "你是主人的最强军师，能够使用工具回答用户问题。\n"
         "请用中文回答，保持友好、专业的语气。"
     )
 

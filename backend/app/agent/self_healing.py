@@ -1,8 +1,5 @@
 """Self-Healing Agent 模块 — Reflexion 模式实现
 
-基于论文《Reflexion: Language Agents with Verbal Reinforcement Learning》
-结合 2026 年行业最佳实践。
-
 核心闭环：
   失败 → 归因(错误类型/触发条件) → 结构化反思 → 存入记忆 → 下轮注入 → 成功
 
@@ -134,7 +131,7 @@ class FailureAnalyzer:
             return Reflection(
                 failure_type=FailureType.TOOL_ERROR,
                 trigger_condition=f"子任务「{subtask_title}」工具调用失败",
-                what_not_to_do="不要在工具失败后直接输出'抱歉'，应该尝试降级策略",
+                what_not_to_do="不要在工具失败后直接输出'抱歉'，应该尝试直接回答或者降级策略",
                 suggested_strategy="工具不可用时，基于已有知识直接回答，并注明降级",
                 confidence=0.8, scope_tags=["guardrail", "tool_failure"], ttl_seconds=1800,
                 subtask_id=subtask_id, subtask_title=subtask_title,

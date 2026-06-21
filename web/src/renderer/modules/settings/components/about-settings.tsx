@@ -38,7 +38,7 @@ export function AboutSettings() {
         <Tag color="green">React 19</Tag>
       </div>
       <Text type="secondary" style={{ display: 'block', marginBottom: 20 }}>
-        你的 AI 桌面助手
+        你的数字好朋友
       </Text>
       <Space>
         <Button

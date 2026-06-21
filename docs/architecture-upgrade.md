@@ -771,7 +771,7 @@ def _make_llm_caller(llm_with_tools, context_manager):
         t0 = time.time()
 
         # 拼装系统提示
-        system_prompt = "你是一个智能助手，能够使用工具回答用户问题。"
+        system_prompt = "你是主人知识最全面的军师，能够使用工具回答用户问题。"
         if state.get("context"):
             system_prompt += f"\n\n{state['context']}"
 

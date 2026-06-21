@@ -202,7 +202,7 @@ export const MessageList: React.FC<MessageListProps> = ({
       <div className={styles.emptyState}>
         <div className={styles.emptyIcon}>💬</div>
         <div className={styles.emptyText}>开始对话吧</div>
-        <div className={styles.emptySubtext}>输入你的问题，AI 助手会为你解答</div>
+        <div className={styles.emptySubtext}>输入你的问题，寻找你的答案</div>
       </div>
     )
   }

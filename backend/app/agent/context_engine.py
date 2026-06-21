@@ -233,14 +233,14 @@ class ContextEngine:
             base = self._soul_prompt_cache
         else:
             base = (
-                "你是 Beautiful-Elf 智能助手，擅长分析问题、使用工具、给出高质量回答。\n"
+                "你是主人的军师，擅长分析问题、使用工具、给出高质量回答。\n"
                 "请用中文回答，保持友好、专业的语气。"
             )
 
-        # ── P0: ReAct + CoT 思考框架（对标 CrewAI / AutoGen 最佳实践）──
+        # ── P0: ReAct + CoT 思考框架 ──
         base += (
             "\n\n## 思考方式\n"
-            "回答前，请按以下步骤思考（ReAct 模式）：\n\n"
+            "回答前，请按以下步骤思考：\n\n"
             "**Thought**：分析用户的真实意图，判断需要什么信息或工具\n"
             "**Action**：如果需要工具，选择最合适的工具并调用；如果不需要，直接进入 Answer\n"
             "**Observation**：检查工具返回的结果是否正确、完整\n"
@@ -253,7 +253,7 @@ class ContextEngine:
             "- 长任务分步骤执行，每步完成后汇报进展\n"
         )
 
-        # ── P0: 深度推理框架（对标 Reflexion + Reasoning）──
+        # ── P0: 深度推理框架 ──
         base += (
             "\n\n## 深度推理框架\n"
             "对于复杂问题，请在回答前先完成以下思考：\n\n"
@@ -264,14 +264,14 @@ class ContextEngine:
             "将以上思考作为内部推理过程，然后给出最终回答。\n"
         )
 
-        # ── P0: 自评机制（对标 MetaGPT QAEngineer + LLM-as-Judge）──
+        # ── P0: 自评机制 ──
         base += (
             "\n\n## 自评清单（回答前自查）\n"
             "生成最终回答前，请按以下维度自查：\n\n"
             "1. **完整性**：是否覆盖了用户问题的所有方面？有无遗漏？\n"
             "2. **准确性**：信息是否准确？是否有依据支撑？有无编造？\n"
             "3. **可用性**：回答是否可直接使用？建议是否可操作？\n\n"
-            "如果自查发现明显不足，请补充后再输出最终回答。\n"
+            "如果自查发现明显不足，请继续补充最终回答。\n"
         )
 
         # ── P0: Grounding 指令（幻觉消除 — 知识 grounding）──
@@ -414,7 +414,7 @@ class ContextEngine:
 
     # ── Context 压缩（LLM 驱动）─────────────────────────
 
-    async def compress_context(self, text: str, target_chars: int = 2000) -> str:
+    async def compress_context(self, text: str, target_chars: int = 5000) -> str:
         """用 LLM 将长文本压缩到目标长度，保留核心信息
 
         v2.3: 优先使用 LlamaIndex SentenceSplitter 分块 + LLM 摘要
@@ -437,7 +437,7 @@ class ContextEngine:
 
             # 如果文本很长，先分块再压缩（避免超出 LLM context window）
             chunk_for_llm = text
-            if len(text) > 8000:
+            if len(text) > 10000:
                 try:
                     from llama_index.core.node_parser import SentenceSplitter
                     splitter = SentenceSplitter(chunk_size=4000, chunk_overlap=200)

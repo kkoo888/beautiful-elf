@@ -1,16 +1,4 @@
-"""Agent 引擎 — LangGraph StateGraph 驱动（v4.0 重构版）
-
-v4.0 重构清单:
-  1. interrupt/resume 正式启用（持久化 checkpointer + resume API 支持）
-  2. LLM-as-Judge 评估器（替代纯规则评估）
-  3. 熔断器（CircuitBreaker）防止级联故障
-  4. 工具并行执行（无依赖工具 asyncio.gather）
-  5. Context 压缩策略（LLM 驱动的智能压缩）
-  6. RAG Query Rewriting（检索前改写口语化查询）
-  7. 记忆摘要优化（结构化标签 + 重要性评分）
-  8. Streaming 输出钩子预留
-  9. Error Contract 三级分类
-  10. 全链路可观测 + trace 回放
+"""Agent 引擎 — LangGraph StateGraph 驱动
 """
 import os
 

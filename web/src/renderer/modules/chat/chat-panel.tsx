@@ -57,8 +57,7 @@ export default function ChatPanel() {
   return (
     <div className={styles.layout}>
       <PageHeader
-        title="💬 对话"
-        description="与 AI 助手对话"
+        title="(❁´◡`❁)聊天"
         extra={
           <div style={{ display: 'flex', gap: 4 }}>
             <Tooltip title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>

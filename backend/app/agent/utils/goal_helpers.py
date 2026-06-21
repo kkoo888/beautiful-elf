@@ -212,11 +212,11 @@ def _build_goal_progress_text(goal_subtasks: list) -> str:
         for t in failed:
             lines.append(f"  ❌ #{t['id']} {t['title']}")
     if in_progress:
-        lines.append("### 🔄 执行中")
+        lines.append("### (°ー°〃) 执行中")
         for t in in_progress:
             lines.append(f"  🔄 #{t['id']} {t['title']}")
     if pending:
-        lines.append("### ⏳ 待执行")
+        lines.append("### (ノω<。)ノ))☆.。 待执行")
         for t in pending:
             deps = t.get('dependencies', [])
             dep_str = f" (依赖: {','.join(str(d) for d in deps)})" if deps else ""

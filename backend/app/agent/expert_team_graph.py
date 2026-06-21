@@ -241,9 +241,10 @@ async def pm_analyze(state: ExpertTeamState) -> dict:
         "- 每个子任务必须有明确的交付物描述\n"
         "- 优先分配给最匹配的专家（按专长匹配）\n"
         "- 可并行的任务分配给不同专家同时执行\n"
-        "- 子任务数量控制在 2-6 个，避免过度拆解\n\n"
+        "- 子任务数量控制在 2-10 个，避免过度拆解\n\n"
         "## 输出要求\n"
-        "严格按 JSON 格式输出分配计划。"
+        "严格按 JSON 格式输出分配计划。\n"
+        "- 通知专家开始执行任务"
     )
 
     # 返工反馈注入
@@ -457,8 +458,7 @@ async def expert_execute(state: ExpertTeamState) -> dict:
                 + "\n".join(teammates)
                 + "\n\n如果你认为某个子任务更适合其他专家处理，"
                 "请在回答末尾用以下格式标注委派请求：\n"
-                "`[DELEGATE] expert_id=<ID> subtask=<任务描述>`\n"
-                "不要委派核心分析任务，只委派辅助性工作。"
+                "`[DELEGATE] expert_id=<ID> subtask=<任务描述>`"
             )
 
     expert_prompt = f"""{expert_system}
@@ -477,6 +477,7 @@ async def expert_execute(state: ExpertTeamState) -> dict:
 2. **关键要素**：从你的专业角度，需要关注哪些关键点？
 3. **深度分析**：基于你的专业知识，给出详细分析
 4. **结论建议**：给出明确的结论和可操作的建议
+4. **实施方案**：按可操作方案严格执行任务
 
 ## 输出要求
 - 结构清晰，使用标题和要点列表
@@ -911,7 +912,7 @@ async def pm_report(state: ExpertTeamState) -> dict:
         "3. **共识与分歧**（哪些观点一致？哪些存在分歧？分歧的原因是什么？）\n"
         "4. **关键建议**（可操作的具体建议，按优先级排序）\n"
         "5. **风险提示**（需要注意的不确定性和风险）\n"
-        "6. **执行路线图**（如果需要落地，推荐的步骤和顺序）"
+        "6. **执行路线图**（如果需要落地，推荐的步骤和顺序并开始委托对应专家执行）"
     )
 
     expert_results = state.get("expert_results", [])

@@ -255,9 +255,9 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
                     logger.info(f"[context_builder] 记忆元数据: count={result.memory_count} avg_score={avg_score:.3f}")
             except Exception as e:
                 logger.warning(f"[context_engine] 组装失败，降级为简单提示: {e}")
-                system_prompt = "你是一个智能助手，能够使用工具回答用户问题。请用中文回答。"
+                system_prompt = "你是主人知识最全面的军师，能够使用工具回答用户问题。请用中文回答。"
         else:
-            system_prompt = "你是一个智能助手，能够使用工具回答用户问题。请用中文回答。"
+            system_prompt = "你是主人知识最全面的军师，能够使用工具回答用户问题。请用中文回答。"
             if memory_manager and query:
                 try:
                     memory_context = await memory_manager.search(query=query, user_id=state.get("user_id", 0), limit=5)
@@ -336,7 +336,7 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
         writer({"step": "llm", "status": "calling", "message": f"正在生成回答... (模型: {model_label}, 路由: {route_class}/{tier}, 思考: {thinking_mode})"})
 
         system_prompt = state.get("system_prompt") or state.get("context") or \
-            "你是一个智能助手，能够使用工具回答用户问题。请用中文回答。"
+            "你是主人知识最全面的军师，能够使用工具回答用户问题。请用中文回答。"
 
         # 注入路由提示
         if prompt_hint:
@@ -374,7 +374,8 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
 3. 最后一个步骤的结果应为最终答案
 4. 每个步骤必须是可通过一次工具调用完成的原子操作
 5. 每个步骤必须有明确的成功标准
-6. 子任务数量控制在 3-8 个
+6. 子任务数量控制在 3-10 个
+7. 制定完后就开始执行子任务
 
 ## 依赖规则
 - 如果任务 B 需要任务 A 的结果才能开始，设置 dependencies: [A的id]
@@ -491,6 +492,7 @@ Answer: 基于工具结果输出该子任务的成果
 3. **只输出当前任务结果** — 不要输出其他子任务的内容或预览
 4. **禁止承诺性回复** — 不要说「我来帮你查」「让我看看」，直接执行
 5. **完成后标记** — 输出: • [子任务描述] - [done] (100%)
+6. **完成后通知下一个** — 完成后需要通知下一个子任务开始执行
 
 {eval_feedback_text}
 {healing_context}"""

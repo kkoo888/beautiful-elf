@@ -24,7 +24,7 @@ export function createTray(mainWindow: BrowserWindow | null): void {
     },
   ])
 
-  tray.setToolTip('Beautiful-Elf 智能桌面助手')
+  tray.setToolTip('数字的好朋友')
   tray.setContextMenu(contextMenu)
 
   tray.on('click', () => {
