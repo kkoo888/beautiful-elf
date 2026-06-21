@@ -162,32 +162,30 @@ class ChatLLMProvider(BaseChatModel):
         return new
 
     def with_structured_output(self, schema: Any, method: str = "json_schema", **kwargs: Any) -> Any:
-        """结构化输出 — 降级链: function_calling → json_mode
+        """结构化输出 — 对标 langchain-openai 官方实现
 
-        对标 LangChain with_structured_output() 标准接口。
-        ChatLLMProvider 通过 function_calling 实现结构化输出（兼容性最好）。
-
-        Args:
-            schema: Pydantic 模型 / TypedDict / JSON Schema
-            method: "json_schema" | "function_calling" | "json_mode"（自动降级）
+        官方源码 (langchain-openai 1.3.2):
+          tool_name = convert_to_openai_tool(schema)["function"]["name"]
+          llm = self.bind_tools([schema], tool_choice=tool_name, parallel_tool_calls=False)
+          output_parser = PydanticToolsParser / JsonOutputKeyToolsParser
         """
-        from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
         from langchain_core.runnables import RunnableLambda
+        from langchain_core.utils.function_calling import convert_to_openai_tool
         import json
 
-        # 获取 JSON schema
-        if hasattr(schema, "model_json_schema"):
-            json_schema = schema.model_json_schema()
-        elif hasattr(schema, "schema"):
-            json_schema = schema.schema()
-        else:
-            json_schema = schema
+        # 官方方式: convert_to_openai_tool 转换 schema
+        tool_def = convert_to_openai_tool(schema)
+        tool_name = tool_def["function"]["name"]
 
-        schema_name = getattr(schema, "__name__", "structured_output")
+        # 官方方式: tool_choice = 字符串（不是 dict！）
+        llm_with_tools = self.bind_tools(
+            [schema],
+            tool_choice=tool_name,
+            parallel_tool_calls=False,
+        )
 
         def _parse_response(response: Any) -> Any:
-            """从 LLM 响应中解析结构化数据"""
-            # 从 tool_calls 解析（function_calling 模式）
+            """从 tool_calls 解析（官方: PydanticToolsParser 逻辑）"""
             if hasattr(response, "tool_calls") and response.tool_calls:
                 for tc in response.tool_calls:
                     args = tc.get("args", {})
@@ -196,7 +194,7 @@ class ChatLLMProvider(BaseChatModel):
                             return schema(**args)
                         except Exception:
                             pass
-            # 从 content 解析（json_mode 模式）
+            # fallback: content JSON 解析
             content = ""
             if hasattr(response, "content"):
                 content = response.content if isinstance(response.content, str) else str(response.content)
@@ -210,30 +208,15 @@ class ChatLLMProvider(BaseChatModel):
                 pass
             return None
 
-        async def _invoke_with_schema(messages: list) -> Any:
-            """尝试两种模式，返回第一个成功的"""
+        async def _async_invoke(messages):
+            """异步调用"""
             msgs = messages if isinstance(messages, list) else [messages]
-
-            # 模式 1: function_calling（把 schema 包装成 tool，强制调用）
-            try:
-                tool_def = {
-                    "type": "function",
-                    "function": {
-                        "name": schema_name,
-                        "description": f"Return structured output for {schema_name}",
-                        "parameters": json_schema,
-                    }
-                }
-                llm = self.bind_tools([tool_def], tool_choice={"type": "function", "function": {"name": schema_name}})
-                resp = await llm.ainvoke(msgs)
-                result = _parse_response(resp)
-                if result:
-                    return result
-            except Exception:
-                pass
-
-            # 模式 2: json_mode（prompt 要求返回 JSON）
-            json_instruction = f"\n\n请严格按以下 JSON schema 返回数据，只输出 JSON，不要添加其他文字:\n{json.dumps(json_schema, ensure_ascii=False)}"
+            resp = await llm_with_tools.ainvoke(msgs)
+            result = _parse_response(resp)
+            if result:
+                return result
+            # fallback: json_mode
+            json_instruction = f"\n\n请严格按以下 JSON schema 返回数据，只输出 JSON:\n{json.dumps(tool_def['function']['parameters'], ensure_ascii=False)}"
             prompt_msgs = list(msgs)
             if prompt_msgs:
                 last = prompt_msgs[-1]
@@ -245,24 +228,21 @@ class ChatLLMProvider(BaseChatModel):
             return _parse_response(resp)
 
         def _sync_invoke(messages):
-            """同步调用 — 在 event loop 中运行异步函数"""
+            """同步调用"""
             import asyncio
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = None
-            coro = _invoke_with_schema(messages if isinstance(messages, list) else [messages])
+            coro = _async_invoke(messages if isinstance(messages, list) else [messages])
             if loop and loop.is_running():
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     return pool.submit(asyncio.run, coro).result(timeout=60)
             return asyncio.run(coro)
 
-        async def _async_invoke(messages):
-            """异步调用"""
-            return await _invoke_with_schema(messages if isinstance(messages, list) else [messages])
-
         return RunnableLambda(func=_sync_invoke, afunc=_async_invoke)
+
 
     @property
     def _llm_type(self) -> str:
