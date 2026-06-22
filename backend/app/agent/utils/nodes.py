@@ -767,6 +767,14 @@ def _make_tool_executor(tool_registry, llm=None):
 
         snapshot = tool_registry.create_snapshot()
         tool_calls = state.get("tool_calls", [])
+        goal_task_id = state.get("goal_current_task_id", 0)
+
+        # 如果在 Goal 模式中，通知前端当前工具属于哪个子任务
+        if goal_task_id and tool_calls:
+            tool_names = [tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "") for tc in tool_calls]
+            writer({"step": "goal_tools", "status": "executing",
+                    "message": f"子任务 #{goal_task_id} 正在调用工具",
+                    "taskId": goal_task_id, "tools": tool_names})
 
         # ── 1. 分离：需要审批的 vs 可直接执行的 ──────────
         needs_approval = False

@@ -145,6 +145,7 @@ class AgentState(TypedDict, total=False):
     goal_subtasks: list          # 目标拆分子任务 [{id, title, description, status: "pending"|"in_progress"|"done"|"failed"}]
     goal_working_memory: list    # 子任务执行结果累积 [{task_id, title, result_summary, tools_used}]
     goal_blocked_reason: str     # blocked 状态的原因（等待用户输入/暂时性错误等）
+    goal_current_task_id: int    # 当前正在执行的子任务 ID（用于关联 tool 事件）
 
 
 # ── Runtime Context（P1: context_schema）────────────────────

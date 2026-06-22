@@ -159,15 +159,18 @@ def _make_goal_status_updater(llm=None):
                         "message": f"依赖关系存在问题: {'; '.join(dep_issues[:3])}"})
 
             parallel_tasks = _get_parallel_ready_tasks(goal_subtasks)
+            _first_task_id = 0
             if parallel_tasks:
                 for task in parallel_tasks:
                     goal_subtasks = _update_subtask_status(goal_subtasks, task["id"], "in_progress", 0)
+                    if not _first_task_id:
+                        _first_task_id = task["id"]
                     writer({"step": "goal_task_start", "status": "executing",
                             "message": f"规划完成，开始执行: {task['title']}",
                             "taskId": task["id"], "taskTitle": task["title"]})
             writer({"step": "goal_subtasks", "status": "done",
                     "message": "规划阶段完成，子任务已激活", "subtasks": goal_subtasks})
-            return {"goal_subtasks": goal_subtasks}
+            return {"goal_subtasks": goal_subtasks, "goal_current_task_id": _first_task_id}
 
         final_answer = state.get("final_answer", "")
         answer_text = _content_to_str(final_answer) if final_answer else ""
@@ -282,9 +285,12 @@ def _make_goal_status_updater(llm=None):
 
         # 批量标记可并行的子任务
         parallel_tasks = _get_parallel_ready_tasks(goal_subtasks)
+        _next_task_id = 0
         if parallel_tasks:
             for task in parallel_tasks:
                 goal_subtasks = _update_subtask_status(goal_subtasks, task["id"], "in_progress", 0)
+                if not _next_task_id:
+                    _next_task_id = task["id"]
                 writer({"step": "goal_task_start", "status": "executing",
                         "message": f"开始执行: {task['title']}",
                         "taskId": task["id"], "taskTitle": task["title"]})
@@ -295,7 +301,7 @@ def _make_goal_status_updater(llm=None):
         # ── 合并 Working Memory ──
         goal_working_memory.extend(new_wm_entries)
 
-        return {"goal_subtasks": goal_subtasks, "goal_working_memory": goal_working_memory}
+        return {"goal_subtasks": goal_subtasks, "goal_working_memory": goal_working_memory, "goal_current_task_id": _next_task_id}
 
     return goal_status_updater_node
 
