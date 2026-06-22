@@ -331,10 +331,24 @@ export function useChat(): UseChatReturn {
             setToolProgress((prev) =>
               prev.map((t) => t.tool === tool && t.status === 'running' ? { ...t, status: 'done', outputPreview } : t)
             )
+            // 同步更新 Goal 子任务的工具状态
+            setGoalTasks((prev) =>
+              prev.map((t) => {
+                if (!t.tools?.some((et) => et.tool === tool && et.status === 'running')) return t
+                return { ...t, tools: t.tools.map((et) => et.tool === tool ? { ...et, status: 'done' as const, outputPreview } : et) }
+              })
+            )
           },
           onToolError: (tool, outputPreview) => {
             setToolProgress((prev) =>
               prev.map((t) => t.tool === tool && t.status === 'running' ? { ...t, status: 'error', outputPreview } : t)
+            )
+            // 同步更新 Goal 子任务的工具状态
+            setGoalTasks((prev) =>
+              prev.map((t) => {
+                if (!t.tools?.some((et) => et.tool === tool && et.status === 'running')) return t
+                return { ...t, tools: t.tools.map((et) => et.tool === tool ? { ...et, status: 'error' as const, outputPreview } : et) }
+              })
             )
           },
           onApproval: (req) => {
@@ -363,6 +377,21 @@ export function useChat(): UseChatReturn {
             // 处理子任务更新事件
             if (progress.subtasks && Array.isArray(progress.subtasks)) {
               setGoalTasks(progress.subtasks as GoalTask[])
+            }
+            // 处理子任务工具关联事件（goal_tools）
+            if (progress.step === 'goal_tools' && progress.taskId && progress.tools) {
+              const taskId = progress.taskId as number
+              const toolNames = progress.tools as string[]
+              setGoalTasks((prev) =>
+                prev.map((t) => {
+                  if (t.id !== taskId) return t
+                  const existingTools = t.tools || []
+                  const newTools = toolNames
+                    .filter((name) => !existingTools.some((et) => et.tool === name && et.status === 'running'))
+                    .map((name) => ({ tool: name, status: 'running' as const, startTime: Date.now() }))
+                  return { ...t, tools: [...existingTools, ...newTools] }
+                })
+              )
             }
           },
         }

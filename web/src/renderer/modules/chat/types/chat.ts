@@ -98,12 +98,14 @@ export interface GoalTask {
   title: string
   /** 子任务描述 */
   description?: string
-  /** 状态: pending/in_progress/done/failed */
-  status: 'pending' | 'in_progress' | 'done' | 'failed'
+  /** 状态: pending/in_progress/done/failed/blocked */
+  status: 'pending' | 'in_progress' | 'done' | 'failed' | 'blocked'
   /** 进度百分比 0-100 */
   progress?: number
   /** 依赖的子任务 ID 列表 */
   dependencies?: number[]
+  /** 关联的工具调用（运行时填充） */
+  tools?: ToolProgress[]
 }
 
 /** 审批请求 */
