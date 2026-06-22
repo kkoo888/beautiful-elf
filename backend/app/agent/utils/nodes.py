@@ -635,7 +635,7 @@ Answer: 基于工具结果输出该子任务的成果
         has_tools = bool(response.tool_calls)
 
         # ── 无工具调用时重试（前沿方案：No-tool-call detector）──
-        # 意图明确需要工具 或 Goal 模式执行阶段 → 重试
+        # 意图明确需要工具 或 Goal 模式执行阶段 或 LLM 嘴上说要搜索但没调工具 → 重试
         # 但如果已因工具失败降级为 auto → 不重试，允许 LLM 自行回答
         intent = state.get("intent") or {}
         intent_needs_tools = bool(intent.get("tool_names"))
@@ -651,7 +651,17 @@ Answer: 基于工具结果输出该子任务的成果
             if _r != "tool":
                 break
 
-        if not has_tools and not _tool_degraded and (intent_needs_tools or (state.get("goal_mode") and state.get("goal_iterations", 0) > 0)):
+        # LLM 回答涉及搜索/查询但没调工具 → 视为需要重试
+        _response_text = _content_to_str(getattr(response, "content", "")) if response.content else ""
+        _mentions_search = any(kw in _response_text for kw in ["搜索", "查询", "查找", "检索", "搜一下", "帮你找", "帮你查", "让我查", "让我搜"])
+
+        _needs_retry = (
+            intent_needs_tools
+            or (state.get("goal_mode") and state.get("goal_iterations", 0) > 0)
+            or (_mentions_search and selected_tool_names)
+        )
+
+        if not has_tools and not _tool_degraded and _needs_retry:
             if selected_tool_names and tool_registry:
                 logger.warning("[llm_call] 应调用工具但未调用，强制重试")
                 writer({"step": "llm", "status": "retrying", "message": "未调用工具，强制重试..."})
