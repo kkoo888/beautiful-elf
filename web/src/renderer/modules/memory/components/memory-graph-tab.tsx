@@ -1,16 +1,12 @@
-/** 记忆关系图 — 全面进化版，借鉴 Dify 核心模式
+/** 实体关系图 — 显示实体节点与实体间的关系
 
-进化清单：
-  1. 撤销/重做（Ctrl+Z / Ctrl+Y）
-  2. 布局持久化（localStorage，刷新不丢）
-  3. 节点结构增强（Header+Body+desc）
-  4. 关系链接修复（任意节点间可连线）
-  5. Handle 快速添加（点击 Handle 弹出选项）
-  6. 自动布局（一键整理）
-  7. 快捷键支持
-  8. 连线渐变色
-  9. 节点 Palette 侧栏
-  10. 搜索 + 分类筛选
+功能：
+  - 实体节点（按类型着色：person/tech/project/tool/concept/org）
+  - 关系连线（渐变色 + 关系类型标签）
+  - 搜索 + 类型筛选
+  - 撤销/重做、自动布局、布局持久化
+  - 右键菜单、详情抽屉
+  - 拖拽添加节点
 */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -31,23 +27,22 @@ import ReactFlow, {
   type OnConnect,
   type OnNodeContextMenu,
   type OnEdgeContextMenu,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getBezierPath,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { Spin, Empty, App, Tooltip, Button, Space } from 'antd'
 import {
-  FileTextOutlined, BulbOutlined,
   UndoOutlined, RedoOutlined,
   AppstoreOutlined, SortAscendingOutlined,
   SaveOutlined, CompressOutlined,
-  DragOutlined,
 } from '@ant-design/icons'
 import {
-  listObservations,
-  fetchDailyLogs,
-  createObservationSource,
-  deleteObservationSource,
-} from '../services/memory-api'
-import type { Observation, MarkdownMemoryEntry } from '../services/memory-api'
+  getEntityGraph,
+  createRelation,
+  deleteRelation,
+} from '../services/memory-entity-api'
 import { useGraphStore } from './graph-store'
 import { NodeContextMenu, EdgeContextMenu } from './graph-context-menu'
 import { NodeDetailDrawer } from './graph-detail-drawer'
@@ -57,140 +52,128 @@ import { autoLayoutAndFit } from './graph-layout'
 
 // ── 样式常量 ──────────────────────────────────────────────
 
-const COLORS = {
-  primary: '#E8913A',
-  info: '#3BA0E8',
-  dailyBg: '#E6F4FF',
-  dailyBorder: '#91CAFF',
-  dailySelected: '#1890ff',
-  obsBg: '#FFF7ED',
-  obsBorder: '#FDBA74',
-  obsSelected: '#E8913A',
-  edge: '#BFBFBF',
-  edgeActive: '#E8913A',
+const ENTITY_COLORS: Record<string, { bg: string; border: string; selected: string; text: string }> = {
+  person:  { bg: '#E6F4FF', border: '#91CAFF', selected: '#1890ff', text: '#1890ff' },
+  tech:    { bg: '#E6FFFB', border: '#87E8DE', selected: '#13C2C2', text: '#13C2C2' },
+  project: { bg: '#F9F0FF', border: '#D3ADF7', selected: '#722ED1', text: '#722ED1' },
+  tool:    { bg: '#F6FFED', border: '#B7EB8F', selected: '#52C41A', text: '#52C41A' },
+  concept: { bg: '#FFF7E6', border: '#FFD591', selected: '#FA8C16', text: '#FA8C16' },
+  org:     { bg: '#F0F5FF', border: '#ADC6FF', selected: '#2F54EB', text: '#2F54EB' },
+}
+const DEFAULT_COLOR = { bg: '#FAFAFA', border: '#D9D9D9', selected: '#8c8c8c', text: '#8c8c8c' }
+
+const ENTITY_TYPE_LABEL: Record<string, string> = {
+  person: '人物', tech: '技术', project: '项目',
+  tool: '工具', concept: '概念', org: '组织',
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-  decisions: '🔑',
-  pitfalls: '🐛',
-  preferences: '👤',
-  status: '📦',
+const ENTITY_TYPE_ICON: Record<string, string> = {
+  person: '👤', tech: '🛠', project: '📁',
+  tool: '🔧', concept: '💡', org: '🏢',
 }
 
-// ── 增强版节点组件（Header + Body + desc）──
+const RELATION_LABEL: Record<string, string> = {
+  uses: '使用', depends: '依赖', belongs: '属于',
+  creates: '创建', works_at: '就职于', related: '相关',
+  causes: '导致', enables: '使能', prevents: '阻止',
+}
 
-function DailyLogNode({ data, selected }: { data: any; selected?: boolean }) {
+// ── 实体节点组件 ──────────────────────────────────────────
+
+function EntityNode({ data, selected }: { data: any; selected?: boolean }) {
   const searchKeyword = useGraphStore(s => s.searchKeyword)
-  const dimmed = searchKeyword && !(data.title || '').toLowerCase().includes(searchKeyword.toLowerCase())
+  const entityTypeFilter = useGraphStore(s => s.entityTypeFilter)
+  const dimmedBySearch = searchKeyword && !(data.name || '').toLowerCase().includes(searchKeyword.toLowerCase())
+  const dimmedByType = entityTypeFilter !== 'all' && data.entityType !== entityTypeFilter
+  const dimmed = dimmedBySearch || dimmedByType
+
+  const colors = ENTITY_COLORS[data.entityType] || DEFAULT_COLOR
+  const icon = ENTITY_TYPE_ICON[data.entityType] || '📌'
+  const typeLabel = ENTITY_TYPE_LABEL[data.entityType] || data.entityType
 
   return (
     <div style={{
-      padding: 0, borderRadius: 6, overflow: 'hidden',
-      border: `1.5px solid ${selected ? COLORS.dailySelected : COLORS.dailyBorder}`,
-      background: selected ? '#f0f7ff' : '#fff',
-      opacity: dimmed ? 0.2 : 1,
+      padding: 0, borderRadius: 8, overflow: 'hidden',
+      border: `2px solid ${selected ? colors.selected : colors.border}`,
+      background: selected ? colors.bg : '#fff',
+      opacity: dimmed ? 0.15 : 1,
       transition: 'opacity 0.2s, border-color 0.15s, box-shadow 0.15s',
-      boxShadow: selected ? '0 0 0 2px rgba(24,144,255,0.12)' : 'none',
-      minWidth: 150, maxWidth: 200,
+      boxShadow: selected ? `0 0 0 3px ${colors.selected}22` : '0 1px 4px rgba(0,0,0,0.06)',
+      minWidth: 160, maxWidth: 220,
     }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '7px 10px', background: selected ? '#e6f0ff' : COLORS.dailyBg,
+        padding: '8px 12px', background: colors.bg,
       }}>
-        <FileTextOutlined style={{ color: COLORS.info, fontSize: 13 }} />
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#1a1a2e', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {data.title}
+        <span style={{ fontSize: 14 }}>{icon}</span>
+        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fff', color: colors.text, fontWeight: 500 }}>
+          {typeLabel}
         </span>
       </div>
       {/* Body */}
-      <div style={{ padding: '5px 10px 7px' }}>
-        <span style={{ color: '#8c8c8c', fontSize: 11 }}>{data.wordCount} 字</span>
+      <div style={{ padding: '8px 12px' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e', lineHeight: 1.4, wordBreak: 'break-all' }}>
+          {data.name}
+        </div>
+        {data.description && (
+          <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 4, lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+            {data.description}
+          </div>
+        )}
       </div>
-    </div>
-  )
-}
-
-function ObservationNode({ data, selected }: { data: any; selected?: boolean }) {
-  const searchKeyword = useGraphStore(s => s.searchKeyword)
-  const categoryFilter = useGraphStore(s => s.categoryFilter)
-  const dimmedBySearch = searchKeyword && !(data.content || '').toLowerCase().includes(searchKeyword.toLowerCase())
-  const dimmedByCategory = categoryFilter !== 'all' && data.category !== categoryFilter
-  const dimmed = dimmedBySearch || dimmedByCategory
-
-  const icon = CATEGORY_ICONS[data.category] || '📌'
-  const preview = data.content?.length > 40 ? data.content.slice(0, 40) + '...' : (data.content || '')
-  const catLabel = { decisions: '决策', pitfalls: '踩坑', preferences: '偏好', status: '状态' }[data.category] || ''
-
-  return (
-    <div style={{
-      padding: 0, borderRadius: 6, overflow: 'hidden',
-      border: `1.5px solid ${selected ? COLORS.obsSelected : COLORS.obsBorder}`,
-      background: selected ? '#fff8f0' : '#fff',
-      opacity: dimmed ? 0.2 : 1,
-      transition: 'opacity 0.2s, border-color 0.15s, box-shadow 0.15s',
-      boxShadow: selected ? '0 0 0 2px rgba(232,145,58,0.12)' : 'none',
-      minWidth: 150, maxWidth: 200,
-    }}>
-      {/* Header */}
+      {/* Footer */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 5,
-        padding: '7px 10px', background: selected ? '#fff0e0' : COLORS.obsBg,
+        padding: '4px 12px 6px', fontSize: 11, color: '#bfbfbf',
+        borderTop: '1px solid #f0f0f0',
       }}>
-        <span style={{ fontSize: 13 }}>{icon}</span>
-        <span style={{
-          fontSize: 10, padding: '1px 5px', borderRadius: 3,
-          background: '#fff', color: '#8c8c8c',
-        }}>{catLabel}</span>
+        提及 {data.mentionCount ?? 0} 次
       </div>
-      {/* Body */}
-      <div style={{ padding: '6px 10px' }}>
-        <div style={{ fontSize: 12, lineHeight: 1.5, color: '#1a1a2e', wordBreak: 'break-all' }}>
-          {preview.split('\n')[0]}
-        </div>
-      </div>
-      {/* desc */}
-      {data.freshness && (
-        <div style={{
-          padding: '3px 10px 5px',
-          fontSize: 11, color: '#bfbfbf',
-        }}>
-          {data.sources?.length || 0} 条来源
-        </div>
-      )}
     </div>
   )
 }
 
-const nodeTypes = {
-  dailyLog: DailyLogNode,
-  observation: ObservationNode,
-}
+const nodeTypes = { entity: EntityNode }
 
-// ── 渐变连线组件 ──
+// ── 带标签的渐变连线 ──────────────────────────────────────
 
-function GradientEdge({ id, sourceX, sourceY, targetX, targetY, style, markerEnd, data }: any) {
+function RelationEdge({ id, sourceX, sourceY, targetX, targetY, style, markerEnd, data, label }: any) {
+  const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY })
   const gradientId = `gradient-${id}`
+
   return (
     <>
       <defs>
         <linearGradient id={gradientId} x1={sourceX} y1={sourceY} x2={targetX} y2={targetY} gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor={COLORS.info} stopOpacity={0.6} />
-          <stop offset="100%" stopColor={COLORS.primary} stopOpacity={0.8} />
+          <stop offset="0%" stopColor="#3BA0E8" stopOpacity={0.7} />
+          <stop offset="100%" stopColor="#E8913A" stopOpacity={0.8} />
         </linearGradient>
       </defs>
-      <path
-        d={`M${sourceX},${sourceY} C${sourceX + 80},${sourceY} ${targetX - 80},${targetY} ${targetX},${targetY}`}
-        stroke={`url(#${gradientId})`}
-        strokeWidth={2.5}
-        fill="none"
-        markerEnd={markerEnd}
-      />
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={{ ...style, stroke: `url(#${gradientId})`, strokeWidth: 2 }} />
+      {label && (
+        <EdgeLabelRenderer>
+          <div style={{
+            position: 'absolute',
+            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+            pointerEvents: 'all',
+            fontSize: 10,
+            fontWeight: 500,
+            color: '#8c8c8c',
+            background: 'rgba(255,255,255,0.9)',
+            padding: '1px 6px',
+            borderRadius: 4,
+            border: '1px solid #f0f0f0',
+            whiteSpace: 'nowrap',
+          }}>
+            {label}
+          </div>
+        </EdgeLabelRenderer>
+      )}
     </>
   )
 }
 
-const edgeTypes = { gradient: GradientEdge }
+const edgeTypes = { relation: RelationEdge }
 
 // ── 主组件 ──────────────────────────────────────────────────
 
@@ -207,8 +190,7 @@ function MemoryGraphInner() {
   const reactflow = useReactFlow()
   const {
     loading, setLoading,
-    observations, setObservations,
-    dailyLogs, setDailyLogs,
+    setEntities, setRelations,
     setNodes: setStoreNodes, setEdges: setStoreEdges,
     selectNode, openContextMenu, openEdgeContextMenu,
     undo, redo, canUndo, canRedo, pushSnapshot,
@@ -249,109 +231,93 @@ function MemoryGraphInner() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [obsResult, logsResult] = await Promise.all([
-        listObservations({ pageSize: 100 }),
-        fetchDailyLogs(30),
-      ])
-      setObservations(obsResult.items)
-      setDailyLogs(logsResult)
-      buildGraph(obsResult.items, logsResult)
-    } catch {} finally {
+      const graphData = await getEntityGraph()
+      setEntities(graphData.nodes.map(n => ({
+        id: parseInt(n.id.replace('entity-', '')),
+        name: n.name,
+        entityType: n.type as any,
+        description: n.description,
+        aliases: '',
+        mentionCount: n.mentionCount,
+        lastMentionedAt: '',
+      })))
+      setRelations(graphData.edges.map(e => ({
+        id: parseInt(e.id.replace('rel-', '')),
+        sourceEntityId: parseInt(e.source.replace('entity-', '')),
+        targetEntityId: parseInt(e.target.replace('entity-', '')),
+        relationType: e.type as any,
+        weight: e.weight,
+        evidence: '',
+        sourceObsId: 0,
+      })))
+      buildGraph(graphData)
+    } catch { msg.error('加载实体图失败') } finally {
       setLoading(false)
     }
   }, [])
 
-  const buildGraph = useCallback((obs: Observation[], logs: MarkdownMemoryEntry[]) => {
-    const newNodes: Node[] = []
-    const newEdges: Edge[] = []
+  const buildGraph = useCallback((graphData: { nodes: any[]; edges: any[] }) => {
+    const newNodes: Node[] = graphData.nodes.map((n, i) => ({
+      id: n.id,
+      type: 'entity',
+      position: { x: (i % 4) * 250 + 50, y: Math.floor(i / 4) * 180 + 50 },
+      data: {
+        name: n.name,
+        entityType: n.type,
+        description: n.description,
+        mentionCount: n.mentionCount,
+        entityId: parseInt(n.id.replace('entity-', '')),
+      },
+    }))
 
-    logs.forEach((log, i) => {
-      newNodes.push({
-        id: `log-${log.id}`,
-        type: 'dailyLog',
-        position: { x: 50, y: i * 100 + 50 },
-        data: { title: log.title, wordCount: log.wordCount, memoryId: log.id },
-      })
-    })
-
-    obs.forEach((ob, i) => {
-      newNodes.push({
-        id: `obs-${ob.id}`,
-        type: 'observation',
-        position: { x: 450, y: i * 120 + 50 },
-        data: { content: ob.content, category: ob.category, freshness: ob.freshness, obsId: ob.id, sources: ob.sources },
-      })
-
-      if (ob.sources) {
-        ob.sources.forEach(src => {
-          if (logs.some(l => l.id === String(src.logId))) {
-            newEdges.push({
-              id: `edge-${src.sourceId}`,
-              source: `log-${src.logId}`,
-              target: `obs-${ob.id}`,
-              type: 'gradient',
-              animated: false,
-              markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.primary },
-              data: { sourceId: src.sourceId },
-            })
-          }
-        })
-      }
-    })
+    const newEdges: Edge[] = graphData.edges.map(e => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      type: 'relation',
+      animated: false,
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#E8913A' },
+      label: RELATION_LABEL[e.type] || e.type,
+      data: { relationType: e.type, weight: e.weight, relationId: parseInt(e.id.replace('rel-', '')) },
+    }))
 
     setNodes(newNodes)
     setEdges(newEdges)
   }, [])
 
-  // ── 连线（支持任意节点间，修复关系链接）──
+  // ── 连线（创建实体间关系）──
   const onConnect: OnConnect = useCallback(async (connection: Connection) => {
     if (!connection.source || !connection.target) return
     if (connection.source === connection.target) return
 
     pushSnapshot()
 
-    const sourceIsLog = connection.source.startsWith('log-')
-    const targetIsObs = connection.target.startsWith('obs-')
+    const sourceEntityId = parseInt(connection.source.replace('entity-', ''))
+    const targetEntityId = parseInt(connection.target.replace('entity-', ''))
+    if (isNaN(sourceEntityId) || isNaN(targetEntityId)) return
 
-    // 日志 → 提炼记忆：创建后端关联
-    if (sourceIsLog && targetIsObs) {
-      const logId = parseInt(connection.source.replace('log-', ''))
-      const obsId = parseInt(connection.target.replace('obs-', ''))
-
-      const tempEdgeId = `edge-temp-${Date.now()}`
-      setEdges(eds => addEdge({
-        ...connection,
-        id: tempEdgeId,
-        type: 'gradient',
-        animated: true,
-        markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.edgeActive },
-      }, eds))
-
-      try {
-        const result = await createObservationSource(obsId, logId)
-        setEdges(eds => eds.map(e =>
-          e.id === tempEdgeId
-            ? { ...e, id: `edge-${result.id}`, animated: false, data: { sourceId: result.id } }
-            : e
-        ))
-        msg.success('关联创建成功')
-      } catch {
-        setEdges(eds => eds.filter(e => e.id !== tempEdgeId))
-        msg.error('关联创建失败')
-      }
-      return
-    }
-
-    // 其他方向（提炼→提炼、提炼→日志）：纯前端连线
+    const tempEdgeId = `edge-temp-${Date.now()}`
     setEdges(eds => addEdge({
       ...connection,
-      id: `edge-local-${Date.now()}`,
-      type: 'gradient',
-      animated: false,
-      markerEnd: { type: MarkerType.ArrowClosed, color: COLORS.primary },
-      style: { strokeDasharray: '5,5' },
+      id: tempEdgeId,
+      type: 'relation',
+      animated: true,
+      label: '相关',
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#E8913A' },
     }, eds))
-    msg.success('关系已建立')
+
+    try {
+      const result = await createRelation({ sourceEntityId, targetEntityId, relationType: 'related' })
+      setEdges(eds => eds.map(e =>
+        e.id === tempEdgeId
+          ? { ...e, id: `rel-${result.id}`, animated: false, label: RELATION_LABEL[result.relationType] || result.relationType, data: { relationType: result.relationType, weight: result.weight, relationId: result.id } }
+          : e
+      ))
+      msg.success('关系创建成功')
+    } catch {
+      setEdges(eds => eds.filter(e => e.id !== tempEdgeId))
+      msg.error('关系创建失败')
+    }
   }, [])
 
   // ── 节点点击 ──
@@ -372,11 +338,11 @@ function MemoryGraphInner() {
 
   // ── 边点击删除 ──
   const onEdgeClick = useCallback(async (_: React.MouseEvent, edge: Edge) => {
-    const sourceId = edge.data?.sourceId
+    const relationId = edge.data?.relationId
     pushSnapshot()
     setEdges(eds => eds.filter(e => e.id !== edge.id))
-    if (sourceId) {
-      try { await deleteObservationSource(sourceId) } catch {}
+    if (relationId) {
+      try { await deleteRelation(relationId) } catch {}
     }
   }, [])
 
@@ -395,12 +361,10 @@ function MemoryGraphInner() {
     pushSnapshot()
 
     const newNode: Node = {
-      id: `${type}-${Date.now()}`,
-      type,
+      id: `entity-new-${Date.now()}`,
+      type: 'entity',
       position,
-      data: type === 'observation'
-        ? { content: '新提炼记忆（点击编辑）', category: 'decisions', freshness: 'new', obsId: 0, sources: [] }
-        : { title: `日志 ${new Date().toLocaleDateString('zh-CN')}`, wordCount: 0, memoryId: '' },
+      data: { name: `新${ENTITY_TYPE_LABEL[type] || '实体'}`, entityType: type, description: '', mentionCount: 0, entityId: 0 },
     }
 
     setNodes([...nodes, newNode])
@@ -415,17 +379,14 @@ function MemoryGraphInner() {
   // ── 快捷键 ──
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+Z 撤销
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
       }
-      // Ctrl+Y 或 Ctrl+Shift+Z 重做
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
         e.preventDefault()
         redo()
       }
-      // Delete 删除选中节点
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const { selectedNodeId, nodes: storeNodes, edges: storeEdges } = useGraphStore.getState()
         if (selectedNodeId && !document.querySelector('input:focus, textarea:focus')) {
@@ -452,7 +413,7 @@ function MemoryGraphInner() {
         <Tooltip title="重做 (Ctrl+Y)"><Button size="small" type="text" icon={<RedoOutlined />} disabled={!canRedo()} onClick={redo} /></Tooltip>
         <Tooltip title="自动布局"><Button size="small" type="text" icon={<SortAscendingOutlined />} onClick={handleAutoLayout} /></Tooltip>
         <Tooltip title="适应视图"><Button size="small" type="text" icon={<CompressOutlined />} onClick={() => reactflow.fitView({ padding: 0.15, duration: 300 })} /></Tooltip>
-        <Tooltip title="节点面板"><Button size="small" type="text" icon={<AppstoreOutlined />} onClick={togglePalette} style={paletteOpen ? { color: COLORS.primary, background: COLORS.obsBg } : {}} /></Tooltip>
+        <Tooltip title="节点面板"><Button size="small" type="text" icon={<AppstoreOutlined />} onClick={togglePalette} style={paletteOpen ? { color: '#E8913A', background: '#FFF7ED' } : {}} /></Tooltip>
         <Tooltip title="保存布局"><Button size="small" type="text" icon={<SaveOutlined />} onClick={() => { saveLayout(); msg.success('布局已保存') }} /></Tooltip>
       </Space>
     </div>
@@ -463,8 +424,8 @@ function MemoryGraphInner() {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><Spin /></div>
   }
 
-  if (observations.length === 0 && dailyLogs.length === 0) {
-    return <Empty description="暂无数据，请先提炼记忆" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  if (nodes.length === 0) {
+    return <Empty description="暂无实体，请先在「实体」Tab 创建实体" image={Empty.PRESENTED_IMAGE_SIMPLE} />
   }
 
   return (
@@ -497,7 +458,10 @@ function MemoryGraphInner() {
       >
         <Controls />
         <MiniMap
-          nodeColor={node => node.type === 'dailyLog' ? COLORS.dailyBg : COLORS.obsBg}
+          nodeColor={node => {
+            const t = node.data?.entityType
+            return ENTITY_COLORS[t]?.bg || '#FAFAFA'
+          }}
           maskColor="rgba(0,0,0,0.08)"
           style={{ border: '1px solid #f0f0f0', borderRadius: 4 }}
         />
@@ -507,21 +471,23 @@ function MemoryGraphInner() {
       {/* 图例 */}
       <div style={{
         position: 'absolute', bottom: 12, left: 12,
-        display: 'flex', gap: 16, padding: '6px 12px',
+        display: 'flex', gap: 12, flexWrap: 'wrap',
+        padding: '6px 12px',
         background: 'rgba(255,255,255,0.9)', borderRadius: 6,
-        border: '1px solid #f0f0f0', fontSize: 12,
+        border: '1px solid #f0f0f0', fontSize: 11,
       }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 12, height: 12, background: COLORS.dailyBg, border: `1px solid ${COLORS.dailyBorder}`, borderRadius: 3, display: 'inline-block' }} />
-          Daily Log
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 12, height: 12, background: COLORS.obsBg, border: `1px solid ${COLORS.obsBorder}`, borderRadius: 3, display: 'inline-block' }} />
-          提炼记忆
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 20, height: 2, background: 'linear-gradient(90deg, #3BA0E8, #E8913A)', display: 'inline-block', borderRadius: 1 }} />
-          拖拽连线 · 右键操作 · Ctrl+Z 撤销
+        {Object.entries(ENTITY_TYPE_LABEL).map(([type, label]) => {
+          const c = ENTITY_COLORS[type]
+          return (
+            <span key={type} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 10, height: 10, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 3, display: 'inline-block' }} />
+              {label}
+            </span>
+          )
+        })}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 3, marginLeft: 4 }}>
+          <span style={{ width: 16, height: 2, background: 'linear-gradient(90deg, #3BA0E8, #E8913A)', display: 'inline-block', borderRadius: 1 }} />
+          关系
         </span>
       </div>
     </div>

@@ -346,6 +346,10 @@ class MemoryManager:
             logger.warning(f"LLM 评分失败，降级为关键词: {e}")
             return MemoryManager._score_conversation_importance(messages)
 
+    async def score_importance(self, messages: list) -> int:
+        """公开接口：LLM 精确评分记忆重要性（1-10）"""
+        return await self._llm_score_importance(messages, llm_client=self.llm)
+
     async def _check_consolidation(
         self, summary: str, user_id: int, tags: list, importance: int,
         network: str, conversation_id: int, message_count: int,

@@ -329,8 +329,11 @@ class MarkdownMemoryService:
         parsed = self._parse_distill_json(raw)
         obs_list = parsed.get("observations", [])
         if not obs_list:
-            logger.warning(f"[distill] LLM 返回无效 JSON，raw 前 500 字: {raw[:500]}")
-            raise ValueError("LLM 未返回有效的提炼结果，请重试（已记录原始输出到日志）")
+            logger.info(f"[distill] LLM 未提炼出新内容，{len(source_titles)} 天日志无新增")
+            return DistillResult(
+                observations=[], source_days=days,
+                source_logs=source_titles, total_count=0,
+            )
 
         # 9. 写入 observation + source 表
         created_observations: List[ObservationOut] = []

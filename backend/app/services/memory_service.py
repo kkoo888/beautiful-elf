@@ -130,6 +130,131 @@ class MemoryService:
         """ORM → Pydantic"""
         return MemoryOut.model_validate(item)
 
+    # ── Optimize（批量重算 activation） ──────────────────
+
+    async def optimize_memories(self, importance_boost: float = 1.0) -> dict:
+        """触发记忆优化：重算 activation + 标记 dormant + 存量回填
+
+        Returns:
+            {"optimizedCount": int, "recalculated": int, "decayApplied": int, ...}
+        """
+        from app.services.memory_decay_service import MemoryDecayService
+        from app.mappers.qdrant_mapper import QdrantMapper
+
+        qdrant = QdrantMapper()
+        decay_svc = MemoryDecayService()
+
+        recalcuated = 0
+        if importance_boost != 1.0:
+            recalcuated = decay_svc.recalculate_all_activation(qdrant, importance_boost)
+
+        dormant_count = decay_svc.batch_mark_dormant(qdrant)
+        backfilled = decay_svc.backfill_existing(qdrant)
+
+        return {
+            "optimizedCount": recalcuated + dormant_count + backfilled,
+            "rerankImproved": 0,
+            "decayApplied": dormant_count,
+            "newInsights": 0,
+            "recalculated": recalcuated,
+        }
+
+    # ── Rescore（LLM 精确评分） ──────────────────────────
+
+    async def rescore_memories(
+        self, point_ids: list[str], user_id: int = 0,
+    ) -> dict:
+        """LLM 重新评分记忆重要性
+
+        Args:
+            point_ids: 要评分的 Qdrant 点 ID 列表（空=全部 active）
+            user_id: 用户 ID（point_ids 为空时生效）
+
+        Returns:
+            {"rescored": int, "updated": int}
+        """
+        if not self._memory_manager:
+            raise RuntimeError("记忆管理器未初始化")
+
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+        qdrant = self._memory_manager.qdrant
+
+        rescored = 0
+        updated = 0
+
+        if point_ids:
+            for pid in point_ids:
+                try:
+                    payload = qdrant.get_by_id("memory_vectors", pid)
+                    if not payload:
+                        continue
+
+                    summary = payload.get("summary", "")
+                    old_importance = int(payload.get("importance", 5))
+
+                    fake_messages = [{"role": "user", "content": summary}]
+                    new_importance = await self._memory_manager.score_importance(fake_messages)
+                    rescored += 1
+
+                    if new_importance != old_importance:
+                        qdrant._client.set_payload(
+                            collection_name="memory_vectors",
+                            payload={"importance": new_importance},
+                            points=[pid],
+                        )
+                        updated += 1
+                except Exception as e:
+                    logger.warning(f"rescore 失败: {pid}: {e}")
+        else:
+            # 全部 active 记忆重新评分（scroll 分页）
+            offset = None
+            batch_size = 50
+            while True:
+                conditions = [
+                    FieldCondition(key="user_id", match=MatchValue(value=user_id)),
+                    FieldCondition(key="decay_status", match=MatchValue(value="active")),
+                ]
+                try:
+                    points, next_offset = qdrant._client.scroll(
+                        collection_name="memory_vectors",
+                        scroll_filter=Filter(must=conditions),
+                        limit=batch_size,
+                        offset=offset,
+                        with_vectors=False,
+                    )
+                except Exception:
+                    break
+
+                if not points:
+                    break
+
+                for p in points:
+                    try:
+                        payload = p.payload or {}
+                        summary = payload.get("summary", "")
+                        old_importance = int(payload.get("importance", 5))
+
+                        fake_messages = [{"role": "user", "content": summary}]
+                        new_importance = await self._memory_manager.score_importance(fake_messages)
+                        rescored += 1
+
+                        if new_importance != old_importance:
+                            qdrant._client.set_payload(
+                                collection_name="memory_vectors",
+                                payload={"importance": new_importance},
+                                points=[p.id],
+                            )
+                            updated += 1
+                    except Exception as e:
+                        logger.warning(f"rescore 失败: {p.id}: {e}")
+
+                if next_offset is None:
+                    break
+                offset = next_offset
+
+        return {"rescored": rescored, "updated": updated}
+
 
 # ── 全局单例 ──────────────────────────────────────────────
 

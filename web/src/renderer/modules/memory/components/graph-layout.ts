@@ -1,78 +1,47 @@
-/** 自动布局工具 — 简化版 dagre，不依赖外部包
-
-布局策略：
-  - 左列：Daily Logs（按时间倒序）
-  - 右列：Observations（按分类分组）
-  - 自动计算连线节点的位置
-*/
+/** 自动布局工具 — 力导向简化版，用于实体关系图 */
 
 import type { Node, Edge } from 'reactflow'
 
-const LAYOUT_CONFIG = {
-  logX: 80,
-  obsX: 500,
-  startY: 60,
-  logGapY: 100,
-  obsGapY: 120,
-  groupGapY: 40,
-}
-
 /**
- * 自动布局：左侧日志，右侧提炼记忆
+ * 自动布局：按实体类型分组，高连接度的节点放中心
  */
 export function autoLayout(nodes: Node[], edges: Edge[]): Node[] {
-  const logNodes = nodes.filter(n => n.type === 'dailyLog')
-  const obsNodes = nodes.filter(n => n.type === 'observation')
+  if (nodes.length === 0) return nodes
 
-  // 日志按标题（日期）排序
-  const sortedLogs = [...logNodes].sort((a, b) =>
-    (a.data.title || '').localeCompare(b.data.title || '')
-  )
-
-  // 提炼记忆按分类分组，再按内容排序
-  const categoryOrder = ['decisions', 'pitfalls', 'preferences', 'status']
-  const sortedObs = [...obsNodes].sort((a, b) => {
-    const catA = categoryOrder.indexOf(a.data.category || 'status')
-    const catB = categoryOrder.indexOf(b.data.category || 'status')
-    if (catA !== catB) return catA - catB
-    return (a.data.content || '').localeCompare(b.data.content || '')
-  })
-
-  // 计算连线密度，高连接度的节点放中间
+  // 计算连接度
   const connectionCount: Record<string, number> = {}
   edges.forEach(e => {
     connectionCount[e.source] = (connectionCount[e.source] || 0) + 1
     connectionCount[e.target] = (connectionCount[e.target] || 0) + 1
   })
 
-  // 布局日志节点
-  const updatedNodes: Node[] = nodes.map(node => {
-    if (node.type === 'dailyLog') {
-      const idx = sortedLogs.findIndex(n => n.id === node.id)
-      return {
-        ...node,
-        position: {
-          x: LAYOUT_CONFIG.logX,
-          y: LAYOUT_CONFIG.startY + idx * LAYOUT_CONFIG.logGapY,
-        },
-      }
-    }
-
-    if (node.type === 'observation') {
-      const idx = sortedObs.findIndex(n => n.id === node.id)
-      return {
-        ...node,
-        position: {
-          x: LAYOUT_CONFIG.obsX,
-          y: LAYOUT_CONFIG.startY + idx * LAYOUT_CONFIG.obsGapY,
-        },
-      }
-    }
-
-    return node
+  // 按类型分组
+  const typeOrder = ['person', 'tech', 'project', 'tool', 'concept', 'org']
+  const grouped: Record<string, Node[]> = {}
+  nodes.forEach(n => {
+    const t = n.data?.entityType || 'concept'
+    if (!grouped[t]) grouped[t] = []
+    grouped[t].push(n)
   })
 
-  return updatedNodes
+  const COLS = 4
+  const COL_GAP = 260
+  const ROW_GAP = 200
+  const START_X = 80
+  const START_Y = 60
+
+  // 高连接度的排在前面
+  const sortedNodes = [...nodes].sort((a, b) =>
+    (connectionCount[b.id] || 0) - (connectionCount[a.id] || 0)
+  )
+
+  return sortedNodes.map((node, i) => ({
+    ...node,
+    position: {
+      x: START_X + (i % COLS) * COL_GAP,
+      y: START_Y + Math.floor(i / COLS) * ROW_GAP,
+    },
+  }))
 }
 
 /**

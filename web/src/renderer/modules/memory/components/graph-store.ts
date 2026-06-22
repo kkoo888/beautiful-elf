@@ -1,4 +1,4 @@
-/** 记忆关系图 Zustand Store — 对标 Dify 分层设计
+/** 记忆关系图 Zustand Store — 实体关系图版本
 
 增强功能：
   - 撤销/重做（手动实现 temporal，不依赖 zundo）
@@ -8,7 +8,7 @@
 
 import { create } from 'zustand'
 import type { Node, Edge } from 'reactflow'
-import type { Observation, MarkdownMemoryEntry } from '../services/memory-api'
+import type { MemoryEntity, EntityRelation } from '../services/memory-entity-api'
 
 // ── 历史快照 ──────────────────────────────────────────────
 
@@ -18,14 +18,14 @@ interface Snapshot {
 }
 
 const MAX_HISTORY = 50
-const STORAGE_KEY = 'memory-graph-layout'
+const STORAGE_KEY = 'memory-entity-graph-layout'
 
 // ── 状态类型 ──────────────────────────────────────────────
 
 interface GraphState {
   // 数据
-  observations: Observation[]
-  dailyLogs: MarkdownMemoryEntry[]
+  entities: MemoryEntity[]
+  relations: EntityRelation[]
 
   // React Flow 状态
   nodes: Node[]
@@ -37,7 +37,7 @@ interface GraphState {
   edgeContextMenu: { edgeId: string; x: number; y: number } | null
   detailDrawerOpen: boolean
   searchKeyword: string
-  categoryFilter: string
+  entityTypeFilter: string
   loading: boolean
   paletteOpen: boolean
 
@@ -46,8 +46,8 @@ interface GraphState {
   future: Snapshot[]
 
   // Actions - 数据
-  setObservations: (obs: Observation[]) => void
-  setDailyLogs: (logs: MarkdownMemoryEntry[]) => void
+  setEntities: (entities: MemoryEntity[]) => void
+  setRelations: (relations: EntityRelation[]) => void
 
   // Actions - 节点/边（带历史记录）
   setNodes: (nodes: Node[], skipHistory?: boolean) => void
@@ -67,7 +67,7 @@ interface GraphState {
   openDetailDrawer: () => void
   closeDetailDrawer: () => void
   setSearchKeyword: (keyword: string) => void
-  setCategoryFilter: (filter: string) => void
+  setEntityTypeFilter: (filter: string) => void
   setLoading: (loading: boolean) => void
   togglePalette: () => void
   setPaletteOpen: (open: boolean) => void
@@ -80,8 +80,8 @@ interface GraphState {
 
 export const useGraphStore = create<GraphState>((set, get) => ({
   // 初始状态
-  observations: [],
-  dailyLogs: [],
+  entities: [],
+  relations: [],
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -89,15 +89,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   edgeContextMenu: null,
   detailDrawerOpen: false,
   searchKeyword: '',
-  categoryFilter: 'all',
+  entityTypeFilter: 'all',
   loading: true,
   paletteOpen: false,
   past: [],
   future: [],
 
   // 数据
-  setObservations: (observations) => set({ observations }),
-  setDailyLogs: (dailyLogs) => set({ dailyLogs }),
+  setEntities: (entities) => set({ entities }),
+  setRelations: (relations) => set({ relations }),
 
   // 节点/边（带历史）
   setNodes: (nodes, skipHistory = false) => {
@@ -166,7 +166,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   openDetailDrawer: () => set({ detailDrawerOpen: true }),
   closeDetailDrawer: () => set({ detailDrawerOpen: false, selectedNodeId: null }),
   setSearchKeyword: (searchKeyword) => set({ searchKeyword }),
-  setCategoryFilter: (categoryFilter) => set({ categoryFilter }),
+  setEntityTypeFilter: (entityTypeFilter) => set({ entityTypeFilter }),
   setLoading: (loading) => set({ loading }),
   togglePalette: () => set(s => ({ paletteOpen: !s.paletteOpen })),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),

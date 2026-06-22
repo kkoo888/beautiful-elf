@@ -69,7 +69,18 @@ async def lifespan(app: FastAPI):
     # 启动记忆定时任务调度器（替代 Celery Beat）
     try:
         from app.tasks.scheduler import start_scheduler
-        start_scheduler()
+        from app.repository.memory_setting_repo import MemorySettingRepository
+        _scheduler_repo = MemorySettingRepository()
+        async with AsyncSessionLocal() as db:
+            _scheduler_settings = await _scheduler_repo.find_all_scheduler_settings(db)
+        start_scheduler(settings=[
+            {
+                "setting_key": s.setting_key,
+                "is_enabled": s.is_enabled,
+                "interval_seconds": s.interval_seconds,
+            }
+            for s in _scheduler_settings
+        ])
     except Exception as e:
         logger.warning(f"定时任务调度器启动失败: {e}")
 
@@ -153,10 +164,19 @@ async def _init_memory():
         async def embedding_func(text: str):
             return await onnx_svc.get_embedding(text)
 
+        # Reranker（可选，ONNX Cross-Encoder 精排）
+        reranker = None
+        try:
+            from app.services.onnx_reranker_service import get_onnx_reranker_service
+            reranker = await get_onnx_reranker_service()
+        except Exception:
+            pass
+
         qdrant_mapper = QdrantMapper()
         manager = MemoryManager(
             qdrant_mapper=qdrant_mapper,
             embedding_func=embedding_func,
+            reranker=reranker,
         )
 
         memory_service.set_memory_manager(manager)

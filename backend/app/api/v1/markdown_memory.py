@@ -115,25 +115,45 @@ async def append_daily_log(
 
 # ── 提炼记忆（Observations）────────────────────────────
 
-@router.post("/distill", response_model=ApiResult[DistillResult])
+@router.post("/distill", response_model=ApiResult)
 async def distill_memories(
     data: DistillRequest,
     user_id: int = Query(default=0, alias="userId"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResult:
-    """提炼记忆 — 读取 daily log，LLM 结构化提取，写入 observation 表"""
-    try:
-        result = await markdown_memory_service.distill(
-            db, user_id=user_id,
-            days=data.days, mission=data.mission,
-            directives=data.directives, categories=data.categories,
-        )
-        return ApiResult(data=result, message=f"提炼完成，共 {result.total_count} 条")
-    except ValueError as e:
-        return api_error("MEMORY_DISTILL_VALIDATION", str(e), "请检查配置")
-    except Exception as e:
-        logger.error(f"提炼记忆失败: {e}", exc_info=True)
-        return api_error("MEMORY_DISTILL_FAILED", str(e), "提炼失败，请稍后重试")
+    """提炼记忆 — 异步执行，完成后通过 WebSocket 通知"""
+    import asyncio
+    from app.core.websocket_manager import ws_manager
+    from app.core.database import AsyncSessionLocal
+
+    async def _run_distill():
+        try:
+            async with AsyncSessionLocal() as bg_db:
+                result = await markdown_memory_service.distill(
+                    bg_db, user_id=user_id,
+                    days=data.days, mission=data.mission,
+                    directives=data.directives, categories=data.categories,
+                )
+                await bg_db.commit()
+            await ws_manager.broadcast("default", {
+                "type": "distill_complete",
+                "data": {
+                    "totalCount": result.total_count,
+                    "observations": [
+                        {"content": o.content, "category": o.category}
+                        for o in result.observations
+                    ],
+                },
+            })
+        except Exception as e:
+            logger.error(f"异步提炼记忆失败: {e}", exc_info=True)
+            await ws_manager.broadcast("default", {
+                "type": "distill_error",
+                "data": {"message": str(e)},
+            })
+
+    asyncio.create_task(_run_distill())
+    return ApiResult(message="提炼中，完成后将通过实时通知告知结果")
 
 
 @router.get("/observations", response_model=ApiPageResult)

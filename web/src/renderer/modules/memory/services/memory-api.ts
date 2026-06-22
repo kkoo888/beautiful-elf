@@ -275,3 +275,55 @@ export async function rescoreMemories(params: {
     }) as any
   ) as { rescored: number; updated: number }
 }
+
+// ── 定时任务控制 API ────────────────────────────────────────
+
+export interface SchedulerTask {
+  name: string
+  label: string
+  enabled: boolean
+  intervalLabel: string
+}
+
+export async function fetchSchedulerTasks(): Promise<SchedulerTask[]> {
+  return extractData(
+    await apiClient.get('/scheduler') as any
+  ) as SchedulerTask[]
+}
+
+export async function toggleSchedulerTask(
+  taskName: string, enabled: boolean
+): Promise<{ name: string; enabled: boolean }> {
+  return extractData(
+    await apiClient.put(`/scheduler/${taskName}/toggle`, { enabled }) as any
+  ) as { name: string; enabled: boolean }
+}
+
+// ── 记忆设置 API ────────────────────────────────────────────
+
+export interface MemoryModelOption {
+  providerName: string
+  providerId: number
+  modelName: string
+  displayName: string
+}
+
+export async function fetchMemoryModelOptions(): Promise<MemoryModelOption[]> {
+  return extractData(
+    await apiClient.get('/memory/settings/models') as any
+  ) as MemoryModelOption[]
+}
+
+export async function fetchMemoryModelSetting(): Promise<{ providerId: number; modelName: string }> {
+  return extractData(
+    await apiClient.get('/memory/settings') as any
+  ) as { providerId: number; modelName: string }
+}
+
+export async function updateMemoryModelSetting(
+  providerId: number, modelName: string
+): Promise<{ providerId: number; modelName: string }> {
+  return extractData(
+    await apiClient.put('/memory/settings', { providerId, modelName }) as any
+  ) as { providerId: number; modelName: string }
+}

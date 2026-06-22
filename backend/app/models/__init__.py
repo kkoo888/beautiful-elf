@@ -80,6 +80,9 @@ from app.models.cost_tracking import CostRecord
 # 视频画廊
 from app.models.video_gallery import VideoGallery
 
+# 记忆设置
+from app.models.memory_setting import MemorySetting
+
 __all__ = [
     "BaseModel",
     "Conversation", "Message",
@@ -108,4 +111,5 @@ __all__ = [
     "MarkdownMemory",
     "CostRecord",
     "VideoGallery",
+    "MemorySetting",
 ]

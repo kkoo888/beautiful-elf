@@ -19,7 +19,7 @@ import type { ApiResponse, PaginatedResponse } from '@/types'
  */
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}${API_PREFIX}`,
-  timeout: 30000,
+  timeout: 120000,
   headers: {
     'Content-Type': 'application/json',
   },

@@ -34,6 +34,7 @@ import {
 import {
   getProfile, updateProfile,
 } from '../services/memory-entity-api'
+import { useWebSocket } from '@/services/websocket'
 import type { AgentProfile } from '../services/memory-entity-api'
 import type {
   MarkdownMemoryEntry, DistillRequest, Observation,
@@ -208,43 +209,55 @@ export function LongTermTab() {
     } catch { message.error('保存失败') } finally { setSaving(false) }
   }, [editContent])
 
-  // ── 提炼操作 ──────────────────────────────────────────
+  // ── 提炼操作（异步：后端 WebSocket 通知结果）──────────────────
+
+  const { subscribe } = useWebSocket()
+
+  useEffect(() => {
+    const unsub = subscribe('*', (msg: any) => {
+      if (msg.type === 'distill_complete') {
+        setDistillStep(3)
+        const count = msg.data?.totalCount ?? 0
+        message.success(`提炼完成，共 ${count} 条记忆`)
+        setTimeout(() => {
+          setDrawerOpen(false)
+          setDistillStep(-1)
+          loadObservations(categoryFilter)
+          loadCounts()
+        }, 1200)
+        setDistilling(false)
+      } else if (msg.type === 'distill_error') {
+        message.error(msg.data?.message || '提炼失败')
+        setDistillStep(-1)
+        setDistilling(false)
+      }
+    })
+    return unsub
+  }, [subscribe, categoryFilter])
 
   const handleDistill = useCallback(async () => {
     setDistilling(true)
     setDistillStep(0)
-    try {
-      // 模拟步骤进度（实际是单次 API 调用）
-      const timer0 = setTimeout(() => setDistillStep(1), 800)
-      const timer1 = setTimeout(() => setDistillStep(2), 3000)
+    const timer0 = setTimeout(() => setDistillStep(1), 800)
+    const timer1 = setTimeout(() => setDistillStep(2), 3000)
 
+    try {
       const request: DistillRequest = {
         days: distillDays,
         mission: distillMission,
         directives: distillDirectives.split('\n').filter(d => d.trim()),
         categories: distillCategories,
       }
-      const result = await distillMemories(request)
-
+      await distillMemories(request)
+      // 后端立即返回，实际结果通过 WebSocket 推送
+    } catch (err: any) {
       clearTimeout(timer0)
       clearTimeout(timer1)
-      setDistillStep(3)
-      message.success(`提炼完成，共 ${result.totalCount} 条记忆`)
-
-      // 延迟关闭 drawer，让用户看到完成状态
-      setTimeout(() => {
-        setDrawerOpen(false)
-        setDistillStep(-1)
-        loadObservations(categoryFilter)
-        loadCounts()
-      }, 1200)
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || '提炼失败')
+      message.error(err?.message || '提炼请求失败')
       setDistillStep(-1)
-    } finally {
       setDistilling(false)
     }
-  }, [distillDays, distillMission, distillDirectives, distillCategories, categoryFilter])
+  }, [distillDays, distillMission, distillDirectives, distillCategories])
 
   // ── Agent Profile ──────────────────────────────────────────
 

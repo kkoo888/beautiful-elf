@@ -13,6 +13,8 @@
   - memory_decay_sweep / observation_freshness_sweep: 天然幂等，无需加锁
   - process_summary_queue: Redis LPOP 原子操作，天然安全
 """
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 import json
 
@@ -21,13 +23,98 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+# ── MemoryManager 单例（延迟初始化，避免每次任务执行重复创建 + DDL） ──
+
+_memory_manager: "MemoryManager | None" = None
+
+
+def invalidate_memory_manager():
+    """清除 MemoryManager 单例缓存，下次使用时重新初始化"""
+    global _memory_manager
+    _memory_manager = None
+
+
+async def _create_llm_from_db_config():
+    """从 DB 读取 memory_task_model 设置，创建 OllamaLLM 实例。失败返回 None。"""
+    try:
+        from app.core.config import get_settings
+        settings = get_settings()
+        base_url = settings.OLLAMA_HOST
+        model_name = ""
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.repository.memory_setting_repo import MemorySettingRepository
+            from app.repository.llm_provider_repo import LLMProviderRepository
+            async with AsyncSessionLocal() as db:
+                repo = MemorySettingRepository()
+                provider_id, db_model = await repo.get_model_setting(db, "memory_task_model")
+                if db_model:
+                    model_name = db_model
+                if provider_id:
+                    provider_repo = LLMProviderRepository()
+                    provider = await provider_repo.find_by_id(db, provider_id)
+                    if provider and provider.base_url:
+                        base_url = provider.base_url
+        except Exception:
+            pass
+        if not model_name:
+            return None
+        from llama_index.llms.ollama import Ollama as OllamaLLM
+        return OllamaLLM(model=model_name, base_url=base_url)
+    except ImportError:
+        return None
+
+
+async def _get_memory_manager():
+    """延迟初始化并缓存 MemoryManager 单例。失败返回 None。"""
+    global _memory_manager
+    if _memory_manager is not None:
+        return _memory_manager
+
+    from app.mappers.qdrant_mapper import QdrantMapper
+    from app.agent.memory_manager import MemoryManager
+
+    # Embedding（ONNX 本地推理）
+    try:
+        from app.services.onnx_embedding_service import get_onnx_embedding_service
+        onnx_svc = await get_onnx_embedding_service()
+        async def embedding_func(text: str):
+            return await onnx_svc.get_embedding(text)
+    except Exception:
+        logger.warning("MemoryManager 单例初始化失败: 缺少 embedding 依赖")
+        return None
+
+    # LLM（从 DB 配置读取）
+    llama_llm = await _create_llm_from_db_config()
+
+    # Reranker（可选，ONNX Cross-Encoder）
+    reranker = None
+    try:
+        from app.services.onnx_reranker_service import get_onnx_reranker_service
+        reranker = await get_onnx_reranker_service()
+    except Exception:
+        pass
+
+    _memory_manager = MemoryManager(
+        qdrant_mapper=QdrantMapper(),
+        embedding_func=embedding_func,
+        llm_client=llama_llm,
+        reranker=reranker,
+    )
+    return _memory_manager
+
+
 async def check_idle_summaries():
     """每 5 分钟：30 分钟无互动 → 存压缩摘要 + 创建经历"""
     from app.core.redis_client import get_redis
-    from app.mappers.qdrant_mapper import QdrantMapper
     from app.core.database import AsyncSessionLocal
     from app.repository.conversation_repo import ConversationRepository
     from app.core.task_lock import distributed_lock, get_watermark, set_watermark
+
+    memory = await _get_memory_manager()
+    if not memory:
+        logger.warning("check_idle_summaries: MemoryManager 不可用，跳过")
+        return
 
     redis = get_redis()
 
@@ -37,41 +124,6 @@ async def check_idle_summaries():
 
         watermark_str = await get_watermark(redis, "check_idle_summaries")
         watermark_dt = datetime.fromisoformat(watermark_str) if watermark_str else None
-
-        qdrant_mapper = QdrantMapper()
-
-        try:
-            from app.services.onnx_embedding_service import get_onnx_embedding_service
-            onnx_svc = await get_onnx_embedding_service()
-            async def embedding_func(text: str):
-                return await onnx_svc.get_embedding(text)
-        except Exception:
-            logger.warning("check_idle_summaries: 缺少 embedding 依赖，跳过")
-            return
-
-        try:
-            from llama_index.llms.ollama import Ollama as OllamaLLM
-            from app.core.config import get_settings
-            settings = get_settings()
-            llama_llm = OllamaLLM(model="qwen3.5:7b", base_url=settings.OLLAMA_HOST)
-        except ImportError:
-            llama_llm = None
-
-        from app.agent.memory_manager import MemoryManager
-
-        reranker = None
-        try:
-            from app.services.onnx_reranker_service import get_onnx_reranker_service
-            reranker = await get_onnx_reranker_service()
-        except Exception:
-            pass
-
-        memory = MemoryManager(
-            qdrant_mapper=qdrant_mapper,
-            embedding_func=embedding_func,
-            llm_client=llama_llm,
-            reranker=reranker,
-        )
 
         now = datetime.utcnow()
         cursor = 0
@@ -136,10 +188,14 @@ async def check_idle_summaries():
 
 async def memory_decay_sweep():
     """每 6 小时：ACT-R 衰减扫描，标记 dormant + 归档 + 物理删除"""
-    from app.mappers.qdrant_mapper import QdrantMapper
     from app.services.memory_decay_service import MemoryDecayService
 
-    qdrant_mapper = QdrantMapper()
+    memory = await _get_memory_manager()
+    if not memory:
+        logger.warning("memory_decay_sweep: MemoryManager 不可用，跳过")
+        return
+
+    qdrant_mapper = memory.qdrant
     decay_service = MemoryDecayService()
 
     marked = decay_service.batch_mark_dormant(qdrant_mapper)
@@ -162,42 +218,13 @@ async def memory_decay_sweep():
 async def process_summary_queue():
     """每分钟：消费摘要队列，LLM 结构化 + embedding + Qdrant 存储"""
     from app.core.redis_client import get_redis
-    from app.mappers.qdrant_mapper import QdrantMapper
 
-    redis = get_redis()
-    qdrant_mapper = QdrantMapper()
-
-    try:
-        from app.services.onnx_embedding_service import get_onnx_embedding_service
-        onnx_svc = await get_onnx_embedding_service()
-        async def embedding_func(text: str):
-            return await onnx_svc.get_embedding(text)
-    except Exception:
+    memory = await _get_memory_manager()
+    if not memory:
+        logger.warning("process_summary_queue: MemoryManager 不可用，跳过")
         return
 
-    try:
-        from llama_index.llms.ollama import Ollama as OllamaLLM
-        from app.core.config import get_settings
-        settings = get_settings()
-        llama_llm = OllamaLLM(model="qwen3.5:7b", base_url=settings.OLLAMA_HOST)
-    except ImportError:
-        llama_llm = None
-
-    from app.agent.memory_manager import MemoryManager
-
-    reranker = None
-    try:
-        from app.services.onnx_reranker_service import get_onnx_reranker_service
-        reranker = await get_onnx_reranker_service()
-    except Exception:
-        pass
-
-    memory = MemoryManager(
-        qdrant_mapper=qdrant_mapper,
-        embedding_func=embedding_func,
-        llm_client=llama_llm,
-        reranker=reranker,
-    )
+    redis = get_redis()
 
     processed = 0
     batch_size = 50
@@ -306,16 +333,7 @@ async def _run_sleeptime_consolidation():
         logger.warning("sleeptime_consolidation: 缺少 embedding 依赖，跳过")
         return
 
-    llama_llm = None
-    try:
-        from llama_index.llms.ollama import Ollama as OllamaLLM
-        from app.core.config import get_settings
-        import os
-        settings = get_settings()
-        model_name = os.environ.get("SLEEPTIME_MODEL", "qwen3.5:7b")
-        llama_llm = OllamaLLM(model=model_name, base_url=settings.OLLAMA_HOST)
-    except ImportError:
-        pass
+    llama_llm = await _create_llm_from_db_config()
 
     user_ids = []
     try:

@@ -26,6 +26,7 @@ from app.api.v1 import (
     memory,
     markdown_memory,
     memory_entity,
+    memory_settings,
     workflow,
     expert_team,
     ollama,
@@ -35,6 +36,7 @@ from app.api.v1 import (
     debug,
     image_gallery,
     video_gallery,
+    scheduler_control,
 )
 
 api_router = APIRouter()
@@ -57,6 +59,7 @@ api_router.include_router(snippet.router, prefix="/snippets", tags=["snippet"])
 api_router.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
 api_router.include_router(memory.router, prefix="/memories", tags=["memory"])
 api_router.include_router(markdown_memory.router, prefix="/markdown_memories", tags=["markdown_memory"])
+api_router.include_router(memory_settings.router, prefix="/memory/settings", tags=["memory_settings"])
 api_router.include_router(memory_entity.router, prefix="/memory", tags=["memory_entity"])
 
 # AI 相关
@@ -89,3 +92,6 @@ api_router.include_router(config.router, prefix="/configs", tags=["config"])
 
 # 调试（开发环境可用，生产环境建议关闭）
 api_router.include_router(debug.router, prefix="/debug", tags=["debug"])
+
+# 定时任务控制
+api_router.include_router(scheduler_control.router, prefix="/scheduler", tags=["scheduler"])

@@ -1,19 +1,21 @@
-/** 搜索 + 筛选工具栏 — 顶部搜索 + 分类快速过滤 */
+/** 搜索 + 筛选工具栏 — 搜索框 + 实体类型筛选 */
 
-import { Input, Segmented, Space } from 'antd'
+import { Input, Segmented } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import { useGraphStore } from './graph-store'
 
-const CATEGORY_OPTIONS = [
+const ENTITY_TYPE_OPTIONS = [
   { label: '全部', value: 'all' },
-  { label: '🔑 决策', value: 'decisions' },
-  { label: '🐛 踩坑', value: 'pitfalls' },
-  { label: '👤 偏好', value: 'preferences' },
-  { label: '📦 状态', value: 'status' },
+  { label: '👤 人物', value: 'person' },
+  { label: '🛠 技术', value: 'tech' },
+  { label: '📁 项目', value: 'project' },
+  { label: '🔧 工具', value: 'tool' },
+  { label: '💡 概念', value: 'concept' },
+  { label: '🏢 组织', value: 'org' },
 ]
 
 export function GraphToolbar() {
-  const { searchKeyword, setSearchKeyword, categoryFilter, setCategoryFilter } = useGraphStore()
+  const { searchKeyword, setSearchKeyword, entityTypeFilter, setEntityTypeFilter } = useGraphStore()
 
   return (
     <div style={{
@@ -21,9 +23,8 @@ export function GraphToolbar() {
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       gap: 8, pointerEvents: 'none',
     }}>
-      {/* 搜索框 */}
       <Input
-        placeholder="搜索节点..."
+        placeholder="搜索实体..."
         prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
         value={searchKeyword}
         onChange={e => setSearchKeyword(e.target.value)}
@@ -36,11 +37,10 @@ export function GraphToolbar() {
         size="small"
       />
 
-      {/* 分类筛选 */}
       <Segmented
-        value={categoryFilter}
-        onChange={v => setCategoryFilter(v as string)}
-        options={CATEGORY_OPTIONS}
+        value={entityTypeFilter}
+        onChange={v => setEntityTypeFilter(v as string)}
+        options={ENTITY_TYPE_OPTIONS}
         size="small"
         style={{
           background: 'rgba(255,255,255,0.92)',

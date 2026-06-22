@@ -4,7 +4,8 @@ import { useState, useCallback } from 'react'
 import { App, Tabs } from 'antd'
 import {
   SearchOutlined, CalendarOutlined, BookOutlined,
-  PlusOutlined, BarChartOutlined,
+  PlusOutlined, BarChartOutlined, ClockCircleOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { MemorySearch } from './memory-search'
@@ -14,6 +15,8 @@ import { DailyLogTab } from './daily-log-tab'
 import { LongTermTab } from './longterm-tab'
 import { EpisodeTab } from './episode-tab'
 import { OptimizationTab } from './optimization-tab'
+import { SchedulerTab } from './scheduler-tab'
+import { MemorySettingsTab } from './memory-settings-tab'
 import { useMemory } from '../hooks/use-memory'
 import type { MemoryEntry } from '../types/memory'
 import styles from './memory-panel.module.css'
@@ -143,6 +146,26 @@ export default function MemoryPanel() {
         </span>
       ),
       children: <LongTermTab />,
+    },
+    {
+      key: 'scheduler',
+      label: (
+        <span>
+          <ClockCircleOutlined />
+          定时任务
+        </span>
+      ),
+      children: <SchedulerTab />,
+    },
+    {
+      key: 'settings',
+      label: (
+        <span>
+          <SettingOutlined />
+          设置
+        </span>
+      ),
+      children: <MemorySettingsTab />,
     },
   ]
 

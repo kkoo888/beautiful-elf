@@ -16,6 +16,8 @@ export type WSMessageType =
   | 'expert_status'
   | 'expert_thinking'
   | 'expert_progress'
+  | 'distill_complete'
+  | 'distill_error'
   | 'ping'
   | 'pong'
 
