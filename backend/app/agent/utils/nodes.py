@@ -16,6 +16,9 @@ from app.agent.utils.common import (
     _content_to_str, _build_message_dicts,
     _trim_messages, _format_tool_result_json,
 )
+from app.agent.message_sanitizer import sanitize_messages, repair_tool_arguments
+from app.agent.tool_dispatch import should_parallelize_tool_batch, wrap_untrusted_result
+from app.agent.error_classifier import classify_error, FailoverReason
 from app.agent.utils.goal_helpers import _parse_goal_subtasks, _validate_goal_definition, _build_goal_progress_text, _get_next_pending_subtask
 
 logger = get_logger(__name__)
@@ -529,8 +532,13 @@ Answer: 基于工具结果输出该子任务的成果
 
         lc_messages = [SystemMessage(content=system_prompt)]
 
-        # ── Auto-Compaction（压缩旧历史，仅首次检查）──────
+        # ── 消息清理（修复畸形 JSON + Unicode 代理）──
         raw_messages = state["messages"]
+        _msg_dicts = [{"role": getattr(m, "role", m.get("role", "user")), "content": _content_to_str(getattr(m, "content", m.get("content", "")))} for m in raw_messages]
+        if sanitize_messages(_msg_dicts):
+            logger.info("[llm_call] 消息清理: 修复了 Unicode 代理对")
+
+        # ── Auto-Compaction（压缩旧历史，仅首次检查）──────
         _window = get_max_message_window()
         if len(raw_messages) > _window and not state.get("is_compacted"):
             try:
@@ -812,6 +820,8 @@ def _make_tool_executor(tool_registry, llm=None):
                     tool_name = getattr(msg, "name", "") or ""
                     tool_call_id = getattr(msg, "tool_call_id", "")
                     content = _content_to_str(msg.content)
+                    # 不可信工具结果加标签（防注入）
+                    content = wrap_untrusted_result(tool_name, content)
                     has_error = "error" in content.lower() or "失败" in content
 
                     # 熔断器记录
