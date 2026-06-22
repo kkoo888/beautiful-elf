@@ -251,7 +251,7 @@ class ContextEngine:
             "\n\n## 思考方式\n"
             "回答前，请按以下步骤思考，然后总结回答：\n\n"
             "**Thought**：分析用户的真实意图，判断需要什么信息或工具\n"
-            "**Action**：如果需要工具，选择最合适的工具并立刻调用然后等待工具返回结果并进入 Observation；如果不需要，直接进入 Answer\n"
+            "**Action**：如果需要工具，选择最合适的工具并说明调用理由（框架会自动执行工具调用）\n"
             "**Observation**：检查工具返回的结果是否正确、完整\n"
             "**Answer**：基于所有信息，给出结构化的最终回答\n\n"
             "## 输出规范\n"
@@ -295,22 +295,13 @@ class ContextEngine:
         # 工具使用规则（始终追加）
         base += (
             "\n\n## 工具使用规则\n"
-            "你有一组可用工具，但不是每个问题都需要用工具。请严格遵守以下规则：\n\n"
-            "**必须使用工具的情况：**\n"
-            "- 用户明确要求搜索、查询、计算、执行代码、读写文件\n"
-            "- 需要实时信息（天气、新闻、股票等）\n"
-            "- 需要查询数据库或知识库\n"
-            "- 用户的问题涉及外部数据或系统操作\n\n"
-            "**禁止使用工具的情况：**\n"
-            "- 问候、闲聊、告别、感谢（如「你好」「谢谢」「再见」）\n"
-            "- 通用知识问答（你自己能回答的问题）\n"
-            "- 简单的解释、翻译、写作、总结\n"
-            "- 用户没有明确需要外部数据或工具辅助的对话\n\n"
-            "**判断原则：** 先思考「这个问题我自己能回答吗？」如果能，直接回答，不要调用工具。"
-            "只有当问题确实需要外部数据、计算或系统操作时，才使用工具。"
+            "判断原则：需要外部数据、计算或系统操作时使用工具，否则直接回答。\n\n"
+            "**调用工具：** 实时信息查询、数据库/知识库检索、代码执行、文件读写、系统操作\n"
+            "**直接回答：** 问候闲聊、通用知识问答、解释翻译写作总结、无需外部数据的对话"
         )
         if intent and intent.get("intent_name") and intent["intent_name"] not in ("semantic_cache_hit", "chitchat"):
-            base += f"\n\n当前激活技能：{intent.get('intent_name', '')}"
+            intent_name = intent.get("intent_name", "")
+            base += f"\n\n当前激活技能：{intent_name}，请优先使用与该技能相关的工具完成任务。"
         return base
 
     def _filter_tools_by_intent(self, tools: List[dict], intent: Optional[dict]) -> List[dict]:
@@ -462,7 +453,7 @@ class ContextEngine:
                     "1. 保留所有关键事实、数字、结论\n"
                     "2. 丢弃冗余描述和重复信息\n"
                     "3. 用要点列表格式输出\n"
-                    f"4. 目标长度：{target_chars} 字符以内"
+                    f"4. 目标长度：约{target_chars} 个汉字以内"
                 )),
                 HumanMessage(content=chunk_for_llm),
             ])
@@ -496,7 +487,7 @@ class ContextEngine:
 
             structured_llm = self.llm_client.with_structured_output(RewrittenQuery)
             result = await structured_llm.ainvoke([
-                SystemMessage(content="你是一个查询改写专家。"),
+                SystemMessage(content="你是一个查询改写专家。将口语化、模糊的用户查询改写为适合向量检索的精确查询，同时保留原始语义。"),
                 HumanMessage(content=(
                     f"将以下用户查询改写为适合向量检索的精确查询。\n\n"
                     f"要求:\n- 指代词结合对话历史补全\n- 口语化转为精确技术描述\n- 已足够精确则返回原文\n\n"
