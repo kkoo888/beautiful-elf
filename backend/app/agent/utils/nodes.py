@@ -1324,9 +1324,9 @@ def _after_memory(state: AgentState) -> str:
 
 
 def _after_goal_eval(state: AgentState) -> str:
-    """goal_evaluator 之后的路由 — 达成/超限→结束，未达成→重试"""
+    """goal_evaluator 之后的路由 — 达成/超限/阻塞→结束，未达成→重试"""
     status = state.get("goal_status", "")
-    if status in ("achieved", "budget_exceeded", "failed"):
+    if status in ("achieved", "budget_exceeded", "failed", "blocked"):
         return END
     return "model_selector"
 
@@ -1336,7 +1336,7 @@ def _after_goal_replan(state: AgentState) -> str:
     status = state.get("goal_status", "")
     if status == "achieved":
         return "memory_saver"
-    if status in ("budget_exceeded", "failed"):
+    if status in ("budget_exceeded", "failed", "blocked"):
         return END
     return "model_selector"
 

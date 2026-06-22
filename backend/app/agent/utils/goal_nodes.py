@@ -62,9 +62,27 @@ def _make_goal_evaluator(llm):
         elif ans_len > 200:
             score += 1
 
-        # 规则 2: 错误关键词
+        # 规则 2: 错误分类（接入 error_classifier，区分暂时性错误 vs 内容错误）
+        from app.agent.error_classifier import classify_error, FailoverReason
         error_kws = ["抱歉", "不可用", "服务异常", "暂时无法", "出错"]
         err_count = sum(1 for kw in error_kws if kw in final_answer)
+
+        # 先用 error_classifier 检测是否为暂时性错误（限流/超时/服务过载）
+        _classified = classify_error(Exception(final_answer))
+        if _classified.reason in (FailoverReason.rate_limit, FailoverReason.timeout, FailoverReason.overloaded):
+            # 暂时性错误：不触发重试，等待后自动恢复
+            writer({"step": "goal_eval", "status": "paused",
+                    "message": f"检测到暂时性错误({_classified.reason.value})，暂停等待恢复"})
+            return {
+                "goal_status": "blocked",
+                "goal_blocked_reason": f"暂时性错误: {_classified.reason.value}，等待恢复后重试",
+                "error": final_answer[:200],
+            }
+        if _classified.reason == FailoverReason.billing:
+            # 额度耗尽：直接终止
+            writer({"step": "goal_eval", "status": "done", "message": "额度耗尽，终止目标"})
+            return {"goal_status": "failed", "error": "额度耗尽"}
+
         if err_count >= 2: score -= 3; reasons.append("多个错误关键词")
         elif err_count >= 1: score -= 1
 
@@ -328,6 +346,30 @@ def _make_goal_replanner(llm):
             return {"goal_status": "achieved"}
 
         failed_tasks = [t for t in goal_subtasks if t.get("status") == "failed"]
+
+        # ── 错误分类：区分暂时性错误 vs 永久性错误 ──
+        from app.agent.error_classifier import classify_error, FailoverReason
+        _has_transient_error = False
+        _has_permanent_error = False
+        for ft in failed_tasks:
+            _err_msg = ft.get("last_eval_feedback", "") or ft.get("result_summary", "")
+            if _err_msg:
+                _classified = classify_error(Exception(_err_msg))
+                if _classified.reason in (FailoverReason.rate_limit, FailoverReason.timeout, FailoverReason.overloaded):
+                    _has_transient_error = True
+                elif _classified.reason in (FailoverReason.billing, FailoverReason.auth_permanent):
+                    _has_permanent_error = True
+
+        # 暂时性错误：不重规划，直接返回 in_progress（等下轮重试）
+        if _has_transient_error and not _has_permanent_error:
+            writer({"step": "goal_replan", "status": "waiting",
+                    "message": "检测到暂时性错误（限流/超时），跳过重规划，等待下轮重试"})
+            return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
+
+        # 永久性错误：直接终止
+        if _has_permanent_error:
+            writer({"step": "goal_replan", "status": "done", "message": "检测到永久性错误（额度耗尽/认证失败），终止"})
+            return {"goal_status": "failed"}
 
         # ── 有失败任务 → Reflexion + 动态重规划（P2: 正式 Reflexion 模式）──
         if failed_tasks and llm:

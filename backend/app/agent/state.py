@@ -135,7 +135,7 @@ class AgentState(TypedDict, total=False):
     # ── Goal 模式 ─────────────────────────────────────────
     goal_mode: bool              # 是否为 Goal 模式
     goal_definition: str         # 用户定义的目标描述
-    goal_status: str             # "pending" | "in_progress" | "achieved" | "failed" | "budget_exceeded"
+    goal_status: str             # "pending" | "in_progress" | "achieved" | "failed" | "budget_exceeded" | "blocked"
     goal_iterations: int         # 当前迭代次数
     goal_max_iterations: int     # 最大迭代次数（默认 5）
     goal_token_budget: int       # Token 预算上限（默认 50000）
@@ -144,6 +144,7 @@ class AgentState(TypedDict, total=False):
     goal_current_plan: str       # 当前执行计划
     goal_subtasks: list          # 目标拆分子任务 [{id, title, description, status: "pending"|"in_progress"|"done"|"failed"}]
     goal_working_memory: list    # 子任务执行结果累积 [{task_id, title, result_summary, tools_used}]
+    goal_blocked_reason: str     # blocked 状态的原因（等待用户输入/暂时性错误等）
 
 
 # ── Runtime Context（P1: context_schema）────────────────────
