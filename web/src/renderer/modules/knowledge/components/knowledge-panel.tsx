@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Input, Select, Segmented, Space } from 'antd'
-import { DatabaseOutlined, FileTextOutlined, AppstoreOutlined, ClusterOutlined } from '@ant-design/icons'
+import { DatabaseOutlined, FileTextOutlined, AppstoreOutlined, ClusterOutlined, SettingOutlined } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { EmptyState } from '@/components/empty-state'
 import { useKnowledge } from '../hooks/use-knowledge'
@@ -10,13 +10,14 @@ import { DocumentDetail } from './document-detail'
 import { RecycleBin } from './recycle-bin'
 import { ExportButton } from './export-button'
 import { QdrantPanel } from './qdrant-panel'
+import { RagSettings } from './rag-settings'
 import styles from './knowledge-panel.module.css'
 
 /**
  * 知识库主面板
  */
 export function KnowledgePanel() {
-  const [activeTab, setActiveTab] = useState<'docs' | 'recycle' | 'qdrant'>('docs')
+  const [activeTab, setActiveTab] = useState<'docs' | 'recycle' | 'qdrant' | 'settings'>('docs')
 
   const {
     documents,
@@ -69,6 +70,7 @@ export function KnowledgePanel() {
                 { label: '文档', value: 'docs' },
                 { label: '回收站', value: 'recycle' },
                 { label: '向量库', value: 'qdrant' },
+                { label: '检索设置', value: 'settings' },
               ]}
               value={activeTab}
               onChange={handleTabChange}
@@ -79,8 +81,10 @@ export function KnowledgePanel() {
         }
       />
 
-      {/* Qdrant 向量库标签页 */}
-      {activeTab === 'qdrant' ? (
+      {/* 标签页内容 */}
+      {activeTab === 'settings' ? (
+        <RagSettings />
+      ) : activeTab === 'qdrant' ? (
         <QdrantPanel />
       ) : (
         <>

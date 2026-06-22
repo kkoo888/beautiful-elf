@@ -482,7 +482,7 @@ class MemoryManager:
 
     # ── 语义检索（v4.0: 4 路并行 + RRF 融合 + Token 预算）──
 
-    async def search(self, query: str, user_id: int, limit: int = 5,
+    async def search(self, query: str, user_id: int, limit: int = 10,
                      max_tokens: int = 0) -> str:
         """检索相关记忆 — v4.0 多策略融合
 

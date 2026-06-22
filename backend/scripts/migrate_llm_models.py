@@ -76,7 +76,7 @@ async def migrate():
                 if isinstance(m, dict):
                     model_name = m.get("id") or m.get("name") or m.get("model_name", "")
                     display_name = m.get("name") or m.get("display_name") or model_name
-                    context_length = m.get("contextLength") or m.get("context_length") or 4096
+                    context_length = m.get("contextLength") or m.get("context_length") or 1_000_000
                     caps = {}
                     if m.get("supportsVision") or m.get("supports_vision"):
                         caps["vision"] = True
@@ -85,7 +85,7 @@ async def migrate():
                 elif isinstance(m, str):
                     model_name = m
                     display_name = m
-                    context_length = 4096
+                    context_length = 1_000_000
                     caps = {}
                 else:
                     continue

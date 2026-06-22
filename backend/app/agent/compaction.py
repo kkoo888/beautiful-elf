@@ -40,10 +40,10 @@ def _content_to_str(content) -> str:
 
 
 # 默认配置
-DEFAULT_MAX_TOKENS = 128000       # context window 大小
-DEFAULT_RESERVE_TOKENS = 20000    # 预留给生成的 token
-DEFAULT_KEEP_RECENT = 10          # 保留最近 N 条消息不压缩
-DEFAULT_SOFT_THRESHOLD = 4000     # 软阈值（触发 pre-flush）
+DEFAULT_MAX_TOKENS = 1_000_000    # context window 大小（百万上下文）
+DEFAULT_RESERVE_TOKENS = 50_000   # 预留给生成的 token（1M 窗口下可以更宽裕）
+DEFAULT_KEEP_RECENT = 50          # 保留最近 50 条消息不压缩（1M 窗口下减少信息丢失）
+DEFAULT_SOFT_THRESHOLD = 20_000   # 软阈值（触发 pre-flush，1M 窗口下更晚触发）
 
 
 class AutoCompactor:
@@ -266,11 +266,17 @@ async def maybe_compact(
     memory_manager=None,
     user_id: int = 0,
     conversation_id: int = 0,
+    max_tokens: int = 0,
 ) -> List[dict]:
-    """检查并执行压缩（入口函数）"""
+    """检查并执行压缩（入口函数）
+
+    Args:
+        max_tokens: context window 大小（0=使用默认值 1M）
+    """
     compactor = AutoCompactor(
         llm_client=llm_client,
         memory_manager=memory_manager,
+        max_tokens=max_tokens or DEFAULT_MAX_TOKENS,
     )
 
     if not compactor.should_compact(messages):

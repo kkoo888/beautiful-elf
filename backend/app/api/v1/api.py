@@ -37,6 +37,7 @@ from app.api.v1 import (
     image_gallery,
     video_gallery,
     scheduler_control,
+    rag_config,
 )
 
 api_router = APIRouter()
@@ -57,6 +58,7 @@ api_router.include_router(snippet.router, prefix="/snippets", tags=["snippet"])
 
 # 知识 & 记忆
 api_router.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
+api_router.include_router(rag_config.router, prefix="/knowledge", tags=["rag_config"])
 api_router.include_router(memory.router, prefix="/memories", tags=["memory"])
 api_router.include_router(markdown_memory.router, prefix="/markdown_memories", tags=["markdown_memory"])
 api_router.include_router(memory_settings.router, prefix="/memory/settings", tags=["memory_settings"])

@@ -121,9 +121,9 @@ const MODEL_PRESETS: Record<string, { modelName: string; displayName: string; co
     { modelName: 'qwen-turbo', displayName: '通义千问 Turbo', contextLength: 131072 },
   ],
   xiaomi: [
-    { modelName: 'mimo-v2.5-pro', displayName: 'MiMo V2.5 Pro', contextLength: 131072 },
-    { modelName: 'mimo-v2-pro', displayName: 'MiMo V2 Pro', contextLength: 131072 },
-    { modelName: 'mimo-v2-flash', displayName: 'MiMo V2 Flash', contextLength: 131072 },
+    { modelName: 'mimo-v2.5-pro', displayName: 'MiMo V2.5 Pro', contextLength: 1000000 },
+    { modelName: 'mimo-v2-pro', displayName: 'MiMo V2 Pro', contextLength: 1000000 },
+    { modelName: 'mimo-v2-flash', displayName: 'MiMo V2 Flash', contextLength: 1000000 },
   ],
   zhipu: [
     { modelName: 'glm-4-plus', displayName: 'GLM-4 Plus', contextLength: 128000 },
@@ -240,7 +240,7 @@ export function LlmProviderSettings() {
     setModelProviderId(providerId)
     setSelectedProviderType(providerType)
     modelForm.resetFields()
-    modelForm.setFieldsValue({ isEnabled: true, temperature: 0.7, maxTokens: 4096, contextLength: 4096 })
+    modelForm.setFieldsValue({ isEnabled: true, temperature: 0.7, maxTokens: 4096, contextLength: 1000000 })
     setModelModalOpen(true)
   }, [modelForm])
 
@@ -265,7 +265,7 @@ export function LlmProviderSettings() {
       const payload: LLMModelPayload = {
         modelName: values.modelName,
         displayName: values.displayName || values.modelName,
-        contextLength: values.contextLength || 4096,
+        contextLength: values.contextLength || 1000000,
         maxTokens: values.maxTokens || 4096,
         temperature: values.temperature ?? 0.7,
         isEnabled: values.isEnabled ? 1 : 0,
@@ -355,7 +355,7 @@ export function LlmProviderSettings() {
         toAdd.map((m) => createModel(provider.id, {
           modelName: m.name,
           displayName: m.name,
-          contextLength: 4096,
+          contextLength: 1000000,
         }))
       )
       const succeeded = results.filter((r) => r.status === 'fulfilled').length
@@ -493,7 +493,7 @@ export function LlmProviderSettings() {
                     >
                       <RocketOutlined style={{ fontSize: 12 }} />
                       <span>{m.displayName || m.modelName}</span>
-                      {m.contextLength > 0 && <Text type="secondary" style={{ fontSize: 10 }}>{Math.round(m.contextLength / 1000)}k</Text>}
+                      {m.contextLength > 0 && <Text type="secondary" style={{ fontSize: 10 }}>{m.contextLength >= 1000000 ? `${(m.contextLength / 1000000).toFixed(0)}M` : `${Math.round(m.contextLength / 1000)}k`}</Text>}
                       <Tooltip title={m.isEnabled ? '点击禁用' : '点击启用'}>
                         <Switch checked={m.isEnabled === 1} onChange={() => void handleToggleModel(p.id, m.id)} size="small" style={{ marginLeft: 4 }} />
                       </Tooltip>
@@ -604,7 +604,7 @@ export function LlmProviderSettings() {
           </Form.Item>
           <div style={{ display: 'flex', gap: 16 }}>
             <Form.Item name="contextLength" label="上下文长度" style={{ flex: 1 }}>
-              <InputNumber min={1} max={1000000} style={{ width: '100%' }} placeholder="4096" />
+              <InputNumber min={256000} max={3500000} style={{ width: '100%' }} placeholder="1000000" formatter={(value) => value ? `${Math.round(Number(value) / 1000)}K` : ''} parser={(value) => Number((value || '').replace(/K/g, '000')) as any} />
             </Form.Item>
             <Form.Item name="maxTokens" label="最大输出 Token" style={{ flex: 1 }}>
               <InputNumber min={1} max={128000} style={{ width: '100%' }} placeholder="4096" />

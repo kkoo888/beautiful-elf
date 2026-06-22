@@ -63,6 +63,7 @@ def build_agent_graph(
     model_selector=None,
     enable_interrupt: bool = False,
     timeout_seconds: int = DEFAULT_AGENT_TIMEOUT,
+    context_length: int = 0,
 ) -> CompiledStateGraph:
     """
     构建 Agent 工作流图。
@@ -87,7 +88,7 @@ def build_agent_graph(
     graph.add_node("intent_router", _make_intent_router(intent_router))
     graph.add_node("skill_executor", _make_skill_executor_node(skill_executor, context_engine, memory_manager))
     graph.add_node("context_builder", _make_context_builder(context_engine, memory_manager, tool_registry))
-    graph.add_node("llm_call", _make_llm_caller(llm, tool_registry, model_selector))
+    graph.add_node("llm_call", _make_llm_caller(llm, tool_registry, model_selector, context_length=context_length))
     graph.add_node("tool_executor", _make_tool_executor(tool_registry, llm))
     graph.add_node("approval_node", _make_approval_node(tool_registry))
     graph.add_node("evaluator", _make_evaluator_node(llm))

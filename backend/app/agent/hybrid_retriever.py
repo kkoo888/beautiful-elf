@@ -38,6 +38,7 @@ class HybridRetriever:
         self._lex_top_n = lexical_top_n
         self._sem_top_n = semantic_top_n
         self._strategy = strategy
+        self._final_top_k = max(lexical_top_n, semantic_top_n)  # RRF 融合后最终返回数
         self._lock = threading.Lock()
 
         # BM25 检索器

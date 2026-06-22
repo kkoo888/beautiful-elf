@@ -12,7 +12,7 @@ from app.core.logging import get_logger
 from app.agent.state import AgentState, _content_blocks_to_str
 from app.agent.context_engine import MAX_CONTEXT_CHARS
 from app.agent.utils.common import (
-    ErrorContract, CircuitBreaker, _circuit_breaker, MAX_MESSAGE_WINDOW,
+    ErrorContract, CircuitBreaker, _circuit_breaker, MAX_MESSAGE_WINDOW, get_max_message_window,
     _content_to_str, _build_message_dicts,
     _trim_messages, _format_tool_result_json,
 )
@@ -231,9 +231,10 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
                 system_prompt = result.system_prompt
 
                 # ── Context 压缩（超长时自动压缩）──
-                if result.total_chars > MAX_CONTEXT_CHARS:
+                _max_chars = getattr(context_engine, '_max_context_chars', MAX_CONTEXT_CHARS)
+                if result.total_chars > _max_chars:
                     system_prompt = await context_engine.compress_context(
-                        system_prompt, target_chars=MAX_CONTEXT_CHARS
+                        system_prompt, target_chars=_max_chars
                     )
 
                 logger.info(f"[context_builder] sources={result.sources_used} chars={result.total_chars} elapsed={time.time()-t0:.2f}s")
@@ -310,7 +311,7 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
     return context_builder_node
 
 
-def _make_llm_caller(llm, tool_registry=None, model_selector=None):
+def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_length: int = 0):
     async def llm_call_node(state: AgentState) -> dict:
         from langgraph.config import get_stream_writer
         writer = get_stream_writer()
@@ -325,6 +326,31 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None):
         else:
             current_base_llm = llm
             model_label = state.get("model_name") or "default"
+
+        # ── 请求级 temperature/max_tokens 覆盖（前端传入时生效）──
+        req_temp = state.get("temperature", 0)
+        req_max_tokens = state.get("max_tokens", 0)
+        if req_temp > 0 or req_max_tokens > 0:
+            try:
+                from app.llm.langchain_adapter import ChatLLMProvider
+                cur_temp = getattr(current_base_llm, 'temperature', 0.7)
+                cur_max = getattr(current_base_llm, 'max_tokens', 4096)
+                new_temp = req_temp if req_temp > 0 else cur_temp
+                new_max = req_max_tokens if req_max_tokens > 0 else cur_max
+                if new_temp != cur_temp or new_max != cur_max:
+                    new_llm = ChatLLMProvider(
+                        provider=current_base_llm.provider,
+                        temperature=new_temp,
+                        max_tokens=new_max,
+                    )
+                    # 继承原 LLM 的工具绑定（ChatLLMProvider 是 Pydantic，用 model_copy）
+                    if hasattr(current_base_llm, '_bound_tools') and current_base_llm._bound_tools:
+                        new_llm._bound_tools = list(current_base_llm._bound_tools)
+                        new_llm._bound_tool_choice = getattr(current_base_llm, '_bound_tool_choice', None)
+                    current_base_llm = new_llm
+                    logger.info(f"[llm_call] 请求级覆盖: temp={new_temp}, max_tokens={new_max}")
+            except Exception as e:
+                logger.debug(f"[llm_call] 请求级参数覆盖跳过: {e}")
 
         # 路由信息
         thinking_mode = state.get("thinking_mode", "")
@@ -505,7 +531,8 @@ Answer: 基于工具结果输出该子任务的成果
 
         # ── Auto-Compaction（压缩旧历史，仅首次检查）──────
         raw_messages = state["messages"]
-        if len(raw_messages) > MAX_MESSAGE_WINDOW and not state.get("is_compacted"):
+        _window = get_max_message_window()
+        if len(raw_messages) > _window and not state.get("is_compacted"):
             try:
                 from app.agent.compaction import maybe_compact
                 raw_messages = await maybe_compact(
@@ -513,14 +540,15 @@ Answer: 基于工具结果输出该子任务的成果
                     llm_client=llm,
                     user_id=state.get("user_id", 0),
                     conversation_id=state.get("conversation_id", 0),
+                    max_tokens=context_length,  # context_length = 模型上下文窗口大小，传给 compactor 作为压缩阈值
                 )
                 _compacted = True
             except Exception as e:
                 logger.warning(f"[llm_call] compaction 失败，降级为窗口裁剪: {e}")
-                raw_messages = _trim_messages(raw_messages, MAX_MESSAGE_WINDOW)
+                raw_messages = _trim_messages(raw_messages, _window)
                 _compacted = True
         else:
-            raw_messages = _trim_messages(raw_messages, MAX_MESSAGE_WINDOW)
+            raw_messages = _trim_messages(raw_messages, _window)
             _compacted = state.get("is_compacted", False)
 
         for m in raw_messages:

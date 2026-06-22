@@ -37,7 +37,7 @@ AGNES_MODELS = [
     {
         "model_name": "agnes-2.0-flash",
         "display_name": "Agnes 2.0 Flash",
-        "context_length": 128000,
+        "context_length": 1_000_000,
         "max_tokens": 4096,
         "temperature": 0.7,
         "capabilities": {"vision": True, "tools": True, "streaming": True},
@@ -48,7 +48,7 @@ AGNES_MODELS = [
     {
         "model_name": "agnes-image-2.1-flash",
         "display_name": "Agnes Image 2.1 Flash",
-        "context_length": 4096,
+        "context_length": 1_000_000,
         "max_tokens": 4096,
         "temperature": 0.7,
         "capabilities": {"vision": True, "streaming": True},
@@ -59,7 +59,7 @@ AGNES_MODELS = [
     {
         "model_name": "agnes-video-v2.0",
         "display_name": "Agnes Video V2.0",
-        "context_length": 4096,
+        "context_length": 1_000_000,
         "max_tokens": 4096,
         "temperature": 0.7,
         "capabilities": {"streaming": True},

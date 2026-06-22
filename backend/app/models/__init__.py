@@ -9,6 +9,7 @@ from app.models.memory import MemoryEntry
 
 # 知识库
 from app.models.knowledge import KnowledgeDocument, KnowledgeChunk
+from app.models.rag_config import RagConfig
 
 # 意图
 from app.models.intent import Intent, IntentUsage

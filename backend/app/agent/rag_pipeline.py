@@ -63,7 +63,7 @@ def _build_rag_workflow(hybrid_retriever, reranker=None, budget_governor=None):
         async def hybrid_retrieve(self, ctx: Context, ev: StartEvent) -> HybridRetrieveEvent:
             """混合检索: BM25 + 向量 → RRF 融合"""
             query_str = ev.get("query_str", "")
-            hits = await asyncio.to_thread(_hybrid.retrieve, query_str, top_k=20)
+            hits = await asyncio.to_thread(_hybrid.retrieve, query_str, top_k=_hybrid._final_top_k)
             doc_ids = [h.doc_id for h in hits]
             return HybridRetrieveEvent(query_str=query_str, doc_ids=doc_ids)
 
@@ -84,7 +84,7 @@ def _build_rag_workflow(hybrid_retriever, reranker=None, budget_governor=None):
                     _reranker.postprocess_nodes, nodes, query_bundle
                 )
 
-            return RerankEvent(query_str=query_str, nodes=nodes[:5])
+            return RerankEvent(query_str=query_str, nodes=nodes[:_reranker.top_n if _reranker else 5])
 
         @step()
         async def assemble(self, ctx: Context, ev: RerankEvent) -> StopEvent:
@@ -168,8 +168,48 @@ class RAGPipeline:
 
         self._hybrid_retriever = HybridRetriever(strategy="hybrid")
         self._budget = ContextBudgetGovernor(
-            context_window_tokens=128000,
+            context_window_tokens=1_000_000,
             max_output_tokens=4096,
+        )
+
+    def apply_rag_config(self, config: dict):
+        """从 DB rag_config 表读取参数，覆盖默认值
+
+        Args:
+            config: rag_config 表的 dict（snake_case keys）
+        """
+        chunk_size = config.get("chunk_size", 2048)
+        chunk_overlap = config.get("chunk_overlap", 256)
+        similarity_top_k = config.get("similarity_top_k", 10)
+        bm25_top_n = config.get("bm25_top_n", 20)
+        rrf_k = config.get("rrf_k", 60)
+        rerank_top_n = config.get("rerank_top_n", 5)
+
+        # 更新分块参数
+        if self._node_parser:
+            from llama_index.core.node_parser import SentenceSplitter
+            self._node_parser = SentenceSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+
+        # 更新向量检索 top_k
+        if self._retriever:
+            self._retriever._similarity_top_k = similarity_top_k
+
+        # 更新 HybridRetriever
+        self._hybrid_retriever._lex_top_n = bm25_top_n
+        self._hybrid_retriever._sem_top_n = bm25_top_n
+        self._hybrid_retriever._rrf_k = rrf_k
+        self._hybrid_retriever._final_top_k = max(bm25_top_n, similarity_top_k)
+
+        # 更新 reranker top_n
+        if self._reranker and hasattr(self._reranker, 'top_n'):
+            self._reranker.top_n = rerank_top_n
+
+        logger.info(
+            f"[rag_pipeline] 配置已更新: chunk={chunk_size}/{chunk_overlap}, "
+            f"top_k={similarity_top_k}, bm25={bm25_top_n}, rrf_k={rrf_k}, rerank_n={rerank_top_n}"
         )
 
     async def initialize(self):
@@ -199,8 +239,8 @@ class RAGPipeline:
             )
 
             self._node_parser = SentenceSplitter(
-                chunk_size=512,
-                chunk_overlap=64,
+                chunk_size=2048,
+                chunk_overlap=256,
             )
 
             self._retriever = self._index.as_retriever(similarity_top_k=10)
@@ -345,7 +385,7 @@ class RAGPipeline:
 
         # ── 混合检索（BM25 + 向量 → RRF 融合）──
         hits = await asyncio.to_thread(
-            self._hybrid_retriever.retrieve, query, top_k=20
+            self._hybrid_retriever.retrieve, query, top_k=self._hybrid_retriever._final_top_k
         )
 
         if not hits:

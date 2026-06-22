@@ -76,6 +76,8 @@ class AgentState(TypedDict, total=False):
     user_id: int
     provider_id: Optional[int]
     model_name: str
+    temperature: float           # 请求级温度（0=使用 DB 值）
+    max_tokens: int              # 请求级最大输出 token（0=使用 DB 值）
 
     # ── 消息（reducer: 追加而非覆盖）──────────────────
     messages: Annotated[list, operator.add]

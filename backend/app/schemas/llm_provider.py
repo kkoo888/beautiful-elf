@@ -11,7 +11,7 @@ class LLMModelCreate(CamelModel):
     """创建模型"""
     model_name: str = Field(..., alias="modelName", description="实际调用名")
     display_name: str = Field(default="", alias="displayName", description="显示名")
-    context_length: int = Field(default=4096, alias="contextLength")
+    context_length: int = Field(default=1_000_000, alias="contextLength")
     max_tokens: int = Field(default=4096, alias="maxTokens")
     temperature: float = Field(default=0.7, description="温度 0-2")
     capabilities: dict = Field(default_factory=dict)
@@ -39,7 +39,7 @@ class LLMModelOut(CamelModel):
     provider_id: int = Field(alias="providerId")
     model_name: str = Field(alias="modelName")
     display_name: str = Field(default="", alias="displayName")
-    context_length: int = Field(default=4096, alias="contextLength")
+    context_length: int = Field(default=1_000_000, alias="contextLength")
     max_tokens: int = Field(default=4096, alias="maxTokens")
     temperature: float = Field(default=0.7)
     capabilities: dict = Field(default_factory=dict)

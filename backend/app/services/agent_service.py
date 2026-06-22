@@ -50,6 +50,8 @@ class AgentService:
         model_name: str = "",
         tool_names: Optional[list] = None,
         enable_interrupt: bool = False,
+        temperature: float = 0,
+        max_tokens: int = 0,
     ) -> bool:
         """初始化 Agent 引擎（v5.0 — 不再全量 bind_tools）
 
@@ -67,9 +69,18 @@ class AgentService:
             await tool_registry.load_from_db(db)
 
             # ── B+C: LLM 不再 bind_tools，工具由 engine 动态绑定 ──
+            # temperature/max_tokens: 请求级 > DB级 > 默认值（get_chat_llm 内部处理优先级）
             llm = await llm_service.get_chat_llm(
-                db, provider_id=provider_id, model_name=model_name, bind_tools=None,
+                db, provider_id=provider_id, model_name=model_name,
+                temperature=temperature, max_tokens=max_tokens, bind_tools=None,
             )
+
+            # ── 从 DB 读取模型完整参数，动态注入各组件 ──
+            model_params = await llm_service.get_model_params(
+                db, provider_id=provider_id, model_name=model_name,
+            )
+            context_length = model_params["context_length"]
+            logger.info(f"[agent_service] 模型参数 from DB: {model_params}")
 
             # ── 模型路由──
             from app.router.model_selector import ModelSelector
@@ -93,7 +104,28 @@ class AgentService:
                 rag_pipeline = RAGPipeline(
                     embedding_model=None,  # 由 RAGPipeline 内部初始化
                 )
-                logger.info("RAG pipeline 已注入 ContextEngine")
+                # 从 DB 注入 context_length 到 RAG budget
+                rag_pipeline.update_budget(context_length)
+
+                # 从 DB 读取 RAG 配置并应用
+                try:
+                    from app.services.rag_config_service import rag_config_service
+                    rag_cfg = await rag_config_service.get_config(db)
+                    if rag_cfg:
+                        # get_config 返回 camelCase dict，转为 snake_case
+                        snake_cfg = {
+                            "chunk_size": rag_cfg.get("chunkSize", 2048),
+                            "chunk_overlap": rag_cfg.get("chunkOverlap", 256),
+                            "similarity_top_k": rag_cfg.get("similarityTopK", 10),
+                            "bm25_top_n": rag_cfg.get("bm25TopN", 20),
+                            "rrf_k": rag_cfg.get("rrfK", 60),
+                            "rerank_top_n": rag_cfg.get("rerankTopN", 5),
+                        }
+                        rag_pipeline.apply_rag_config(snake_cfg)
+                except Exception as e:
+                    logger.warning(f"RAG 配置加载跳过: {e}")
+
+                logger.info(f"RAG pipeline 已注入 ContextEngine (budget={context_length})")
             except Exception as e:
                 logger.warning(f"RAG pipeline 初始化跳过: {e}")
 
@@ -101,7 +133,31 @@ class AgentService:
                 memory_manager=memory_manager,
                 rag_pipeline=rag_pipeline,
                 tool_registry=tool_registry,
+                context_length=context_length,
             )
+
+            # 存储 context_length 供 compaction 节点使用
+            self._context_length = context_length
+
+            # 动态计算消息窗口
+            from app.agent.utils.common import update_max_message_window
+            update_max_message_window(context_length)
+
+            # 从 DB setting 表加载可配置参数
+            try:
+                from app.services.config_service import config_service
+                from app.agent.intent_router import update_thresholds
+                intent_val = await config_service.get_value("agent.intent_threshold")
+                cache_val = await config_service.get_value("agent.semantic_cache_threshold")
+                timeout_val = await config_service.get_value("agent.timeout_seconds")
+                update_thresholds(
+                    float(intent_val) if intent_val else 0,
+                    float(cache_val) if cache_val else 0,
+                )
+                if timeout_val:
+                    self._agent_timeout = int(timeout_val)
+            except Exception as e:
+                logger.debug(f"[agent_service] 可配置参数加载跳过: {e}")
 
             # 加载用户配置的人格
             try:
@@ -124,6 +180,7 @@ class AgentService:
                 rag_pipeline=rag_pipeline,
                 model_selector=model_selector,
                 enable_interrupt=enable_interrupt,
+                context_length=context_length,
             )
             self._provider_id = provider_id
             self._model_name = model_name
@@ -401,10 +458,12 @@ class AgentService:
         skill_id: int | None = None,
         goal_mode: bool = False,
         goal_definition: str = "",
+        temperature: float = 0,
+        max_tokens: int = 0,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Agent 流式对话（v4.4 — 新增 Goal 模式）"""
         if not self.is_ready:
-            success = await self._lazy_init(provider_id, model_name)
+            success = await self._lazy_init(provider_id, model_name, temperature=temperature, max_tokens=max_tokens)
             if not success:
                 yield {"type": "error", "message": "Agent 引擎初始化失败"}
                 return
@@ -500,6 +559,8 @@ class AgentService:
                 "trace_metadata": {},
                 "provider_id": provider_id,
                 "model_name": model_name,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
                 "evaluation": None,
                 "reasoning_depth": reasoning_depth,
                 "selected_model": "",
@@ -919,7 +980,7 @@ class AgentService:
             logger.error(f"专家团流式执行失败: {e}", exc_info=True)
             yield {"type": "error", "message": f"专家团执行失败: {e}"}
 
-    async def _lazy_init(self, provider_id: int, model_name: str) -> bool:
+    async def _lazy_init(self, provider_id: int, model_name: str, temperature: float = 0, max_tokens: int = 0) -> bool:
         """懒初始化 — 双重检查锁 + provider 变更检测
 
         当用户切换供应商/模型时，需要重建 graph。
@@ -939,7 +1000,7 @@ class AgentService:
 
             from app.core.database import AsyncSessionLocal
             async with AsyncSessionLocal() as db:
-                return await self.initialize(db, provider_id=provider_id, model_name=model_name)
+                return await self.initialize(db, provider_id=provider_id, model_name=model_name, temperature=temperature, max_tokens=max_tokens)
 
     def reset(self):
         self._graph = None

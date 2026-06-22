@@ -23,6 +23,7 @@ export const KNOWLEDGE_ENDPOINTS = {
   QDRANT_STATS: `/knowledge/qdrant/stats`,
   QDRANT_DOCUMENTS: `/knowledge/qdrant/documents`,
   QDRANT_VECTORS: (docId: string | number) => `/knowledge/qdrant/vectors/${docId}`,
+  RAG_CONFIG: `/knowledge/rag-config`,
 } as const
 
 // ─── 记忆 ───

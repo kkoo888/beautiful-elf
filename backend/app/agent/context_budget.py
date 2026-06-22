@@ -36,7 +36,7 @@ class ContextBudgetGovernor:
 
     用法:
         governor = ContextBudgetGovernor.from_values(
-            context_window_tokens=128000,
+            context_window_tokens=1_000_000,
             max_output_tokens=4096,
         )
         snapshot = governor.snapshot()
@@ -45,7 +45,7 @@ class ContextBudgetGovernor:
 
     def __init__(
         self,
-        context_window_tokens: int = 128000,
+        context_window_tokens: int = 1_000_000,
         max_output_tokens: int = 4096,
         thinking_budget_tokens: int = 0,
         threshold: float = 0.85,
@@ -60,7 +60,7 @@ class ContextBudgetGovernor:
     def from_config(cls, config) -> "ContextBudgetGovernor":
         """从项目配置创建"""
         return cls(
-            context_window_tokens=getattr(config, "context_window_tokens", 128000),
+            context_window_tokens=getattr(config, "context_window_tokens", 1_000_000),
             max_output_tokens=getattr(config, "max_output_tokens", 4096),
             thinking_budget_tokens=getattr(config, "thinking_budget_tokens", 0),
             threshold=getattr(config, "context_overflow_threshold", 0.85),
@@ -86,15 +86,15 @@ class ContextBudgetGovernor:
         max_chars = int(usable * self._threshold * CHARS_PER_TOKEN)
 
         # RAG 结果：占可用上下文的 50%（留空间给 system prompt + 对话历史）
-        max_rag_chars = max(4_000, min(
+        max_rag_chars = max(10_000, min(
             max_chars // 2,
-            160_000 if ctx >= 64_000 else 32_000,
+            300_000 if ctx >= 64_000 else 32_000,
         ))
 
         # 工具结果：占可用上下文的 25%
-        max_tool_chars = max(2_000, min(
+        max_tool_chars = max(5_000, min(
             max_chars // 4,
-            80_000 if ctx >= 64_000 else 16_000,
+            150_000 if ctx >= 64_000 else 16_000,
         ))
 
         return ContextBudgetSnapshot(

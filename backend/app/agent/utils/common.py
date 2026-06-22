@@ -9,7 +9,21 @@ from app.agent.state import _content_blocks_to_str
 logger = get_logger(__name__)
 
 # ── 通用常量 ─────────────────────────────────────────────
-MAX_MESSAGE_WINDOW = 30
+MAX_MESSAGE_WINDOW = 30  # 默认值，可被 context_length 动态覆盖
+
+# 运行时可覆盖（从 context_length 推导）
+_max_message_window_override: int = 0
+
+
+def update_max_message_window(context_length: int):
+    """根据 context_length 动态计算消息窗口大小"""
+    global _max_message_window_override
+    # 经验公式：1M 窗口 → 50 条，256K → 30 条，线性插值
+    _max_message_window_override = max(30, min(100, context_length // 20000))
+
+
+def get_max_message_window() -> int:
+    return _max_message_window_override or MAX_MESSAGE_WINDOW
 
 
 # ── 错误契约 ──────────────────────────────────────────────

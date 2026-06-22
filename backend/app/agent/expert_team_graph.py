@@ -405,7 +405,7 @@ async def expert_execute(state: ExpertTeamState) -> dict:
         model_name=expert_conf.get("model_name") or state["pm_model_name"],
         expert_name=expert_name, expert_role=expert_role, expert_goal=expert_goal,
         subtask=subtask, skills_desc=skills_desc, context=context_text,
-        temperature=0.3,
+        temperature=float(expert_conf.get("temperature") or 0.3),
     )
     reasoning_text = format_reasoning_for_prompt(reasoning_obj)
     if reasoning_text:
@@ -418,7 +418,8 @@ async def expert_execute(state: ExpertTeamState) -> dict:
         db=state.get("db"), provider_id=expert_conf.get("provider_id") or state["pm_provider_id"],
         model_name=expert_conf.get("model_name") or state["pm_model_name"],
         expert_name=expert_name, expert_role=expert_role,
-        subtask=subtask, context=context_text, n_branches=3, temperature=0.7,
+        subtask=subtask, context=context_text, n_branches=3,
+        temperature=float(expert_conf.get("temperature") or 0.7),
     )
     tot_text = format_tot_for_prompt(tot_obj)
     if tot_text:
@@ -431,10 +432,11 @@ async def expert_execute(state: ExpertTeamState) -> dict:
     use_lats = expert_conf.get("use_lats", False)
     if use_lats:
         try:
-            lats_llm = await _get_llm_for_verify(state.get("db"), expert_provider_id, expert_model_name, 0.7)
+            _expert_temp = float(expert_conf.get("temperature") or 0.7)
+            lats_llm = await _get_llm_for_verify(state.get("db"), expert_provider_id, expert_model_name, _expert_temp)
             lats_result = await run_lats(
                 llm=lats_llm, problem=subtask, context=context_text,
-                max_iterations=5, max_children=3, temperature=0.7,
+                max_iterations=5, max_children=3, temperature=_expert_temp,
             )
             lats_text = format_lats_for_prompt(lats_result)
             if lats_text:
@@ -576,7 +578,8 @@ async def expert_execute(state: ExpertTeamState) -> dict:
                 db=state.get("db"), provider_id=expert_provider_id,
                 model_name=expert_model_name, expert_name=expert_name,
                 expert_role=expert_role, subtask=subtask,
-                output=content, duration_ms=duration_ms, temperature=0.3,
+                output=content, duration_ms=duration_ms,
+                temperature=float(expert_conf.get("temperature") or 0.3),
             )
             if reflexion_obj:
                 reflexion_text = format_reflexion_for_prompt(reflexion_obj)

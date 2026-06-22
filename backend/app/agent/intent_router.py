@@ -25,6 +25,20 @@ SEMANTIC_CACHE_COLLECTION = "semantic_cache"
 SEMANTIC_CACHE_THRESHOLD = 0.92      # [P2] 语义缓存阈值：从 0.95 调整到 0.92（同义改写区间）
 SEMANTIC_CACHE_HIGH_CONFIDENCE = 0.95  # 高置信度：直接返回缓存答案
 
+# 运行时可覆盖的阈值（从 DB setting 表加载）
+_intent_threshold_override: float = 0
+_semantic_cache_threshold_override: float = 0
+
+
+def update_thresholds(intent_threshold: float = 0, semantic_cache_threshold: float = 0):
+    """从 DB 更新阈值（agent_service 初始化时调用）"""
+    global _intent_threshold_override, _semantic_cache_threshold_override
+    if intent_threshold > 0:
+        _intent_threshold_override = intent_threshold
+    if semantic_cache_threshold > 0:
+        _semantic_cache_threshold_override = semantic_cache_threshold
+
+
 # 按意图类型可配置的阈值映射（覆盖默认值）
 INTENT_THRESHOLD_MAP = {
     "exact_match": 0.90,    # 精确匹配场景（如命令触发）
@@ -125,7 +139,7 @@ class IntentRouter:
         """
         self.qdrant = qdrant_mapper
         self.embedding_func = embedding_func
-        self._threshold = score_threshold or INTENT_SCORE_THRESHOLD
+        self._threshold = score_threshold or _intent_threshold_override or INTENT_SCORE_THRESHOLD
         self.qdrant.ensure_collection(INTENT_COLLECTION, vector_size=1024)
         self.qdrant.ensure_collection(SEMANTIC_CACHE_COLLECTION, vector_size=1024)
 
@@ -208,13 +222,13 @@ class IntentRouter:
                 collection=SEMANTIC_CACHE_COLLECTION,
                 query_vector=vector,
                 limit=1,
-                score_threshold=SEMANTIC_CACHE_THRESHOLD,
+                score_threshold=_semantic_cache_threshold_override or SEMANTIC_CACHE_THRESHOLD,
             )
             if not results:
                 return None
 
             score = results[0].score
-            if score >= SEMANTIC_CACHE_THRESHOLD:
+            if score >= (_semantic_cache_threshold_override or SEMANTIC_CACHE_THRESHOLD):
                 confidence = "high" if score >= SEMANTIC_CACHE_HIGH_CONFIDENCE else "medium"
                 logger.info(f"[semantic_cache] 命中: score={score:.3f} confidence={confidence}")
                 return {

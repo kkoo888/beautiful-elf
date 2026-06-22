@@ -72,6 +72,8 @@ async def chat(
     skill_id = data.skill_id
     goal_mode = data.goal_mode or False
     goal_definition = data.goal_definition or ""
+    temperature = data.temperature or 0
+    max_tokens = data.max_tokens or 0
 
     # Goal 模式与 manual 专家团模式互斥
     if goal_mode and team_mode == "manual":
@@ -85,7 +87,7 @@ async def chat(
         )
 
     return StreamingResponse(
-        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth, team_mode, team_id, skill_id, goal_mode, goal_definition),
+        _stream_response(conversation_id, user_id, messages, provider_id, model_name, reasoning_depth, team_mode, team_id, skill_id, goal_mode, goal_definition, temperature, max_tokens),
         media_type="text/event-stream",
     )
 
@@ -441,6 +443,7 @@ async def _stream_response(
     provider_id: int, model_name: str, reasoning_depth: str = "balanced",
     team_mode: str = "off", team_id: int | None = None, skill_id: int | None = None,
     goal_mode: bool = False, goal_definition: str = "",
+    temperature: float = 0, max_tokens: int = 0,
 ):
     """SSE 流式响应 — 带心跳保活 + 消息持久化
 
@@ -518,6 +521,8 @@ async def _stream_response(
                 skill_id=skill_id,
                 goal_mode=goal_mode,
                 goal_definition=goal_definition,
+                temperature=temperature,
+                max_tokens=max_tokens,
             ):
                 event_type = event.get("type", "")
                 if event_type == "token":

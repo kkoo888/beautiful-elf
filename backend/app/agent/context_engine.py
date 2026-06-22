@@ -18,7 +18,12 @@ from app.agent.injection_guard import wrap_untrusted, detect_injection_attempt
 
 logger = get_logger(__name__)
 
-MAX_CONTEXT_CHARS = 6000
+# MAX_CONTEXT_CHARS 由 context_length 动态计算
+# 默认值：context_length 的 8%（约 80K 字符 @ 1M 窗口）
+_DEFAULT_CONTEXT_LENGTH = 1_000_000
+_CONTEXT_RATIO = 0.08  # system prompt 占 context window 的比例
+# 模块级 fallback（nodes.py 导入用，实例化后会被 self._max_context_chars 覆盖）
+MAX_CONTEXT_CHARS = int(_DEFAULT_CONTEXT_LENGTH * _CONTEXT_RATIO * 4)
 
 
 def _content_to_str(content) -> str:
@@ -65,12 +70,16 @@ class ContextEngine:
         rag_pipeline=None,
         tool_registry=None,
         llm_client=None,
+        context_length: int = 0,
     ):
         self.memory_manager = memory_manager
         self.rag_pipeline = rag_pipeline
         self.tool_registry = tool_registry
         self.llm_client = llm_client  # 用于压缩和 query rewriting
         self._soul_prompt_cache: Optional[str] = None  # 用户配置的人格 prompt
+        # 动态计算 context 预算（从 DB context_length 推导）
+        _ctx = context_length or _DEFAULT_CONTEXT_LENGTH
+        self._max_context_chars = int(_ctx * _CONTEXT_RATIO * 4)  # 4 chars/token
 
     def get_tool_summaries(self) -> List[dict]:
         """返回工具摘要列表（供 engine.py 使用）"""
@@ -139,7 +148,7 @@ class ContextEngine:
     ) -> ContextResult:
         """组装完整的 Context（Write/Select/Compress/Isolate 四策略）"""
         parts: Dict[str, str] = {}
-        budget_remaining = MAX_CONTEXT_CHARS
+        budget_remaining = self._max_context_chars
 
         # 1. 系统人格（最高优先级）
         soul = self._build_soul_prompt(intent)
@@ -152,33 +161,33 @@ class ContextEngine:
             budget_remaining -= len(skill_context)
 
         # 3. 用户偏好（从记忆中提取）
-        if self.memory_manager and user_id and budget_remaining > 300:
-            prefs = await self._retrieve_user_prefs(user_id, budget=500)
+        if self.memory_manager and user_id and budget_remaining > 1000:
+            prefs = await self._retrieve_user_prefs(user_id, budget=3_000)
             if prefs:
                 parts["preferences"] = prefs
                 budget_remaining -= len(prefs)
 
         # 4. 长期记忆（user_message 已在 engine.py 中经过 query rewriting）
         memory_meta = {"ids": [], "scores": [], "count": 0}
-        if self.memory_manager and user_message and budget_remaining > 500:
-            memory_ctx, memory_meta = await self._retrieve_memory_with_meta(user_id, user_message, budget=1500)
+        if self.memory_manager and user_message and budget_remaining > 2000:
+            memory_ctx, memory_meta = await self._retrieve_memory_with_meta(user_id, user_message, budget=15_000)
             if memory_ctx:
                 parts["memory"] = memory_ctx
                 budget_remaining -= len(memory_ctx)
 
         # 5. RAG 知识库
-        if self.rag_pipeline and getattr(self.rag_pipeline, 'is_ready', False) and user_message and budget_remaining > 500:
-            rag_ctx = await self._retrieve_knowledge(user_message, budget=2000)
+        if self.rag_pipeline and getattr(self.rag_pipeline, 'is_ready', False) and user_message and budget_remaining > 2000:
+            rag_ctx = await self._retrieve_knowledge(user_message, budget=30_000)
             if rag_ctx:
                 parts["knowledge"] = rag_ctx
                 budget_remaining -= len(rag_ctx)
 
         # 6. 工具定义摘要（根据意图动态过滤）
         tool_list = tools or self.get_tool_summaries()
-        if tool_list and budget_remaining > 300:
+        if tool_list and budget_remaining > 1000:
             # 根据意图过滤工具
             filtered_tools = self._filter_tools_by_intent(tool_list, intent)
-            tools_ctx = self._format_tool_defs(filtered_tools, budget=1000)
+            tools_ctx = self._format_tool_defs(filtered_tools, budget=5_000)
             if tools_ctx:
                 parts["tools"] = tools_ctx
                 budget_remaining -= len(tools_ctx)
@@ -319,7 +328,7 @@ class ContextEngine:
         """
         meta = {"ids": [], "scores": [], "count": 0}
         try:
-            results = await self.memory_manager.search_with_scores(query=query, user_id=user_id, limit=3)
+            results = await self.memory_manager.search_with_scores(query=query, user_id=user_id, limit=10)
             if not results:
                 return "", meta
 
