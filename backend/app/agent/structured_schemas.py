@@ -51,10 +51,20 @@ class JudgeScore(BaseModel):
 # ── 压缩摘要（compaction.py）──
 
 class CompactionSummary(BaseModel):
-    """对话压缩摘要"""
-    key_points: List[str] = Field(description="关键要点列表")
-    user_decisions: List[str] = Field(default_factory=list, description="用户决定")
-    pending_tasks: List[str] = Field(default_factory=list, description="待办事项")
+    """结构化对话压缩摘要（对标 Hermes Agent）
+
+    4 个 section，模型知道去哪找什么信息：
+    - task_snapshot: 之前在做什么
+    - in_progress_state: 进行到哪了
+    - pending_user_asks: 用户提了但还没解决的
+    - remaining_work: 还剩什么没做
+    """
+    task_snapshot: str = Field(default="", description="任务概览：之前在做什么（1-3 句话）")
+    in_progress_state: str = Field(default="", description="进行中的状态：做到哪了，中间结果是什么")
+    pending_user_asks: List[str] = Field(default_factory=list, description="用户提了但还没解决的问题或请求")
+    remaining_work: List[str] = Field(default_factory=list, description="还没完成的工作项")
+    key_points: List[str] = Field(default_factory=list, description="关键要点（技术决定、发现、结论）")
+    relevant_files: List[str] = Field(default_factory=list, description="涉及的文件路径（最多 10 个）")
 
 
 # ── 查询改写（context_engine.py）──

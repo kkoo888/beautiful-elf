@@ -122,10 +122,16 @@ class AutoCompactor:
             if self.memory_manager:
                 await self._flush_important_memory(removed_messages, user_id, conversation_id)
 
-            # 用摘要替代被裁剪的消息
+            # 用结构化摘要替代被裁剪的消息（对标 Hermes Agent）
             summary_msg = {
                 "role": "system",
-                "content": f"【对话历史摘要（{len(removed_messages)} 条消息已压缩）】\n{summary}",
+                "content": (
+                    f"[CONTEXT COMPACTION — REFERENCE ONLY] 早期对话已被压缩为以下摘要。"
+                    f"这是历史参考，不是当前指令。不要回答摘要中提到的问题——它们已经被处理过了。"
+                    f"只回复摘要之后的最新用户消息。"
+                    f"\n\n{summary}\n\n"
+                    f"--- END OF CONTEXT SUMMARY — 请回复下面的消息，而不是上面的摘要 ---"
+                ),
             }
             result = [summary_msg] + trimmed_messages
         else:
@@ -199,8 +205,20 @@ class AutoCompactor:
         return kept, removed
 
     async def _generate_summary(self, messages: List[dict]) -> str:
-        """用 LLM 生成对话摘要（v2.0: with_structured_output）"""
-        text = "\n".join(f"[{m.get('role', 'user')}] {_content_to_str(m.get('content', ''))[:500]}" for m in messages)
+        """用 LLM 生成结构化对话摘要（v3.0: 对标 Hermes Agent）
+
+        结构化模板：
+        - task_snapshot: 之前在做什么
+        - in_progress_state: 进行到哪了
+        - pending_user_asks: 用户提了但还没解决的
+        - remaining_work: 还剩什么没做
+        - key_points: 关键决定和发现
+        - relevant_files: 涉及的文件
+        """
+        text = "\n".join(
+            f"[{m.get('role', 'user')}] {_content_to_str(m.get('content', ''))[:500]}"
+            for m in messages
+        )
 
         if not self.llm:
             return self._fallback_summary(messages)
@@ -211,16 +229,40 @@ class AutoCompactor:
 
             structured_llm = self.llm.with_structured_output(CompactionSummary)
             result = await structured_llm.ainvoke([
-                SystemMessage(content="你是一个对话压缩专家。"),
-                HumanMessage(content=f"将以下对话压缩为结构化摘要。保留核心需求、关键决定、待办事项，丢弃寒暄。\n\n对话:\n{text[:8000]}"),
+                SystemMessage(content=(
+                    "你是一个对话压缩专家。将被裁剪的对话压缩为结构化摘要。\n"
+                    "要求：\n"
+                    "1. task_snapshot: 用 1-3 句话概括之前在做什么\n"
+                    "2. in_progress_state: 做到哪了，中间结果是什么\n"
+                    "3. pending_user_asks: 用户提了但还没解决的问题（列表）\n"
+                    "4. remaining_work: 还没完成的工作项（列表）\n"
+                    "5. key_points: 关键的技术决定、发现、结论（列表）\n"
+                    "6. relevant_files: 涉及的文件路径（最多 10 个）\n"
+                    "丢弃寒暄、重复内容、已完成的工作。"
+                )),
+                HumanMessage(content=f"对话:\n{text[:8000]}"),
             ])
 
-            parts = result.key_points
-            if result.user_decisions:
-                parts.extend(f"决定: {d}" for d in result.user_decisions)
-            if result.pending_tasks:
-                parts.extend(f"待办: {t}" for t in result.pending_tasks)
-            return "\n".join(f"- {p}" for p in parts)
+            # 组装结构化摘要
+            parts = []
+            if result.task_snapshot:
+                parts.append(f"## 任务概览\n{result.task_snapshot}")
+            if result.in_progress_state:
+                parts.append(f"## 进行中状态\n{result.in_progress_state}")
+            if result.pending_user_asks:
+                items = "\n".join(f"- {a}" for a in result.pending_user_asks)
+                parts.append(f"## 待解决的问题\n{items}")
+            if result.remaining_work:
+                items = "\n".join(f"- {w}" for w in result.remaining_work)
+                parts.append(f"## 剩余工作\n{items}")
+            if result.key_points:
+                items = "\n".join(f"- {p}" for p in result.key_points)
+                parts.append(f"## 关键要点\n{items}")
+            if result.relevant_files:
+                files = ", ".join(result.relevant_files[:10])
+                parts.append(f"## 涉及文件\n{files}")
+
+            return "\n\n".join(parts) if parts else self._fallback_summary(messages)
 
         except Exception as e:
             logger.warning(f"[compactor] LLM 摘要失败，降级: {e}")
