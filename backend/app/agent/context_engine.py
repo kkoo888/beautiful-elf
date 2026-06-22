@@ -299,6 +299,18 @@ class ContextEngine:
             "**调用工具：** 实时信息查询、数据库/知识库检索、代码执行、文件读写、系统操作\n"
             "**直接回答：** 问候闲聊、通用知识问答、解释翻译写作总结、无需外部数据的对话"
         )
+
+        # 并行工具调用 Guidance（降低成本 + 延迟）
+        base += (
+            "\n\n## Parallel tool calls（并行工具调用）\n"
+            "当你需要多个互不依赖的信息时，在同一个 response 里一起调用，"
+            "而不是一个一个来。独立的读取、搜索、web fetch、只读命令应该"
+            "批量放入同一个 assistant turn —— 运行时会并行执行独立调用，"
+            "批量调用避免了每轮重传整个对话。\n"
+            "只有当后续调用真正依赖前一个调用的结果时才串行（比如你必须先"
+            "读文件才能改它）。如果不确定是否独立，就批量调用。"
+        )
+
         if intent and intent.get("intent_name") and intent["intent_name"] not in ("semantic_cache_hit", "chitchat"):
             intent_name = intent.get("intent_name", "")
             base += f"\n\n当前激活技能：{intent_name}，请优先使用与该技能相关的工具完成任务。"
