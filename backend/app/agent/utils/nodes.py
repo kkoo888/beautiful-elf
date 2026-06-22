@@ -1029,47 +1029,20 @@ def _make_approval_node(tool_registry):
 
 
 def _make_evaluator_node(llm=None):
-    """评估节点 — LLM-as-Judge（替代纯规则评估）
+    """评估节点 — 混合方案（增强规则 + LLM-as-Judge）
 
-    评估维度:
-      1. 准确性 — 回答是否正确
-      2. 完整性 — 是否回答了用户的问题
-      3. 幻觉检测 — 是否包含捏造信息
-      4. 工具使用 — 工具调用结果是否被正确引用
+    两阶段评估:
+      Phase 1 — 增强规则（零 LLM 调用，快速过滤明显差/好的回答）
+      Phase 2 — LLM-as-Judge（仅对边界 case 做语义评估，score 5-8）
 
-    当 llm 不可用时降级为规则评估。
+    当 llm 不可用时降级为纯规则评估。
     """
 
-    # 规则评估降级版（仅在无 LLM 时使用）
-    def _rule_based_eval(state) -> dict:
-        final_answer = state.get("final_answer", "")
-        if not final_answer:
-            return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
-        if len(final_answer.strip()) < 10:
-            return {"evaluation": {"passed": False, "reason": "回答过短", "score": 2},
-                    "final_answer": "抱歉，我暂时无法准确回答这个问题。你可以换个方式描述，或稍后再试。"}
-        if "抱歉" in final_answer and "不可用" in final_answer:
-            return {"evaluation": {"passed": False, "reason": "包含错误信息", "score": 2}}
-        return {"evaluation": {"passed": True, "reason": "", "score": 7}}
-
-    async def evaluator_node(state: AgentState) -> dict:
-        from langgraph.config import get_stream_writer
-        writer = get_stream_writer()
-
-        final_answer = state.get("final_answer", "")
-        if not final_answer:
-            writer({"step": "eval", "status": "skipped", "message": "无回答，跳过评估"})
-            logger.info("[evaluator] 无回答，跳过评估")
-            return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
-
-        writer({"step": "eval", "status": "checking", "message": "正在评估回答质量..."})
-        logger.info("[evaluator] 开始评估回答质量")
-
-        # ── 纯代码规则评估（零 LLM 调用）──
-        score = 7  # 基础分
+    # ── Phase 1: 增强规则评估 ──
+    def _rule_based_score(final_answer: str, tools_used: list, memory_ctx: dict) -> tuple[int, list[str]]:
+        """返回 (score, reasons)，score 范围 1-10。"""
+        score = 4  # 基础分降低，避免垃圾回答轻易过关
         reasons = []
-        tools_used = state.get("tools_used", [])
-        memory_ctx = state.get("memory_context") or {}
 
         # 规则 1: 回答长度
         ans_len = len(final_answer.strip())
@@ -1080,7 +1053,7 @@ def _make_evaluator_node(llm=None):
             score -= 2
             reasons.append("回答较短")
         elif ans_len > 200:
-            score += 1  # 长回答加分
+            score += 1
 
         # 规则 2: 错误关键词
         error_keywords = ["抱歉", "不可用", "服务异常", "暂时无法", "出错了", "失败了"]
@@ -1094,8 +1067,7 @@ def _make_evaluator_node(llm=None):
 
         # 规则 3: 工具使用
         if tools_used:
-            score += 1  # 使用了工具加分
-            # 检查回答是否引用了工具结果
+            score += 1
             tool_ref_keywords = ["根据", "检索", "查询", "搜索", "工具", "返回", "结果显示"]
             has_tool_ref = any(kw in final_answer for kw in tool_ref_keywords)
             if has_tool_ref:
@@ -1121,37 +1093,145 @@ def _make_evaluator_node(llm=None):
         uncertainty_markers = ["可能", "也许", "据我了解", "不确定", "推测"]
         has_uncertainty = any(m in final_answer for m in uncertainty_markers)
         if has_uncertainty:
-            score += 0.5  # 诚实加分
+            score += 0.5
 
-        # 限制分数范围
-        score = max(1, min(10, int(score)))
-        passed = score >= 6
-        reason = "、".join(reasons) if reasons else "质量合格"
+        # 规则 7: 工具调用 JSON 残留检测（回答里混入了工具调用格式）
+        tool_json_markers = ['"name":', '"parameters":', '"query":', "web_search", "search_web", "function_call"]
+        tool_json_count = sum(1 for m in tool_json_markers if m in final_answer)
+        if tool_json_count >= 2:
+            score -= 4
+            reasons.append("回答包含工具调用残留")
+        elif tool_json_count >= 1:
+            score -= 2
+            reasons.append("回答可能包含工具调用残留")
+
+        # 规则 8: 自然语言比例检测（中文字符占比）
+        if ans_len >= 20:
+            chinese_chars = sum(1 for c in final_answer if '\u4e00' <= c <= '\u9fff')
+            cn_ratio = chinese_chars / ans_len
+            if cn_ratio < 0.1 and ans_len > 50:
+                score -= 3
+                reasons.append("回答缺少自然语言内容")
+
+        return max(1, min(10, int(score))), reasons
+
+    # ── Phase 2: LLM-as-Judge ──
+    _EVALUATOR_PROMPT = """你是一个严格的质量评估员。请评估以下 AI 回答的质量。
+
+用户问题:
+{question}
+
+AI 回答:
+{answer}
+
+评估维度（每项 1-10 分）:
+1. 相关性 — 回答是否针对用户问题
+2. 准确性 — 信息是否正确
+3. 完整性 — 是否充分回答了问题
+4. 可读性 — 是否是通顺的自然语言
+
+请严格按以下 JSON 格式返回（不要返回其他内容）:
+{{"score": <1-10>, "reason": "<简短评估理由>", "passed": <true/false>}}
+
+通过标准: score >= 6"""
+
+    async def _llm_judge(final_answer: str, user_question: str) -> dict | None:
+        """调用 LLM 做语义评估，失败返回 None（降级为规则结果）。"""
+        if not llm:
+            return None
+        try:
+            prompt = _EVALUATOR_PROMPT.format(question=user_question, answer=final_answer[:2000])
+            resp = await llm.ainvoke([HumanMessage(content=prompt)])
+            content = _content_to_str(getattr(resp, "content", ""))
+            # 尝试从回复中提取 JSON
+            import re
+            json_match = re.search(r'\{[^{}]*\}', content)
+            if json_match:
+                import json as _json
+                return _json.loads(json_match.group())
+        except Exception as e:
+            logger.warning(f"[evaluator] LLM 评估失败，降级为规则: {e}")
+        return None
+
+    def _extract_user_question(state: AgentState) -> str:
+        """从消息历史中提取用户第一个问题。"""
+        messages = state.get("messages", [])
+        for m in messages:
+            role = getattr(m, "role", "") if not isinstance(m, dict) else m.get("role", "")
+            if role == "user":
+                content = getattr(m, "content", "") if not isinstance(m, dict) else m.get("content", "")
+                return _content_to_str(content)[:500]
+        return ""
+
+    async def evaluator_node(state: AgentState) -> dict:
+        from langgraph.config import get_stream_writer
+        writer = get_stream_writer()
+
+        final_answer = state.get("final_answer", "")
+        if not final_answer:
+            writer({"step": "eval", "status": "skipped", "message": "无回答，跳过评估"})
+            logger.info("[evaluator] 无回答，跳过评估")
+            return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
+
+        writer({"step": "eval", "status": "checking", "message": "正在评估回答质量..."})
+        logger.info("[evaluator] 开始评估回答质量")
+
+        tools_used = state.get("tools_used", [])
+        memory_ctx = state.get("memory_context") or {}
+
+        # ── Phase 1: 增强规则评分 ──
+        rule_score, reasons = _rule_based_score(final_answer, tools_used, memory_ctx)
+        logger.info(f"[evaluator] 规则评分: {rule_score}/10, reasons={reasons}")
+
+        # ── Phase 2: 边界 case 调用 LLM 评估 ──
+        final_score = rule_score
+        final_reasons = reasons
+        used_llm = False
+
+        if 5 <= rule_score <= 8 and llm:
+            user_question = _extract_user_question(state)
+            if user_question:
+                writer({"step": "eval", "status": "checking", "message": "规则评分边界，调用 LLM 精细评估..."})
+                llm_result = await _llm_judge(final_answer, user_question)
+                if llm_result and "score" in llm_result:
+                    llm_score = int(llm_result["score"])
+                    llm_passed = llm_result.get("passed", llm_score >= 6)
+                    llm_reason = llm_result.get("reason", "")
+                    used_llm = True
+                    # LLM 评估与规则评估加权平均（LLM 权重更高）
+                    final_score = max(1, min(10, int(rule_score * 0.3 + llm_score * 0.7)))
+                    if llm_reason:
+                        final_reasons = [f"LLM: {llm_reason}"] + reasons
+                    logger.info(f"[evaluator] LLM 评分: {llm_score}/10, 综合: {final_score}/10")
+
+        passed = final_score >= 6
+        reason = "、".join(final_reasons) if final_reasons else "质量合格"
 
         evaluation = {
-            "score": score,
+            "score": final_score,
             "passed": passed,
             "reason": reason,
             "dimensions": {
-                "accuracy": score,
-                "completeness": score,
-                "hallucination": score,
-                "tool_usage": score,
-                "memory_usage": score,
+                "accuracy": final_score,
+                "completeness": final_score,
+                "hallucination": final_score,
+                "tool_usage": final_score,
+                "memory_usage": final_score,
             },
+            "method": "llm_judge" if used_llm else "rule_based",
         }
 
         if passed:
-            writer({"step": "eval", "status": "done", "message": f"质量评估通过 ({score}/10)", "score": score})
-            logger.info(f"[evaluator] 质量评估通过 ({score}/10)")
+            writer({"step": "eval", "status": "done", "message": f"质量评估通过 ({final_score}/10)", "score": final_score})
+            logger.info(f"[evaluator] 质量评估通过 ({final_score}/10, method={evaluation['method']})")
         else:
-            writer({"step": "eval", "status": "done", "message": f"质量评估未通过 ({score}/10, {reason})", "score": score})
-            logger.info(f"[evaluator] 质量评估未通过 ({score}/10, {reason})")
+            writer({"step": "eval", "status": "done", "message": f"质量评估未通过 ({final_score}/10, {reason})", "score": final_score})
+            logger.info(f"[evaluator] 质量评估未通过 ({final_score}/10, {reason}, method={evaluation['method']})")
 
         # 评分太低（<4）的回答替换为兜底
         eval_result = {"evaluation": evaluation}
-        if score < 4 and final_answer:
-            logger.warning(f"[evaluator] 评估不通过(score={score})，替换为兜底回答")
+        if final_score < 4 and final_answer:
+            logger.warning(f"[evaluator] 评估不通过(score={final_score})，替换为兜底回答")
             eval_result["final_answer"] = (
                 "抱歉，我暂时无法准确回答这个问题。"
                 "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
