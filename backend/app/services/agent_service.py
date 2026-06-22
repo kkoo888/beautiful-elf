@@ -1,13 +1,12 @@
-"""Agent 业务服务 — v4.3 完整版
+"""Agent 业务服务 — v4.4 完整版
 
-v4.3 变更:
-  1. [P0] 流式对话改用 astream_events(version="v3") — LangGraph 官方 Event Streaming API
-     · typed projection，messages/values/output 独立消费，天然去重
-     · 文档: https://docs.langchain.com/oss/python/langgraph/event-streaming
+v4.4 变更:
+  1. [P0] astream_events v3 + StreamTransformer 捕获 get_stream_writer() custom 事件
+     · 官方推荐方式: https://docs.langchain.com/oss/python/langgraph/event-streaming
+     · 注册 CustomEventTransformer 捕获节点内 writer() 推送的进度事件
   2. [P0] AgentState 从 Pydantic BaseModel 迁移到 TypedDict（LangGraph 官方推荐）
-v4.2 变更:
-  1. [P0] 初始化加 asyncio.Lock 防竞态
-  2. [P2] LLM 缓存加 TTL 过期机制
+v4.3 变更:
+  1. [P0] 流式对话改用 astream_events(version="v3")
 """
 import asyncio
 import time
@@ -18,6 +17,34 @@ from app.core.logging import get_logger
 from app.agent.state import _content_blocks_to_str
 
 logger = get_logger(__name__)
+
+
+# ── v3 StreamTransformer: 捕获 get_stream_writer() 的 custom 事件 ──
+
+try:
+    from langgraph.stream import ProtocolEvent, StreamChannel, StreamTransformer
+
+    class CustomEventTransformer(StreamTransformer):
+        """捕获节点内 get_stream_writer() 发射的 custom 事件"""
+
+        required_stream_modes = ("custom",)
+
+        def __init__(self, scope: tuple = ()):
+            super().__init__(scope)
+            self.events = StreamChannel("custom_events")
+
+        def init(self) -> dict:
+            return {"custom_events": self.events}
+
+        def process(self, event: ProtocolEvent) -> bool:
+            if event["method"] == "custom":
+                self.events.push(event["params"]["data"])
+            return True
+
+    _HAS_STREAM_TRANSFORMER = True
+except ImportError:
+    _HAS_STREAM_TRANSFORMER = False
+    logger.warning("[agent_service] langgraph.stream 未安装，custom 事件降级为原始解析")
 
 
 class AgentService:
@@ -360,14 +387,40 @@ class AgentService:
         tools_used = []
 
         try:
+            transformers = [CustomEventTransformer] if _HAS_STREAM_TRANSFORMER else []
             stream = await self._graph.astream_events(
                 Command(resume=resume_data),
                 config=config,
                 version="v3",
+                transformers=transformers,
             )
 
             _final_answer = None
             _got_llm_tokens = False
+
+            # v3: extensions 消费 custom 事件
+            custom_events_iter = stream.extensions.get("custom_events") if _HAS_STREAM_TRANSFORMER else None
+
+            async def _resume_custom_consumer():
+                if custom_events_iter:
+                    async for data in custom_events_iter:
+                        if isinstance(data, dict):
+                            yield {"type": "progress", **data}
+
+            _custom_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+            _custom_done = asyncio.Event()
+
+            async def _resume_custom_drain():
+                try:
+                    async for evt in _resume_custom_consumer():
+                        await _custom_queue.put(evt)
+                except Exception:
+                    pass
+                finally:
+                    _custom_done.set()
+
+            if custom_events_iter:
+                _custom_task = asyncio.create_task(_resume_custom_drain())
 
             async for event in stream:
                 method = event.get("method", "")
@@ -405,7 +458,7 @@ class AgentService:
                         else:
                             yield {"type": "tool_end", "tool": tn, "output_preview": output_str[:200]}
 
-                elif method == "custom":
+                elif method == "custom" and not _HAS_STREAM_TRANSFORMER:
                     if isinstance(data, dict):
                         yield {"type": "progress", **data}
 
@@ -414,6 +467,18 @@ class AgentService:
                         for node_output in data.values():
                             if isinstance(node_output, dict) and node_output.get("final_answer"):
                                 _final_answer = node_output["final_answer"]
+
+            # 排空 custom 事件队列
+            if custom_events_iter:
+                try:
+                    _custom_task.cancel()
+                except Exception:
+                    pass
+                while not _custom_queue.empty():
+                    try:
+                        yield _custom_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
 
             # 缓存答案 fallback
             if not _got_llm_tokens and not _final_answer:
@@ -492,8 +557,6 @@ class AgentService:
                     svc = SkillService()
                     skill = await svc.get_skill_by_id(skill_db, skill_id)
                     if skill:
-                        import asyncio
-
                         async def _run_skill():
                             return await skill_executor.execute(
                                 db=skill_db,
@@ -600,17 +663,48 @@ class AgentService:
                 yield {"type": "done", "tools_used": [], "duration_ms": elapsed, "prompt_tokens": 0, "completion_tokens": 0}
                 return
 
-            # [P0] LangGraph v3 Event Streaming — 官方推荐的 typed projection API
+            # [P0] LangGraph v3 Event Streaming + StreamTransformer
+            # 官方推荐: astream_events(version="v3") + StreamTransformer 捕获 custom 事件
             # 文档: https://docs.langchain.com/oss/python/langgraph/event-streaming
-            # 注意: astream_events 返回 coroutine，需要 await 获取 async generator
+            transformers = [CustomEventTransformer] if _HAS_STREAM_TRANSFORMER else []
             stream = await self._graph.astream_events(
                 initial_state,
                 config=config,
                 version="v3",
+                transformers=transformers,
             )
 
             _final_answer = None
             _got_llm_tokens = False
+
+            # v3: 通过 extensions 消费 custom 事件（Transformer 捕获）
+            # 同时保留 raw event 迭代处理 messages/tools/updates 通道
+            custom_events_iter = stream.extensions.get("custom_events") if _HAS_STREAM_TRANSFORMER else None
+
+            async def _consume_custom_events():
+                """后台消费 Transformer 捕获的 custom 事件"""
+                if custom_events_iter:
+                    async for data in custom_events_iter:
+                        if isinstance(data, dict):
+                            if data.get("step") == "goal_subtasks":
+                                yield {"type": "goal_subtasks", "subtasks": data.get("subtasks", [])}
+                            yield {"type": "progress", **data}
+
+            # 启动 custom 事件消费协程
+            _custom_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+            _custom_done = asyncio.Event()
+
+            async def _custom_consumer():
+                try:
+                    async for evt in _consume_custom_events():
+                        await _custom_queue.put(evt)
+                except Exception:
+                    pass
+                finally:
+                    _custom_done.set()
+
+            if custom_events_iter:
+                _custom_task = asyncio.create_task(_custom_consumer())
 
             async for event in stream:
                 method = event.get("method", "")
@@ -624,8 +718,7 @@ class AgentService:
                     msg_chunk, metadata = data[0], data[1] if len(data) > 1 else {}
                     node_name = metadata.get("langgraph_node", "") if isinstance(metadata, dict) else ""
 
-                    # v3: data = (payload, metadata); payload 是 dict（protocol event）或 BaseMessage
-                    # ── content-block-delta: 流式 token（文本生成过程中的增量） ──
+                    # v3 content-block 协议
                     if isinstance(msg_chunk, dict) and msg_chunk.get("event") == "content-block-delta":
                         block = (msg_chunk.get("delta") or {})
                         if block.get("type") == "text-delta":
@@ -633,26 +726,24 @@ class AgentService:
                             if token_text:
                                 _got_llm_tokens = True
                                 yield {"type": "token", "content": token_text}
-                    # ── content-block-start: reasoning / thinking 内容 ──
                     elif isinstance(msg_chunk, dict) and msg_chunk.get("event") == "content-block-start":
                         block = msg_chunk.get("content_block", {})
                         if isinstance(block, dict) and block.get("type") == "thinking":
                             thinking_text = block.get("thinking", "")
                             if thinking_text:
                                 yield {"type": "token", "content": thinking_text}
-                    # ── reasoning-delta: reasoning 流式增量 ──
                     elif isinstance(msg_chunk, dict) and msg_chunk.get("event") == "reasoning-delta":
                         reasoning_text = msg_chunk.get("delta", {}).get("reasoning", "") if isinstance(msg_chunk.get("delta"), dict) else ""
                         if reasoning_text:
                             yield {"type": "token", "content": reasoning_text}
-                    # 兼容 v2: AIMessageChunk（LangChain 模型返回的完整 chunk）
+                    # 兼容 AIMessageChunk
                     elif hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
                         if getattr(msg_chunk, "type", "") == "AIMessageChunk":
                             _got_llm_tokens = True
                             token_text = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
                             yield {"type": "token", "content": token_text}
 
-                    # 提取 usage
+                    # usage
                     if isinstance(msg_chunk, dict) and msg_chunk.get("event") == "message-finish":
                         usage = msg_chunk.get("usage") or {}
                         pt = usage.get("input_tokens", 0) or 0
@@ -670,7 +761,7 @@ class AgentService:
                             total_completion_tokens += ct
                             yield {"type": "cost_update", "prompt_tokens": total_prompt_tokens, "completion_tokens": total_completion_tokens}
 
-                # ── tools 通道: 工具调用事件（v3: tool-started / tool-output-delta / tool-finished / tool-error） ──
+                # ── tools 通道: 工具调用事件 ──
                 elif method == "tools":
                     event_type = data.get("event", "") if isinstance(data, dict) else ""
                     tool_name = data.get("tool_name", "") if isinstance(data, dict) else ""
@@ -679,7 +770,6 @@ class AgentService:
                         if tool_name:
                             tools_used.append(tool_name)
                             yield {"type": "tool_start", "tool": tool_name, "args": data.get("input", {}) if isinstance(data, dict) else {}}
-
                     elif event_type in ("tool-finished", "tool-error"):
                         output_str = str(data.get("output", "")) if isinstance(data, dict) else ""
                         is_error = event_type == "tool-error"
@@ -688,10 +778,9 @@ class AgentService:
                         else:
                             yield {"type": "tool_end", "tool": tool_name, "output_preview": output_str[:200]}
 
-                # ── custom 通道: get_stream_writer() 发射的进展事件 ──
-                elif method == "custom":
+                # ── custom 通道: 降级方案（Transformer 不可用时直接解析） ──
+                elif method == "custom" and not _HAS_STREAM_TRANSFORMER:
                     if isinstance(data, dict):
-                        # Goal 模式子任务更新事件 — 单独推送，前端实时更新看板
                         if data.get("step") == "goal_subtasks":
                             yield {"type": "goal_subtasks", "subtasks": data.get("subtasks", [])}
                         yield {"type": "progress", **data}
@@ -702,6 +791,18 @@ class AgentService:
                         for node_output in data.values():
                             if isinstance(node_output, dict) and node_output.get("final_answer"):
                                 _final_answer = node_output["final_answer"]
+
+            # 排空 custom 事件队列
+            if custom_events_iter:
+                try:
+                    _custom_task.cancel()
+                except Exception:
+                    pass
+                while not _custom_queue.empty():
+                    try:
+                        yield _custom_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
 
             # 获取最终状态（一次 get_state，同时取 final_state + interrupt 检测）
             final_state = None

@@ -16,6 +16,13 @@ from typing import Optional
 from app.core.database import get_db
 from app.services.agent_service import agent_service
 from app.services.chat_service import ChatService
+
+# v3 StreamTransformer（可选依赖）
+try:
+    from app.services.agent_service import CustomEventTransformer, _HAS_STREAM_TRANSFORMER
+except ImportError:
+    _HAS_STREAM_TRANSFORMER = False
+    CustomEventTransformer = None
 from app.services.llm_provider_service import LLMProviderService
 from app.schemas.chat import ChatRequest
 from app.schemas.response import ApiResult, api_error
@@ -343,12 +350,24 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
             pass
 
     async def _graph_producer():
-        """图事件生产者 — 从 astream_events 读取 custom 事件放入队列"""
+        """图事件生产者 — v3 StreamTransformer 捕获 custom 事件"""
         try:
-            async for event in graph.astream_events(initial_state, version="v3"):
-                method = event.get("method", "")
-                if method == "custom":
-                    await _hb_queue.put(event)
+            transformers = [CustomEventTransformer] if _HAS_STREAM_TRANSFORMER else []
+            stream = await graph.astream_events(
+                initial_state,
+                version="v3",
+                transformers=transformers,
+            )
+            # 通过 extensions 消费 custom 事件
+            custom_iter = stream.extensions.get("custom_events") if _HAS_STREAM_TRANSFORMER else None
+            if custom_iter:
+                async for data in custom_iter:
+                    await _hb_queue.put({"method": "custom", "params": {"data": data}})
+            else:
+                # 降级: raw event 解析
+                async for event in stream:
+                    if event.get("method") == "custom":
+                        await _hb_queue.put(event)
         finally:
             _graph_done.set()
             await _hb_queue.put(None)  # 哨兵值

@@ -1010,9 +1010,11 @@ def _make_evaluator_node(llm=None):
         final_answer = state.get("final_answer", "")
         if not final_answer:
             writer({"step": "eval", "status": "skipped", "message": "无回答，跳过评估"})
+            logger.info("[evaluator] 无回答，跳过评估")
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
 
         writer({"step": "eval", "status": "checking", "message": "正在评估回答质量..."})
+        logger.info("[evaluator] 开始评估回答质量")
 
         # ── 纯代码规则评估（零 LLM 调用）──
         score = 7  # 基础分
@@ -1092,8 +1094,10 @@ def _make_evaluator_node(llm=None):
 
         if passed:
             writer({"step": "eval", "status": "done", "message": f"质量评估通过 ({score}/10)", "score": score})
+            logger.info(f"[evaluator] 质量评估通过 ({score}/10)")
         else:
             writer({"step": "eval", "status": "done", "message": f"质量评估未通过 ({score}/10, {reason})", "score": score})
+            logger.info(f"[evaluator] 质量评估未通过 ({score}/10, {reason})")
 
         # 评分太低（<4）的回答替换为兜底
         eval_result = {"evaluation": evaluation}
