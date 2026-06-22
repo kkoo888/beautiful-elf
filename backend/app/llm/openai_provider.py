@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import httpx
 
+from app.core.logging import get_logger
 from .protocol import ProviderConnectionConfig, ProviderMetadata
 from .types import (
     ChatConfig,
@@ -30,6 +31,8 @@ from .types import (
     ToolUseEndEvent,
     ToolUseStartEvent,
 )
+
+logger = get_logger(__name__)
 
 _OPENAI_API_BASE = "https://api.openai.com"
 
@@ -265,6 +268,9 @@ class OpenAIProvider:
             payload["tools"] = [_build_openai_tool(t) for t in tools]
             if cfg.tool_choice is not None:
                 payload["tool_choice"] = cfg.tool_choice
+
+        # ── 日志：打印实际 HTTP payload 关键字段 ──
+        logger.info(f"[openai_provider] PAYLOAD: model={payload.get('model')} stream={payload.get('stream')} tool_choice={payload.get('tool_choice')} msg_count={len(payload.get('messages', []))}")
 
         # ── Reasoning 模式注入 ──
         if caps and caps.supports_reasoning and cfg.thinking:

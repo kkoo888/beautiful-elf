@@ -209,6 +209,10 @@ async def chat_resume(
                 yield item
         finally:
             heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
             if not producer_task.done():
                 producer_task.cancel()
                 try:
@@ -450,6 +454,10 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
         yield f"data: {json.dumps({'error': f'专家团执行失败: {e}', 'done': True})}\n\n"
     finally:
         heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
         if not graph_task.done():
             graph_task.cancel()
             try:
@@ -571,13 +579,17 @@ async def _stream_response(
                     completion_tokens = event.get("completion_tokens", 0)
                     total_tokens = prompt_tokens + completion_tokens
                     goal_subtasks = event.get("goal_subtasks", [])
+                    # 先停心跳，再发 done，避免心跳插在 done 之后
+                    _stream_done.set()
                     # done 时保存助手回复（数据完整）
                     await _save_assistant_message("".join(_full_content), total_tokens)
                     await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens, 'goal_subtasks': goal_subtasks})}\n\n")
                 elif event_type == "error":
+                    _stream_done.set()
                     await _queue.put(f"data: {json.dumps({'error': event['message'], 'done': True})}\n\n")
         except Exception as e:
             logger.error(f"流式对话失败: {e}", exc_info=True)
+            _stream_done.set()
             await _queue.put(f"data: {json.dumps({'error': str(e), 'done': True})}\n\n")
         finally:
             _stream_done.set()
@@ -595,7 +607,12 @@ async def _stream_response(
                 break
             yield item
     finally:
+        _stream_done.set()
         heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
         # SSE 断开时取消 producer_task，释放 Agent 资源。
         # 每次对话都从 initial_state 全新执行，无需保留 producer 继续运行。
         # 取消后 producer_task 在下一个 await 点抛出 CancelledError 并退出。

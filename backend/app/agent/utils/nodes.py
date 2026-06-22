@@ -117,6 +117,8 @@ def _make_intent_router(intent_router):
 
         elapsed = time.time() - t0
         logger.info(f"[intent_router] hit={intent is not None} elapsed={elapsed:.3f}s")
+        if intent:
+            logger.info(f"[intent_router] intent_detail: name={intent.get('intent_name')} score={intent.get('score', 0):.3f} tool_names={intent.get('tool_names')} target_module={intent.get('target_module')}")
 
         if intent and intent.get("cached_answer"):
             writer({"step": "intent", "status": "done", "message": f"缓存命中 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000)})
@@ -619,6 +621,23 @@ Answer: 基于工具结果输出该子任务的成果
                 logger.debug(f"[llm_call] 动态绑定 {len(tool_objects)} 个工具 (model={model_label})")
         # selected_tools=[] → 不绑定任何工具（纯对话模式）
 
+        # ── 日志：打印发给 LLM 的完整请求 ──
+        _log_msgs = []
+        for _m in lc_messages:
+            _role = getattr(_m, "role", None) or getattr(_m, "type", "unknown")
+            _content = _content_to_str(getattr(_m, "content", ""))
+            _tc = getattr(_m, "tool_calls", None)
+            _tid = getattr(_m, "tool_call_id", None)
+            _entry = {"role": _role, "content": _content[:500]}
+            if _tc:
+                _entry["tool_calls"] = [{"name": t.get("name", ""), "args": str(t.get("args", {}))[:200]} for t in _tc]
+            if _tid:
+                _entry["tool_call_id"] = _tid
+            _log_msgs.append(_entry)
+        _bound_tools = [t.name for t in tool_objects] if tool_objects else []
+        _tc_setting = getattr(current_llm, '_bound_tool_choice', None)
+        logger.info(f"[llm_call] REQUEST: tools={_bound_tools} tool_choice={_tc_setting} messages={json.dumps(_log_msgs, ensure_ascii=False)}")
+
         try:
             response = await current_llm.ainvoke(lc_messages)
         except Exception as e:
@@ -633,6 +652,11 @@ Answer: 基于工具结果输出该子任务的成果
 
         elapsed = time.time() - t0
         has_tools = bool(response.tool_calls)
+
+        # ── 日志：打印 LLM 返回结果 ──
+        _resp_content = _content_to_str(getattr(response, "content", "")) if response.content else ""
+        _resp_tool_calls = [{"name": t.get("name", ""), "args": str(t.get("args", {}))[:200]} for t in (response.tool_calls or [])]
+        logger.info(f"[llm_call] RESPONSE: elapsed={elapsed:.2f}s has_tools={has_tools} tool_calls={json.dumps(_resp_tool_calls, ensure_ascii=False)} content={_resp_content[:300]}")
 
         # ── 无工具调用时重试（前沿方案：No-tool-call detector）──
         # 意图明确需要工具 或 Goal 模式执行阶段 或 LLM 嘴上说要搜索但没调工具 → 重试
@@ -672,10 +696,17 @@ Answer: 基于工具结果输出该子任务的成果
                     except (ValueError, NotImplementedError):
                         forced_llm = current_base_llm.bind_tools(tool_objects)
                         logger.warning("[llm_call] 强制重试 tool_choice=required 不支持，降级")
+                    # ── 日志：打印强制重试请求 ──
+                    _retry_bound_tools = [t.name for t in tool_objects] if tool_objects else []
+                    _retry_tc = getattr(forced_llm, '_bound_tool_choice', None)
+                    logger.info(f"[llm_call] RETRY REQUEST: tools={_retry_bound_tools} tool_choice={_retry_tc}")
                     response = await forced_llm.ainvoke(lc_messages)
                     has_tools = bool(response.tool_calls)
                     elapsed = time.time() - t0
-                    logger.info(f"[llm_call] 强制重试: tool_calls={has_tools}")
+                    # ── 日志：打印强制重试结果 ──
+                    _retry_resp_content = _content_to_str(getattr(response, "content", "")) if response.content else ""
+                    _retry_resp_tc = [{"name": t.get("name", ""), "args": str(t.get("args", {}))[:200]} for t in (response.tool_calls or [])]
+                    logger.info(f"[llm_call] RETRY RESPONSE: tool_calls={has_tools} tc={json.dumps(_retry_resp_tc, ensure_ascii=False)} content={_retry_resp_content[:300]}")
                 except Exception as retry_e:
                     logger.warning(f"[llm_call] 强制重试失败: {retry_e}")
 
