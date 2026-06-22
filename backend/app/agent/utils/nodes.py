@@ -536,7 +536,7 @@ Answer: 基于工具结果输出该子任务的成果
 
         # ── 消息清理（修复畸形 JSON + Unicode 代理）──
         raw_messages = state["messages"]
-        _msg_dicts = [{"role": getattr(m, "role", m.get("role", "user")), "content": _content_to_str(getattr(m, "content", m.get("content", "")))} for m in raw_messages]
+        _msg_dicts = [{"role": getattr(m, "role", "user"), "content": _content_to_str(getattr(m, "content", ""))} for m in raw_messages]
         if sanitize_messages(_msg_dicts):
             logger.info("[llm_call] 消息清理: 修复了 Unicode 代理对")
 
@@ -546,7 +546,7 @@ Answer: 基于工具结果输出该子任务的成果
             try:
                 from app.agent.compaction import maybe_compact
                 raw_messages = await maybe_compact(
-                    messages=[{"role": getattr(m, "role", m.get("role", "user")), "content": _content_to_str(getattr(m, "content", m.get("content", "")))} for m in raw_messages],
+                    messages=[{"role": getattr(m, "role", "user"), "content": _content_to_str(getattr(m, "content", ""))} for m in raw_messages],
                     llm_client=llm,
                     user_id=state.get("user_id", 0),
                     conversation_id=state.get("conversation_id", 0),
