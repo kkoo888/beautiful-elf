@@ -166,14 +166,36 @@ class ToolRegistry:
 
         for t in target_tools:
             func = t.func or self._make_db_tool_wrapper(t.name)
+            # 从 DB json_schema 构建 args_schema，确保 LLM 能看到工具参数定义
+            args_schema = self._build_args_schema(t.name, t.parameters) if t.parameters else None
             tool = StructuredTool.from_function(
                 func=func,
                 name=t.name,
                 description=t.description,
+                args_schema=args_schema,
                 coroutine=func if asyncio.iscoroutinefunction(func) else None,
             )
             tools.append(tool)
         return tools
+
+    @staticmethod
+    def _build_args_schema(tool_name: str, json_schema: dict):
+        """从 DB JSON Schema 动态构建 Pydantic model（供 StructuredTool.args_schema）"""
+        from pydantic import create_model, Field
+        from pydantic.fields import FieldInfo
+
+        properties = json_schema.get("properties", {})
+        required = set(json_schema.get("required", []))
+        fields = {}
+        for pname, pinfo in properties.items():
+            ptype = str  # 默认 str
+            desc = pinfo.get("description", "")
+            default = ... if pname in required else pinfo.get("default", "")
+            fields[pname] = (ptype, Field(default=default, description=desc))
+        try:
+            return create_model(f"{tool_name}Args", **fields)
+        except Exception:
+            return None
 
     def _make_db_tool_wrapper(self, tool_name: str) -> Callable:
         """为 DB 工具创建通用执行包装器"""
@@ -335,8 +357,10 @@ class ToolRegistrySnapshot:
 
         for t in target:
             func = t.func or self._make_wrapper(t.name)
+            args_schema = ToolRegistry._build_args_schema(t.name, t.parameters) if t.parameters else None
             tool = StructuredTool.from_function(
                 func=func, name=t.name, description=t.description,
+                args_schema=args_schema,
                 coroutine=func if asyncio.iscoroutinefunction(func) else None,
             )
             tools.append(tool)

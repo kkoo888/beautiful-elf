@@ -868,6 +868,11 @@ class AgentService:
             goal_subtasks = []
             if final_state:
                 goal_subtasks = final_state.get("goal_subtasks", []) or []
+                # 兜底：streaming events 未收集到 tools 时，从 final_state 补全
+                if not tools_used:
+                    state_tools = final_state.get("tools_used", []) or []
+                    if state_tools:
+                        tools_used = list(dict.fromkeys(state_tools))  # 去重保序
 
             yield {
                 "type": "done",

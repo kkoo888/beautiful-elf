@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Iterator
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
@@ -343,7 +346,6 @@ class ChatLLMProvider(BaseChatModel):
             for tc in (msg.tool_calls or []):
                 tc_id = tc.get("id", "")
                 if tc_id and tc_id in accumulated_tool_calls:
-                    # 后续 chunk：合并 args
                     accumulated_tool_calls[tc_id]["args"].update(tc.get("args", {}))
                 elif tc_id:
                     accumulated_tool_calls[tc_id] = dict(tc)
@@ -401,7 +403,6 @@ class ChatLLMProvider(BaseChatModel):
                     "name": event.tool_name,
                     "args_str": "",
                 }
-                # 立即 yield 一个带 tool_call 头的 chunk（name 已知，args 待填充）
                 yield ChatGenerationChunk(
                     message=AIMessageChunk(
                         content="",
@@ -421,12 +422,10 @@ class ChatLLMProvider(BaseChatModel):
             elif isinstance(event, ToolUseEndEvent):
                 tc = _tool_calls.get(event.tool_use_id)
                 if tc:
-                    # 解析完整的 args JSON
                     try:
                         args = json.loads(tc["args_str"]) if tc["args_str"] else event.arguments or {}
                     except json.JSONDecodeError:
                         args = event.arguments or {}
-                    # yield 最终确认的 tool_call chunk
                     yield ChatGenerationChunk(
                         message=AIMessageChunk(
                             content="",
@@ -439,10 +438,20 @@ class ChatLLMProvider(BaseChatModel):
                     )
 
             elif isinstance(event, ErrorEvent):
-                chunk = ChatGenerationChunk(
+                yield ChatGenerationChunk(
                     message=AIMessageChunk(content=f"[Error: {event.message}]"),
                 )
-                yield chunk
+
+    def _should_use_protocol_streaming(self, **kwargs: Any) -> bool:
+        """内层 ainvoke 走 v1 streaming 路径（generate_from_stream）。
+
+        LangChain v2 内层协议（AsyncChatModelStream）在处理 tool_calls 时存在
+        chunks → events → 重组 的信息丢失。v1 路径（generate_from_stream）直接
+        合并 AIMessageChunk，tool_calls 完整保留。
+
+        注意：这不影响外层 astream_events(version="v3")，只影响 ainvoke 内部。
+        """
+        return False
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
