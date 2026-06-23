@@ -443,14 +443,19 @@ class ChatLLMProvider(BaseChatModel):
                 )
 
     def _should_use_protocol_streaming(self, **kwargs: Any) -> bool:
-        """内层 ainvoke 走 v1 streaming 路径（generate_from_stream）。
+        """内层 ainvoke 走 _agenerate 路径（id 合并 tool_calls）。
 
-        LangChain v2 内层协议（AsyncChatModelStream）在处理 tool_calls 时存在
-        chunks → events → 重组 的信息丢失。v1 路径（generate_from_stream）直接
-        合并 AIMessageChunk，tool_calls 完整保留。
+        三条路径对比：
+          v2 protocol → AsyncChatModelStream → 丢失 tool_calls
+          v1 stream   → generate_from_stream → 重复 tool_calls（append 而非按 id 合并）
+          _agenerate  → 按 id 合并 tool_calls ✅
 
-        注意：这不影响外层 astream_events(version="v3")，只影响 ainvoke 内部。
+        注意：不影响外层 astream_events(version="v3")，只影响 ainvoke 内部。
         """
+        return False
+
+    def _should_stream(self, **kwargs: Any) -> bool:
+        """同上，走 _agenerate 路径。"""
         return False
 
     @property
