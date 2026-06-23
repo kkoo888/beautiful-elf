@@ -676,8 +676,10 @@ Answer: 基于工具结果输出该子任务的成果
                 break
 
         # LLM 回答涉及搜索/查询但没调工具 → 视为需要重试
+        # 但如果回答已经足够完整（> 100字符且不含抱歉），不重试
         _response_text = _content_to_str(getattr(response, "content", "")) if response.content else ""
         _mentions_search = any(kw in _response_text for kw in ["搜索", "查询", "查找", "检索", "搜一下", "帮你找", "帮你查", "让我查", "让我搜"])
+        _already_answered = len(_response_text.strip()) > 100 and "抱歉" not in _response_text[:30]
 
         _needs_retry = (
             intent_needs_tools
@@ -685,7 +687,7 @@ Answer: 基于工具结果输出该子任务的成果
             or (_mentions_search and selected_tool_names)
         )
 
-        if not has_tools and not _tool_degraded and _needs_retry:
+        if not has_tools and not _tool_degraded and not _already_answered and _needs_retry:
             if selected_tool_names and tool_registry:
                 logger.warning("[llm_call] 应调用工具但未调用，强制重试")
                 writer({"step": "llm", "status": "retrying", "message": "未调用工具，强制重试..."})
@@ -1228,20 +1230,8 @@ AI 回答:
             writer({"step": "eval", "status": "done", "message": f"质量评估未通过 ({final_score}/10, {reason})", "score": final_score})
             logger.info(f"[evaluator] 质量评估未通过 ({final_score}/10, {reason}, method={evaluation['method']})")
 
-        # 评分太低（<4）的回答替换为兜底
-        eval_result = {"evaluation": evaluation}
-        if final_score < 4 and final_answer:
-            logger.warning(f"[evaluator] 评估不通过(score={final_score})，替换为兜底回答")
-            eval_result["final_answer"] = (
-                "抱歉，我暂时无法准确回答这个问题。"
-                "可能是搜索服务暂时不可用，或者问题超出了我当前的能力范围。\n\n"
-                "你可以试试：\n"
-                "1. 换个方式描述你的问题\n"
-                "2. 稍后再试\n"
-                "3. 如果是天气等实时信息，可以直接告诉我你的城市"
-            )
-
-        return eval_result
+        # 评估只打分，不替换 LLM 回答
+        return {"evaluation": evaluation}
 
     return evaluator_node
 

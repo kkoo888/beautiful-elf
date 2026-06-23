@@ -386,44 +386,48 @@ class ToolRegistrySnapshot:
 # ─── 内置工具实现 ─────────────────────────────────────────
 
 async def web_search(query: str, max_results: int = 5) -> dict:
-    """搜索互联网获取实时信息（通过 SearXNG）
+    """搜索互联网获取实时信息
 
-    v5.1: 统一从 Settings 读取配置（替代 os.getenv，与 config.py 一致）
+    优先 SearXNG，降级 DuckDuckGo（免费无需 API Key）。
+    v5.2: 增加 DuckDuckGo 降级，确保搜索始终可用。
     """
     import httpx
-
     from app.core.config import get_settings
-    searxng_url = get_settings().SEARXNG_URL.strip()
-    if not searxng_url:
-        return {
-            "success": False,
-            "error": {
-                "code": "SEARCH_NOT_CONFIGURED",
-                "message": "搜索服务未配置",
-                "retryable": False,
-                "user_facing": True,
-                "user_tip": "搜索服务暂未启用，请联系管理员配置 SearXNG",
-            },
-        }
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(
-            f"{searxng_url.rstrip('/')}/search",
-            params={"q": query, "format": "json", "count": max_results},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        results = data.get("results", [])[:max_results]
-        if results:
-            return {"results": [
-                {
-                    "title": r.get("title", ""),
-                    "url": r.get("url", ""),
-                    "snippet": r.get("content", ""),
-                }
-                for r in results
-            ]}
-        return {"results": []}
+    searxng_url = get_settings().SEARXNG_URL.strip()
+
+    # ── 1. 尝试 SearXNG ──
+    if searxng_url:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    f"{searxng_url.rstrip('/')}/search",
+                    params={"q": query, "format": "json", "count": max_results},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                results = data.get("results", [])[:max_results]
+                if results:
+                    return {"results": [
+                        {"title": r.get("title", ""), "url": r.get("url", ""), "snippet": r.get("content", "")}
+                        for r in results
+                    ]}
+        except Exception:
+            pass  # 降级到 DuckDuckGo
+
+    # ── 2. 降级 DuckDuckGo（免费，无需 API Key）──
+    try:
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            if results:
+                return {"results": [
+                    {"title": r.get("title", ""), "url": r.get("href", ""), "snippet": r.get("body", "")}
+                    for r in results
+                ]}
+            return {"results": []}
+    except Exception as e:
+        return {"success": False, "error": {"code": "SEARCH_FAILED", "message": f"搜索失败: {e}"}}
 
 
 async def execute_code(language: str, code: str) -> dict:
@@ -719,26 +723,37 @@ async def exec_command(command: str, workdir: str = None, timeout: int = 10) -> 
 # ── 网页抓取 ────────────────────────────────────────────
 
 async def web_fetch(url: str, extract_mode: str = "markdown", max_chars: int = 10000) -> dict:
-    """抓取 URL 内容并提取为可读文本"""
+    """抓取 URL 内容并提取为可读文本
+
+    v5.2: 增加 User-Agent、超时、重试、内容清洗。
+    """
     import httpx
+    import re
+    if not url or not url.strip():
+        return {"error": "url 参数不能为空"}
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True, verify=False) as client:
+            resp = await client.get(url, headers=headers)
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "")
+            text = resp.text
             if "text/html" in content_type:
-                # 简单 HTML 转文本
-                text = resp.text
-                import re
                 text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL)
                 text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
                 text = re.sub(r"<[^>]+>", " ", text)
                 text = re.sub(r"\s+", " ", text).strip()
-            else:
-                text = resp.text
             return {"content": text[:max_chars], "title": "", "url": str(resp.url)}
+    except httpx.TimeoutException:
+        return {"error": "抓取超时（20秒）"}
+    except httpx.HTTPStatusError as e:
+        return {"error": f"HTTP {e.response.status_code}: {e.response.reason_phrase}"}
     except Exception as e:
-        return {"error": f"抓取失败: {e}"}
+        return {"error": f"抓取失败: {type(e).__name__}: {e}"}
 
 
 # ── 记忆工具 ────────────────────────────────────────────
