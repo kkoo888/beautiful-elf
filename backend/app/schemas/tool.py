@@ -13,7 +13,7 @@ class ToolCreate(CamelModel):
     json_schema: Any = Field(..., description="参数 JSON Schema (MCP inputSchema)")
     output_schema: Optional[Any] = Field(default=None, description="输出 JSON Schema (MCP outputSchema)")
     risk_level: str = Field(default="low", description="风险等级: low/medium/high")
-    version: str = Field(default="1.0.0", max_length=32, description="工具版本号")
+    strict_mode: int = Field(default=0, description="OpenAI strict 模式: 1=启用 0=禁用")
     timeout_seconds: int = Field(default=60, description="工具执行超时（秒）")
 
 
@@ -24,7 +24,7 @@ class ToolUpdate(CamelModel):
     json_schema: Optional[Any] = Field(default=None, description="参数 JSON Schema")
     output_schema: Optional[Any] = Field(default=None, description="输出 JSON Schema (MCP outputSchema)")
     risk_level: Optional[str] = Field(default=None, description="风险等级: low/medium/high")
-    version: Optional[str] = Field(default=None, max_length=32, description="工具版本号")
+    strict_mode: Optional[int] = Field(default=None, description="OpenAI strict 模式: 1=启用 0=禁用")
     timeout_seconds: Optional[int] = Field(default=None, description="工具执行超时（秒）")
 
 
@@ -38,7 +38,7 @@ class ToolOut(CamelModel):
     output_schema: Optional[Any] = None
     risk_level: str
     is_enabled: int
-    version: str = "1.0.0"
+    strict_mode: int = 0
     timeout_seconds: int = 60
     created_at: datetime
     updated_at: datetime

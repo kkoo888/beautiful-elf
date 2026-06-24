@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     MCP_SERVER_PORT: int = 6880
 
     # Workspace
-    WORKSPACE_DIR: str = "/workspace"
+    WORKSPACE_DIR: str = "./workspace"
 
     # JWT — 必须在 .env 中设置，禁止空值和默认值
     JWT_SECRET_KEY: str = ""

@@ -683,6 +683,7 @@ Answer: 基于工具结果输出该子任务的成果
 5. **完成后标记** — 输出: • [子任务描述] - [done] (100%)
 6. **完成后通知下一个** — 完成后需要通知下一个子任务开始执行
 7. **失败不纠缠** — 工具调用失败超过 2 次，立即用自身知识回答，不要反复重试
+8. **禁止输出工具调用 JSON** — 工具调用结果不要原样输出，用自然语言组织回答。不要输出 {{"name":...}} 这种格式
 
 {eval_feedback_text}
 {healing_context}"""
@@ -783,11 +784,11 @@ Answer: 基于工具结果输出该子任务的成果
                         current_llm = current_base_llm.bind_tools(tool_objects, tool_choice="auto")
                         logger.info("[llm_call] 上轮工具失败，降级为 tool_choice=auto")
                     else:
-                        try:
-                            current_llm = current_base_llm.bind_tools(tool_objects, tool_choice="required")
-                        except (ValueError, NotImplementedError):
-                            current_llm = current_base_llm.bind_tools(tool_objects)
-                            logger.warning("[llm_call] tool_choice=required 不支持，降级为 auto")
+                        # v6.1: Goal 模式用 auto 而非 required
+                        # 原因：Agnes AI 对 tool_choice=required 支持不完善，
+                        # 会把工具调用 JSON 放在 content 而非 tool_calls 字段
+                        current_llm = current_base_llm.bind_tools(tool_objects, tool_choice="auto")
+                        logger.info("[llm_call] Goal 模式: tool_choice=auto")
                 else:
                     current_llm = current_base_llm.bind_tools(tool_objects)
 
@@ -951,6 +952,31 @@ Answer: 基于工具结果输出该子任务的成果
                 result_update["goal_subtasks"] = parsed
                 logger.info(f"[llm_call] Goal 模式解析到 {len(parsed)} 个子任务")
                 writer({"step": "goal_subtasks", "status": "done", "message": f"任务拆解完成: {len(parsed)} 个子任务", "subtasks": parsed})
+
+        # v6.1: 检测 LLM 把工具调用 JSON 放在 content 而非 tool_calls 的情况
+        # Agnes AI 对 tool_choice 支持不完善时会出现此问题
+        if not response.tool_calls and response.content:
+            content_text = _content_to_str(response.content)
+            try:
+                import re as _re
+                # 检测 [{"name":..., "parameters":...}] 格式
+                json_match = _re.search(r'\[\s*\{\s*"name"\s*:', content_text)
+                if json_match:
+                    parsed_calls = json.loads(json_match.group() + content_text[json_match.end():].split(']')[0] + ']')
+                    if isinstance(parsed_calls, list) and all(isinstance(c, dict) and 'name' in c for c in parsed_calls):
+                        # 转换为标准 tool_calls 格式
+                        converted_calls = []
+                        for i, tc in enumerate(parsed_calls):
+                            converted_calls.append({
+                                "id": f"call_parsed_{i}",
+                                "name": tc["name"],
+                                "args": tc.get("parameters", tc.get("arguments", {})),
+                            })
+                        response.tool_calls = converted_calls
+                        response.content = ""
+                        logger.info(f"[llm_call] 从 content 解析到 {len(converted_calls)} 个工具调用")
+            except Exception:
+                pass
 
         if response.tool_calls:
             tool_names = [tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "") for tc in response.tool_calls]
@@ -1262,15 +1288,17 @@ def _make_evaluator_node(llm=None):
             elif ans_len > 50:
                 score += 1  # 工具失败但 LLM 用自身知识回答了，奖励
         else:
-            # 正常情况：严格长度检查
+            # 正常情况：长度检查
             if ans_len < 10:
                 score = 1
                 reasons.append("回答过短")
             elif ans_len < 50:
-                score -= 2
+                score -= 1
                 reasons.append("回答较短")
-            elif ans_len > 200:
-                score += 1
+            elif ans_len >= 50 and ans_len < 200:
+                score += 1  # 中等长度回答，适当加分
+            elif ans_len >= 200:
+                score += 2  # 长回答，更多加分
 
         # 规则 2: 错误关键词（工具失败时跳过）
         if not is_tool_failure_context:
@@ -1313,15 +1341,12 @@ def _make_evaluator_node(llm=None):
         if has_uncertainty:
             score += 0.5
 
-        # 规则 7: 工具调用 JSON 残留检测（回答里混入了工具调用格式）
+        # 规则 7: 工具调用 JSON 残留检测
+        # v6.1: 不扣分（Goal 模式下工具调用是正常行为），改为标记需要重组织
         tool_json_markers = ['"name":', '"parameters":', '"query":', "web_search", "search_web", "function_call"]
         tool_json_count = sum(1 for m in tool_json_markers if m in final_answer)
-        if tool_json_count >= 2:
-            score -= 4
-            reasons.append("回答包含工具调用残留")
-        elif tool_json_count >= 1:
-            score -= 2
-            reasons.append("回答可能包含工具调用残留")
+        has_tool_residual = tool_json_count >= 2
+        # 不扣分，但标记（由调用方决定是否需要重组织）
 
         # 规则 8: 自然语言比例检测（中文字符占比）
         if ans_len >= 20:
@@ -1331,7 +1356,16 @@ def _make_evaluator_node(llm=None):
                 score -= 3
                 reasons.append("回答缺少自然语言内容")
 
-        return max(1, min(10, int(score))), reasons
+        # 规则 9: 工具调用日志检测（Thought/Action/Observation 格式）
+        # 这些是内部执行日志，不应作为最终回答
+        tool_log_markers = ["Thought:", "Action:", "Observation:"]
+        tool_log_count = sum(1 for m in tool_log_markers if m in final_answer)
+        if tool_log_count >= 2:
+            score -= 5
+            reasons.append("回答包含工具调用日志（非自然语言回答）")
+            has_tool_residual = True
+
+        return max(1, min(10, int(score))), reasons, has_tool_residual
 
     # ── Phase 2: LLM-as-Judge ──
     _EVALUATOR_PROMPT = """你是一个严格的质量评估员。请评估以下 AI 回答的质量。
@@ -1347,6 +1381,12 @@ AI 回答:
 2. 准确性 — 信息是否正确
 3. 完整性 — 是否充分回答了问题
 4. 可读性 — 是否是通顺的自然语言
+
+重要说明（必须遵守）:
+- AI 自称「Agnes」或「军师」是正确的，不要扣分
+- AI 称呼用户为「主人」是正确的，不要扣分
+- AI 的身份是「主人的军师」，这是系统设定，不是错误
+- 只评估回答内容的质量，不要评估身份设定
 
 请严格按以下 JSON 格式返回（不要返回其他内容）:
 {{"score": <1-10>, "reason": "<简短评估理由>", "passed": <true/false>}}
@@ -1391,6 +1431,12 @@ AI 回答:
             logger.info("[evaluator] 无回答，跳过评估")
             return {"evaluation": {"passed": False, "reason": "无回答", "score": 0}}
 
+        # Goal 模式规划阶段：跳过评估（规划输出不是最终回答）
+        if final_answer.startswith("[目标拆解]"):
+            writer({"step": "eval", "status": "skipped", "message": "规划阶段，跳过评估"})
+            logger.info("[evaluator] Goal 规划阶段，跳过评估")
+            return {"evaluation": {"passed": True, "reason": "规划阶段", "score": 10}}
+
         writer({"step": "eval", "status": "checking", "message": "正在评估回答质量..."})
         logger.info("[evaluator] 开始评估回答质量")
 
@@ -1398,7 +1444,7 @@ AI 回答:
         memory_ctx = state.get("memory_context") or {}
 
         # ── Phase 1: 增强规则评分 ──
-        rule_score, reasons = _rule_based_score(final_answer, tools_used, memory_ctx)
+        rule_score, reasons, has_tool_residual = _rule_based_score(final_answer, tools_used, memory_ctx)
         logger.info(f"[evaluator] 规则评分: {rule_score}/10, reasons={reasons}")
 
         # ── Phase 2: 边界 case 或工具失败时调用 LLM 评估 ──
@@ -1431,6 +1477,12 @@ AI 回答:
         passed = final_score >= 6
         reason = "、".join(final_reasons) if final_reasons else "质量合格"
 
+        # 工具调用残留时：强制不通过，让 LLM 重新组织自然语言回答
+        if has_tool_residual and passed:
+            passed = False
+            reason = "回答包含工具调用 JSON，需要用自然语言重新组织"
+            logger.info(f"[evaluator] 工具调用残留，强制重组织")
+
         evaluation = {
             "score": final_score,
             "passed": passed,
@@ -1443,6 +1495,7 @@ AI 回答:
                 "memory_usage": final_score,
             },
             "method": "llm_judge" if used_llm else "rule_based",
+            "has_tool_residual": has_tool_residual,
         }
 
         if passed:

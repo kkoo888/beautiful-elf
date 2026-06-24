@@ -10,7 +10,7 @@ class LLMProvider(BaseModel):
     name = Column(String(128), nullable=False, comment="供应商显示名称")
     provider_type = Column(String(64), nullable=False, comment="供应商类型: openai/claude/deepseek/ollama/custom")
     base_url = Column(String(512), nullable=False, comment="API 基础地址")
-    api_key = Column(Text, server_default=text("''"), comment="API Key (加密存储)")
+    api_key = Column(Text, nullable=False, comment="API Key (加密存储)")
     is_enabled = Column(Integer, nullable=False, default=1, comment="是否启用: 1=启用 0=禁用")
     is_default = Column(Integer, nullable=False, default=0, comment="是否默认供应商: 1=是 0=否")
     description = Column(String(512), nullable=False, server_default=text("''"), comment="备注说明")

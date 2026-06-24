@@ -289,6 +289,144 @@ export function chatStream(
 }
 
 /**
+ * WebSocket 流式对话 — 支持长任务不断连
+ * v6.3: 队列缓冲 + 自动重连 + 心跳保活
+ *
+ * 优先使用 WebSocket，降级到 SSE
+ */
+export function chatStreamWS(
+  request: ChatRequest,
+  onToken: (token: StreamToken) => void,
+  onError?: (error: Error) => void,
+  callbacks?: {
+    onToolStart?: (tool: string, args: Record<string, unknown>) => void
+    onToolEnd?: (tool: string, outputPreview: string) => void
+    onToolError?: (tool: string, outputPreview: string) => void
+    onApproval?: (req: ApprovalRequest) => void
+    onCostUpdate?: (promptTokens: number, completionTokens: number) => void
+    onIntentHit?: (name: string, score: number) => void
+    onProgress?: (progress: ProgressStep) => void
+    onGoalSubtasks?: (subtasks: Array<{ id: number; title: string; description?: string; status: string }>) => void
+    onGoalToolUpdate?: (update: { task_id: number; tool: string; tool_status: string; args?: Record<string, unknown>; output_preview?: string }) => void
+  }
+): { abort: () => void } {
+  const messageId = crypto.randomUUID()
+  let ws: WebSocket | null = null
+  let aborted = false
+  let firstToken = true
+
+  const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/api/v1/ws/chat?token=${localStorage.getItem('token') || ''}`
+
+  function connect() {
+    if (aborted) return
+    ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      ws?.send(JSON.stringify({
+        type: 'chat',
+        content: request.message,
+        conversationId: request.conversationId,
+        providerId: request.providerId,
+        modelName: request.modelName ?? '',
+        reasoningDepth: request.reasoningDepth ?? 'balanced',
+        goalMode: request.goalMode ?? false,
+        goalDefinition: request.goalMode ? request.message : '',
+        temperature: 0.7,
+        maxTokens: 4096,
+      }))
+    }
+
+    ws.onmessage = (event) => {
+      if (aborted) return
+      try {
+        const data = JSON.parse(event.data)
+
+        switch (data.type) {
+          case 'ping':
+            ws?.send(JSON.stringify({ type: 'pong' }))
+            break
+          case 'start':
+            break
+          case 'token':
+            onToken({ content: data.content ?? '', done: false, messageId: firstToken ? messageId : undefined })
+            firstToken = false
+            break
+          case 'tool_start':
+            callbacks?.onToolStart?.(data.tool, data.args ?? {})
+            break
+          case 'tool_end':
+            callbacks?.onToolEnd?.(data.tool, data.output_preview ?? '')
+            break
+          case 'tool_error':
+            callbacks?.onToolError?.(data.tool, data.output_preview ?? '')
+            break
+          case 'progress':
+            callbacks?.onProgress?.(data as ProgressStep)
+            break
+          case 'goal_subtasks':
+            callbacks?.onGoalSubtasks?.(data.subtasks)
+            break
+          case 'goal_tool_update':
+            callbacks?.onGoalToolUpdate?.(data)
+            break
+          case 'intent_hit':
+            callbacks?.onIntentHit?.(data.intent, data.score ?? 0)
+            break
+          case 'cost_update':
+            callbacks?.onCostUpdate?.(data.prompt_tokens ?? 0, data.completion_tokens ?? 0)
+            break
+          case 'approval_required':
+            callbacks?.onApproval?.({ tool: data.tool ?? '', args: data.args ?? {}, message: data.message ?? '' })
+            break
+          case 'thinking':
+            // thinking 事件：思考过程内容
+            onToken({ content: '', thinking: data.content ?? '', done: false })
+            break
+          case 'done':
+            // done 时也触发 goal_subtasks 最终更新
+            if (data.goal_subtasks) {
+              callbacks?.onGoalSubtasks?.(data.goal_subtasks)
+            }
+            onToken({ content: '', done: true, toolsUsed: data.tools_used, durationMs: data.duration_ms, promptTokens: data.prompt_tokens, completionTokens: data.completion_tokens, goalSubtasks: data.goal_subtasks })
+            ws?.close()
+            break
+          case 'error':
+            onError?.(new Error(data.message))
+            ws?.close()
+            break
+        }
+      } catch { /* skip malformed */ }
+    }
+
+    ws.onclose = (event) => {
+      if (aborted) return
+      // 非正常关闭 + 非 done 主动关闭 → 自动重连
+      if (event.code !== 1000 && event.code !== 4003) {
+        setTimeout(() => connect(), 2000)
+      } else {
+        // 正常关闭但未收到 done → 兜底结束 loading
+        if (!aborted) {
+          onToken({ content: '', done: true, messageId: undefined })
+        }
+      }
+    }
+
+    ws.onerror = () => {
+      // onclose 会触发，这里不重复处理
+    }
+  }
+
+  connect()
+
+  return {
+    abort: () => {
+      aborted = true
+      ws?.close()
+    }
+  }
+}
+
+/**
  * 审批恢复 — 流式 SSE（LangGraph interrupt/resume 官方模式）
  *
  * 后端路径: POST /conversations/{conversation_id}/chat/resume

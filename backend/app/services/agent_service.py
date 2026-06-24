@@ -715,7 +715,7 @@ class AgentService:
                 "goal_mode": goal_mode,
                 "goal_definition": goal_definition,
                 "goal_iterations": 0,
-                "goal_max_iterations": 5,
+                "goal_max_iterations": 50,
                 "goal_token_budget": 50000,
                 "goal_tokens_used": 0,
                 "goal_history": [],

@@ -97,12 +97,25 @@ def _content_to_str(content) -> str:
 
 
 def _build_message_dicts(state) -> List[dict]:
+    """构建消息列表，过滤掉工具调用日志（Thought/Action/Observation 格式）"""
     result = []
     for m in state.get("messages", []):
         if isinstance(m, dict):
-            result.append({"role": m.get("role", "user"), "content": _content_to_str(m.get("content", ""))})
+            role = m.get("role", "user")
+            content = _content_to_str(m.get("content", ""))
         else:
-            result.append({"role": getattr(m, "role", "user"), "content": _content_to_str(getattr(m, "content", ""))})
+            role = getattr(m, "role", "user")
+            content = _content_to_str(getattr(m, "content", ""))
+
+        # 过滤掉包含工具调用日志的 assistant 消息
+        if role == "assistant" and content:
+            # 检测 Thought/Action/Observation 格式
+            if ("Thought:" in content and "Action:" in content) or \
+               ("Observation:" in content and "Action:" in content):
+                # 这是工具调用日志，不加入对话历史
+                continue
+
+        result.append({"role": role, "content": content})
     return result
 
 

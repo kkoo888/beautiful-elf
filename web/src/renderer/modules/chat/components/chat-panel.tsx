@@ -21,6 +21,8 @@ import styles from './chat-panel.module.css'
 import { SimpleMessageList } from './message-list'
 import { MessageInput } from './message-input'
 import { ApprovalDialog } from './approval-dialog'
+import { ThinkingProcess } from './thinking-process'
+import { ExecutionStatus } from './execution-status'
 import type { UseChatReturn } from '../hooks/use-chat'
 
 interface ChatContentProps {
@@ -47,6 +49,10 @@ export const ChatContent: React.FC<ChatContentProps> = ({
     selectedProviderId,
     selectedModelName,
     approvalRequest,
+    thinkingSteps,
+    isExecuting,
+    currentStep,
+    currentTool,
     sendMessage,
     setReasoningDepth,
     setModelSelection,
@@ -104,6 +110,21 @@ export const ChatContent: React.FC<ChatContentProps> = ({
           </Tooltip>
         </div>
       </div>
+
+      {/* 执行状态栏 */}
+      <ExecutionStatus
+        isExecuting={isExecuting}
+        currentStep={currentStep}
+        currentTool={currentTool}
+      />
+
+      {/* 思考过程 */}
+      {thinkingSteps.length > 0 && (
+        <ThinkingProcess
+          steps={thinkingSteps}
+          isThinking={isExecuting}
+        />
+      )}
 
       {/* 消息列表 */}
       <SimpleMessageList messages={messages} isLoading={isLoading} onFeedback={submitFeedback} />

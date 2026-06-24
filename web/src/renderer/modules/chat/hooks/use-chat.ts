@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
-import { chatStream, chatResumeStream, submitFeedback, createConversation, fetchMessages, fetchConversations, deleteConversationApi } from '../services/chat-api'
+import { chatStream, chatStreamWS, chatResumeStream, submitFeedback, createConversation, fetchMessages, fetchConversations, deleteConversationApi } from '../services/chat-api'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
 import type {
   ChatMessage,
@@ -95,6 +95,14 @@ export interface UseChatReturn {
   goalMode: boolean
   /** Goal 模式子任务列表 */
   goalTasks: GoalTask[]
+  /** 思考过程步骤 */
+  thinkingSteps: Array<{ id: string; content: string; status: 'thinking' | 'done' | 'error' }>
+  /** 是否正在执行 */
+  isExecuting: boolean
+  /** 当前执行步骤 */
+  currentStep?: string
+  /** 当前执行的工具 */
+  currentTool?: string
   /** 发送消息（流式） */
   sendMessage: (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual'; goalMode?: boolean }) => void
 
@@ -268,7 +276,8 @@ export function useChat(): UseChatReturn {
       setTokenStats(null)
       setProgressSteps([])
 
-      const { abort, done } = chatStream(
+      // v6.3: 优先 WebSocket（长任务不断连），降级 SSE
+      const { abort, done } = chatStreamWS(
         {
           conversationId: convId,
           message: content.trim(),
@@ -624,6 +633,17 @@ export function useChat(): UseChatReturn {
     progressSteps,
     goalMode,
     goalTasks,
+    // 派生数据：思考过程和执行状态
+    thinkingSteps: progressSteps
+      .filter((s) => s.step === 'thinking' || s.step === 'reasoning' || s.step === 'llm')
+      .map((s, i) => ({
+        id: `${s.step}-${i}`,
+        content: s.message || s.step,
+        status: s.status === 'calling' ? 'thinking' as const : s.status === 'done' ? 'done' as const : 'thinking' as const,
+      })),
+    isExecuting: isLoading && progressSteps.some((s) => s.status === 'calling' || s.status === 'executing'),
+    currentStep: progressSteps.filter((s) => s.status === 'calling' || s.status === 'executing').pop()?.step,
+    currentTool: toolProgress.filter((t) => t.status === 'running').map((t) => t.tool).pop(),
     sendMessage,
     setReasoningDepth,
     setModelSelection,

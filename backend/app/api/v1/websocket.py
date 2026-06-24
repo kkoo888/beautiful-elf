@@ -91,41 +91,138 @@ async def websocket_endpoint(
 
 
 async def _handle_agent_ws(websocket: WebSocket, data: dict, user_id: int):
-    """通过 WebSocket 流式处理 Agent 对话"""
+    """通过 WebSocket 流式处理 Agent 对话（v6.3: 队列缓冲 + 心跳 + 全事件支持）"""
+    import asyncio
     from app.services.agent_service import agent_service
 
     content = data.get("content", "")
     conversation_id = data.get("conversationId", 0)
+    provider_id = data.get("providerId")
+    model_name = data.get("modelName", "")
+    reasoning_depth = data.get("reasoningDepth", "balanced")
+    goal_mode = data.get("goalMode", False)
+    goal_definition = data.get("goalDefinition", "")
+    temperature = data.get("temperature", 0.7)
+    max_tokens = data.get("maxTokens", 2048)
 
     if not content:
         await websocket.send_json({"type": "error", "message": "消息内容为空"})
         return
 
+    # 懒初始化 Agent 引擎
     if not agent_service.is_ready:
-        await websocket.send_json({"type": "error", "message": "Agent 引擎未初始化"})
-        return
+        success = await agent_service._lazy_init(provider_id, model_name)
+        if not success:
+            await websocket.send_json({"type": "error", "message": "Agent 引擎初始化失败"})
+            return
+
+    # ── 队列 + 后台任务 + 心跳 ──
+    _queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+    _stream_done = asyncio.Event()
+
+    async def _produce():
+        """生产者：Agent 执行 → 事件写入队列"""
+        try:
+            async for event in agent_service.chat_stream(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                messages=[{"role": "user", "content": content}],
+                provider_id=provider_id,
+                model_name=model_name,
+                reasoning_depth=reasoning_depth,
+                goal_mode=goal_mode,
+                goal_definition=goal_definition,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ):
+                if _stream_done.is_set():
+                    break
+                event_type = event.get("type", "")
+
+                if event_type == "token":
+                    await _queue.put({"type": "token", "content": event["content"]})
+                elif event_type == "tool_start":
+                    await _queue.put({"type": "tool_start", "tool": event["tool"], "args": event.get("args", {})})
+                elif event_type == "tool_end":
+                    await _queue.put({"type": "tool_end", "tool": event["tool"], "output_preview": event.get("output_preview", "")})
+                elif event_type == "tool_error":
+                    await _queue.put({"type": "tool_error", "tool": event["tool"], "output_preview": event.get("output_preview", "")})
+                elif event_type == "progress":
+                    progress = {k: v for k, v in event.items() if k != "type"}
+                    await _queue.put({"type": "progress", **progress})
+                elif event_type == "goal_subtasks":
+                    await _queue.put({"type": "goal_subtasks", "subtasks": event.get("subtasks", [])})
+                elif event_type == "goal_tool_update":
+                    await _queue.put({"type": "goal_tool_update", "task_id": event.get("task_id", 0), "tool": event.get("tool", ""), "tool_status": event.get("tool_status", ""), "args": event.get("args", {}), "output_preview": event.get("output_preview", "")})
+                elif event_type == "intent_hit":
+                    await _queue.put({"type": "intent_hit", "intent": event["intent"], "score": event.get("score", 0)})
+                elif event_type == "cost_update":
+                    await _queue.put({"type": "cost_update", "prompt_tokens": event["prompt_tokens"], "completion_tokens": event["completion_tokens"]})
+                elif event_type == "approval_required":
+                    await _queue.put({"type": "approval_required", "tool": event.get("tool", ""), "args": event.get("args", {}), "message": event.get("message", "")})
+                elif event_type == "done":
+                    await _queue.put({"type": "done", "tools_used": event.get("tools_used", []), "duration_ms": event.get("duration_ms", 0), "prompt_tokens": event.get("prompt_tokens", 0), "completion_tokens": event.get("completion_tokens", 0), "goal_subtasks": event.get("goal_subtasks", [])})
+                elif event_type == "error":
+                    await _queue.put({"type": "error", "message": event["message"]})
+
+        except Exception as e:
+            logger.error(f"WebSocket Agent 生产者失败: {e}", exc_info=True)
+            await _queue.put({"type": "error", "message": str(e)})
+        finally:
+            _stream_done.set()
+            await _queue.put(None)  # 哨兵值
+
+    async def _heartbeat():
+        """心跳：每 15s 发送 ping，防止中间层超时断连"""
+        try:
+            while not _stream_done.is_set():
+                await asyncio.sleep(15)
+                if not _stream_done.is_set():
+                    try:
+                        await websocket.send_json({"type": "ping"})
+                    except Exception:
+                        break
+        except asyncio.CancelledError:
+            pass
+
+    # 启动生产者和心跳
+    producer_task = asyncio.create_task(_produce())
+    heartbeat_task = asyncio.create_task(_heartbeat())
 
     try:
         await websocket.send_json({"type": "start"})
 
-        async for event in agent_service.chat_stream(
-            conversation_id=conversation_id,
-            user_id=user_id,
-            messages=[{"role": "user", "content": content}],
-        ):
-            event_type = event.get("type", "")
+        # 消费者：从队列读取事件并发送
+        while True:
+            item = await _queue.get()
+            if item is None:
+                break
+            try:
+                await websocket.send_json(item)
+            except Exception:
+                logger.warning("WebSocket 发送失败，客户端可能已断开")
+                _stream_done.set()
+                break
 
-            if event_type == "token":
-                await websocket.send_json({"type": "token", "content": event["content"]})
-            elif event_type == "tool_start":
-                await websocket.send_json({"type": "tool_start", "tool": event["tool"]})
-            elif event_type == "tool_end":
-                await websocket.send_json({"type": "tool_end", "tool": event["tool"]})
-            elif event_type == "done":
-                await websocket.send_json({"type": "done"})
-            elif event_type == "error":
-                await websocket.send_json({"type": "error", "message": event["message"]})
-
+    except WebSocketDisconnect:
+        logger.info("WebSocket 客户端断开")
+        _stream_done.set()
     except Exception as e:
         logger.error(f"WebSocket Agent 对话失败: {e}", exc_info=True)
-        await websocket.send_json({"type": "error", "message": str(e)})
+        _stream_done.set()
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+    finally:
+        _stream_done.set()
+        heartbeat_task.cancel()
+        producer_task.cancel()
+        try:
+            await heartbeat_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        try:
+            await producer_task
+        except (asyncio.CancelledError, Exception):
+            pass
