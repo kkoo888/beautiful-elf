@@ -34,6 +34,8 @@ class WorkerState(BaseModel):
     max_iterations: int = Field(default=5, description="最大 LLM 调用轮次")
     final_answer: Optional[str] = Field(default=None, description="最终回答")
     force_end: bool = Field(default=False, description="强制结束标志")
+    parent_system_prompt: str = Field(default="", description="父 Agent 的 system prompt 子集")
+    parent_memory: str = Field(default="", description="父 Agent 的相关记忆")
 
 
 # ── 节点 ──────────────────────────────────────────────────
@@ -47,15 +49,21 @@ def _make_worker_llm_caller(llm, system_prompt: str):
         iteration = state.get("iteration", 0)
         max_iter = state.get("max_iterations", 5)
 
-        # 首轮：注入 system prompt + task
+        # 首轮：注入 system prompt + task + parent context
         if iteration == 0:
             if system_prompt:
                 messages.insert(0, SystemMessage(content=system_prompt))
             task = state.get("task", "")
             context = state.get("context", "")
+            parent_prompt = state.get("parent_system_prompt", "")
+            parent_memory = state.get("parent_memory", "")
             user_content = f"## 任务\n{task}"
             if context:
                 user_content += f"\n\n## 背景信息\n{context}"
+            if parent_prompt:
+                user_content += f"\n\n## 父 Agent 指令摘要\n{parent_prompt[:1000]}"
+            if parent_memory:
+                user_content += f"\n\n## 相关记忆\n{parent_memory[:500]}"
             messages.append(HumanMessage(content=user_content))
 
         # 超过最大迭代 → 强制结束

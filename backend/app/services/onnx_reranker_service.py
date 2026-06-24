@@ -165,9 +165,7 @@ class OnnxRerankerService:
         pairs = [(query, c[:_MAX_LENGTH]) for c in filtered_candidates]
 
         if self._use_tokenizers_lib:
-            encodings = self._tokenizer.encode_batch(
-                [{"text": q, "pair": c} for q, c in pairs]
-            )
+            encodings = self._tokenizer.encode_batch(pairs)
             input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
             attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
             token_type_ids = np.array([e.type_ids for e in encodings], dtype=np.int64)

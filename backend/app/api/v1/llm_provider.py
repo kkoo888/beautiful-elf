@@ -1,18 +1,21 @@
-"""大模型供应商 + 模型 API — RESTful 规范"""
+"""大模型供应商 + 模型 + Tier配置 API — RESTful 规范"""
 from typing import List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.services.llm_provider_service import LLMProviderService
+from app.services.tier_config_service import TierConfigService
 from app.schemas.llm_provider import (
     ProviderCreate, ProviderUpdate, ProviderOut,
     LLMModelCreate, LLMModelUpdate, LLMModelOut,
+    TierConfigCreate, TierConfigUpdate, TierConfigOut,
 )
 from app.schemas.response import ApiResult, ApiPageResult
 
 router = APIRouter()
 _service = LLMProviderService()
+_tier_service = TierConfigService()
 
 
 # ── 供应商端点 ─────────────────────────────────────────────
@@ -109,3 +112,45 @@ async def delete_model(provider_id: int, model_id: int, db: AsyncSession = Depen
     """删除单个模型"""
     await _service.delete_model(db, model_id)
     return ApiResult(message="删除成功")
+
+
+# ── Tier 配置端点 ─────────────────────────────────────────
+
+@router.get("/tier-mapping", response_model=ApiResult[List[TierConfigOut]])
+async def list_tier_configs(db: AsyncSession = Depends(get_db)) -> ApiResult[List[TierConfigOut]]:
+    """查询所有启用的 tier 配置"""
+    items = await _tier_service.list_all(db)
+    return ApiResult(data=items)
+
+
+@router.get("/{provider_id}/tier-mapping", response_model=ApiResult[List[TierConfigOut]])
+async def list_provider_tier_configs(provider_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[List[TierConfigOut]]:
+    """查询某个供应商的 tier 配置"""
+    items = await _tier_service.list_by_provider(db, provider_id)
+    return ApiResult(data=items)
+
+
+@router.post("/{provider_id}/tier-mapping", response_model=ApiResult[TierConfigOut])
+async def upsert_tier_config(
+    provider_id: int, data: TierConfigCreate, db: AsyncSession = Depends(get_db)
+) -> ApiResult[TierConfigOut]:
+    """创建或更新 tier 配置"""
+    data.provider_id = provider_id
+    item = await _tier_service.upsert(db, data)
+    return ApiResult(data=item)
+
+
+@router.put("/tier-mapping/{config_id}", response_model=ApiResult[TierConfigOut])
+async def update_tier_config(
+    config_id: int, data: TierConfigUpdate, db: AsyncSession = Depends(get_db)
+) -> ApiResult[TierConfigOut]:
+    """更新 tier 配置"""
+    item = await _tier_service.update(db, config_id, data)
+    return ApiResult(data=item)
+
+
+@router.delete("/tier-mapping/{tier}", response_model=ApiResult)
+async def delete_tier_configs(tier: str, db: AsyncSession = Depends(get_db)) -> ApiResult:
+    """删除某个 tier 的所有配置"""
+    count = await _tier_service.delete_by_tier(db, tier)
+    return ApiResult(message=f"删除 {count} 条配置")

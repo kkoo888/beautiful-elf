@@ -1,10 +1,10 @@
 /**
  * 消息输入框组件 — 现代助手风格
- * 圆角容器包裹、内部工具栏（专家团/技能选择）+ 多行输入区
+ * 圆角容器包裹、内部工具栏（模型/推理深度/专家团/技能选择）+ 多行输入区
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Dropdown, Tooltip } from 'antd'
+import { Dropdown, Select, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   RobotOutlined,
@@ -14,12 +14,16 @@ import {
   StopOutlined,
   CloseOutlined,
   DownOutlined,
+  CloudOutlined,
+  BulbOutlined,
 } from '@ant-design/icons'
 import { fetchExpertTeams } from '@/modules/expert-team/services/expert-team-api'
 import type { ExpertTeam } from '@/modules/expert-team/types'
 import { ExpertAvatar } from '@/components/expert-avatar'
 import { fetchSkills } from '@/modules/skills/services/skills-api'
 import type { Skill } from '@/modules/skills/types/skills'
+import { getProvidersCached } from '@/modules/shared/components/model-selector'
+import type { LLMProvider } from '@/modules/settings/types/settings'
 import styles from './chat-panel.module.css'
 
 interface SendOptions {
@@ -38,6 +42,16 @@ interface MessageInputProps {
   onStop?: () => void
   /** 是否正在加载 */
   isLoading?: boolean
+  /** 当前选中的供应商 ID */
+  providerId?: number
+  /** 当前选中的模型名称 */
+  modelName?: string
+  /** 模型选择回调 */
+  onModelChange?: (providerId: number, modelName: string) => void
+  /** 当前推理深度 */
+  reasoningDepth?: string
+  /** 推理深度变更回调 */
+  onReasoningDepthChange?: (depth: string) => void
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({
@@ -45,6 +59,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   disabled = false,
   onStop,
   isLoading = false,
+  providerId = 0,
+  modelName = 'auto',
+  onModelChange,
+  reasoningDepth = 'auto',
+  onReasoningDepthChange,
 }) => {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -52,6 +71,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   // 专家团 / 技能列表
   const [expertTeams, setExpertTeams] = useState<ExpertTeam[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
+
+  // 模型列表
+  const [providers, setProviders] = useState<LLMProvider[]>([])
+  const [modelsLoading, setModelsLoading] = useState(true)
 
   // 当前选中
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
@@ -81,6 +104,19 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     return () => { cancelled = true }
   }, [])
 
+  // 加载模型列表
+  useEffect(() => {
+    let cancelled = false
+    getProvidersCached()
+      .then((list) => {
+        if (!cancelled) setProviders(list)
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
   // 派生：选中项名称
   const selectedTeamName = teamMode === 'auto'
     ? 'Auto'
@@ -90,6 +126,26 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const selectedSkillName = selectedSkillId
     ? skills.find((s) => s.id === selectedSkillId)?.displayName
     : undefined
+
+  // 模型选项（auto + DB 模型列表）
+  const modelOptions = [
+    { label: '🤖 Auto', value: '0:auto' },
+    ...providers.flatMap((p) =>
+      (p.models ?? []).map((m) => ({
+        label: `${m.displayName || m.modelName} (${p.name})`,
+        value: `${p.id}:${m.modelName}`,
+      }))
+    ),
+  ]
+  const currentModelKey = `${providerId}:${modelName}`
+
+  // 推理深度选项
+  const reasoningOptions = [
+    { label: '🤖 Auto', value: 'auto' },
+    { label: '⚡ 快速', value: 'fast' },
+    { label: '🔍 深度', value: 'deep' },
+    { label: '🧠 全面', value: 'full' },
+  ]
 
   /** 自动调整高度 */
   const adjustHeight = useCallback(() => {
@@ -151,7 +207,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       key: 'auto',
       label: (
         <div className={styles.menuItemInner}>
-          <span className={styles.menuItemLabel}>🧠 Auto (自动匹配)</span>
+          <span className={styles.menuItemLabel}>🧠 Auto</span>
           <span className={styles.menuItemDesc}>根据消息内容自动选择合适的专家团</span>
         </div>
       ),
@@ -238,6 +294,33 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         <div className={styles.toolbar}>
           {/* 左侧选择器 */}
           <div className={styles.toolbarLeft}>
+            {/* 模型选择 */}
+            <Select
+              value={currentModelKey}
+              onChange={(val: string) => {
+                if (!onModelChange) return
+                const [pid, ...rest] = val.split(':')
+                onModelChange(Number(pid), rest.join(':'))
+              }}
+              placeholder="选择模型"
+              loading={modelsLoading}
+              style={{ minWidth: 180 }}
+              size="small"
+              showSearch
+              optionFilterProp="label"
+              options={modelOptions}
+            />
+
+            {/* 推理深度选择 */}
+            <Select
+              value={reasoningDepth}
+              onChange={(val: string) => onReasoningDepthChange?.(val)}
+              placeholder="推理深度"
+              style={{ minWidth: 120 }}
+              size="small"
+              options={reasoningOptions}
+            />
+
             {/* 专家团选择 */}
             <Dropdown
               menu={{ items: expertTeamMenuItems, onClick: handleExpertTeamSelect, selectedKeys: teamMode === 'auto' ? ['auto'] : selectedTeamId ? [String(selectedTeamId)] : [] }}

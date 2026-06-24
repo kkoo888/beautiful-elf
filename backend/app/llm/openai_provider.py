@@ -266,15 +266,16 @@ class OpenAIProvider:
 
         if tools:
             payload["tools"] = [_build_openai_tool(t) for t in tools]
-            if cfg.tool_choice is not None:
-                tc = cfg.tool_choice
-                # langchain-openai 官方: string tool_choice → dict 格式
-                # "auto"/"none"/"required" 保持不变; 函数名 → {"type":"function","function":{"name":...}}
-                if isinstance(tc, str) and tc not in ("auto", "none", "required"):
-                    tool_names = [t.get("function", {}).get("name", "") for t in payload["tools"]]
-                    if tc in tool_names:
-                        tc = {"type": "function", "function": {"name": tc}}
-                payload["tool_choice"] = tc
+
+        if cfg.tool_choice is not None:
+            tc = cfg.tool_choice
+            # langchain-openai 官方: string tool_choice → dict 格式
+            # "auto"/"none"/"required" 保持不变; 函数名 → {"type":"function","function":{"name":...}}
+            if isinstance(tc, str) and tc not in ("auto", "none", "required"):
+                tool_names = [t.get("function", {}).get("name", "") for t in payload.get("tools", [])]
+                if tc in tool_names:
+                    tc = {"type": "function", "function": {"name": tc}}
+            payload["tool_choice"] = tc
 
         # ── 日志：打印实际 HTTP payload 关键字段 ──
         logger.info(f"[openai_provider] PAYLOAD: model={payload.get('model')} stream={payload.get('stream')} tool_choice={payload.get('tool_choice')} msg_count={len(payload.get('messages', []))}")

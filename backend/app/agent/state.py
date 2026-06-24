@@ -126,8 +126,14 @@ class AgentState(TypedDict, total=False):
     # ── 动态工具选择 ──────────────────────────────────
     selected_tools: list
 
-    # ── 推理深度（前端传入，引擎内部暂未使用）─────────
+    # ── 推理深度（前端传入: auto/fast/deep/full）─────────
     reasoning_depth: str
+
+    # ── Skills 按需加载 ──────────────────────────────────
+    matched_skills: list  # intent_router 匹配到的 skills
+
+    # ── Tier 配置（路由闭环使用）───────────────────────────
+    tier_config: dict  # 当前 tier 的配置 {model_name, max_tokens, temperature, reasoning_enabled, ...}
 
     # ── Compaction 状态 ─────────────────────────────────
     is_compacted: bool  # 本轮是否已执行过 compaction（避免重复检查）

@@ -913,11 +913,22 @@ async def memory_delete(point_id: str, reason: str = "") -> dict:
 
 # ── 会话工具 ────────────────────────────────────────────
 
-async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: int = 300) -> dict:
-    """生成子 Agent 执行子任务（Worker Subgraph 模式）"""
+async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: int = 300, depth: int = 0, parent_system_prompt: str = "", parent_memory: str = "") -> dict:
+    """生成子 Agent 执行子任务（Worker Subgraph 模式）
+
+    Args:
+        depth: 当前嵌套深度（0=顶层，最大 2）
+        parent_system_prompt: 父 Agent 的 system prompt 子集
+        parent_memory: 父 Agent 的相关记忆
+    """
     import asyncio
     from app.core.logging import get_logger as _get_logger
     _logger = _get_logger("spawn_agent")
+
+    MAX_DEPTH = 2
+    if depth > MAX_DEPTH:
+        _logger.warning(f"[spawn_agent] 深度超限 ({depth}/{MAX_DEPTH}): {label}")
+        return {"error": f"子 Agent 嵌套深度超限（最大 {MAX_DEPTH} 层）", "task": task, "label": label, "depth": depth}
 
     llm = tool_registry._worker_llm
     if not llm:
@@ -931,7 +942,7 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
     if not tools:
         tools = []
 
-    # 构建 system prompt
+    # 构建 system prompt（不含 parent context，parent context 在 worker 内部注入）
     system_prompt = "你是一个专注的子任务执行器。根据给定的任务，使用可用工具完成工作，返回结构化的执行结果。"
 
     try:
@@ -946,6 +957,8 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
             "max_iterations": 5,
             "final_answer": None,
             "force_end": False,
+            "parent_system_prompt": parent_system_prompt[:1000] if parent_system_prompt else "",
+            "parent_memory": parent_memory[:500] if parent_memory else "",
         }
 
         result = await asyncio.wait_for(
@@ -961,16 +974,21 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
                     answer = content if isinstance(content, str) else str(content)
                     break
 
-        tools_used = []
-        _logger.info(f"[spawn_agent] 子任务完成: label={label} answer_len={len(answer)}")
-        return {"success": True, "result": answer, "tools_used": tools_used, "label": label}
+        _logger.info(f"[spawn_agent] 子任务完成: label={label} depth={depth} answer_len={len(answer)}")
+        return {
+            "success": True,
+            "result": answer,
+            "tools_used": [],
+            "label": label,
+            "depth": depth,
+        }
 
     except asyncio.TimeoutError:
         _logger.warning(f"[spawn_agent] 子任务超时 ({timeout}s): {label}")
-        return {"error": f"子任务执行超时 ({timeout}s)", "task": task, "label": label}
+        return {"error": f"子任务执行超时 ({timeout}s)", "task": task, "label": label, "depth": depth}
     except Exception as e:
         _logger.error(f"[spawn_agent] 子任务失败: {e}", exc_info=True)
-        return {"error": f"子任务执行失败: {e}", "task": task, "label": label}
+        return {"error": f"子任务执行失败: {e}", "task": task, "label": label, "depth": depth}
 
 
 async def list_sessions(limit: int = 20, active_minutes: int = None) -> dict:

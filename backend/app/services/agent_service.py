@@ -166,14 +166,41 @@ class AgentService:
             # ── 模型路由──
             from app.router.model_selector import ModelSelector
             model_selector = ModelSelector(default_model=model_name)
-            # tier → 模型映射（对齐 router.runtime.yaml tier_mapping，后续从 DB 读取）
-            # 默认全部走同一个模型，主人在 DB 配置不同模型后可切换
-            model_selector.register_tier("S", model_name)  # R0 轻量（闲聊/简单问答）
-            model_selector.register_tier("M", model_name)  # R1 标准（一般对话和任务）
-            model_selector.register_tier("L", model_name)  # R2 强力（推理/调试/多步任务）
-            model_selector.register_tier("XL", model_name)  # R3 最强（架构/高风险决策）
-            # 注册 LLM 实例（get_llm 时使用）
-            model_selector.register_llm(model_name, llm)
+
+            # 从 DB 读取 tier → model 映射（替代硬编码）
+            from app.services.tier_config_service import TierConfigService
+            tier_svc = TierConfigService()
+            try:
+                tier_map = await tier_svc.get_tier_model_map(db)
+            except Exception:
+                tier_map = {}
+
+            if tier_map:
+                for tier_key, tier_cfg in tier_map.items():
+                    mapped_model = tier_cfg["model_name"]
+                    model_selector.register_tier(tier_key, mapped_model)
+                    # 为每个 tier 注册 LLM 实例
+                    try:
+                        mapped_llm = await llm_service.get_chat_llm(
+                            db, provider_id=tier_cfg["provider_id"],
+                            model_name=mapped_model,
+                            temperature=tier_cfg.get("temperature", 0.7),
+                            max_tokens=tier_cfg.get("max_tokens", 4096),
+                        )
+                        model_selector.register_llm(mapped_model, mapped_llm)
+                    except Exception as e:
+                        logger.warning(f"[agent_service] tier {tier_key} LLM 注册失败: {e}")
+                        model_selector.register_llm(mapped_model, llm)
+                logger.info(f"[agent_service] tier 映射 from DB: {list(tier_map.keys())}")
+            else:
+                # 降级：无 tier 配置时，所有 tier 走默认模型
+                for t in ("S", "M", "L", "XL"):
+                    model_selector.register_tier(t, model_name)
+                model_selector.register_llm(model_name, llm)
+                logger.info("[agent_service] 无 tier 配置，所有 tier 走默认模型")
+
+            # 存储 tier_map 供 model_selector_node 使用
+            model_selector.set_tier_map(tier_map)
 
             memory_manager = memory_service.memory_manager
             intent_router = intent_service.intent_router

@@ -88,6 +88,7 @@ def _make_model_selector_node(model_selector):
             "difficulty_score": decision.difficulty_score,
             "routing_probabilities": decision.probabilities,
             "routing_flags": decision.flags,
+            "tier_config": model_selector.get_tier_config(decision.tier),
         }
 
     return model_selector_node
@@ -306,6 +307,29 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
             except Exception as e:
                 logger.debug(f"[context_builder] 主动回忆跳过: {e}")
 
+        # ── 路由闭环：prompt_policy 控制 prompt 复杂度 ──
+        # frontend 传入 auto/concise/balanced/detailed，auto 时由 ML 路由决定
+        prompt_policy = state.get("prompt_policy", "auto")
+        tier = state.get("tier", "")
+
+        if prompt_policy == "auto":
+            # ML 路由: S/M → concise; L/XL → balanced
+            effective_policy = "concise" if tier in ("S", "M") else "balanced"
+        else:
+            effective_policy = prompt_policy
+
+        if effective_policy == "concise":
+            # 精简模式：去掉 RAG、主动回忆、跨线程记忆，只保留 soul + 核心指令
+            # 重新组装：取 system_prompt 的前半部分（soul + 核心行为准则）
+            _soul_end = system_prompt.find("## 工具使用规则")
+            if _soul_end > 0:
+                system_prompt = system_prompt[:_soul_end].rstrip()
+            logger.info(f"[context_builder] prompt_policy=concise, 已精简 system_prompt")
+        elif effective_policy == "detailed":
+            # 详细模式：确保所有上下文都注入（当前已是默认行为，无需额外处理）
+            logger.info(f"[context_builder] prompt_policy=detailed, 保持完整上下文")
+        # balanced: 当前行为，无需修改
+
         return {
             "system_prompt": system_prompt,
             "context": system_prompt,
@@ -326,7 +350,10 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
         # ── 按路由结果动态选择 LLM ──
         selected_model = state.get("selected_model") or ""
         if model_selector and selected_model:
-            current_base_llm = model_selector.get_llm(selected_model)
+            # 获取 fallback 模型名（从 tier_config 中读取）
+            tier_cfg = state.get("tier_config") or {}
+            fallback_model = tier_cfg.get("fallback_model_name", "")
+            current_base_llm = model_selector.get_llm(selected_model, fallback_model=fallback_model)
             model_label = selected_model
         else:
             current_base_llm = llm
@@ -364,7 +391,45 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
         route_class = state.get("route_class", "")
         tier = state.get("tier", "")
 
-        writer({"step": "llm", "status": "calling", "message": f"正在生成回答... (模型: {model_label}, 路由: {route_class}/{tier}, 思考: {thinking_mode})"})
+        # ── 路由闭环：reasoning_depth 决策 ──
+        # frontend 传入 auto/fast/deep/full，auto 时由 ML 路由 thinking_mode 决定
+        reasoning_depth = state.get("reasoning_depth", "auto")
+        if reasoning_depth == "auto":
+            # ML 路由: T0/T1 → 禁用 reasoning; T2/T3 → 启用
+            effective_reasoning = thinking_mode in ("T2", "T3")
+        elif reasoning_depth == "fast":
+            effective_reasoning = False
+        elif reasoning_depth in ("deep", "full"):
+            effective_reasoning = True
+        else:
+            effective_reasoning = thinking_mode in ("T2", "T3")
+
+        # ── 路由闭环：tier 决定 temperature/max_tokens ──
+        tier_overrides = {
+            "S":  {"temperature": 0.3, "max_tokens": 1024},
+            "M":  {"temperature": 0.5, "max_tokens": 2048},
+            "L":  {"temperature": 0.7, "max_tokens": 8192},
+            "XL": {"temperature": 0.7, "max_tokens": 16384},
+        }
+        # 仅当 frontend 未显式指定时，才用 tier 覆盖
+        if tier and tier in tier_overrides and req_temp == 0 and req_max_tokens == 0:
+            tier_cfg = tier_overrides[tier]
+            try:
+                from app.llm.langchain_adapter import ChatLLMProvider
+                new_llm = ChatLLMProvider(
+                    provider=current_base_llm.provider,
+                    temperature=tier_cfg["temperature"],
+                    max_tokens=tier_cfg["max_tokens"],
+                )
+                if hasattr(current_base_llm, '_bound_tools') and current_base_llm._bound_tools:
+                    new_llm._bound_tools = list(current_base_llm._bound_tools)
+                    new_llm._bound_tool_choice = getattr(current_base_llm, '_bound_tool_choice', None)
+                current_base_llm = new_llm
+                logger.info(f"[llm_call] tier 覆盖: tier={tier} temp={tier_cfg['temperature']} max_tokens={tier_cfg['max_tokens']}")
+            except Exception as e:
+                logger.debug(f"[llm_call] tier 覆盖跳过: {e}")
+
+        writer({"step": "llm", "status": "calling", "message": f"正在生成回答... (模型: {model_label}, 路由: {route_class}/{tier}, 思考: {thinking_mode}, reasoning: {effective_reasoning})"})
 
         system_prompt = state.get("system_prompt") or state.get("context") or \
             "你是主人知识最全面的军师，能够使用工具回答用户问题。请用中文回答。"
@@ -372,6 +437,16 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
         # 注入路由提示
         if prompt_hint:
             system_prompt = f"{system_prompt}\n\n【指令】{prompt_hint}"
+
+        # ── Cache Continuity：tier 从高降回低时，注入压缩指令 ──
+        _TIER_RANK = {"S": 0, "M": 1, "L": 2, "XL": 3}
+        prev_tier = state.get("_prev_tier", "")
+        if prev_tier and tier:
+            prev_rank = _TIER_RANK.get(prev_tier, 0)
+            curr_rank = _TIER_RANK.get(tier, 0)
+            if prev_rank > curr_rank:
+                # 从高 tier 降回低 tier，注入精简指令
+                system_prompt += "\n\n【缓存连续性】上文较长，请简洁回答，避免重复已讨论的内容，控制在 500 字以内。"
 
         # ── Goal 模式：注入任务拆解与执行指令 ──
         # 规划执行分离：第0轮只输出计划，后续轮强制使用工具执行
@@ -751,6 +826,9 @@ Answer: 基于工具结果输出该子任务的成果
             pass
 
         result_update = {}
+        # 存储当前 tier 供下一轮 Cache Continuity 使用
+        if tier:
+            result_update["_prev_tier"] = tier
         if goal_tokens_delta and state.get("goal_mode"):
             result_update["goal_tokens_used"] = state.get("goal_tokens_used", 0) + goal_tokens_delta
 

@@ -10,20 +10,37 @@
 
 import React, { useCallback } from 'react'
 import { Button, Tooltip } from 'antd'
-import { ClearOutlined } from '@ant-design/icons'
+import {
+  ClearOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
+} from '@ant-design/icons'
 import styles from './chat-panel.module.css'
 import { SimpleMessageList } from './message-list'
 import { MessageInput } from './message-input'
 import { ReasoningDepthSwitch } from './reasoning-depth'
-import { FullModelSelect } from '@/modules/shared/components/model-selector'
 import { ApprovalDialog } from './approval-dialog'
 import type { UseChatReturn } from '../hooks/use-chat'
 
 interface ChatContentProps {
   chat: UseChatReturn
+  sidebarCollapsed?: boolean
+  progressCollapsed?: boolean
+  onToggleSidebar?: () => void
+  onToggleProgress?: () => void
+  hasProgressData?: boolean
 }
 
-export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
+export const ChatContent: React.FC<ChatContentProps> = ({
+  chat,
+  sidebarCollapsed,
+  progressCollapsed,
+  onToggleSidebar,
+  onToggleProgress,
+  hasProgressData,
+}) => {
   const {
     messages,
     reasoningDepth,
@@ -51,14 +68,33 @@ export const ChatContent: React.FC<ChatContentProps> = ({ chat }) => {
     <div className={styles.chatPanel}>
       {/* 顶部操作栏 */}
       <div className={styles.chatHeader}>
-        <h4 className={styles.chatTitle}>💬 对话</h4>
         <div className={styles.headerActions}>
-          <FullModelSelect
-            providerId={selectedProviderId}
-            modelName={selectedModelName}
-            onChange={setModelSelection}
-          />
           <ReasoningDepthSwitch value={reasoningDepth} onChange={setReasoningDepth} />
+          {onToggleSidebar && (
+            <Tooltip title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
+              <Button
+                type="text"
+                size="small"
+                icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={onToggleSidebar}
+              />
+            </Tooltip>
+          )}
+          {onToggleProgress && (
+            <Tooltip title={progressCollapsed ? '展开进展面板' : '收起进展面板'}>
+              <Button
+                type="text"
+                size="small"
+                icon={progressCollapsed ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                onClick={onToggleProgress}
+                style={{
+                  color: hasProgressData && progressCollapsed
+                    ? 'var(--color-primary, #ff8c42)'
+                    : undefined,
+                }}
+              />
+            </Tooltip>
+          )}
           <Tooltip title="清空对话">
             <Button
               type="text"

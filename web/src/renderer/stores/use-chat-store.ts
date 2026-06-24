@@ -10,7 +10,7 @@ interface ChatState {
   messages: ChatMessage[]
 
   // 推理深度
-  reasoningDepth: 'fast' | 'deep' | 'full'
+  reasoningDepth: 'auto' | 'fast' | 'deep' | 'full'
 
   // 模型选择
   selectedProviderId: number | undefined
@@ -24,7 +24,7 @@ interface ChatState {
   setCurrentConversation: (id: string | null) => void
   setMessages: (messages: ChatMessage[]) => void
   addMessage: (message: ChatMessage) => void
-  setReasoningDepth: (depth: 'fast' | 'deep' | 'full') => void
+  setReasoningDepth: (depth: 'auto' | 'fast' | 'deep' | 'full') => void
   setModelSelection: (providerId: number, modelName: string) => void
   /** 从已启用供应商列表中提取默认供应商和模型，写入 store */
   initDefaultModel: (providers: { id: number; isDefault: number; models: { modelName: string }[] }[]) => void
@@ -44,9 +44,9 @@ export const useChatStore = create<ChatState>((set) => ({
   conversations: [],
   currentConversationId: null,
   messages: [],
-  reasoningDepth: 'fast',
+  reasoningDepth: 'auto',
   selectedProviderId: undefined,
-  selectedModelName: undefined,
+  selectedModelName: 'auto',
   isLoading: false,
 
   setConversations: (conversations) => set({ conversations }),

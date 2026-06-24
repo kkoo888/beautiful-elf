@@ -1,13 +1,4 @@
 import { useState, useCallback } from 'react'
-import { Button, Tooltip, Typography } from 'antd'
-import {
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  EyeOutlined,
-  EyeInvisibleOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons'
-import { PageHeader } from '@/components/page-header'
 import { ChatContent } from './components/chat-panel'
 import { ConversationList } from './components/conversation-list'
 import { AgentProgressIndicator } from './components/agent-progress'
@@ -56,32 +47,6 @@ export default function ChatPanel() {
 
   return (
     <div className={styles.layout}>
-      <PageHeader
-        title="(❁´◡`❁)聊天"
-        extra={
-          <div style={{ display: 'flex', gap: 4 }}>
-            <Tooltip title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
-              <Button
-                type="text"
-                icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                onClick={toggleSidebar}
-              />
-            </Tooltip>
-            <Tooltip title={progressCollapsed ? '展开进展面板' : '收起进展面板'}>
-              <Button
-                type="text"
-                icon={progressCollapsed ? <EyeOutlined /> : <EyeInvisibleOutlined />}
-                onClick={toggleProgress}
-                style={{
-                  color: hasProgressData && progressCollapsed
-                    ? 'var(--color-primary, #ff8c42)'
-                    : undefined,
-                }}
-              />
-            </Tooltip>
-          </div>
-        }
-      />
       <div className={styles.body}>
         {/* 会话侧栏 */}
         <div className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
@@ -98,7 +63,14 @@ export default function ChatPanel() {
 
         {/* 聊天内容区 */}
         <div className={styles.content}>
-          <ChatContent chat={chat} />
+          <ChatContent
+            chat={chat}
+            sidebarCollapsed={sidebarCollapsed}
+            progressCollapsed={progressCollapsed}
+            onToggleSidebar={toggleSidebar}
+            onToggleProgress={toggleProgress}
+            hasProgressData={hasProgressData}
+          />
         </div>
 
         {/* 右侧进展面板 */}

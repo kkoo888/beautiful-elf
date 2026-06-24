@@ -68,6 +68,7 @@ from app.models.expert_team import (
 # 大模型供应商
 from app.models.llm_provider import LLMProvider
 from app.models.llm_model import LLMModel
+from app.models.llm_tier_config import LLMTierConfig
 
 # 用户
 from app.models.user import User
@@ -107,7 +108,7 @@ __all__ = [
     "ActionLog",
     "ExpertTeam", "Expert", "TeamExpertBinding", "ExpertTeamRun",
     "ExpertSkill", "ExpertRoleRun",
-    "LLMProvider", "LLMModel",
+    "LLMProvider", "LLMModel", "LLMTierConfig",
     "User",
     "MarkdownMemory",
     "CostRecord",

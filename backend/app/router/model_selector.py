@@ -239,6 +239,7 @@ class ModelSelector:
         self._bundle_dir = Path(bundle_dir) if bundle_dir else _DEFAULT_BUNDLE_DIR
         self._config = {}
         self._ml_strategy = None
+        self._tier_map = {}  # tier → {model_name, provider_id, max_tokens, temperature, ...}
 
         runtime_yaml = self._bundle_dir / "router.runtime.yaml"
         if runtime_yaml.exists():
@@ -260,16 +261,36 @@ class ModelSelector:
     def register_llm(self, model_name, llm):
         self._llm_registry[model_name] = llm
 
-    def get_llm(self, model_name):
+    def set_tier_map(self, tier_map):
+        """设置 tier → config 映射（从 DB 加载）"""
+        self._tier_map = tier_map
+
+    def get_tier_config(self, tier):
+        """获取某个 tier 的配置"""
+        return self._tier_map.get(tier, {})
+
+    def get_llm(self, model_name, fallback_model=None):
+        """获取 LLM 实例，支持 fallback 降级"""
         llm = self._llm_registry.get(model_name)
         if llm:
             return llm
+        # 尝试 fallback 模型
+        if fallback_model:
+            llm = self._llm_registry.get(fallback_model)
+            if llm:
+                logger.info(f"[model_selector] fallback: {model_name} → {fallback_model}")
+                return llm
+        # 尝试默认模型
         if self._default_model:
             llm = self._llm_registry.get(self._default_model)
             if llm:
+                logger.info(f"[model_selector] fallback: {model_name} → {self._default_model}")
                 return llm
+        # 最后兜底：任意可用模型
         if self._llm_registry:
-            return next(iter(self._llm_registry.values()))
+            fallback = next(iter(self._llm_registry.values()))
+            logger.info(f"[model_selector] fallback: {model_name} → 任意可用模型")
+            return fallback
         raise RuntimeError(f"没有已注册的 LLM（{model_name}）")
 
     def classify(self, user_message, history=None):
