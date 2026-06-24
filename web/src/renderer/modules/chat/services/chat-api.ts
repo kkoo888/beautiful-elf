@@ -315,7 +315,7 @@ export function chatStreamWS(
   let aborted = false
   let firstToken = true
 
-  const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/api/v1/ws/chat?token=${localStorage.getItem('token') || ''}`
+  const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + `/api/v1/ws/chat?token=${localStorage.getItem('beautiful-elf:auth_token') || ''}`
 
   function connect() {
     if (aborted) return
