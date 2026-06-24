@@ -129,10 +129,18 @@ class OnnxRerankerService:
         if not candidates:
             return []
 
+        # 过滤空文本，记录原始索引以还原顺序
+        indexed = [(i, c) for i, c in enumerate(candidates) if c and c.strip()]
+        if not indexed:
+            return [0.5] * len(candidates)
+
+        orig_indices = [i for i, _ in indexed]
+        filtered_candidates = [c for _, c in indexed]
+
         # ── optimum 模式: 直接用 transformers 推理 ──
         if getattr(self, '_use_optimum', False):
             import torch
-            pairs = [(query, c[:_MAX_LENGTH]) for c in candidates]
+            pairs = [(query, c[:_MAX_LENGTH]) for c in filtered_candidates]
             encoded = self._tokenizer(
                 [q for q, c in pairs], [c for q, c in pairs],
                 padding=True, truncation=True, max_length=_MAX_LENGTH, return_tensors="pt",
@@ -146,10 +154,15 @@ class OnnxRerankerService:
                 scores = logits[:, 0].astype(np.float64)
             else:
                 scores = logits.flatten().astype(np.float64)
-            return (1.0 / (1.0 + np.exp(-scores))).tolist()
+            filtered_scores = (1.0 / (1.0 + np.exp(-scores))).tolist()
+            # 还原原始顺序，空文本补 0.5
+            result = [0.5] * len(candidates)
+            for idx, score in zip(orig_indices, filtered_scores):
+                result[idx] = score
+            return result
 
         # ── ONNX 模式: onnxruntime 推理 ──
-        pairs = [(query, c[:_MAX_LENGTH]) for c in candidates]
+        pairs = [(query, c[:_MAX_LENGTH]) for c in filtered_candidates]
 
         if self._use_tokenizers_lib:
             encodings = self._tokenizer.encode_batch(
@@ -193,7 +206,12 @@ class OnnxRerankerService:
             scores = logits.flatten().astype(np.float64)
 
         sigmoid_scores = 1.0 / (1.0 + np.exp(-scores))
-        return sigmoid_scores.tolist()
+        filtered_scores = sigmoid_scores.tolist()
+        # 还原原始顺序，空文本补 0.5
+        result = [0.5] * len(candidates)
+        for idx, score in zip(orig_indices, filtered_scores):
+            result[idx] = score
+        return result
 
     @property
     def is_ready(self) -> bool:

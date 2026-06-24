@@ -140,12 +140,16 @@ export interface ChatMessage {
   role: MessageRole
   /** 消息内容 */
   content: string
+  /** AI 思考过程 */
+  thinking?: string
   /** 创建时间戳 */
   createdAt: number
   /** 元数据 */
   metadata?: MessageMetadata
   /** 用户反馈 */
   feedback?: FeedbackData
+  /** 消息是否已完成（SSE 流结束后为 true） */
+  completed?: boolean
 }
 
 /** 会话 */
@@ -220,6 +224,8 @@ export interface ChatResponse {
 export interface StreamToken {
   /** token 内容 */
   content: string
+  /** 思考过程内容 */
+  thinking?: string
   /** 是否为最后一个 token */
   done: boolean
   /** 消息 ID（首个 token 返回） */

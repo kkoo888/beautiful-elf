@@ -450,7 +450,7 @@ def _make_goal_replanner(llm):
 
 简洁输出，每点 2-3 句话。"""
 
-                reflexion_content, _ = await llm.ainvoke(reflexion_prompt)
+                reflexion_content = await llm.ainvoke(reflexion_prompt)
                 reflexion_text = _content_blocks_to_str(reflexion_content if hasattr(reflexion_content, 'content') else reflexion_content)
                 logger.info(f"[goal_replanner] Reflexion 完成: {reflexion_text[:100]}")
 

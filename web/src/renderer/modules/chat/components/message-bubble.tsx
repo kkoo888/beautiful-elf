@@ -20,6 +20,7 @@ import {
   BarChartOutlined,
   FileTextOutlined,
   BulbOutlined,
+  CaretRightOutlined,
 } from '@ant-design/icons'
 import 'prismjs/components/prism-yaml'
 import 'prismjs/components/prism-sql'
@@ -116,6 +117,38 @@ interface MessageBubbleProps {
   onFeedback?: (data: FeedbackData) => Promise<void>
 }
 
+/** 可折叠思考块 */
+function ThinkingBlock({ thinking }: { thinking: string }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!thinking) return null
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '2px 8px', borderRadius: 6, cursor: 'pointer',
+          background: '#f0f0f0', border: '1px solid #e0e0e0',
+          fontSize: 12, color: '#666', userSelect: 'none',
+        }}
+      >
+        <CaretRightOutlined style={{ fontSize: 10, transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'none' }} />
+        <span>思考过程</span>
+      </div>
+      {expanded && (
+        <div style={{
+          marginTop: 6, padding: '8px 12px', borderRadius: 8,
+          background: '#f9f9f9', border: '1px solid #eee',
+          fontSize: 12, color: '#888', lineHeight: 1.6,
+          maxHeight: 300, overflow: 'auto', whiteSpace: 'pre-wrap',
+        }}>
+          {thinking}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedback }) => {
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
@@ -142,6 +175,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedbac
           </div>
         ) : (
           <div className={styles.markdownContent}>
+            <ThinkingBlock thinking={message.thinking ?? ''} />
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -184,8 +218,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedbac
           </div>
         )}
 
-        {/* AI 反馈按钮 */}
-        {isAssistant && onFeedback && (
+        {/* AI 反馈按钮 — 仅在消息完成后显示 */}
+        {isAssistant && onFeedback && message.completed && (
           <FeedbackButtons
             messageId={message.id}
             feedback={message.feedback}

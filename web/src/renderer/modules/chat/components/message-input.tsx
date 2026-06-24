@@ -230,7 +230,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder={goalMode ? '描述你的目标… (如：帮我分析竞品，出一份市场报告)' : '输入消息… (Enter 发送，Shift+Enter 换行)' }
-          disabled={disabled}
           rows={1}
           aria-label="消息输入框"
         />

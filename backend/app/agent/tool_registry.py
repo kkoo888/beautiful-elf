@@ -54,6 +54,16 @@ class ToolRegistry:
     def __init__(self):
         self._tools: Dict[str, ToolDef] = {}
         self._db_loaded = False
+        # Worker subgraph 依赖（由 agent_service 初始化时注入）
+        self._worker_llm = None
+        self._worker_tool_names: list[str] = []
+        self._worker_context_engine = None
+
+    def set_worker_deps(self, llm, tool_names: list, context_engine=None):
+        """注入 Worker 子图依赖（Agent 引擎初始化后调用）"""
+        self._worker_llm = llm
+        self._worker_tool_names = tool_names
+        self._worker_context_engine = context_engine
 
     # ─── 注册（内置工具）────────────────────────────────
 
@@ -904,9 +914,63 @@ async def memory_delete(point_id: str, reason: str = "") -> dict:
 # ── 会话工具 ────────────────────────────────────────────
 
 async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: int = 300) -> dict:
-    """生成子 Agent 执行子任务"""
-    # 预留接口，实际需对接 sessions_spawn
-    return {"error": "子 Agent 功能待对接 sessions_spawn 接口", "task": task, "label": label}
+    """生成子 Agent 执行子任务（Worker Subgraph 模式）"""
+    import asyncio
+    from app.core.logging import get_logger as _get_logger
+    _logger = _get_logger("spawn_agent")
+
+    llm = tool_registry._worker_llm
+    if not llm:
+        return {"error": "Worker 子图未初始化（llm 未注入）", "task": task, "label": label}
+
+    # 获取 worker 工具
+    worker_tool_names = tool_registry._worker_tool_names or [
+        "web_search", "execute_code", "read_file", "query_database", "web_fetch",
+    ]
+    tools = tool_registry.get_langchain_tools(worker_tool_names)
+    if not tools:
+        tools = []
+
+    # 构建 system prompt
+    system_prompt = "你是一个专注的子任务执行器。根据给定的任务，使用可用工具完成工作，返回结构化的执行结果。"
+
+    try:
+        from app.agent.worker_graph import build_worker_graph
+        worker = build_worker_graph(llm=llm, tools=tools, system_prompt=system_prompt, max_iterations=5)
+
+        initial_state = {
+            "messages": [],
+            "task": task,
+            "context": "",
+            "iteration": 0,
+            "max_iterations": 5,
+            "final_answer": None,
+            "force_end": False,
+        }
+
+        result = await asyncio.wait_for(
+            worker.ainvoke(initial_state),
+            timeout=timeout,
+        )
+
+        answer = result.get("final_answer") or ""
+        if not answer:
+            for msg in reversed(result.get("messages", [])):
+                content = getattr(msg, "content", "") if not isinstance(msg, dict) else msg.get("content", "")
+                if content:
+                    answer = content if isinstance(content, str) else str(content)
+                    break
+
+        tools_used = []
+        _logger.info(f"[spawn_agent] 子任务完成: label={label} answer_len={len(answer)}")
+        return {"success": True, "result": answer, "tools_used": tools_used, "label": label}
+
+    except asyncio.TimeoutError:
+        _logger.warning(f"[spawn_agent] 子任务超时 ({timeout}s): {label}")
+        return {"error": f"子任务执行超时 ({timeout}s)", "task": task, "label": label}
+    except Exception as e:
+        _logger.error(f"[spawn_agent] 子任务失败: {e}", exc_info=True)
+        return {"error": f"子任务执行失败: {e}", "task": task, "label": label}
 
 
 async def list_sessions(limit: int = 20, active_minutes: int = None) -> dict:

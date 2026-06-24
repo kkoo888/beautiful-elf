@@ -47,6 +47,60 @@ except ImportError:
     logger.warning("[agent_service] langgraph.stream 未安装，custom 事件降级为原始解析")
 
 
+_SENTINEL = object()
+
+
+async def _queue_to_aiter(q: asyncio.Queue) -> AsyncIterator[dict]:
+    """把 asyncio.Queue 包装成 async iterator，用于 asyncio.merge 合并多路流。
+
+    用法:
+        aiter = _queue_to_aiter(queue)
+        merged = asyncio.merge(main_stream, aiter)
+        async for event in merged:
+            ...
+
+    通过 put(_SENTINEL) 哨兵值通知迭代结束。
+    """
+    while True:
+        item = await q.get()
+        if item is _SENTINEL:
+            break
+        yield item
+
+
+async def _async_merge(*aiters):
+    """asyncio.merge 兼容实现（Python 3.11+ 原生可用，低版本 fallback）"""
+    if hasattr(asyncio, "merge"):
+        async for item in asyncio.merge(*aiters):
+            yield item
+    else:
+        _merged_q: asyncio.Queue = asyncio.Queue()
+        _active = len(aiters)
+
+        async def _drain(aiter, idx):
+            nonlocal _active
+            try:
+                async for item in aiter:
+                    await _merged_q.put(item)
+            except Exception:
+                pass
+            finally:
+                _active -= 1
+                if _active <= 0:
+                    await _merged_q.put(_SENTINEL)
+
+        tasks = [asyncio.create_task(_drain(ai, i)) for i, ai in enumerate(aiters)]
+        try:
+            while True:
+                item = await _merged_q.get()
+                if item is _SENTINEL:
+                    break
+                yield item
+        finally:
+            for t in tasks:
+                t.cancel()
+
+
 class AgentService:
     """Agent 业务服务（v4.2）"""
 
@@ -212,6 +266,10 @@ class AgentService:
             self._provider_id = provider_id
             self._model_name = model_name
             self._initialized = True
+
+            # 注入 Worker 子图依赖（spawn_agent 工具使用）
+            from app.agent.worker_graph import WORKER_TOOL_NAMES
+            tool_registry.set_worker_deps(llm=llm, tool_names=WORKER_TOOL_NAMES, context_engine=context_engine)
 
             logger.info(f"Agent 引擎初始化完成 (provider={provider_id}, model={model_name}, ML路由={model_selector.is_ml_available}, B+C动态工具, interrupt={enable_interrupt})")
             return True
@@ -398,31 +456,39 @@ class AgentService:
             _final_answer = None
             _got_llm_tokens = False
 
-            # v3: extensions 消费 custom 事件
+            # v3: extensions 消费 custom 事件（asyncio.merge 并发消费，不再阻塞）
             custom_events_iter = stream.extensions.get("custom_events") if _HAS_STREAM_TRANSFORMER else None
 
-            async def _resume_custom_consumer():
-                if custom_events_iter:
-                    async for data in custom_events_iter:
-                        if isinstance(data, dict):
-                            yield {"type": "progress", **data}
-
-            _custom_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
-            _custom_done = asyncio.Event()
-
-            async def _resume_custom_drain():
+            async def _resume_custom_producer():
+                """custom 事件生产者 → queue，供 merge 并发消费"""
+                q: asyncio.Queue = asyncio.Queue(maxsize=500)
                 try:
-                    async for evt in _resume_custom_consumer():
-                        await _custom_queue.put(evt)
+                    if custom_events_iter:
+                        async for data in custom_events_iter:
+                            if isinstance(data, dict):
+                                await q.put({"type": "progress", **data})
                 except Exception:
                     pass
                 finally:
-                    _custom_done.set()
+                    await q.put(_SENTINEL)
+                return q
 
-            if custom_events_iter:
-                _custom_task = asyncio.create_task(_resume_custom_drain())
+            _custom_q = await _resume_custom_producer()
+            _custom_aiter = _queue_to_aiter(_custom_q)
 
-            async for event in stream:
+            async def _resume_main_iter():
+                """主流事件 → 统一格式，供 merge 并发消费"""
+                async for event in stream:
+                    yield event
+
+            merged = _async_merge(_resume_main_iter(), _custom_aiter)
+
+            async for event in merged:
+                # custom 事件已由 merge 实时推送，直接 yield
+                if isinstance(event, dict) and event.get("type") == "progress":
+                    yield event
+                    continue
+
                 method = event.get("method", "")
                 params = event.get("params", {})
                 data = params.get("data", {}) if isinstance(params, dict) else {}
@@ -467,18 +533,6 @@ class AgentService:
                         for node_output in data.values():
                             if isinstance(node_output, dict) and node_output.get("final_answer"):
                                 _final_answer = node_output["final_answer"]
-
-            # 排空 custom 事件队列
-            if custom_events_iter:
-                try:
-                    _custom_task.cancel()
-                except Exception:
-                    pass
-                while not _custom_queue.empty():
-                    try:
-                        yield _custom_queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
 
             # 缓存答案 fallback
             if not _got_llm_tokens and not _final_answer:
@@ -677,36 +731,41 @@ class AgentService:
             _final_answer = None
             _got_llm_tokens = False
 
-            # v3: 通过 extensions 消费 custom 事件（Transformer 捕获）
-            # 同时保留 raw event 迭代处理 messages/tools/updates 通道
+            # v3: asyncio.merge 并发消费 custom + main stream（不再阻塞）
             custom_events_iter = stream.extensions.get("custom_events") if _HAS_STREAM_TRANSFORMER else None
 
-            async def _consume_custom_events():
-                """后台消费 Transformer 捕获的 custom 事件"""
-                if custom_events_iter:
-                    async for data in custom_events_iter:
-                        if isinstance(data, dict):
-                            if data.get("step") == "goal_subtasks":
-                                yield {"type": "goal_subtasks", "subtasks": data.get("subtasks", [])}
-                            yield {"type": "progress", **data}
-
-            # 启动 custom 事件消费协程
-            _custom_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
-            _custom_done = asyncio.Event()
-
-            async def _custom_consumer():
+            async def _custom_producer():
+                """custom 事件生产者 → queue，供 merge 并发消费"""
+                q: asyncio.Queue = asyncio.Queue(maxsize=500)
                 try:
-                    async for evt in _consume_custom_events():
-                        await _custom_queue.put(evt)
+                    if custom_events_iter:
+                        async for data in custom_events_iter:
+                            if isinstance(data, dict):
+                                if data.get("step") == "goal_subtasks":
+                                    await q.put({"type": "goal_subtasks", "subtasks": data.get("subtasks", [])})
+                                await q.put({"type": "progress", **data})
                 except Exception:
                     pass
                 finally:
-                    _custom_done.set()
+                    await q.put(_SENTINEL)
+                return q
 
-            if custom_events_iter:
-                _custom_task = asyncio.create_task(_custom_consumer())
+            _custom_q = await _custom_producer()
+            _custom_aiter = _queue_to_aiter(_custom_q)
 
-            async for event in stream:
+            async def _main_event_iter():
+                """主流事件 → 统一格式，供 merge 并发消费"""
+                async for event in stream:
+                    yield event
+
+            merged = _async_merge(_main_event_iter(), _custom_aiter)
+
+            async for event in merged:
+                # custom 事件已由 merge 实时推送，直接 yield
+                if isinstance(event, dict) and event.get("type") in ("progress", "goal_subtasks"):
+                    yield event
+                    continue
+
                 method = event.get("method", "")
                 params = event.get("params", {})
                 data = params.get("data", {}) if isinstance(params, dict) else {}
@@ -731,17 +790,22 @@ class AgentService:
                         if isinstance(block, dict) and block.get("type") == "thinking":
                             thinking_text = block.get("thinking", "")
                             if thinking_text:
-                                yield {"type": "token", "content": thinking_text}
+                                yield {"type": "thinking", "content": thinking_text}
                     elif isinstance(msg_chunk, dict) and msg_chunk.get("event") == "reasoning-delta":
                         reasoning_text = msg_chunk.get("delta", {}).get("reasoning", "") if isinstance(msg_chunk.get("delta"), dict) else ""
                         if reasoning_text:
-                            yield {"type": "token", "content": reasoning_text}
+                            yield {"type": "thinking", "content": reasoning_text}
                     # 兼容 AIMessageChunk
                     elif hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
                         if getattr(msg_chunk, "type", "") == "AIMessageChunk":
                             _got_llm_tokens = True
                             token_text = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
                             yield {"type": "token", "content": token_text}
+                    # thinking 实时增量（从 additional_kwargs.reasoning_content_delta 读取）
+                    if hasattr(msg_chunk, "additional_kwargs"):
+                        reasoning_delta = msg_chunk.additional_kwargs.get("reasoning_content_delta")
+                        if reasoning_delta:
+                            yield {"type": "thinking", "content": reasoning_delta}
 
                     # usage
                     if isinstance(msg_chunk, dict) and msg_chunk.get("event") == "message-finish":
@@ -791,18 +855,6 @@ class AgentService:
                         for node_output in data.values():
                             if isinstance(node_output, dict) and node_output.get("final_answer"):
                                 _final_answer = node_output["final_answer"]
-
-            # 排空 custom 事件队列
-            if custom_events_iter:
-                try:
-                    _custom_task.cancel()
-                except Exception:
-                    pass
-                while not _custom_queue.empty():
-                    try:
-                        yield _custom_queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
 
             # 获取最终状态（一次 get_state，同时取 final_state + interrupt 检测）
             final_state = None

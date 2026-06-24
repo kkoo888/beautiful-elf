@@ -238,6 +238,10 @@ export function chatStream(
               onToken({ content: data.content ?? '', done: data.done, messageId: firstToken ? messageId : undefined })
               firstToken = false
             }
+            // thinking 事件
+            if (data.thinking) {
+              onToken({ content: '', thinking: data.thinking, done: false })
+            }
             // done 事件中可能包含 goal_subtasks
             if (data.done && data.goal_subtasks) {
               callbacks?.onGoalSubtasks?.(data.goal_subtasks)
@@ -246,6 +250,27 @@ export function chatStream(
           } catch { /* skip malformed JSON */ }
         }
       }
+
+      // 流正常关闭后，处理 buffer 中可能残留的最后一行（done 事件可能在此）
+      if (buffer.trim()) {
+        for (const line of buffer.split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.content || data.done) {
+              onToken({ content: data.content ?? '', done: data.done, messageId: firstToken ? messageId : undefined })
+              firstToken = false
+            }
+            if (data.thinking) {
+              onToken({ content: '', thinking: data.thinking, done: false })
+            }
+            if (data.done) return
+          } catch { /* skip malformed JSON */ }
+        }
+      }
+
+      // 兜底：流正常关闭但未收到 done 事件 → 强制结束加载状态
+      onToken({ content: '', done: true, messageId: undefined })
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         onError?.(err instanceof Error ? err : new Error(String(err)))
@@ -253,8 +278,8 @@ export function chatStream(
     }
   }
 
-  doStream()
-  return { abort: () => controller.abort() }
+  const done = doStream()
+  return { abort: () => controller.abort(), done }
 }
 
 /**
@@ -327,10 +352,34 @@ export function chatResumeStream(
               onToken({ content: data.content ?? '', done: data.done, messageId: firstToken ? messageId : undefined })
               firstToken = false
             }
+            if (data.thinking) {
+              onToken({ content: '', thinking: data.thinking, done: false })
+            }
             if (data.done) return
           } catch { /* skip malformed JSON */ }
         }
       }
+
+      // 流正常关闭后，处理 buffer 中可能残留的最后一行
+      if (buffer.trim()) {
+        for (const line of buffer.split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.content || data.done) {
+              onToken({ content: data.content ?? '', done: data.done, messageId: firstToken ? messageId : undefined })
+              firstToken = false
+            }
+            if (data.thinking) {
+              onToken({ content: '', thinking: data.thinking, done: false })
+            }
+            if (data.done) return
+          } catch { /* skip malformed JSON */ }
+        }
+      }
+
+      // 兜底：流正常关闭但未收到 done 事件
+      onToken({ content: '', done: true, messageId: undefined })
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         onError?.(err instanceof Error ? err : new Error(String(err)))
@@ -338,8 +387,8 @@ export function chatResumeStream(
     }
   }
 
-  doStream()
-  return { abort: () => controller.abort() }
+  const done = doStream()
+  return { abort: () => controller.abort(), done }
 }
 
 /** 提交反馈 — 调用后端 POST /ai_feedback */

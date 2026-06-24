@@ -1,7 +1,9 @@
 """日志配置 - P3C 规范"""
 import logging
+import os
 import sys
 from contextvars import ContextVar
+from logging.handlers import TimedRotatingFileHandler
 from app.core.config import get_settings
 
 # 请求链路 ID 上下文
@@ -47,15 +49,36 @@ def setup_logging():
         datefmt="%Y-%m-%dT%H:%M:%S%z",
     )
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
-    handler.addFilter(TraceFilter())
-    handler.addFilter(SensitiveFilter())
+    # 控制台日志处理器
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    console_handler.addFilter(TraceFilter())
+    console_handler.addFilter(SensitiveFilter())
+
+    # 文件日志处理器（按日期轮转）
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "log")
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # 创建按日期轮转的文件处理器，每天创建新的日志文件
+    file_handler = TimedRotatingFileHandler(
+        filename=os.path.join(log_dir, "app.log"),
+        when="midnight",
+        interval=1,
+        backupCount=30,  # 保留30天的日志
+        encoding="utf-8"
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.addFilter(TraceFilter())
+    file_handler.addFilter(SensitiveFilter())
+    
+    # 设置日志文件后缀为日期格式
+    file_handler.suffix = "%Y-%m-%d"
 
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     root_logger.handlers.clear()
-    root_logger.addHandler(handler)
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
 
     # 降低第三方库日志级别
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)

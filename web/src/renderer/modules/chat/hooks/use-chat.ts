@@ -268,7 +268,7 @@ export function useChat(): UseChatReturn {
       setTokenStats(null)
       setProgressSteps([])
 
-      abortRef.current = chatStream(
+      const { abort, done } = chatStream(
         {
           conversationId: convId,
           message: content.trim(),
@@ -282,46 +282,38 @@ export function useChat(): UseChatReturn {
           goalMode: options?.goalMode,
         },
         (token: StreamToken) => {
-          if (token.done) {
-            setIsLoading(false)
-            abortRef.current = null
-            // 更新会话最后消息
-            const finalMessages = useChatStore.getState().messages
-            const lastAiMsg = [...finalMessages].reverse().find((m) => m.role === 'assistant')
-            if (lastAiMsg) {
-              useChatStore.getState().updateConversation(convId, {
-                lastMessage: lastAiMsg.content.slice(0, 100),
-                messageCount:
-                  (useChatStore.getState().conversations.find((c) => c.id === convId)
-                    ?.messageCount ?? 0) + 1,
-              })
-            }
+          const currentMessages = useChatStore.getState().messages
+          // 思考过程
+          if (token.thinking) {
+            const updatedMessages = currentMessages.map((msg) =>
+              msg.id === aiMessageId ? { ...msg, thinking: (msg.thinking ?? '') + token.thinking } : msg
+            )
+            setMessages(updatedMessages)
             return
           }
-
-          // 更新 AI 消息内容（追加 token）
-          const currentMessages = useChatStore.getState().messages
+          // 流结束
+          if (token.done) {
+            const updatedMessages = currentMessages.map((msg) =>
+              msg.id === aiMessageId ? { ...msg, completed: true } : msg
+            )
+            setMessages(updatedMessages)
+            return
+          }
+          // 回答内容
           const updatedMessages = currentMessages.map((msg) =>
             msg.id === aiMessageId ? { ...msg, content: msg.content + token.content } : msg
           )
           setMessages(updatedMessages)
-
-          // Goal 模式：子任务状态由后端 goal_subtasks SSE 事件权威推送
-          // 不再从前端文本解析，避免与后端状态竞态覆盖
-          // parseGoalTasks 仅作为 SSE 事件未到达时的降级兜底
-          // （后端 goal_status_updater 节点会在每次迭代后推送完整的子任务列表）
         },
         (error) => {
           console.error('[Chat] Stream error:', error)
           const currentMessages = useChatStore.getState().messages
           const updatedMessages = currentMessages.map((msg) =>
             msg.id === aiMessageId
-              ? { ...msg, content: msg.content + '\n\n⚠️ 生成中断，请重试' }
+              ? { ...msg, content: msg.content + '\n\n⚠️ 生成中断，请重试', completed: true }
               : msg
           )
           setMessages(updatedMessages)
-          setIsLoading(false)
-          abortRef.current = null
         },
         {
           onToolStart: (tool, args) => {
@@ -353,7 +345,6 @@ export function useChat(): UseChatReturn {
           },
           onApproval: (req) => {
             setApprovalRequest(req)
-            setIsLoading(false)
           },
           onCostUpdate: (promptTokens, completionTokens) => {
             setTokenStats({ promptTokens, completionTokens })
@@ -396,6 +387,25 @@ export function useChat(): UseChatReturn {
           },
         }
       )
+      abortRef.current = { abort }
+
+      try {
+        await done
+      } finally {
+        setIsLoading(false)
+        abortRef.current = null
+        // 更新会话最后消息
+        const finalMessages = useChatStore.getState().messages
+        const lastAiMsg = [...finalMessages].reverse().find((m) => m.role === 'assistant')
+        if (lastAiMsg) {
+          useChatStore.getState().updateConversation(convId, {
+            lastMessage: lastAiMsg.content.slice(0, 100),
+            messageCount:
+              (useChatStore.getState().conversations.find((c) => c.id === convId)
+                ?.messageCount ?? 0) + 1,
+          })
+        }
+      }
     },
     [isLoading, reasoningDepth, selectedProviderId, selectedModelName, ensureConversationId, addMessage, setMessages, setIsLoading, goalMode]
   )
@@ -510,7 +520,7 @@ export function useChat(): UseChatReturn {
   }, [])
 
   /** 响应审批（approved/rejected）— 调用后端 resume 端点 */
-  const respondApproval = useCallback((approved: boolean) => {
+  const respondApproval = useCallback(async (approved: boolean) => {
     if (!approvalRequest || !currentConversationId) return
 
     setApprovalRequest(null)
@@ -527,7 +537,7 @@ export function useChat(): UseChatReturn {
     }
     addMessage(aiMessage)
 
-    abortRef.current = chatResumeStream(
+    const { abort, done } = chatResumeStream(
       currentConversationId,
       {
         approved,
@@ -536,11 +546,7 @@ export function useChat(): UseChatReturn {
         userResponse: approved ? '' : '用户拒绝执行此操作',
       },
       (token: StreamToken) => {
-        if (token.done) {
-          setIsLoading(false)
-          abortRef.current = null
-          return
-        }
+        if (token.done) return
         const currentMessages = useChatStore.getState().messages
         const updatedMessages = currentMessages.map((msg) =>
           msg.id === aiMessageId ? { ...msg, content: msg.content + token.content } : msg
@@ -556,8 +562,6 @@ export function useChat(): UseChatReturn {
             : msg
         )
         setMessages(updatedMessages)
-        setIsLoading(false)
-        abortRef.current = null
       },
       {
         onToolStart: (tool, args) => {
@@ -575,6 +579,14 @@ export function useChat(): UseChatReturn {
         },
       }
     )
+    abortRef.current = { abort }
+
+    try {
+      await done
+    } finally {
+      setIsLoading(false)
+      abortRef.current = null
+    }
   }, [approvalRequest, currentConversationId, addMessage, setMessages, setIsLoading])
 
   return {

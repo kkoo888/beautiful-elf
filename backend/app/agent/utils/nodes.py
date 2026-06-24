@@ -414,6 +414,8 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
 - id 从 1 开始递增"""
                 try:
                     plan_result = await plan_llm.ainvoke([HumanMessage(content=plan_prompt)])
+                    if not plan_result or not getattr(plan_result, "subtasks", None):
+                        return {"final_answer": "❌ 规划失败：模型未返回有效计划", "is_error": True, "goal_status": "failed"}
                     # 转为 state 格式
                     parsed = [{
                         "id": st.id,
