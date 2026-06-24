@@ -595,12 +595,13 @@ Observation: 检查工具返回结果
 Answer: 基于工具结果输出该子任务的成果
 
 ## 核心规则
-1. **必须调用工具** — 有可用工具时必须调用，禁止只说「我来帮你」而不执行。没有工具时基于已有知识直接回答
+1. **工具优先，知识兜底** — 优先调用工具获取真实数据；工具失败或不可用时，用自身知识直接回答，标注「基于模型推理」
 2. **只做一件事** — 只执行上面列出的当前子任务，不要跳到其他任务
 3. **只输出当前任务结果** — 不要输出其他子任务的内容或预览
 4. **禁止承诺性回复** — 不要说「我来帮你查」「让我看看」，直接执行
 5. **完成后标记** — 输出: • [子任务描述] - [done] (100%)
 6. **完成后通知下一个** — 完成后需要通知下一个子任务开始执行
+7. **失败不纠缠** — 工具调用失败超过 2 次，立即用自身知识回答，不要反复重试
 
 {eval_feedback_text}
 {healing_context}"""
@@ -974,6 +975,12 @@ def _make_tool_executor(tool_registry, llm=None):
                     except Exception:
                         pass
 
+                    # 工具失败时：截断错误内容，避免污染对话历史
+                    # 前沿方案：错误详情存日志，消息中只保留简洁提示
+                    if has_error and len(content) > 200:
+                        logger.warning(f"[tool_executor] {tool_name} 失败，原始错误已截断: {content[:300]}")
+                        content = json.dumps({"success": False, "error": f"工具 {tool_name} 执行失败，请用自身知识回答"}, ensure_ascii=False)
+
                     results.append({
                         "role": "tool",
                         "tool_call_id": tool_call_id,
@@ -1126,30 +1133,49 @@ def _make_evaluator_node(llm=None):
 
     # ── Phase 1: 增强规则评估 ──
     def _rule_based_score(final_answer: str, tools_used: list, memory_ctx: dict) -> tuple[int, list[str]]:
-        """返回 (score, reasons)，score 范围 1-10。"""
-        score = 4  # 基础分降低，避免垃圾回答轻易过关
+        """返回 (score, reasons)，score 范围 1-10。
+
+        v6.0: 工具失败时跳过长度检查，避免误判。
+        前沿方案（Confident AI 2026）：区分「工具失败」和「回答质量差」。
+        """
+        score = 4  # 基础分
         reasons = []
-
-        # 规则 1: 回答长度
         ans_len = len(final_answer.strip())
-        if ans_len < 10:
-            score = 1
-            reasons.append("回答过短")
-        elif ans_len < 50:
-            score -= 2
-            reasons.append("回答较短")
-        elif ans_len > 200:
-            score += 1
 
-        # 规则 2: 错误关键词
-        error_keywords = ["抱歉", "不可用", "服务异常", "暂时无法", "出错了", "失败了"]
-        error_count = sum(1 for kw in error_keywords if kw in final_answer)
-        if error_count >= 2:
-            score -= 3
-            reasons.append("包含多个错误关键词")
-        elif error_count >= 1:
-            score -= 1
-            reasons.append("包含错误关键词")
+        # ── 检测工具失败上下文 ──
+        tool_error_keywords = ["不可用", "服务异常", "暂时无法", "出错了", "失败了", "搜索失败", "执行失败", "timeout", "超时"]
+        tool_error_count = sum(1 for kw in tool_error_keywords if kw in final_answer)
+        is_tool_failure_context = tool_error_count >= 1
+
+        # 规则 1: 回答长度（工具失败时放宽标准）
+        if is_tool_failure_context:
+            # 工具失败时：只要回答 > 20 字就不扣分（LLM 用自身知识回答）
+            if ans_len < 10:
+                score -= 1  # 轻微扣分，不判死
+                reasons.append("工具失败且回答过短")
+            elif ans_len > 50:
+                score += 1  # 工具失败但 LLM 用自身知识回答了，奖励
+        else:
+            # 正常情况：严格长度检查
+            if ans_len < 10:
+                score = 1
+                reasons.append("回答过短")
+            elif ans_len < 50:
+                score -= 2
+                reasons.append("回答较短")
+            elif ans_len > 200:
+                score += 1
+
+        # 规则 2: 错误关键词（工具失败时跳过）
+        if not is_tool_failure_context:
+            error_keywords = ["抱歉", "不可用", "服务异常", "暂时无法", "出错了", "失败了"]
+            error_count = sum(1 for kw in error_keywords if kw in final_answer)
+            if error_count >= 2:
+                score -= 3
+                reasons.append("包含多个错误关键词")
+            elif error_count >= 1:
+                score -= 1
+                reasons.append("包含错误关键词")
 
         # 规则 3: 工具使用
         if tools_used:
@@ -1269,12 +1295,18 @@ AI 回答:
         rule_score, reasons = _rule_based_score(final_answer, tools_used, memory_ctx)
         logger.info(f"[evaluator] 规则评分: {rule_score}/10, reasons={reasons}")
 
-        # ── Phase 2: 边界 case 调用 LLM 评估 ──
+        # ── Phase 2: 边界 case 或工具失败时调用 LLM 评估 ──
         final_score = rule_score
         final_reasons = reasons
         used_llm = False
 
-        if 5 <= rule_score <= 8 and llm:
+        # 工具失败时强制用 LLM 评估（规则评分不准）
+        tool_error_keywords = ["不可用", "服务异常", "暂时无法", "出错了", "失败了", "搜索失败", "执行失败"]
+        is_tool_failure = any(kw in final_answer for kw in tool_error_keywords)
+        # 规则评分低 或 工具失败 → 都用 LLM 评估
+        should_use_llm = llm and (5 <= rule_score <= 8 or (is_tool_failure and rule_score < 5))
+
+        if should_use_llm:
             user_question = _extract_user_question(state)
             if user_question:
                 writer({"step": "eval", "status": "checking", "message": "规则评分边界，调用 LLM 精细评估..."})

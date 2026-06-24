@@ -40,6 +40,7 @@ class ToolDef:
     func: Optional[Callable] = None  # 执行函数（可选，内置工具才有）
     output_schema: Optional[dict] = None  # MCP outputSchema（可选）
     display_name: str = ""      # 显示名称（MCP title，友好名称）
+    strict_mode: bool = False   # OpenAI strict 模式（强制 JSON Schema 合规）
 
 
 class ToolRegistry:
@@ -106,6 +107,8 @@ class ToolRegistry:
 
             display_name = getattr(tool, 'display_name', '') or ''
 
+            strict = bool(getattr(tool, 'strict_mode', 0))
+
             if tool.name in self._tools:
                 existing = self._tools[tool.name]
                 existing.id = tool.id
@@ -115,6 +118,7 @@ class ToolRegistry:
                 existing.risk_level = RiskLevel(tool.risk_level)
                 existing.module = tool.module
                 existing.display_name = display_name
+                existing.strict_mode = strict
                 if func:
                     existing.func = func
                 continue
@@ -129,6 +133,7 @@ class ToolRegistry:
                 module=tool.module,
                 func=func,
                 display_name=display_name,
+                strict_mode=strict,
             )
             count += 1
 
@@ -157,6 +162,7 @@ class ToolRegistry:
                 "risk": t.risk_level.value,
                 "module": t.module,
                 "output_schema": t.output_schema,
+                "strict_mode": t.strict_mode,
             }
             for t in self._tools.values()
         ]
@@ -185,8 +191,16 @@ class ToolRegistry:
                 args_schema=args_schema,
                 coroutine=func if asyncio.iscoroutinefunction(func) else None,
             )
+            # OpenAI strict 模式元数据（bind_tools 时读取）
+            if t.strict_mode:
+                tool.metadata = tool.metadata or {}
+                tool.metadata["strict"] = True
             tools.append(tool)
         return tools
+
+    def get_strict_tool_names(self) -> set:
+        """返回启用了 strict 模式的工具名集合"""
+        return {t.name for t in self._tools.values() if t.strict_mode}
 
     @staticmethod
     def _build_args_schema(tool_name: str, json_schema: dict):
@@ -398,8 +412,8 @@ class ToolRegistrySnapshot:
 async def web_search(query: str, max_results: int = 5) -> dict:
     """搜索互联网获取实时信息
 
-    优先 SearXNG，降级 DuckDuckGo（免费无需 API Key）。
-    v5.2: 增加 DuckDuckGo 降级，确保搜索始终可用。
+    降级链: SearXNG → DuckDuckGo → web_fetch 抓取 → 空结果（让 LLM 凭自身知识回答）
+    v6.0: 搜索失败不再返回 error，返回空结果 + fallback 标记，避免污染对话历史。
     """
     import httpx
     from app.core.config import get_settings
@@ -435,9 +449,41 @@ async def web_search(query: str, max_results: int = 5) -> dict:
                     {"title": r.get("title", ""), "url": r.get("href", ""), "snippet": r.get("body", "")}
                     for r in results
                 ]}
-            return {"results": []}
-    except Exception as e:
-        return {"success": False, "error": {"code": "SEARCH_FAILED", "message": f"搜索失败: {e}"}}
+    except Exception:
+        pass  # 降级到 web_fetch
+
+    # ── 3. 降级 web_fetch: 用已知搜索引擎抓取结果页 ──
+    try:
+        from duckduckgo_search import DDGS
+        # DDGS 可能部分可用（返回空但不抛异常），尝试 Google 抓取
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": query},
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            if resp.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(resp.text, "html.parser")
+                results = []
+                for r in soup.select(".result__body")[:max_results]:
+                    title = r.select_one(".result__a")
+                    snippet = r.select_one(".result__snippet")
+                    link = r.select_one(".result__url")
+                    if title:
+                        results.append({
+                            "title": title.get_text(strip=True),
+                            "url": link.get_text(strip=True) if link else "",
+                            "snippet": snippet.get_text(strip=True) if snippet else "",
+                        })
+                if results:
+                    return {"results": results}
+    except Exception:
+        pass
+
+    # ── 4. 全部失败：返回空结果 + fallback 标记 ──
+    # 不返回 error，避免污染对话历史；LLM 会用自身知识回答
+    return {"results": [], "fallback": "no_search_available", "message": "搜索服务暂不可用，请用自身知识回答"}
 
 
 async def execute_code(language: str, code: str) -> dict:
@@ -924,6 +970,16 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
     import asyncio
     from app.core.logging import get_logger as _get_logger
     _logger = _get_logger("spawn_agent")
+
+    # 类型安全: LLM 工具调用可能传入 str 类型
+    try:
+        depth = int(depth)
+    except (TypeError, ValueError):
+        depth = 0
+    try:
+        timeout = int(timeout)
+    except (TypeError, ValueError):
+        timeout = 300
 
     MAX_DEPTH = 2
     if depth > MAX_DEPTH:
