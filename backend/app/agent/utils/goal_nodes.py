@@ -295,8 +295,25 @@ def _make_goal_status_updater(llm=None):
                         "message": f"开始执行: {task['title']}",
                         "taskId": task["id"], "taskTitle": task["title"]})
 
+        # 构建子任务工具关联（从 working memory 读取已完成任务的工具列表）
+        _wm_tool_map = {}
+        for wm in goal_working_memory:
+            _wm_tool_map[wm.get("task_id", 0)] = wm.get("tools_used", [])
+        # 当前进行中子任务的工具（从 state 读取）
+        _current_tools = list(state.get("current_tools_used", []))
+        # 为每个子任务附加 tools 字段
+        _subtasks_with_tools = []
+        for st in goal_subtasks:
+            st_id = st.get("id", 0)
+            if st.get("status") == "done" or st.get("status") == "failed":
+                tools_list = _wm_tool_map.get(st_id, [])
+            elif st.get("status") == "in_progress":
+                tools_list = _current_tools
+            else:
+                tools_list = []
+            _subtasks_with_tools.append({**st, "tools": [{"tool": t, "status": "done" if st.get("status") == "done" else ("error" if st.get("status") == "failed" else "running")} for t in tools_list]})
         writer({"step": "goal_subtasks", "status": "done",
-                "message": "子任务状态更新", "subtasks": goal_subtasks})
+                "message": "子任务状态更新", "subtasks": _subtasks_with_tools})
 
         # ── 合并 Working Memory ──
         goal_working_memory.extend(new_wm_entries)
@@ -554,6 +571,17 @@ def _make_goal_replanner(llm):
                     "replanned": True,
                 }
 
+                # 构建子任务工具关联
+                _wm_tool_map = {}
+                for wm in goal_working_memory:
+                    _wm_tool_map[wm.get("task_id", 0)] = wm.get("tools_used", [])
+                _subtasks_with_tools = []
+                for st in new_subtasks:
+                    st_id = st.get("id", 0)
+                    tools_list = _wm_tool_map.get(st_id, [])
+                    _subtasks_with_tools.append({**st, "tools": [{"tool": t, "status": "done" if st.get("status") == "done" else ("error" if st.get("status") == "failed" else "running")} for t in tools_list]})
+                writer({"step": "goal_subtasks", "status": "done",
+                        "message": "子任务重规划完成", "subtasks": _subtasks_with_tools})
                 return {
                     "goal_status": "in_progress",
                     "goal_iterations": iterations + 1,
@@ -578,6 +606,23 @@ def _make_goal_replanner(llm):
         if not pending_tasks and not in_progress_tasks and done_count < total:
             return {"goal_status": "failed", "goal_iterations": iterations + 1, "goal_subtasks": goal_subtasks}
 
+        # 构建子任务工具关联
+        _wm_tool_map = {}
+        for wm in goal_working_memory:
+            _wm_tool_map[wm.get("task_id", 0)] = wm.get("tools_used", [])
+        _current_tools = list(state.get("current_tools_used", []))
+        _subtasks_with_tools = []
+        for st in goal_subtasks:
+            st_id = st.get("id", 0)
+            if st.get("status") == "done" or st.get("status") == "failed":
+                tools_list = _wm_tool_map.get(st_id, [])
+            elif st.get("status") == "in_progress":
+                tools_list = _current_tools
+            else:
+                tools_list = []
+            _subtasks_with_tools.append({**st, "tools": [{"tool": t, "status": "done" if st.get("status") == "done" else ("error" if st.get("status") == "failed" else "running")} for t in tools_list]})
+        writer({"step": "goal_subtasks", "status": "done",
+                "message": f"子任务状态更新", "subtasks": _subtasks_with_tools})
         writer({"step": "goal_replan", "status": "done",
                 "message": f"继续执行 ({done_count}/{total} 完成, 第{iterations+1}轮)"})
         return {

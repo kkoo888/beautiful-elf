@@ -94,6 +94,23 @@ def _build_tool_definitions(tools: list[Any] | None) -> list[ToolDefinition] | N
             ))
             continue
 
+        # ── Pydantic BaseModel 格式（with_structured_output 传入 Pydantic 类）──
+        from pydantic import BaseModel as PydanticBaseModel
+        if isinstance(tool, type) and issubclass(tool, PydanticBaseModel):
+            name = tool.__name__
+            desc = tool.__doc__ or ""
+            schema = tool.model_json_schema()
+            defs.append(ToolDefinition(
+                name=name,
+                description=desc.split('\n')[0].strip(),
+                input_schema=ToolInputSchema(
+                    type="object",
+                    properties=schema.get("properties", {}),
+                    required=schema.get("required", []),
+                ),
+            ))
+            continue
+
         # ── LangChain StructuredTool 格式 ──
         name = getattr(tool, "name", "")
         desc = getattr(tool, "description", "")
@@ -438,9 +455,9 @@ class ChatLLMProvider(BaseChatModel):
                     )
 
             elif isinstance(event, ErrorEvent):
-                yield ChatGenerationChunk(
-                    message=AIMessageChunk(content=f"[Error: {event.message}]"),
-                )
+                # 修复：LLM 错误应抛出异常而非混入正常内容
+                # 让上游 agent_service 捕获并通过 error 事件返回给前端
+                raise RuntimeError(f"LLM Error: {event.message}")
 
     def _should_use_protocol_streaming(self, **kwargs: Any) -> bool:
         """内层 ainvoke 走 _agenerate 路径（id 合并 tool_calls）。

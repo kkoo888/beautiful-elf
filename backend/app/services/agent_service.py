@@ -757,6 +757,8 @@ class AgentService:
 
             _final_answer = None
             _got_llm_tokens = False
+            # Goal 模式：跟踪当前子任务 ID，用于关联工具调用
+            goal_current_task_id = 0
 
             # v3: asyncio.merge 并发消费 custom + main stream（不再阻塞）
             custom_events_iter = stream.extensions.get("custom_events") if _HAS_STREAM_TRANSFORMER else None
@@ -790,6 +792,13 @@ class AgentService:
             async for event in merged:
                 # custom 事件已由 merge 实时推送，直接 yield
                 if isinstance(event, dict) and event.get("type") in ("progress", "goal_subtasks"):
+                    # 跟踪 goal_current_task_id 变化（用于关联工具调用与子任务）
+                    if event.get("type") == "progress" and event.get("step") == "goal_task_start":
+                        goal_current_task_id = event.get("taskId", 0)
+                    elif event.get("type") == "progress" and event.get("step") == "goal_task_done":
+                        goal_current_task_id = 0
+                    elif event.get("type") == "progress" and event.get("step") == "goal_task_failed":
+                        goal_current_task_id = 0
                     yield event
                     continue
 
@@ -861,6 +870,9 @@ class AgentService:
                         if tool_name:
                             tools_used.append(tool_name)
                             yield {"type": "tool_start", "tool": tool_name, "args": data.get("input", {}) if isinstance(data, dict) else {}}
+                            # Goal 模式：同步更新子任务的工具状态（running）
+                            if goal_mode and goal_current_task_id:
+                                yield {"type": "goal_tool_update", "task_id": goal_current_task_id, "tool": tool_name, "tool_status": "running", "args": data.get("input", {}) if isinstance(data, dict) else {}}
                     elif event_type in ("tool-finished", "tool-error"):
                         output_str = str(data.get("output", "")) if isinstance(data, dict) else ""
                         is_error = event_type == "tool-error"
@@ -868,6 +880,9 @@ class AgentService:
                             yield {"type": "tool_error", "tool": tool_name, "output_preview": output_str[:200]}
                         else:
                             yield {"type": "tool_end", "tool": tool_name, "output_preview": output_str[:200]}
+                        # Goal 模式：同步更新子任务的工具状态（done/error）
+                        if goal_mode and goal_current_task_id:
+                            yield {"type": "goal_tool_update", "task_id": goal_current_task_id, "tool": tool_name, "tool_status": "error" if is_error else "done", "output_preview": output_str[:200]}
 
                 # ── custom 通道: 降级方案（Transformer 不可用时直接解析） ──
                 elif method == "custom" and not _HAS_STREAM_TRANSFORMER:

@@ -718,12 +718,16 @@ Answer: 基于工具结果输出该子任务的成果
         try:
             response = await current_llm.ainvoke(lc_messages)
         except Exception as e:
+            # LangGraph 官方模式：错误通过 writer 推送 + 存入 state.error
+            # 不污染 messages（对话历史），避免下轮 LLM 上下文被污染
             logger.error(f"[llm_call] LLM 调用失败: {e}")
+            writer({"step": "llm", "status": "error", "message": f"LLM 调用失败: {str(e)[:100]}"})
+            error_answer = "抱歉，AI 服务暂时不可用，请稍后重试。"
             return {
-                "messages": [AIMessage(content=f"抱歉，AI 服务暂时不可用：{e}")],
-                "final_answer": f"抱歉，AI 服务暂时不可用：{e}",
+                "final_answer": error_answer,
                 "tool_calls": [],
                 "error": str(e),
+                "is_error": True,
                 "is_compacted": _compacted,
             }
 
@@ -1326,6 +1330,11 @@ def _make_memory_saver(memory_manager):
             return {}
 
         if not state.get("final_answer"):
+            return {}
+
+        # LangGraph 官方模式：错误不存入记忆，避免污染对话历史
+        if state.get("is_error"):
+            writer({"step": "memory_save", "status": "skipped", "message": "错误响应，跳过记忆保存"})
             return {}
 
         writer({"step": "memory_save", "status": "saving", "message": "正在保存记忆..."})

@@ -355,6 +355,25 @@ export function useChat(): UseChatReturn {
           onGoalSubtasks: (subtasks) => {
             setGoalTasks(subtasks as GoalTask[])
           },
+          onGoalToolUpdate: (update) => {
+            const { task_id, tool, tool_status, args, output_preview } = update
+            setGoalTasks((prev) =>
+              prev.map((t) => {
+                if (t.id !== task_id) return t
+                const existingTools = t.tools || []
+                const idx = existingTools.findIndex((et) => et.tool === tool)
+                if (idx >= 0) {
+                  // 更新已有工具状态
+                  const updated = [...existingTools]
+                  updated[idx] = { ...updated[idx], status: tool_status as ToolProgress['status'], outputPreview: output_preview || updated[idx].outputPreview }
+                  return { ...t, tools: updated }
+                } else {
+                  // 新增工具
+                  return { ...t, tools: [...existingTools, { tool, status: tool_status as ToolProgress['status'], args: args || {}, startTime: Date.now(), outputPreview: output_preview }] }
+                }
+              })
+            )
+          },
           onProgress: (progress) => {
             setProgressSteps((prev) => {
               const idx = prev.findIndex((s) => s.step === progress.step)

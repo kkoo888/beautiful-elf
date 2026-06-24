@@ -1,4 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { Typography } from 'antd'
+import { ThunderboltOutlined } from '@ant-design/icons'
 import { ChatContent } from './components/chat-panel'
 import { ConversationList } from './components/conversation-list'
 import { AgentProgressIndicator } from './components/agent-progress'
@@ -14,7 +16,7 @@ const { Text } = Typography
 /** 对话模块面板（含会话侧栏 + 右侧进展面板） */
 export default function ChatPanel() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [progressCollapsed, setProgressCollapsed] = useState(false)
+  const [progressCollapsed, setProgressCollapsed] = useState(true)  // 默认折叠，有数据时自动展开
   const chat = useChat()
   const {
     conversations,
@@ -44,6 +46,13 @@ export default function ChatPanel() {
     contextSources.length > 0 ||
     tokenStats !== null ||
     goalMode
+
+  // 有数据时自动展开进展面板
+  useEffect(() => {
+    if (hasProgressData && progressCollapsed) {
+      setProgressCollapsed(false)
+    }
+  }, [hasProgressData])
 
   return (
     <div className={styles.layout}>

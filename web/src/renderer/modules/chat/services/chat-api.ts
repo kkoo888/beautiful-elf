@@ -139,6 +139,7 @@ export function chatStream(
     onIntentHit?: (name: string, score: number) => void
     onProgress?: (progress: ProgressStep) => void
     onGoalSubtasks?: (subtasks: Array<{ id: number; title: string; description?: string; status: string }>) => void
+    onGoalToolUpdate?: (update: { task_id: number; tool: string; tool_status: string; args?: Record<string, unknown>; output_preview?: string }) => void
   }
 ): { abort: () => void } {
   const controller = new AbortController()
@@ -231,6 +232,11 @@ export function chatStream(
             // Goal 模式子任务更新事件
             if (data.goal_subtasks) {
               callbacks?.onGoalSubtasks?.(data.goal_subtasks)
+              continue
+            }
+            // Goal 模式：子任务关联的工具调用实时更新
+            if (data.goal_tool_update) {
+              callbacks?.onGoalToolUpdate?.(data.goal_tool_update)
               continue
             }
             // token 事件

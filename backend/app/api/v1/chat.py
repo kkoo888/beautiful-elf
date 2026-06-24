@@ -574,6 +574,9 @@ async def _stream_response(
                 elif event_type == "goal_subtasks":
                     # Goal 模式子任务更新事件
                     await _queue.put(f"data: {json.dumps({'goal_subtasks': event.get('subtasks', []), 'done': False})}\n\n")
+                elif event_type == "goal_tool_update":
+                    # Goal 模式：子任务关联的工具调用实时更新
+                    await _queue.put(f"data: {json.dumps({'goal_tool_update': {'task_id': event.get('task_id', 0), 'tool': event.get('tool', ''), 'tool_status': event.get('tool_status', ''), 'args': event.get('args', {}), 'output_preview': event.get('output_preview', '')}, 'done': False})}\n\n")
                 elif event_type == "done":
                     prompt_tokens = event.get("prompt_tokens", 0)
                     completion_tokens = event.get("completion_tokens", 0)
