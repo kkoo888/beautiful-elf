@@ -34,7 +34,6 @@ class TierConfigService:
             db, tier=data.tier, provider_id=data.provider_id,
             model_name=data.model_name,
             fallback_model_name=data.fallback_model_name,
-            max_tokens=data.max_tokens,
             temperature=data.temperature,
             reasoning_enabled=data.reasoning_enabled,
             is_enabled=data.is_enabled,

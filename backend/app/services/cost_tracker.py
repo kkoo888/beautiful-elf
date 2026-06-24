@@ -64,6 +64,8 @@ class CostTracker:
         call_type: str = "chat",
         provider_id: int = 0,
         is_stream: bool = False,
+        tier: str = "",
+        route_class: str = "",
     ) -> None:
         """记录一次 LLM 调用的成本"""
         total_tokens = prompt_tokens + completion_tokens
@@ -83,8 +85,10 @@ class CostTracker:
                 "call_type": call_type,
                 "duration_ms": duration_ms,
                 "is_stream": 1 if is_stream else 0,
+                "tier": tier,
+                "route_class": route_class,
             })
-            logger.debug(f"[cost] {model_name} tokens={total_tokens} cost=¥{cost_cny:.4f}")
+            logger.debug(f"[cost] {model_name} tier={tier} tokens={total_tokens} cost=¥{cost_cny:.4f}")
         except Exception as e:
             logger.warning(f"[cost] 记录失败: {e}")
 
@@ -117,6 +121,7 @@ class CostTracker:
         total = await self.repo.summary_by_user(db, user_id)
         by_model = await self.repo.summary_by_model(db, user_id, days)
         by_type = await self.repo.summary_by_type(db, user_id, days)
+        by_tier = await self.repo.summary_by_tier(db, user_id, days)
         return {
             "total_cost_cny": total["total_cny"],
             "total_cost_usd": total["total_usd"],
@@ -124,6 +129,7 @@ class CostTracker:
             "call_count": total["call_count"],
             "by_model": by_model,
             "by_type": by_type,
+            "by_tier": by_tier,
         }
 
 

@@ -11,7 +11,6 @@ class LLMTierConfig(BaseModel):
     provider_id = Column(BigInteger, nullable=False, comment="供应商 ID → llm_provider.id")
     model_name = Column(String(128), nullable=False, comment="模型名 → llm_model.model_name")
     fallback_model_name = Column(String(128), nullable=False, server_default=text("''"), comment="降级模型名")
-    max_tokens = Column(Integer, nullable=False, default=4096, comment="该 tier 最大输出 token")
     temperature = Column(Float, nullable=False, default=0.7, comment="该 tier 默认温度")
     reasoning_enabled = Column(SmallInteger, nullable=False, default=0, comment="是否启用 extended thinking: 1=启用 0=禁用")
     is_enabled = Column(SmallInteger, nullable=False, default=1, comment="是否启用: 1=启用 0=禁用")

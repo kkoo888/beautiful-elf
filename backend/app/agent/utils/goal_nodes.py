@@ -1,5 +1,6 @@
 """Goal 模式节点工厂 — evaluator、status_updater、replanner"""
 from typing import Dict
+import asyncio
 import time
 import json
 import re
@@ -16,6 +17,126 @@ from app.agent.utils.goal_helpers import (
 )
 
 logger = get_logger(__name__)
+
+
+# ── Worker Subgraph 并行执行器 ──────────────────────────────
+
+async def _execute_subtasks_via_workers(
+    tasks: list,
+    state: AgentState,
+    writer=None,
+) -> list:
+    """为多个子任务 spawn worker subgraph 并行执行
+
+    Args:
+        tasks: 待执行的子任务列表 [{id, title, description, ...}]
+        state: 当前 AgentState（用于读取 parent context）
+        writer: 流式进度回调
+
+    Returns:
+        [{task_id, title, result_summary, tools_used, success}]
+    """
+    from app.agent.tool_registry import tool_registry
+
+    llm = tool_registry._worker_llm
+    if not llm:
+        logger.warning("[worker_spawner] worker llm 未初始化，降级为串行")
+        return []
+
+    # 获取 worker 工具
+    worker_tool_names = tool_registry._worker_tool_names or [
+        "web_search", "execute_code", "read_file", "query_database", "web_fetch",
+    ]
+    tools = tool_registry.get_langchain_tools(worker_tool_names)
+
+    # Parent context
+    parent_system_prompt = tool_registry._parent_system_prompt
+    parent_memory = tool_registry._parent_memory
+
+    system_prompt = "你是一个专注的子任务执行器。根据给定的任务，使用可用工具完成工作，返回结构化的执行结果。"
+
+    async def _run_one_worker(task: dict) -> dict:
+        """执行单个子任务的 worker"""
+        task_id = task["id"]
+        task_title = task.get("title", "")
+        task_desc = task.get("description", task_title)
+
+        try:
+            from app.agent.worker_graph import build_worker_graph
+            worker = build_worker_graph(
+                llm=llm, tools=tools, system_prompt=system_prompt,
+                max_iterations=5, depth=1,
+            )
+
+            initial_state = {
+                "messages": [],
+                "task": f"## 任务\n{task_title}\n\n## 描述\n{task_desc}",
+                "context": "",
+                "iteration": 0,
+                "max_iterations": 5,
+                "final_answer": None,
+                "force_end": False,
+                "parent_trace_id": f"goal-worker-{task_id}",
+                "parent_system_prompt": parent_system_prompt,
+                "parent_memory": parent_memory,
+            }
+
+            result = await asyncio.wait_for(
+                worker.ainvoke(initial_state),
+                timeout=300,
+            )
+
+            answer = result.get("final_answer") or ""
+            if not answer:
+                for msg in reversed(result.get("messages", [])):
+                    content = getattr(msg, "content", "") if not isinstance(msg, dict) else msg.get("content", "")
+                    if content:
+                        answer = content if isinstance(content, str) else str(content)
+                        break
+
+            # 收集工具使用
+            worker_tools = []
+            for msg in result.get("messages", []):
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                        if name:
+                            worker_tools.append(name)
+
+            if writer:
+                writer({"step": "goal_worker", "status": "done",
+                        "message": f"Worker 完成: {task_title}",
+                        "taskId": task_id, "answerLen": len(answer)})
+
+            return {
+                "task_id": task_id,
+                "title": task_title,
+                "result_summary": (answer[:300] + "...") if len(answer) > 300 else answer,
+                "tools_used": worker_tools,
+                "success": True,
+            }
+
+        except asyncio.TimeoutError:
+            logger.warning(f"[worker_spawner] 子任务 #{task_id} 超时")
+            return {"task_id": task_id, "title": task_title, "result_summary": "执行超时", "tools_used": [], "success": False}
+        except Exception as e:
+            logger.error(f"[worker_spawner] 子任务 #{task_id} 失败: {e}")
+            return {"task_id": task_id, "title": task_title, "result_summary": f"执行失败: {e}", "tools_used": [], "success": False}
+
+    # 并行执行所有子任务
+    if writer:
+        writer({"step": "goal_workers", "status": "executing",
+                "message": f"并行启动 {len(tasks)} 个 Worker",
+                "taskIds": [t["id"] for t in tasks]})
+
+    results = await asyncio.gather(*[_run_one_worker(t) for t in tasks])
+
+    if writer:
+        succeeded = sum(1 for r in results if r["success"])
+        writer({"step": "goal_workers", "status": "done",
+                "message": f"Worker 执行完成: {succeeded}/{len(tasks)} 成功"})
+
+    return list(results)
 
 
 def _make_goal_evaluator(llm):
@@ -159,6 +280,47 @@ def _make_goal_status_updater(llm=None):
                         "message": f"依赖关系存在问题: {'; '.join(dep_issues[:3])}"})
 
             parallel_tasks = _get_parallel_ready_tasks(goal_subtasks)
+
+            # ── Worker Subgraph: 并行子任务用 worker 执行 ──
+            if len(parallel_tasks) > 1:
+                # 标记为 in_progress
+                for task in parallel_tasks:
+                    goal_subtasks = _update_subtask_status(goal_subtasks, task["id"], "in_progress", 0)
+                writer({"step": "goal_subtasks", "status": "done",
+                        "message": "规划完成，启动并行 Worker", "subtasks": goal_subtasks})
+
+                # 并行执行
+                worker_results = await _execute_subtasks_via_workers(parallel_tasks, state, writer)
+
+                # 收集结果
+                goal_working_memory = list(state.get("goal_working_memory") or [])
+                for wr in worker_results:
+                    task_id = wr["task_id"]
+                    if wr["success"]:
+                        goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "done", 100)
+                        goal_working_memory.append({
+                            "task_id": task_id,
+                            "title": wr["title"],
+                            "result_summary": wr["result_summary"],
+                            "tools_used": wr["tools_used"],
+                            "success": True,
+                        })
+                    else:
+                        goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "failed", 0)
+
+                # 找下一个待执行的子任务
+                next_task = _get_next_pending_subtask(goal_subtasks)
+                next_task_id = next_task["id"] if next_task else 0
+
+                writer({"step": "goal_subtasks", "status": "done",
+                        "message": f"并行 Worker 完成，子任务已更新", "subtasks": goal_subtasks})
+                return {
+                    "goal_subtasks": goal_subtasks,
+                    "goal_working_memory": goal_working_memory,
+                    "goal_current_task_id": next_task_id,
+                }
+
+            # 单个任务：保持原有串行逻辑
             _first_task_id = 0
             if parallel_tasks:
                 for task in parallel_tasks:
@@ -286,7 +448,41 @@ def _make_goal_status_updater(llm=None):
         # 批量标记可并行的子任务
         parallel_tasks = _get_parallel_ready_tasks(goal_subtasks)
         _next_task_id = 0
-        if parallel_tasks:
+
+        # ── Worker Subgraph: 多个并行子任务用 worker 执行 ──
+        if len(parallel_tasks) > 1:
+            for task in parallel_tasks:
+                goal_subtasks = _update_subtask_status(goal_subtasks, task["id"], "in_progress", 0)
+
+            worker_results = await _execute_subtasks_via_workers(parallel_tasks, state, writer)
+
+            for wr in worker_results:
+                task_id = wr["task_id"]
+                if wr["success"]:
+                    goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "done", 100)
+                    new_wm_entries.append({
+                        "task_id": task_id,
+                        "title": wr["title"],
+                        "result_summary": wr["result_summary"],
+                        "tools_used": wr["tools_used"],
+                        "success": True,
+                    })
+                else:
+                    goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "failed", 0)
+                    new_wm_entries.append({
+                        "task_id": task_id,
+                        "title": wr["title"],
+                        "result_summary": wr["result_summary"],
+                        "tools_used": [],
+                        "success": False,
+                    })
+
+            # 找下一个待执行的子任务
+            next_task = _get_next_pending_subtask(goal_subtasks)
+            _next_task_id = next_task["id"] if next_task else 0
+
+        elif parallel_tasks:
+            # 单个任务：保持原有串行逻辑
             for task in parallel_tasks:
                 goal_subtasks = _update_subtask_status(goal_subtasks, task["id"], "in_progress", 0)
                 if not _next_task_id:

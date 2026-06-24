@@ -109,6 +109,37 @@ class CostRepository:
             for row in result.all()
         ]
 
+    async def summary_by_tier(
+        self, db: AsyncSession, user_id: int, days: int = 30,
+    ) -> List[dict]:
+        """按路由 tier 汇总（S/M/L/XL）"""
+        since = datetime.utcnow() - timedelta(days=days)
+        stmt = (
+            select(
+                CostRecord.tier,
+                func.coalesce(func.sum(CostRecord.total_tokens), 0).label("total_tokens"),
+                func.coalesce(func.sum(CostRecord.cost_cny), 0).label("total_cny"),
+                func.count(CostRecord.id).label("call_count"),
+            )
+            .where(
+                CostRecord.user_id == user_id,
+                CostRecord.is_deleted == 0,
+                CostRecord.created_at >= since,
+                CostRecord.tier != "",
+            )
+            .group_by(CostRecord.tier)
+        )
+        result = await db.execute(stmt)
+        return [
+            {
+                "tier": row.tier,
+                "total_tokens": int(row.total_tokens or 0),
+                "total_cny": float(row.total_cny or 0),
+                "call_count": int(row.call_count or 0),
+            }
+            for row in result.all()
+        ]
+
     async def daily_trend(
         self, db: AsyncSession, user_id: int, days: int = 30,
     ) -> List[dict]:

@@ -20,7 +20,6 @@ import {
 import styles from './chat-panel.module.css'
 import { SimpleMessageList } from './message-list'
 import { MessageInput } from './message-input'
-import { ReasoningDepthSwitch } from './reasoning-depth'
 import { ApprovalDialog } from './approval-dialog'
 import type { UseChatReturn } from '../hooks/use-chat'
 
@@ -69,7 +68,6 @@ export const ChatContent: React.FC<ChatContentProps> = ({
       {/* 顶部操作栏 */}
       <div className={styles.chatHeader}>
         <div className={styles.headerActions}>
-          <ReasoningDepthSwitch value={reasoningDepth} onChange={setReasoningDepth} />
           {onToggleSidebar && (
             <Tooltip title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
               <Button
@@ -116,6 +114,11 @@ export const ChatContent: React.FC<ChatContentProps> = ({
         disabled={isLoading}
         onStop={stopGeneration}
         isLoading={isLoading}
+        providerId={selectedProviderId}
+        modelName={selectedModelName}
+        onModelChange={setModelSelection}
+        reasoningDepth={reasoningDepth}
+        onReasoningDepthChange={setReasoningDepth}
       />
 
       {/* 审批对话框 */}

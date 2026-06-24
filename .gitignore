@@ -25,6 +25,7 @@ web/*.snap
 
 # 日志
 *.log
+*.log.*
 npm-debug.log*
 
 # IDE
@@ -61,3 +62,6 @@ docs/analysis-3mode-evolution.md
 docs/evolution-blueprint.md
 scripts/simulate_*.py
 scripts/sim_*.py
+
+# 小米
+.mimocode/

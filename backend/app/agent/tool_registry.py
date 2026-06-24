@@ -59,12 +59,25 @@ class ToolRegistry:
         self._worker_llm = None
         self._worker_tool_names: list[str] = []
         self._worker_context_engine = None
+        # Parent context（每次请求前设置，spawn_agent 自动注入）
+        self._parent_system_prompt: str = ""
+        self._parent_memory: str = ""
+        self._current_depth: int = 0
 
     def set_worker_deps(self, llm, tool_names: list, context_engine=None):
         """注入 Worker 子图依赖（Agent 引擎初始化后调用）"""
         self._worker_llm = llm
         self._worker_tool_names = tool_names
         self._worker_context_engine = context_engine
+
+    def set_parent_context(self, system_prompt: str = "", memory: str = ""):
+        """设置当前请求的 parent context（每次请求前调用，spawn_agent 自动注入）"""
+        self._parent_system_prompt = system_prompt[:2000] if system_prompt else ""
+        self._parent_memory = memory[:1000] if memory else ""
+
+    def set_depth(self, depth: int):
+        """设置当前 spawn 嵌套深度（spawn_agent 读取）"""
+        self._current_depth = depth
 
     # ─── 注册（内置工具）────────────────────────────────
 
@@ -959,13 +972,10 @@ async def memory_delete(point_id: str, reason: str = "") -> dict:
 
 # ── 会话工具 ────────────────────────────────────────────
 
-async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: int = 300, depth: int = 0, parent_system_prompt: str = "", parent_memory: str = "") -> dict:
+async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: int = 300) -> dict:
     """生成子 Agent 执行子任务（Worker Subgraph 模式）
 
-    Args:
-        depth: 当前嵌套深度（0=顶层，最大 2）
-        parent_system_prompt: 父 Agent 的 system prompt 子集
-        parent_memory: 父 Agent 的相关记忆
+    自动从 tool_registry 读取 parent context 并注入 worker。
     """
     import asyncio
     from app.core.logging import get_logger as _get_logger
@@ -982,13 +992,19 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
         timeout = 300
 
     MAX_DEPTH = 2
-    if depth > MAX_DEPTH:
-        _logger.warning(f"[spawn_agent] 深度超限 ({depth}/{MAX_DEPTH}): {label}")
-        return {"error": f"子 Agent 嵌套深度超限（最大 {MAX_DEPTH} 层）", "task": task, "label": label, "depth": depth}
 
     llm = tool_registry._worker_llm
     if not llm:
         return {"error": "Worker 子图未初始化（llm 未注入）", "task": task, "label": label}
+
+    # 获取 parent context（自动注入，无需 LLM 传递）
+    parent_system_prompt = tool_registry._parent_system_prompt
+    parent_memory = tool_registry._parent_memory
+    depth = getattr(tool_registry, '_current_depth', 0)
+
+    if depth > MAX_DEPTH:
+        _logger.warning(f"[spawn_agent] 深度超限 ({depth}/{MAX_DEPTH}): {label}")
+        return {"error": f"子 Agent 嵌套深度超限（最大 {MAX_DEPTH} 层）", "task": task, "label": label, "depth": depth}
 
     # 获取 worker 工具
     worker_tool_names = tool_registry._worker_tool_names or [
@@ -1003,7 +1019,7 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
 
     try:
         from app.agent.worker_graph import build_worker_graph
-        worker = build_worker_graph(llm=llm, tools=tools, system_prompt=system_prompt, max_iterations=5)
+        worker = build_worker_graph(llm=llm, tools=tools, system_prompt=system_prompt, max_iterations=5, depth=depth)
 
         initial_state = {
             "messages": [],
@@ -1013,8 +1029,9 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
             "max_iterations": 5,
             "final_answer": None,
             "force_end": False,
-            "parent_system_prompt": parent_system_prompt[:1000] if parent_system_prompt else "",
-            "parent_memory": parent_memory[:500] if parent_memory else "",
+            "parent_trace_id": f"worker-{label or 'sub'}",
+            "parent_system_prompt": parent_system_prompt,
+            "parent_memory": parent_memory,
         }
 
         result = await asyncio.wait_for(
@@ -1030,11 +1047,20 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
                     answer = content if isinstance(content, str) else str(content)
                     break
 
-        _logger.info(f"[spawn_agent] 子任务完成: label={label} depth={depth} answer_len={len(answer)}")
+        # 收集 worker 使用的工具
+        worker_tools_used = []
+        for msg in result.get("messages", []):
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    name = tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")
+                    if name:
+                        worker_tools_used.append(name)
+
+        _logger.info(f"[spawn_agent] 子任务完成: label={label} depth={depth} answer_len={len(answer)} tools={worker_tools_used}")
         return {
             "success": True,
             "result": answer,
-            "tools_used": [],
+            "tools_used": worker_tools_used,
             "label": label,
             "depth": depth,
         }

@@ -38,6 +38,31 @@ async def list_enabled_providers(db: AsyncSession = Depends(get_db)) -> ApiResul
     return ApiResult(data=items)
 
 
+# ── Tier 配置端点（必须在 /{provider_id} 之前注册，避免路由遮蔽）──
+
+@router.get("/tier-mapping", response_model=ApiResult[List[TierConfigOut]])
+async def list_tier_configs(db: AsyncSession = Depends(get_db)) -> ApiResult[List[TierConfigOut]]:
+    """查询所有启用的 tier 配置"""
+    items = await _tier_service.list_all(db)
+    return ApiResult(data=items)
+
+
+@router.put("/tier-mapping/{config_id}", response_model=ApiResult[TierConfigOut])
+async def update_tier_config(
+    config_id: int, data: TierConfigUpdate, db: AsyncSession = Depends(get_db)
+) -> ApiResult[TierConfigOut]:
+    """更新 tier 配置"""
+    item = await _tier_service.update(db, config_id, data)
+    return ApiResult(data=item)
+
+
+@router.delete("/tier-mapping/{tier}", response_model=ApiResult)
+async def delete_tier_configs(tier: str, db: AsyncSession = Depends(get_db)) -> ApiResult:
+    """删除某个 tier 的所有配置"""
+    count = await _tier_service.delete_by_tier(db, tier)
+    return ApiResult(message=f"删除 {count} 条配置")
+
+
 @router.get("/{provider_id}", response_model=ApiResult[ProviderOut])
 async def get_provider(provider_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[ProviderOut]:
     """获取单个供应商（含模型）"""
@@ -114,14 +139,7 @@ async def delete_model(provider_id: int, model_id: int, db: AsyncSession = Depen
     return ApiResult(message="删除成功")
 
 
-# ── Tier 配置端点 ─────────────────────────────────────────
-
-@router.get("/tier-mapping", response_model=ApiResult[List[TierConfigOut]])
-async def list_tier_configs(db: AsyncSession = Depends(get_db)) -> ApiResult[List[TierConfigOut]]:
-    """查询所有启用的 tier 配置"""
-    items = await _tier_service.list_all(db)
-    return ApiResult(data=items)
-
+# ── Tier 配置端点（供应商维度）──
 
 @router.get("/{provider_id}/tier-mapping", response_model=ApiResult[List[TierConfigOut]])
 async def list_provider_tier_configs(provider_id: int, db: AsyncSession = Depends(get_db)) -> ApiResult[List[TierConfigOut]]:
@@ -138,19 +156,3 @@ async def upsert_tier_config(
     data.provider_id = provider_id
     item = await _tier_service.upsert(db, data)
     return ApiResult(data=item)
-
-
-@router.put("/tier-mapping/{config_id}", response_model=ApiResult[TierConfigOut])
-async def update_tier_config(
-    config_id: int, data: TierConfigUpdate, db: AsyncSession = Depends(get_db)
-) -> ApiResult[TierConfigOut]:
-    """更新 tier 配置"""
-    item = await _tier_service.update(db, config_id, data)
-    return ApiResult(data=item)
-
-
-@router.delete("/tier-mapping/{tier}", response_model=ApiResult)
-async def delete_tier_configs(tier: str, db: AsyncSession = Depends(get_db)) -> ApiResult:
-    """删除某个 tier 的所有配置"""
-    count = await _tier_service.delete_by_tier(db, tier)
-    return ApiResult(message=f"删除 {count} 条配置")

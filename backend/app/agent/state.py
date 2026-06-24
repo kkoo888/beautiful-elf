@@ -134,6 +134,8 @@ class AgentState(TypedDict, total=False):
 
     # ── Tier 配置（路由闭环使用）───────────────────────────
     tier_config: dict  # 当前 tier 的配置 {model_name, max_tokens, temperature, reasoning_enabled, ...}
+    _prev_tier: str  # 上一轮 tier（Cache Continuity 用）
+    _prev_output_tokens: int  # 上一轮 output token 数（Cache Continuity 阈值判断）
 
     # ── Compaction 状态 ─────────────────────────────────
     is_compacted: bool  # 本轮是否已执行过 compaction（避免重复检查）

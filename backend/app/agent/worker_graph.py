@@ -34,6 +34,7 @@ class WorkerState(BaseModel):
     max_iterations: int = Field(default=5, description="最大 LLM 调用轮次")
     final_answer: Optional[str] = Field(default=None, description="最终回答")
     force_end: bool = Field(default=False, description="强制结束标志")
+    parent_trace_id: str = Field(default="", description="父 Agent trace ID（追踪用）")
     parent_system_prompt: str = Field(default="", description="父 Agent 的 system prompt 子集")
     parent_memory: str = Field(default="", description="父 Agent 的相关记忆")
 
@@ -133,6 +134,7 @@ def build_worker_graph(
     tools: list,
     system_prompt: str = "",
     max_iterations: int = 5,
+    depth: int = 0,
 ) -> "CompiledStateGraph":
     """构建 Worker 子图 — 独立执行单个子任务的 ReAct Agent
 
@@ -141,6 +143,7 @@ def build_worker_graph(
         tools: LangChain StructuredTool 列表
         system_prompt: Worker 的系统提示词
         max_iterations: 最大 LLM 调用轮次（防无限循环）
+        depth: 当前嵌套深度（0=顶层，最大 2）
     """
     from langgraph.graph.state import CompiledStateGraph
 

@@ -133,3 +133,49 @@ export async function toggleModel(providerId: number, modelId: number): Promise<
 export async function deleteModel(providerId: number, modelId: number): Promise<void> {
   await apiClient.delete(`/llm_providers/${providerId}/models/${modelId}`)
 }
+
+// ── Tier 配置 API ─────────────────────────────────────────
+
+export interface TierConfig {
+  id: number
+  tier: string
+  providerId: number
+  modelName: string
+  fallbackModelName: string
+  temperature: number
+  reasoningEnabled: number
+  isEnabled: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export async function getTierConfigs(): Promise<TierConfig[]> {
+  return (extractData(await apiClient.get('/llm_providers/tier-mapping')) as TierConfig[]) ?? []
+}
+
+export async function createTierConfig(payload: {
+  tier: string
+  providerId: number
+  modelName: string
+  fallbackModelName?: string
+  temperature?: number
+  reasoningEnabled?: number
+  isEnabled?: number
+}): Promise<TierConfig> {
+  return extractData(await apiClient.post(`/llm_providers/${payload.providerId}/tier-mapping`, payload))
+}
+
+export async function updateTierConfig(id: number, payload: Partial<{
+  providerId: number
+  modelName: string
+  fallbackModelName: string
+  temperature: number
+  reasoningEnabled: number
+  isEnabled: number
+}>): Promise<TierConfig> {
+  return extractData(await apiClient.put(`/llm_providers/tier-mapping/${id}`, payload))
+}
+
+export async function deleteTierConfigs(tier: string): Promise<void> {
+  await apiClient.delete(`/llm_providers/tier-mapping/${tier}`)
+}

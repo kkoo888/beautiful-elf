@@ -29,6 +29,8 @@ class CostRecord(BaseModel):
                        comment="调用类型: chat/evaluator/compression/rewrite/summary")
     duration_ms = Column(Integer, nullable=False, default=0, comment="耗时（毫秒）")
     is_stream = Column(Integer, nullable=False, default=0, comment="是否流式: 0=否 1=是")
+    tier = Column(String(4), nullable=False, default="", comment="路由 tier: S/M/L/XL")
+    route_class = Column(String(8), nullable=False, default="", comment="路由分类: R0/R1/R2/R3")
 
     __table_args__ = (
         Index("idx_cost_user", "user_id"),

@@ -13,7 +13,6 @@ class TierConfigCreate(CamelModel):
     provider_id: int = Field(..., alias="providerId", description="供应商 ID")
     model_name: str = Field(..., alias="modelName", description="模型名")
     fallback_model_name: str = Field(default="", alias="fallbackModelName", description="降级模型名")
-    max_tokens: int = Field(default=4096, alias="maxTokens")
     temperature: float = Field(default=0.7)
     reasoning_enabled: int = Field(default=0, alias="reasoningEnabled")
     is_enabled: int = Field(default=1, alias="isEnabled")
@@ -24,7 +23,6 @@ class TierConfigUpdate(CamelModel):
     provider_id: Optional[int] = Field(default=None, alias="providerId")
     model_name: Optional[str] = Field(default=None, alias="modelName")
     fallback_model_name: Optional[str] = Field(default=None, alias="fallbackModelName")
-    max_tokens: Optional[int] = Field(default=None, alias="maxTokens")
     temperature: Optional[float] = None
     reasoning_enabled: Optional[int] = Field(default=None, alias="reasoningEnabled")
     is_enabled: Optional[int] = Field(default=None, alias="isEnabled")
@@ -37,7 +35,6 @@ class TierConfigOut(CamelModel):
     provider_id: int = Field(alias="providerId")
     model_name: str = Field(alias="modelName")
     fallback_model_name: str = Field(default="", alias="fallbackModelName")
-    max_tokens: int = Field(default=4096, alias="maxTokens")
     temperature: float = Field(default=0.7)
     reasoning_enabled: int = Field(default=0, alias="reasoningEnabled")
     is_enabled: int = Field(default=1, alias="isEnabled")

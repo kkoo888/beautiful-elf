@@ -39,6 +39,26 @@ def _make_model_selector_node(model_selector):
             writer({"step": "model_select", "status": "skipped", "message": "模型路由未初始化"})
             return {"selected_model": "", "routing_confidence": 0.0, "routing_reason": "no_selector"}
 
+        # ── 用户显式选择了模型 → 跳过路由，直接使用 ──
+        user_model = state.get("model_name", "")
+        user_provider = state.get("provider_id")
+        if user_model and user_model != "auto" and user_provider:
+            writer({"step": "model_select", "status": "skipped", "message": f"用户指定模型: {user_model}"})
+            return {
+                "selected_model": user_model,
+                "routing_confidence": 1.0,
+                "routing_reason": "user_selected",
+                "route_class": "R0",
+                "tier": "S",
+                "thinking_mode": "T0",
+                "prompt_policy": "P0",
+                "prompt_hint": "",
+                "difficulty_score": 0.0,
+                "routing_probabilities": {},
+                "routing_flags": {},
+                "tier_config": {},
+            }
+
         query = _extract_last_message(state)
         if not query or not query.strip():
             writer({"step": "model_select", "status": "skipped", "message": "空消息，跳过路由"})
@@ -134,10 +154,33 @@ def _make_intent_router(intent_router):
             name = intent.get("intent_name", "unknown")
             score = intent.get("score", 0)
             writer({"step": "intent", "status": "done", "message": f"命中「{name}」(置信度 {score:.0%})", "intent": name, "score": score, "elapsed_ms": int(elapsed * 1000)})
-        else:
-            writer({"step": "intent", "status": "done", "message": f"未命中，走通用对话 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000)})
 
-        return {"intent": intent}
+            # ── Skills 按需加载：查询 intent 关联的 skill ──
+            matched_skills = []
+            target_module = intent.get("target_module", "")
+            if target_module and target_module != "cache":
+                try:
+                    from app.core.database import AsyncSessionLocal
+                    from app.repository.skill_repo import SkillRepository
+                    async with AsyncSessionLocal() as skill_db:
+                        skill_repo = SkillRepository()
+                        skill = await skill_repo.find_by_name(skill_db, target_module)
+                        if skill:
+                            # 优先从 config.instructions 读取，fallback 到 description
+                            config = skill.config or {}
+                            instructions = config.get("instructions", "") or skill.description or ""
+                            if instructions:
+                                matched_skills.append({
+                                    "name": skill.name,
+                                    "display_name": skill.display_name or skill.name,
+                                    "description": skill.description or "",
+                                    "instructions": instructions[:3000],
+                                })
+                                logger.info(f"[intent_router] matched skill: {skill.name}")
+                except Exception as e:
+                    logger.debug(f"[intent_router] skill 查询跳过: {e}")
+
+            return {"intent": intent, "matched_skills": matched_skills}
 
     return intent_router_node
 
@@ -307,6 +350,40 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
             except Exception as e:
                 logger.debug(f"[context_builder] 主动回忆跳过: {e}")
 
+        # ── Skills 按需加载：注入匹配到的 skill instructions ──
+        matched_skills = state.get("matched_skills") or []
+        if matched_skills:
+            skills_text = "\n\n".join(
+                f"### {s['display_name']}\n{s['instructions']}"
+                for s in matched_skills if s.get("instructions")
+            )
+            if skills_text:
+                system_prompt += f"\n\n【已加载技能】\n请按照以下技能的指令执行：\n{skills_text}"
+                logger.info(f"[context_builder] 注入 {len(matched_skills)} 个 skill instructions")
+
+        # ── Skill Auto-Trigger：无 intent 匹配时，注入 skill catalog 供 LLM 自主选择 ──
+        if not matched_skills and tool_registry:
+            try:
+                from app.core.database import AsyncSessionLocal
+                from app.repository.skill_repo import SkillRepository
+                async with AsyncSessionLocal() as skill_db:
+                    skill_repo = SkillRepository()
+                    skills_list = await skill_repo.find_all(skill_db, enabled=1, limit=20)
+                    if skills_list:
+                        catalog_lines = []
+                        for sk in skills_list[:20]:
+                            desc = (sk.description or "")[:100]
+                            catalog_lines.append(f"- {sk.name}: {desc}")
+                        catalog_text = "\n".join(catalog_lines)
+                        system_prompt += (
+                            f"\n\n【可用技能目录】\n"
+                            f"如果用户问题匹配以下技能，请在回答中说明你将使用哪个技能，并简述执行步骤。\n"
+                            f"{catalog_text}"
+                        )
+                        logger.info(f"[context_builder] Skill Auto-Trigger: 注入 {len(skills_list)} 个 skill catalog")
+            except Exception as e:
+                logger.debug(f"[context_builder] Skill Auto-Trigger 跳过: {e}")
+
         # ── 路由闭环：prompt_policy 控制 prompt 复杂度 ──
         # frontend 传入 auto/concise/balanced/detailed，auto 时由 ML 路由决定
         prompt_policy = state.get("prompt_policy", "auto")
@@ -392,11 +469,16 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
         tier = state.get("tier", "")
 
         # ── 路由闭环：reasoning_depth 决策 ──
-        # frontend 传入 auto/fast/deep/full，auto 时由 ML 路由 thinking_mode 决定
+        # frontend 传入 auto/fast/deep/full，auto 时由 ML 路由 thinking_mode + tier reasoning_enabled 决定
         reasoning_depth = state.get("reasoning_depth", "auto")
+        tier_cfg = state.get("tier_config") or {}
+        tier_reasoning = tier_cfg.get("reasoning_enabled", 0)
         if reasoning_depth == "auto":
-            # ML 路由: T0/T1 → 禁用 reasoning; T2/T3 → 启用
-            effective_reasoning = thinking_mode in ("T2", "T3")
+            # ML 路由: T0/T1 → 禁用; T2/T3 → 启用; tier reasoning_enabled 优先
+            if tier_reasoning:
+                effective_reasoning = True
+            else:
+                effective_reasoning = thinking_mode in ("T2", "T3")
         elif reasoning_depth == "fast":
             effective_reasoning = False
         elif reasoning_depth in ("deep", "full"):
@@ -404,30 +486,26 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
         else:
             effective_reasoning = thinking_mode in ("T2", "T3")
 
-        # ── 路由闭环：tier 决定 temperature/max_tokens ──
-        tier_overrides = {
-            "S":  {"temperature": 0.3, "max_tokens": 1024},
-            "M":  {"temperature": 0.5, "max_tokens": 2048},
-            "L":  {"temperature": 0.7, "max_tokens": 8192},
-            "XL": {"temperature": 0.7, "max_tokens": 16384},
-        }
+        # ── 路由闭环：tier 决定 temperature ──
         # 仅当 frontend 未显式指定时，才用 tier 覆盖
-        if tier and tier in tier_overrides and req_temp == 0 and req_max_tokens == 0:
-            tier_cfg = tier_overrides[tier]
-            try:
-                from app.llm.langchain_adapter import ChatLLMProvider
-                new_llm = ChatLLMProvider(
-                    provider=current_base_llm.provider,
-                    temperature=tier_cfg["temperature"],
-                    max_tokens=tier_cfg["max_tokens"],
-                )
-                if hasattr(current_base_llm, '_bound_tools') and current_base_llm._bound_tools:
-                    new_llm._bound_tools = list(current_base_llm._bound_tools)
-                    new_llm._bound_tool_choice = getattr(current_base_llm, '_bound_tool_choice', None)
-                current_base_llm = new_llm
-                logger.info(f"[llm_call] tier 覆盖: tier={tier} temp={tier_cfg['temperature']} max_tokens={tier_cfg['max_tokens']}")
-            except Exception as e:
-                logger.debug(f"[llm_call] tier 覆盖跳过: {e}")
+        if tier and req_temp == 0:
+            tier_cfg = state.get("tier_config") or {}
+            tier_temp = tier_cfg.get("temperature")
+            if tier_temp is not None:
+                try:
+                    from app.llm.langchain_adapter import ChatLLMProvider
+                    new_llm = ChatLLMProvider(
+                        provider=current_base_llm.provider,
+                        temperature=tier_temp,
+                        max_tokens=req_max_tokens or getattr(current_base_llm, 'max_tokens', 4096),
+                    )
+                    if hasattr(current_base_llm, '_bound_tools') and current_base_llm._bound_tools:
+                        new_llm._bound_tools = list(current_base_llm._bound_tools)
+                        new_llm._bound_tool_choice = getattr(current_base_llm, '_bound_tool_choice', None)
+                    current_base_llm = new_llm
+                    logger.info(f"[llm_call] tier 覆盖(DB): tier={tier} temp={tier_temp} max_tokens={tier_max}")
+                except Exception as e:
+                    logger.debug(f"[llm_call] tier 覆盖跳过: {e}")
 
         writer({"step": "llm", "status": "calling", "message": f"正在生成回答... (模型: {model_label}, 路由: {route_class}/{tier}, 思考: {thinking_mode}, reasoning: {effective_reasoning})"})
 
@@ -445,8 +523,11 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
             prev_rank = _TIER_RANK.get(prev_tier, 0)
             curr_rank = _TIER_RANK.get(tier, 0)
             if prev_rank > curr_rank:
-                # 从高 tier 降回低 tier，注入精简指令
-                system_prompt += "\n\n【缓存连续性】上文较长，请简洁回答，避免重复已讨论的内容，控制在 500 字以内。"
+                # 检查上一轮输出 token 数（超 2000 才压缩）
+                prev_output_tokens = state.get("_prev_output_tokens", 0)
+                if prev_output_tokens > 2000:
+                    system_prompt += "\n\n【缓存连续性】上文较长，请简洁回答，避免重复已讨论的内容，控制在 500 字以内。"
+                    logger.info(f"[llm_call] Cache Continuity: prev_tier={prev_tier} → {tier}, prev_output_tokens={prev_output_tokens}, 注入压缩指令")
 
         # ── Goal 模式：注入任务拆解与执行指令 ──
         # 规划执行分离：第0轮只输出计划，后续轮强制使用工具执行
@@ -610,6 +691,19 @@ Answer: 基于工具结果输出该子任务的成果
             # 注意：iterations == 0 的 prompt 已在上方行 535-571 定义，此处不再重复
 
 
+        # ── 设置 parent context（供 spawn_agent 自动注入 worker）──
+        if tool_registry:
+            _mem = state.get("memory_context")
+            _mem_text = ""
+            if isinstance(_mem, dict):
+                _mem_text = _mem.get("raw", "") or json.dumps(_mem, ensure_ascii=False)
+            elif isinstance(_mem, str):
+                _mem_text = _mem
+            tool_registry.set_parent_context(
+                system_prompt=system_prompt,
+                memory=_mem_text[:1000],
+            )
+
         lc_messages = [SystemMessage(content=system_prompt)]
 
         # ── 消息清理（修复畸形 JSON + Unicode 代理）──
@@ -658,6 +752,7 @@ Answer: 基于工具结果输出该子任务的成果
         # ── B+C: 动态绑定工具 ──
         selected_tool_names = state.get("selected_tools") or []
         current_llm = current_base_llm
+        tool_objects = []
         if selected_tool_names and tool_registry:
             tool_objects = tool_registry.get_langchain_tools(selected_tool_names)
             if tool_objects:
@@ -815,6 +910,8 @@ Answer: 基于工具结果输出该子任务的成果
                             completion_tokens=completion_tokens,
                             duration_ms=int(elapsed * 1000),
                             call_type="chat",
+                            tier=tier,
+                            route_class=route_class,
                         )
         except Exception as e:
             logger.debug(f"[llm_call] 成本追踪失败（不影响主流程）: {e}")
@@ -834,6 +931,15 @@ Answer: 基于工具结果输出该子任务的成果
         # 存储当前 tier 供下一轮 Cache Continuity 使用
         if tier:
             result_update["_prev_tier"] = tier
+        # 存储当前 output token 数供下一轮 Cache Continuity 阈值判断
+        try:
+            usage = getattr(response, "usage_metadata", None) or getattr(response, "usage", None)
+            if usage:
+                _ct = getattr(usage, "output_tokens", 0) or (usage.get("output_tokens", 0) if isinstance(usage, dict) else 0)
+                if _ct:
+                    result_update["_prev_output_tokens"] = _ct
+        except Exception:
+            pass
         if goal_tokens_delta and state.get("goal_mode"):
             result_update["goal_tokens_used"] = state.get("goal_tokens_used", 0) + goal_tokens_delta
 

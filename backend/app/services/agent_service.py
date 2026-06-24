@@ -185,7 +185,6 @@ class AgentService:
                             db, provider_id=tier_cfg["provider_id"],
                             model_name=mapped_model,
                             temperature=tier_cfg.get("temperature", 0.7),
-                            max_tokens=tier_cfg.get("max_tokens", 4096),
                         )
                         model_selector.register_llm(mapped_model, mapped_llm)
                     except Exception as e:
@@ -381,6 +380,8 @@ class AgentService:
             total_duration_ms=elapsed,
             prompt_tokens=result.get("prompt_tokens", 0),
             completion_tokens=result.get("completion_tokens", 0),
+            tier=result.get("tier", ""),
+            route_class=result.get("route_class", ""),
         ))
 
         return {
@@ -954,6 +955,8 @@ class AgentService:
                     total_duration_ms=elapsed,
                     prompt_tokens=total_prompt_tokens,
                     completion_tokens=total_completion_tokens,
+                    tier=final_state.get("tier", "") if final_state else "",
+                    route_class=final_state.get("route_class", "") if final_state else "",
                 ))
             except Exception:
                 pass

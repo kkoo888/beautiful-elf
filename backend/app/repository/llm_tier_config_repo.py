@@ -1,6 +1,6 @@
 """Tier 配置 Repository"""
 from typing import Optional, List, Dict
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mappers.base import MySQLMapper
@@ -59,7 +59,6 @@ class LLMTierConfigRepository:
             tier_map[c.tier] = {
                 "model_name": c.model_name,
                 "provider_id": c.provider_id,
-                "max_tokens": c.max_tokens,
                 "temperature": c.temperature,
                 "reasoning_enabled": c.reasoning_enabled,
                 "fallback_model_name": c.fallback_model_name,
@@ -82,7 +81,13 @@ class LLMTierConfigRepository:
         return await self.mapper.create(db, data)
 
     async def delete_by_tier(self, db: AsyncSession, tier: str) -> int:
-        """删除某个 tier 的所有配置"""
-        stmt = delete(LLMTierConfig).where(LLMTierConfig.tier == tier)
+        """软删除某个 tier 的所有配置（is_deleted=1）"""
+        from sqlalchemy import update
+        stmt = (
+            update(LLMTierConfig)
+            .where(LLMTierConfig.tier == tier, LLMTierConfig.is_deleted == 0)
+            .values(is_deleted=1)
+        )
         result = await db.execute(stmt)
+        await db.flush()
         return result.rowcount

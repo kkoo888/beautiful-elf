@@ -16,6 +16,7 @@ import {
   DownOutlined,
   CloudOutlined,
   BulbOutlined,
+  SearchOutlined,
 } from '@ant-design/icons'
 import { fetchExpertTeams } from '@/modules/expert-team/services/expert-team-api'
 import type { ExpertTeam } from '@/modules/expert-team/types'
@@ -129,7 +130,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   // 模型选项（auto + DB 模型列表）
   const modelOptions = [
-    { label: '🤖 Auto', value: '0:auto' },
+    { label: <span><RobotOutlined /> Auto</span>, value: '0:auto' },
     ...providers.flatMap((p) =>
       (p.models ?? []).map((m) => ({
         label: `${m.displayName || m.modelName} (${p.name})`,
@@ -137,14 +138,15 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       }))
     ),
   ]
-  const currentModelKey = `${providerId}:${modelName}`
+  // auto 模式下固定用 "0:auto"，不依赖 selectedProviderId
+  const currentModelKey = (modelName === 'auto' || !modelName) ? '0:auto' : `${providerId ?? 0}:${modelName}`
 
   // 推理深度选项
   const reasoningOptions = [
-    { label: '🤖 Auto', value: 'auto' },
-    { label: '⚡ 快速', value: 'fast' },
-    { label: '🔍 深度', value: 'deep' },
-    { label: '🧠 全面', value: 'full' },
+    { label: <span><RobotOutlined /> Auto</span>, value: 'auto' },
+    { label: <span><ThunderboltOutlined /> 快速</span>, value: 'fast' },
+    { label: <span><SearchOutlined /> 深度</span>, value: 'deep' },
+    { label: <span><BulbOutlined /> 全面</span>, value: 'full' },
   ]
 
   /** 自动调整高度 */
@@ -207,7 +209,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       key: 'auto',
       label: (
         <div className={styles.menuItemInner}>
-          <span className={styles.menuItemLabel}>🧠 Auto</span>
+          <span className={styles.menuItemLabel}><BulbOutlined /> Auto</span>
           <span className={styles.menuItemDesc}>根据消息内容自动选择合适的专家团</span>
         </div>
       ),

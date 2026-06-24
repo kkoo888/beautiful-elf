@@ -110,6 +110,8 @@ class AgentTrace:
     error: Optional[str] = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    tier: str = ""
+    route_class: str = ""
 
 
 # ── 追踪上下文管理器 ──────────────────────────────────────

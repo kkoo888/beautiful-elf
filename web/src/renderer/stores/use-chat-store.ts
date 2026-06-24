@@ -61,7 +61,7 @@ export const useChatStore = create<ChatState>((set) => ({
   initDefaultModel: (providers) => {
     const defaultP = providers.find((p) => p.isDefault === 1) ?? providers[0]
     if (defaultP && defaultP.models.length > 0) {
-      set({ selectedProviderId: defaultP.id, selectedModelName: defaultP.models[0].modelName })
+      set({ selectedProviderId: defaultP.id, selectedModelName: 'auto' })
     }
   },
   setIsLoading: (isLoading) => set({ isLoading }),
