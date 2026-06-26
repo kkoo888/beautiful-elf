@@ -141,7 +141,7 @@ class OllamaProvider:
                             yield TextDeltaEvent(text=text)
 
                         # Ollama 在单个 chunk 中返回 tool_calls
-                        for tc in msg_chunk.get("tool_calls", []):
+                        for tc in (msg_chunk.get("tool_calls") or []):
                             fn = tc.get("function", {})
                             pending_tool_calls.append({
                                 "id": tc.get("id", f"call_{len(pending_tool_calls)}"),

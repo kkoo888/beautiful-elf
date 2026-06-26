@@ -85,6 +85,35 @@ from app.models.video_gallery import VideoGallery
 # 记忆设置
 from app.models.memory_setting import MemorySetting
 
+# 跨线程记忆
+from app.models.cross_thread_memory import CrossThreadMemory
+
+# Agent 档案
+from app.models.agent_profile import AgentProfile
+
+# 自愈反思
+from app.models.healing_reflection import HealingReflection
+
+# 图片画廊
+from app.models.image_gallery import ImageGallery
+
+# 记忆洞察历史
+from app.models.insight_history import MemoryInsightHistory
+
+# 记忆实体 & 关系
+from app.models.memory_entity import MemoryEntity
+from app.models.memory_entity_relation import MemoryEntityRelation
+
+# 记忆片段
+from app.models.memory_episode import MemoryEpisode
+
+# 记忆洞察
+from app.models.memory_insight import MemoryInsight
+
+# 记忆观察 & 来源
+from app.models.observation import MemoryObservation
+from app.models.observation_source import MemoryObservationSource
+
 __all__ = [
     "BaseModel",
     "Conversation", "Message",

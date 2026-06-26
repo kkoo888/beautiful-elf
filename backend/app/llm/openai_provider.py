@@ -389,7 +389,7 @@ class OpenAIProvider:
                                         reasoning_parts.append(detail["text"])
 
                             # Tool calls（流式累积）
-                            for tc in delta.get("tool_calls", []):
+                            for tc in (delta.get("tool_calls") or []):
                                 idx = _resolve_tool_call_index(tc, pending_calls)
                                 if idx not in pending_calls:
                                     pending_calls[idx] = {

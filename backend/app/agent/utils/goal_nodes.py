@@ -111,7 +111,7 @@ async def _execute_subtasks_via_workers(
             return {
                 "task_id": task_id,
                 "title": task_title,
-                "result_summary": (answer[:300] + "...") if len(answer) > 300 else answer,
+                "result_summary": (answer[:800] + "...") if len(answer) > 800 else answer,
                 "tools_used": worker_tools,
                 "success": True,
             }
@@ -376,28 +376,16 @@ def _make_goal_status_updater(llm=None):
             task_retry_count = current_subtask.get("retry_count", 0)
 
             # 层 1: Evaluator 质量检查（LLM-as-Judge）
-            if not eval_passed and eval_score < 6 and task_retry_count < 2:
-                # 质量不合格但可重试 → 不标记 failed，留待下轮重试
-                writer({"step": "goal_task_retry", "status": "retrying",
-                        "message": f"子任务「{current_subtask['title']}」质量不合格 ({eval_score}/10)，第 {task_retry_count + 1} 次重试",
-                        "taskId": task_id, "reason": eval_reason, "retry": task_retry_count + 1})
-                # 更新 retry_count，保持 in_progress 状态
-                for i, t in enumerate(goal_subtasks):
-                    if t.get("id") == task_id:
-                        goal_subtasks[i]["retry_count"] = task_retry_count + 1
-                        goal_subtasks[i]["last_eval_feedback"] = eval_reason
-                        break
-                logger.info(f"[goal_status_updater] 子任务 #{task_id} 质量不合格，重试 {task_retry_count + 1}/2")
-            else:
-                # 层 2: Guardrail 格式校验
+            if eval_passed or eval_score >= 6:
+                # 质量合格 → 走 guardrail 格式校验
                 passed, reason = await _guardrail_check_subtask(answer_text, current_subtask["title"], llm=llm)
-                if passed and (eval_passed or eval_score >= 6):
+                if passed:
                     goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "done", 100)
                     loop_detector.record(task_id, "done")
                     new_wm_entries.append({
                         "task_id": task_id,
                         "title": current_subtask["title"],
-                        "result_summary": (answer_text[:200] + "...") if len(answer_text) > 200 else answer_text,
+                        "result_summary": (answer_text[:800] + "...") if len(answer_text) > 800 else answer_text,
                         "tools_used": list(state.get("current_tools_used", [])),
                         "success": True,
                     })
@@ -406,11 +394,9 @@ def _make_goal_status_updater(llm=None):
                             "taskId": task_id, "taskTitle": current_subtask["title"]})
                     logger.info(f"[goal_status_updater] 子任务 #{task_id} → done")
                 else:
-                    # Guardrail 失败 或 evaluator 失败且重试已耗尽
-                    fail_reason = reason if not passed else f"质量不合格: {eval_reason}"
-
+                    # Guardrail 格式校验失败
+                    fail_reason = reason
                     # ── 失败隔离: 生成降级输出而非直接标记 failed ──
-                    # 切断级联失败，让下游任务仍能基于降级信息继续
                     degraded_output = ""
                     try:
                         from app.agent.failure_isolation import generate_degraded_output
@@ -452,8 +438,68 @@ def _make_goal_status_updater(llm=None):
                         "result_summary": degraded_output if degraded_output else f"失败: {fail_reason}",
                         "tools_used": [],
                         "success": False,
-                        "degraded": bool(degraded_output),  # 标记为降级输出
+                        "degraded": bool(degraded_output),
                     })
+
+            elif not eval_passed and eval_score < 6 and task_retry_count < 2:
+                # 质量不合格但可重试 → 不标记 failed，留待下轮重试
+                writer({"step": "goal_task_retry", "status": "retrying",
+                        "message": f"子任务「{current_subtask['title']}」质量不合格 ({eval_score}/10)，第 {task_retry_count + 1} 次重试",
+                        "taskId": task_id, "reason": eval_reason, "retry": task_retry_count + 1})
+                for i, t in enumerate(goal_subtasks):
+                    if t.get("id") == task_id:
+                        goal_subtasks[i]["retry_count"] = task_retry_count + 1
+                        goal_subtasks[i]["last_eval_feedback"] = eval_reason
+                        break
+                logger.info(f"[goal_status_updater] 子任务 #{task_id} 质量不合格，重试 {task_retry_count + 1}/2")
+
+            else:
+                # 重试已耗尽（retry_count >= 2）→ 直接标记 failed，不走 guardrail 放行
+                fail_reason = f"质量不合格 ({eval_score}/10)，已重试 {task_retry_count} 次: {eval_reason}"
+                logger.warning(f"[goal_status_updater] 子任务 #{task_id} 重试耗尽，标记 failed")
+                degraded_output = ""
+                try:
+                    from app.agent.failure_isolation import generate_degraded_output
+                    if llm:
+                        degraded = await generate_degraded_output(
+                            llm=llm,
+                            failed_task_title=current_subtask["title"],
+                            failed_task_reason=fail_reason,
+                            context=answer_text[:500] if answer_text else "",
+                            memory_context=str(state.get("goal_working_memory", ""))[:500],
+                        )
+                        degraded_output = degraded.content
+                        writer({"step": "goal_task_degraded", "status": "degraded",
+                                "message": f"子任务降级: {current_subtask['title']} → {degraded.strategy}",
+                                "taskId": task_id, "confidence": degraded.confidence})
+                except Exception as e:
+                    logger.debug(f"[goal_status_updater] 降级输出生成失败: {e}")
+
+                goal_subtasks = _update_subtask_status(goal_subtasks, task_id, "failed", 0)
+                try:
+                    from app.agent.self_healing import analyze_failure, get_healing_memory
+                    reflection = analyze_failure(
+                        subtask_title=current_subtask["title"], subtask_id=task_id,
+                        failure_source="eval", answer_text=answer_text,
+                        guardrail_reason=fail_reason,
+                        user_id=state.get("user_id", 0),
+                        goal_definition=state.get("goal_definition", ""),
+                    )
+                    await get_healing_memory().store(reflection, goal_id=str(state.get("conversation_id", 0)))
+                    loop_detector.record(task_id, "failed")
+                except Exception as e:
+                    logger.debug(f"[goal_status_updater] 自愈分析跳过: {e}")
+                writer({"step": "goal_task_failed", "status": "error",
+                        "message": f"子任务失败: {current_subtask['title']} ({fail_reason})",
+                        "taskId": task_id, "taskTitle": current_subtask["title"]})
+                new_wm_entries.append({
+                    "task_id": task_id,
+                    "title": current_subtask["title"],
+                    "result_summary": degraded_output if degraded_output else f"失败: {fail_reason}",
+                    "tools_used": [],
+                    "success": False,
+                    "degraded": bool(degraded_output),
+                })
 
         # 批量标记可并行的子任务
         parallel_tasks = _get_parallel_ready_tasks(goal_subtasks)
