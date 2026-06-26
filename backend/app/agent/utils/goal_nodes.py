@@ -214,21 +214,31 @@ def _make_goal_evaluator(llm):
         if any(m in final_answer for m in ["可能", "也许", "据我了解", "不确定"]): score += 0.5
 
         score = max(1, min(10, int(score)))
-        achieved = score >= 6
         reason = "、".join(reasons) if reasons else "质量合格"
 
-        if achieved:
-            writer({"step": "goal_eval", "status": "done", "message": "目标已达成！"})
+        # 检查子任务完成情况 — 所有子任务都 done 才算 achieved
+        goal_subtasks = state.get("goal_subtasks") or []
+        done_count = sum(1 for t in goal_subtasks if t.get("status") == "done")
+        total_count = len(goal_subtasks)
+        all_done = total_count > 0 and done_count == total_count
+
+        if score >= 6 and all_done:
+            writer({"step": "goal_eval", "status": "done", "message": f"目标已达成！({done_count}/{total_count} 子任务完成)"})
             try:
                 from app.agent.self_healing import get_healing_memory
                 healing_memory = get_healing_memory()
-                for st in (state.get("goal_subtasks") or []):
+                for st in goal_subtasks:
                     if st.get("status") == "done":
                         await healing_memory.mark_successful(
                             user_id=state.get("user_id", 0), subtask_id=st.get("id", 0))
             except Exception:
                 pass
             return {"goal_status": "achieved"}
+        elif score >= 6 and not all_done:
+            # 当前轮回答质量合格，但还有子任务未完成 → 继续
+            writer({"step": "goal_eval", "status": "done",
+                    "message": f"当前轮质量合格 ({score}/10)，但子任务未全部完成 ({done_count}/{total_count})，继续执行"})
+            return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
         else:
             history = list(state.get("goal_history", []))
             history.append({
