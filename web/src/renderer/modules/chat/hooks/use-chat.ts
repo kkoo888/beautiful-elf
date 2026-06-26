@@ -5,7 +5,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatStore } from '@/stores/use-chat-store'
-import { chatStream, chatStreamWS, chatResumeStream, submitFeedback, createConversation, fetchMessages, fetchConversations, deleteConversationApi } from '../services/chat-api'
+import { submitFeedback, createConversation, fetchMessages, fetchConversations, deleteConversationApi } from '../services/chat-api'
+import { chatStream, chatResumeStream } from '../services/chat-ws'
 import { getEnabledProviders } from '@/modules/settings/services/settings-api'
 import type {
   ChatMessage,
@@ -22,47 +23,6 @@ import type {
 
 /** 生成唯一 ID */
 const generateId = (): string => crypto.randomUUID()
-
-/** 从 AI 回复中解析 [目标拆解] 格式的子任务列表 */
-function parseGoalTasks(content: string): GoalTask[] {
-  const tasks: GoalTask[] = []
-  // 匹配 [目标拆解] 后面的任务行（支持多种分隔符）
-  const planMatch = content.match(/\[目标拆解\]\s*\n([\s\S]*?)(?=\n\n|═|$)/)
-  if (!planMatch) return tasks
-
-  const lines = planMatch[1].split('\n')
-  let id = 1
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-
-    // 匹配格式: • [任务描述] - [pending] (0%) -> 依赖: 1,2
-    // 或简化格式: • [任务描述] - [pending]
-    const taskMatch = trimmed.match(
-      /^[•\-\d\.]+\s*(.+?)\s*-\s*\[(pending|in_progress|done|failed)\](?:\s*\((\d+)%\))?(?:\s*->\s*依赖:\s*([\d,\s]+))?/
-    )
-    if (taskMatch) {
-      const title = taskMatch[1].replace(/^\[|\]$/g, '').trim()
-      const statusStr = taskMatch[2]
-      const progress = taskMatch[3] ? parseInt(taskMatch[3], 10) : undefined
-      const depsStr = taskMatch[4]
-
-      let status: GoalTask['status'] = 'pending'
-      if (statusStr === 'done') status = 'done'
-      else if (statusStr === 'failed') status = 'failed'
-      else if (statusStr === 'in_progress') status = 'in_progress'
-
-      // 解析依赖关系
-      let dependencies: number[] | undefined
-      if (depsStr) {
-        dependencies = depsStr.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
-      }
-
-      tasks.push({ id: id++, title, status, progress, dependencies })
-    }
-  }
-  return tasks
-}
 
 export interface UseChatReturn {
   /** 消息列表 */
@@ -132,6 +92,7 @@ export function useChat(): UseChatReturn {
     currentConversationId,
     reasoningDepth,
     isLoading,
+    chatStatus,
     conversations,
     selectedProviderId,
     selectedModelName,
@@ -140,10 +101,12 @@ export function useChat(): UseChatReturn {
     setReasoningDepth: storeSetReasoningDepth,
     setModelSelection,
     setIsLoading,
+    setChatStatus,
     clearMessages: storeClearMessages,
   } = useChatStore()
 
   const abortRef = useRef<{ abort: () => void } | null>(null)
+  const generationRef = useRef(0)
 
   // 新增状态：工具进度、审批、上下文引用、token 统计
   const [toolProgress, setToolProgress] = useState<ToolProgress[]>([])
@@ -196,6 +159,14 @@ export function useChat(): UseChatReturn {
     }).catch(() => { /* 忽略 */ })
   }, [currentConversationId])
 
+  // ── 组件卸载时中止进行中的流 ──────────────────────────
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+    }
+  }, [])
+
   const getProviderType = useCallback(async (pid?: number): Promise<string | undefined> => {
     if (!pid) return undefined
     const cache = providerTypeCacheRef.current
@@ -227,6 +198,8 @@ export function useChat(): UseChatReturn {
   const sendMessage = useCallback(
     async (content: string, options?: { expertTeamId?: number; skillId?: number; teamMode?: 'off' | 'auto' | 'manual'; goalMode?: boolean }) => {
       if (isLoading || !content.trim()) return
+
+      setIsLoading(true)
 
       // 设置 Goal 模式状态
       if (options?.goalMode) {
@@ -265,7 +238,10 @@ export function useChat(): UseChatReturn {
         createdAt: Date.now(),
       }
       addMessage(aiMessage)
-      setIsLoading(true)
+
+      // 递增 generation ID，隔离本次请求的生命周期
+      const gen = ++generationRef.current
+      setChatStatus('submitted')
 
       // 流式接收
       const providerType = await getProviderType(selectedProviderId)
@@ -276,8 +252,8 @@ export function useChat(): UseChatReturn {
       setTokenStats(null)
       setProgressSteps([])
 
-      // v6.3: 优先 WebSocket（长任务不断连），降级 SSE
-      const { abort, done } = chatStreamWS(
+      // 每条消息一个 WS 连接
+      const { abort, done } = chatStream(
         {
           conversationId: convId,
           message: content.trim(),
@@ -308,6 +284,10 @@ export function useChat(): UseChatReturn {
             setMessages(updatedMessages)
             return
           }
+          // 收到第一个 token 时切换到 streaming 状态
+          if (useChatStore.getState().chatStatus === 'submitted') {
+            setChatStatus('streaming')
+          }
           // 回答内容
           const updatedMessages = currentMessages.map((msg) =>
             msg.id === aiMessageId ? { ...msg, content: msg.content + token.content } : msg
@@ -316,6 +296,7 @@ export function useChat(): UseChatReturn {
         },
         (error) => {
           console.error('[Chat] Stream error:', error)
+          setChatStatus('error')
           const currentMessages = useChatStore.getState().messages
           const updatedMessages = currentMessages.map((msg) =>
             msg.id === aiMessageId
@@ -420,8 +401,12 @@ export function useChat(): UseChatReturn {
       try {
         await done
       } finally {
-        setIsLoading(false)
-        abortRef.current = null
+        // 只有当前代才重置加载状态，避免旧代的 finally 覆盖新代的 isLoading
+        if (gen === generationRef.current) {
+          setIsLoading(false)
+          setChatStatus('idle')
+          abortRef.current = null
+        }
         // 更新会话最后消息
         const finalMessages = useChatStore.getState().messages
         const lastAiMsg = [...finalMessages].reverse().find((m) => m.role === 'assistant')
@@ -502,7 +487,8 @@ export function useChat(): UseChatReturn {
     abortRef.current?.abort()
     abortRef.current = null
     setIsLoading(false)
-  }, [setIsLoading])
+    setChatStatus('idle')
+  }, [setIsLoading, setChatStatus])
 
   /** 创建新会话（调后端 API） */
   const handleCreateConversation = useCallback(async () => {
@@ -552,7 +538,10 @@ export function useChat(): UseChatReturn {
     if (!approvalRequest || !currentConversationId) return
 
     setApprovalRequest(null)
-    setIsLoading(true)
+
+    // 递增 generation ID，隔离本次请求
+    const gen = ++generationRef.current
+    setChatStatus('submitted')
 
     // 创建 AI 占位消息用于流式接收
     const aiMessageId = generateId()
@@ -566,7 +555,7 @@ export function useChat(): UseChatReturn {
     addMessage(aiMessage)
 
     const { abort, done } = chatResumeStream(
-      currentConversationId,
+      currentConversationId ?? '',
       {
         approved,
         toolName: approvalRequest.tool,
@@ -612,10 +601,22 @@ export function useChat(): UseChatReturn {
     try {
       await done
     } finally {
-      setIsLoading(false)
-      abortRef.current = null
+      if (gen === generationRef.current) {
+        setIsLoading(false)
+        setChatStatus('idle')
+        abortRef.current = null
+      }
     }
-  }, [approvalRequest, currentConversationId, addMessage, setMessages, setIsLoading])
+  }, [approvalRequest, currentConversationId, addMessage, setMessages, setIsLoading, setChatStatus])
+
+  // 审批超时：5 分钟无响应自动关闭弹框
+  useEffect(() => {
+    if (!approvalRequest) return
+    const timer = setTimeout(() => {
+      setApprovalRequest(null)
+    }, 5 * 60 * 1000)
+    return () => clearTimeout(timer)
+  }, [approvalRequest])
 
   return {
     messages,
@@ -644,6 +645,7 @@ export function useChat(): UseChatReturn {
     isExecuting: isLoading && progressSteps.some((s) => s.status === 'calling' || s.status === 'executing'),
     currentStep: progressSteps.filter((s) => s.status === 'calling' || s.status === 'executing').pop()?.step,
     currentTool: toolProgress.filter((t) => t.status === 'running').map((t) => t.tool).pop(),
+    chatStatus,
     sendMessage,
     setReasoningDepth,
     setModelSelection,

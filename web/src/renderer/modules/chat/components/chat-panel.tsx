@@ -46,6 +46,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({
     messages,
     reasoningDepth,
     isLoading,
+    chatStatus,
     selectedProviderId,
     selectedModelName,
     approvalRequest,
@@ -135,6 +136,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({
         disabled={isLoading}
         onStop={stopGeneration}
         isLoading={isLoading}
+        chatStatus={chatStatus}
         providerId={selectedProviderId}
         modelName={selectedModelName}
         onModelChange={setModelSelection}

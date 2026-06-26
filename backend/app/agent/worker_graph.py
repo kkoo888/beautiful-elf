@@ -9,11 +9,11 @@ State:
 """
 import operator
 from typing import Annotated, Optional
+from typing_extensions import TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END, START
 from langgraph.prebuilt import ToolNode
-from pydantic import BaseModel, Field
 
 from app.core.logging import get_logger
 from app.agent.state import _content_blocks_to_str
@@ -23,20 +23,18 @@ logger = get_logger(__name__)
 # ── Worker State ──────────────────────────────────────────
 
 
-class WorkerState(BaseModel):
-    """Worker 子图状态 — 独立于主 AgentState"""
-    model_config = {"from_attributes": True}
-
-    messages: Annotated[list, operator.add] = Field(default_factory=list, description="消息历史")
-    task: str = Field(default="", description="子任务描述")
-    context: str = Field(default="", description="背景信息")
-    iteration: int = Field(default=0, description="当前迭代轮次")
-    max_iterations: int = Field(default=5, description="最大 LLM 调用轮次")
-    final_answer: Optional[str] = Field(default=None, description="最终回答")
-    force_end: bool = Field(default=False, description="强制结束标志")
-    parent_trace_id: str = Field(default="", description="父 Agent trace ID（追踪用）")
-    parent_system_prompt: str = Field(default="", description="父 Agent 的 system prompt 子集")
-    parent_memory: str = Field(default="", description="父 Agent 的相关记忆")
+class WorkerState(TypedDict, total=False):
+    """Worker 子图状态 — dict 兼容，ainvoke() 返回 dict"""
+    messages: Annotated[list, operator.add]
+    task: str
+    context: str
+    iteration: int
+    max_iterations: int
+    final_answer: Optional[str]
+    force_end: bool
+    parent_trace_id: str
+    parent_system_prompt: str
+    parent_memory: str
 
 
 # ── 节点 ──────────────────────────────────────────────────

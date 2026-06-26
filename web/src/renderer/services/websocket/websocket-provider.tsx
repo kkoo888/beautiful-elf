@@ -44,9 +44,11 @@ interface WebSocketProviderProps {
  */
 function DisconnectBanner({
   connectionState,
+  closeReason,
   onReconnect,
 }: {
   connectionState: ConnectionState
+  closeReason: 'auth_expired' | 'auth_invalid' | null
   onReconnect: () => void
 }) {
   const [dismissed, setDismissed] = useState(false)
@@ -62,6 +64,11 @@ function DisconnectBanner({
   if (connectionState === 'connected' || connectionState === 'disconnecting') return null
 
   const isConnecting = connectionState === 'connecting'
+  const isAuthError = closeReason === 'auth_expired' || closeReason === 'auth_invalid'
+
+  const authMessage = closeReason === 'auth_expired'
+    ? '登录已过期，请重新登录'
+    : '登录凭证无效，请重新登录'
 
   return (
     <div
@@ -75,23 +82,40 @@ function DisconnectBanner({
       }}
     >
       <Alert
-        type={isConnecting ? 'warning' : 'error'}
+        type={isAuthError ? 'error' : (isConnecting ? 'warning' : 'error')}
         showIcon
         icon={isConnecting ? <ReloadOutlined spin /> : <DisconnectOutlined />}
+        message={
+          isAuthError ? authMessage : undefined
+        }
         title={
-          <Space>
-            <span>
-              {isConnecting ? '正在重新连接服务器...' : '与服务器断开连接，部分功能可能不可用'}
-            </span>
-            {!isConnecting && (
-              <Button size="small" type="link" onClick={onReconnect}>
-                立即重连
+          isAuthError ? undefined : (
+            <Space>
+              <span>
+                {isConnecting ? '正在重新连接服务器...' : '与服务器断开连接，部分功能可能不可用'}
+              </span>
+              {!isConnecting && (
+                <Button size="small" type="link" onClick={onReconnect}>
+                  立即重连
+                </Button>
+              )}
+              <Button size="small" type="text" onClick={() => setDismissed(true)}>
+                ✕
               </Button>
-            )}
-            <Button size="small" type="text" onClick={() => setDismissed(true)}>
-              ✕
-            </Button>
-          </Space>
+            </Space>
+          )
+        }
+        description={
+          isAuthError ? (
+            <Space>
+              <Button size="small" type="primary" onClick={() => { window.location.href = '/login' }}>
+                重新登录
+              </Button>
+              <Button size="small" type="text" onClick={() => setDismissed(true)}>
+                ✕
+              </Button>
+            </Space>
+          ) : undefined
         }
         banner
       />
@@ -116,6 +140,7 @@ export function WebSocketProvider({
 }: WebSocketProviderProps) {
   const clientRef = useRef<WebSocketClient | null>(null)
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected')
+  const [closeReason, setCloseReason] = useState<'auth_expired' | 'auth_invalid' | null>(null)
 
   // 稳定化 config 引用，避免重复初始化
   const stableConfig = useMemo(() => config, [config?.url])
@@ -137,12 +162,35 @@ export function WebSocketProvider({
     const unsub = client.onStateChange((state) => {
       if (mounted) {
         setConnectionState(state)
+        // 连接恢复时清除关闭原因
+        if (state === 'connected') {
+          setCloseReason(null)
+        }
       }
     })
+
+    // 监听关闭原因
+    const unsubReason = client.onCloseReason((reason) => {
+      if (mounted) {
+        setCloseReason(reason)
+      }
+    })
+
+    // 监听 chat WS 的 auth 错误（chat 模块使用独立 WS 连接）
+    const handleChatAuthError = (e: Event) => {
+      const code = (e as CustomEvent).detail?.code
+      if (mounted && (code === 4001 || code === 4003)) {
+        setCloseReason(code === 4001 ? 'auth_expired' : 'auth_invalid')
+        setConnectionState('disconnected')
+      }
+    }
+    window.addEventListener('ws-auth-error', handleChatAuthError)
 
     return () => {
       mounted = false
       unsub()
+      unsubReason()
+      window.removeEventListener('ws-auth-error', handleChatAuthError)
       client.destroy()
       clientRef.current = null
     }
@@ -181,7 +229,7 @@ export function WebSocketProvider({
   return (
     <WebSocketContext value={value}>
       {showDisconnectBanner && (
-        <DisconnectBanner connectionState={connectionState} onReconnect={handleReconnect} />
+        <DisconnectBanner connectionState={connectionState} closeReason={closeReason} onReconnect={handleReconnect} />
       )}
       {children}
     </WebSocketContext>

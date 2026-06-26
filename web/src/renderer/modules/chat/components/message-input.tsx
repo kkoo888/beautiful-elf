@@ -43,6 +43,8 @@ interface MessageInputProps {
   onStop?: () => void
   /** 是否正在加载 */
   isLoading?: boolean
+  /** 聊天状态机 */
+  chatStatus?: 'idle' | 'submitted' | 'streaming' | 'error'
   /** 当前选中的供应商 ID */
   providerId?: number
   /** 当前选中的模型名称 */
@@ -60,6 +62,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   disabled = false,
   onStop,
   isLoading = false,
+  chatStatus = 'idle',
   providerId = 0,
   modelName = 'auto',
   onModelChange,
@@ -434,7 +437,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 <button
                   className={styles.sendButton}
                   onClick={handleSend}
-                  disabled={!value.trim() || disabled}
+                  disabled={!value.trim() || chatStatus !== 'idle'}
                   aria-label="发送消息"
                 >
                   <SendOutlined />

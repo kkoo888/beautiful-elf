@@ -63,6 +63,11 @@ class Settings(BaseSettings):
 
     REDIS_MAX_CONNECTIONS: int = 20
 
+    # WebSocket
+    WS_QUEUE_MAXSIZE: int = 2000
+    WS_HEARTBEAT_INTERVAL: int = 30  # 秒
+    WS_IDLE_TIMEOUT: int = 1800  # 30 分钟
+
     @property
     def MYSQL_URL(self) -> str:
         return (

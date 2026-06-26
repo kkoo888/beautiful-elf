@@ -48,6 +48,16 @@ async def _call_llm(db, provider_id: int, model_name: str, prompt: str, temperat
     return content, tokens
 
 
+async def _ws_broadcast(team_id: int, event_type: str, data: dict):
+    """向专家团频道广播 WebSocket 事件"""
+    try:
+        from app.core.websocket_manager import ws_manager
+        channel = f"expert_team_{team_id}"
+        await ws_manager.broadcast(channel, {"type": event_type, **data})
+    except Exception:
+        logger.debug(f"WS broadcast failed for team {team_id}: {event_type}")
+
+
 # ─── 模型温度查询 ───────────────────────────────────────
 
 async def _get_model_temperature(db, provider_id: int | None, model_name: str | None) -> float:

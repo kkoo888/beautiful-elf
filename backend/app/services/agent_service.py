@@ -487,21 +487,21 @@ class AgentService:
             # v3: extensions 消费 custom 事件（asyncio.merge 并发消费，不再阻塞）
             custom_events_iter = stream.extensions.get("custom_events") if _HAS_STREAM_TRANSFORMER else None
 
+            _custom_q: asyncio.Queue = asyncio.Queue(maxsize=500)
+
             async def _resume_custom_producer():
-                """custom 事件生产者 → queue，供 merge 并发消费"""
-                q: asyncio.Queue = asyncio.Queue(maxsize=500)
+                """custom 事件生产者 → queue，后台运行不阻塞主流"""
                 try:
                     if custom_events_iter:
                         async for data in custom_events_iter:
                             if isinstance(data, dict):
-                                await q.put({"type": "progress", **data})
+                                await _custom_q.put({"type": "progress", **data})
                 except Exception:
                     pass
                 finally:
-                    await q.put(_SENTINEL)
-                return q
+                    await _custom_q.put(_SENTINEL)
 
-            _custom_q = await _resume_custom_producer()
+            asyncio.create_task(_resume_custom_producer())
             _custom_aiter = _queue_to_aiter(_custom_q)
 
             async def _resume_main_iter():
@@ -532,8 +532,19 @@ class AgentService:
                             if token_text:
                                 _got_llm_tokens = True
                                 yield {"type": "token", "content": token_text}
+                        elif block.get("type") == "thinking":
+                            thinking_text = block.get("thinking", "")
+                            if thinking_text:
+                                yield {"type": "thinking", "content": thinking_text}
                     elif hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
                         if getattr(msg_chunk, "type", "") == "AIMessageChunk":
+                            # 处理 thinking content blocks
+                            if isinstance(msg_chunk.content, list):
+                                for block in msg_chunk.content:
+                                    if isinstance(block, dict) and block.get("type") == "thinking":
+                                        thinking_text = block.get("thinking", "")
+                                        if thinking_text:
+                                            yield {"type": "thinking", "content": thinking_text}
                             _got_llm_tokens = True
                             token_text = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
                             yield {"type": "token", "content": token_text}
@@ -586,6 +597,8 @@ class AgentService:
                 "type": "done",
                 "tools_used": tools_used,
                 "duration_ms": elapsed,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
             }
 
         except Exception as e:
@@ -764,23 +777,23 @@ class AgentService:
             # v3: asyncio.merge 并发消费 custom + main stream（不再阻塞）
             custom_events_iter = stream.extensions.get("custom_events") if _HAS_STREAM_TRANSFORMER else None
 
+            _custom_q: asyncio.Queue = asyncio.Queue(maxsize=500)
+
             async def _custom_producer():
-                """custom 事件生产者 → queue，供 merge 并发消费"""
-                q: asyncio.Queue = asyncio.Queue(maxsize=500)
+                """custom 事件生产者 → queue，后台运行不阻塞主流"""
                 try:
                     if custom_events_iter:
                         async for data in custom_events_iter:
                             if isinstance(data, dict):
                                 if data.get("step") == "goal_subtasks":
-                                    await q.put({"type": "goal_subtasks", "subtasks": data.get("subtasks", [])})
-                                await q.put({"type": "progress", **data})
+                                    await _custom_q.put({"type": "goal_subtasks", "subtasks": data.get("subtasks", [])})
+                                await _custom_q.put({"type": "progress", **data})
                 except Exception:
                     pass
                 finally:
-                    await q.put(_SENTINEL)
-                return q
+                    await _custom_q.put(_SENTINEL)
 
-            _custom_q = await _custom_producer()
+            asyncio.create_task(_custom_producer())
             _custom_aiter = _queue_to_aiter(_custom_q)
 
             async def _main_event_iter():
@@ -971,6 +984,8 @@ class AgentService:
                     if state_tools:
                         tools_used = list(dict.fromkeys(state_tools))  # 去重保序
 
+            _is_error = bool(final_state and final_state.get("is_error"))
+
             yield {
                 "type": "done",
                 "tools_used": tools_used,
@@ -978,6 +993,7 @@ class AgentService:
                 "prompt_tokens": total_prompt_tokens,
                 "completion_tokens": total_completion_tokens,
                 "goal_subtasks": goal_subtasks,
+                "is_error": _is_error,
             }
 
         except Exception as e:

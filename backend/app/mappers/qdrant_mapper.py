@@ -258,7 +258,7 @@ class QdrantMapper:
                 "name": collection,
                 "status": str(info.status),
                 "points_count": info.points_count or 0,
-                "vectors_count": info.vectors_count or 0,
+                "vectors_count": getattr(info, 'vectors_count', None) or 0,
             }
         except Exception as e:
             logger.warning(f"Qdrant collection_info 失败（集合可能不存在）: {collection}, error={e}")

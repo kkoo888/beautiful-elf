@@ -15,7 +15,8 @@ export { useChat } from './hooks/use-chat'
 export { useAutoScroll } from './hooks/use-auto-scroll'
 
 // Services
-export { chat, chatStream, submitFeedback } from './services/chat-api'
+export { chatStream, chatResumeStream } from './services/chat-ws'
+export { submitFeedback } from './services/chat-api'
 
 // Types
 export type {

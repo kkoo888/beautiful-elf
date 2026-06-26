@@ -1437,6 +1437,12 @@ AI 回答:
             logger.info("[evaluator] Goal 规划阶段，跳过评估")
             return {"evaluation": {"passed": True, "reason": "规划阶段", "score": 10}}
 
+        # LLM 调用失败 → 跳过评估（避免浪费 LLM 调用做无意义评估）
+        if state.get("is_error"):
+            writer({"step": "eval", "status": "skipped", "message": "LLM 调用失败，跳过评估"})
+            logger.info("[evaluator] LLM 调用失败，跳过评估")
+            return {"evaluation": {"passed": True, "reason": "LLM 调用失败", "score": 0, "method": "error_skip"}}
+
         writer({"step": "eval", "status": "checking", "message": "正在评估回答质量..."})
         logger.info("[evaluator] 开始评估回答质量")
 
@@ -1705,6 +1711,10 @@ def _after_eval(state: AgentState) -> str:
     evaluation = state.get("evaluation", {})
     passed = evaluation.get("passed", True)
     score = evaluation.get("score", 7)
+
+    # LLM 调用失败 → 直接放行，不重试（避免前端重发导致消息堆积）
+    if state.get("is_error"):
+        return "pass"
 
     # score >= 6 或 passed=True → 通过
     if passed and score >= 6:

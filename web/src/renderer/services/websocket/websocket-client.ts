@@ -45,12 +45,16 @@ export class WebSocketClient {
   private reconnectAttempts = 0
   private manualClose = false
 
+  // 关闭原因
+  closeReason: 'auth_expired' | 'auth_invalid' | null = null
+
   // event_id 去重 LRU 缓存
   private eventIdCache: string[] = []
   private eventIdSet = new Set<string>()
 
   // 连接状态变更回调
   private stateListeners = new Set<(state: ConnectionState) => void>()
+  private closeReasonListeners = new Set<(reason: 'auth_expired' | 'auth_invalid' | null) => void>()
 
   constructor(config?: Partial<WebSocketConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -117,6 +121,13 @@ export class WebSocketClient {
     }
   }
 
+  /** 发送原始 JSON（不走 WSMessage 信封格式，用于后端扁平协议） */
+  sendRaw(data: Record<string, unknown>): void {
+    if (this.connectionState === 'connected' && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data))
+    }
+  }
+
   /** 订阅指定类型消息 */
   subscribe(type: WSMessageType | '*', handler: MessageHandler): Unsubscribe {
     if (!this.handlers.has(type)) {
@@ -137,6 +148,20 @@ export class WebSocketClient {
     }
   }
 
+  /** 监听关闭原因变更 */
+  onCloseReason(listener: (reason: 'auth_expired' | 'auth_invalid' | null) => void): () => void {
+    this.closeReasonListeners.add(listener)
+    return () => {
+      this.closeReasonListeners.delete(listener)
+    }
+  }
+
+  private notifyCloseReason(reason: 'auth_expired' | 'auth_invalid' | null): void {
+    for (const listener of this.closeReasonListeners) {
+      try { listener(reason) } catch { /* ignore */ }
+    }
+  }
+
   /** 获取当前连接状态 */
   getConnectionState(): ConnectionState {
     return this.connectionState
@@ -152,6 +177,7 @@ export class WebSocketClient {
     this.disconnect()
     this.handlers.clear()
     this.stateListeners.clear()
+    this.closeReasonListeners.clear()
     this.eventIdCache = []
     this.eventIdSet.clear()
     this.messageQueue.close()
@@ -164,6 +190,7 @@ export class WebSocketClient {
     this.setConnectionState('connected')
     this.reconnectAttempts = 0
     this.missedPongs = 0
+    this.closeReason = null
     this.startHeartbeat()
     this.flushQueue()
   }
@@ -179,14 +206,19 @@ export class WebSocketClient {
       return
     }
 
-    // 处理 pong 响应
+    // 处理 pong 响应（服务端对客户端 ping 的回复）
     if (message.type === 'pong') {
       this.missedPongs = 0
       return
     }
 
-    // 忽略客户端发出的 ping
-    if (message.type === 'ping') return
+    // 服务端心跳 ping → 回复 pong 保活
+    if (message.type === 'ping') {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'pong' }))
+      }
+      return
+    }
 
     // event_id 去重
     if (message.eventId && this.isDuplicate(message.eventId)) {
@@ -209,6 +241,21 @@ export class WebSocketClient {
 
     this.setConnectionState('disconnected')
     console.warn(`[WebSocket] Connection closed: code=${event.code}, reason=${event.reason}`)
+
+    // Token 过期：设置原因，不重连
+    if (event.code === 4001) {
+      this.closeReason = 'auth_expired'
+      this.notifyCloseReason('auth_expired')
+      return
+    }
+
+    // Token 无效：设置原因，不重连
+    if (event.code === 4003) {
+      this.closeReason = 'auth_invalid'
+      this.notifyCloseReason('auth_invalid')
+      return
+    }
+
     this.scheduleReconnect()
   }
 

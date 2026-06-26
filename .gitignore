@@ -65,3 +65,5 @@ scripts/sim_*.py
 
 # 小米
 .mimocode/
+
+seed_expert_team_tech_evolution.sql

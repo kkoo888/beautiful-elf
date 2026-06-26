@@ -18,6 +18,8 @@ interface ChatState {
 
   // 加载状态
   isLoading: boolean
+  /** 聊天状态机: idle(空闲) | submitted(已发送等待响应) | streaming(流式输出中) | error(出错) */
+  chatStatus: 'idle' | 'submitted' | 'streaming' | 'error'
 
   // 操作
   setConversations: (conversations: Conversation[]) => void
@@ -29,6 +31,7 @@ interface ChatState {
   /** 从已启用供应商列表中提取默认供应商和模型，写入 store */
   initDefaultModel: (providers: { id: number; isDefault: number; models: { modelName: string }[] }[]) => void
   setIsLoading: (loading: boolean) => void
+  setChatStatus: (status: ChatState['chatStatus']) => void
   clearMessages: () => void
 
   // 会话管理
@@ -48,6 +51,7 @@ export const useChatStore = create<ChatState>((set) => ({
   selectedProviderId: undefined,
   selectedModelName: 'auto',
   isLoading: false,
+  chatStatus: 'idle',
 
   setConversations: (conversations) => set({ conversations }),
   setCurrentConversation: (id) => set({ currentConversationId: id }),
@@ -65,6 +69,7 @@ export const useChatStore = create<ChatState>((set) => ({
     }
   },
   setIsLoading: (isLoading) => set({ isLoading }),
+  setChatStatus: (chatStatus) => set({ chatStatus }),
   clearMessages: () => set({ messages: [] }),
 
   addConversation: (conv) =>

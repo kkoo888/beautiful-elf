@@ -586,7 +586,8 @@ async def _stream_response(
                     _stream_done.set()
                     # done 时保存助手回复（数据完整）
                     await _save_assistant_message("".join(_full_content), total_tokens)
-                    await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens, 'goal_subtasks': goal_subtasks})}\n\n")
+                    _is_error = event.get('is_error', False)
+                    await _queue.put(f"data: {json.dumps({'content': '', 'done': True, 'tools_used': event.get('tools_used', []), 'duration_ms': event.get('duration_ms', 0), 'prompt_tokens': prompt_tokens, 'completion_tokens': completion_tokens, 'goal_subtasks': goal_subtasks, 'is_error': _is_error})}\n\n")
                 elif event_type == "error":
                     _stream_done.set()
                     await _queue.put(f"data: {json.dumps({'error': event['message'], 'done': True})}\n\n")

@@ -251,12 +251,16 @@ class OpenAIProvider:
             "stream_options": {"include_usage": True},
         }
 
-        # max_tokens vs max_completion_tokens
+        # max_tokens vs max_completion_tokens（硬上限保护：防止超限 500）
+        _mt = cfg.max_tokens
+        if _mt and _mt > 65536:
+            logger.warning(f"[openai_provider] max_tokens={_mt} 超过 65536 上限，自动截断")
+            _mt = 65536
         model_l = self._model.lower()
         if model_l.startswith(("o1", "o3", "o4")):
-            payload["max_completion_tokens"] = cfg.max_tokens
+            payload["max_completion_tokens"] = _mt
         else:
-            payload["max_tokens"] = cfg.max_tokens
+            payload["max_tokens"] = _mt
 
         if _should_send_temperature(self._provider_kind, self._model, cfg, caps):
             payload["temperature"] = cfg.temperature

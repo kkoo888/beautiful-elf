@@ -20,6 +20,21 @@ export type WSMessageType =
   | 'distill_error'
   | 'ping'
   | 'pong'
+  // Chat 流式事件
+  | 'chat_start'
+  | 'chat_token'
+  | 'chat_thinking'
+  | 'chat_tool_start'
+  | 'chat_tool_end'
+  | 'chat_tool_error'
+  | 'chat_progress'
+  | 'chat_goal_subtasks'
+  | 'chat_goal_tool_update'
+  | 'chat_intent_hit'
+  | 'chat_cost_update'
+  | 'chat_approval_required'
+  | 'chat_done'
+  | 'chat_error'
 
 /** WebSocket 消息格式 */
 export interface WSMessage {
