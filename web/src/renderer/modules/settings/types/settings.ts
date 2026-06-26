@@ -136,7 +136,13 @@ export interface LLMModel {
   contextLength: number   // 上下文窗口
   maxTokens: number       // 默认最大输出 token
   temperature: number     // 温度 0-2
-  capabilities: { vision?: boolean; tools?: boolean; streaming?: boolean }
+  capabilities: {
+    supportsVision?: boolean
+    supportsTools?: boolean
+    supportsStreaming?: boolean
+    supportsReasoning?: boolean
+    reasoningFormat?: string
+  }
   isEnabled: number       // 1=启用 0=禁用
   sortOrder: number       // 排序
   remark: string
@@ -151,7 +157,13 @@ export interface LLMModelPayload {
   contextLength?: number
   maxTokens?: number
   temperature?: number
-  capabilities?: { vision?: boolean; tools?: boolean; streaming?: boolean }
+  capabilities?: {
+    supportsVision?: boolean
+    supportsTools?: boolean
+    supportsStreaming?: boolean
+    supportsReasoning?: boolean
+    reasoningFormat?: string
+  }
   isEnabled?: number
   sortOrder?: number
   remark?: string

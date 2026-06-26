@@ -451,6 +451,7 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
                         provider=current_base_llm.provider,
                         temperature=new_temp,
                         max_tokens=new_max,
+                        model_capabilities=getattr(current_base_llm, 'model_capabilities', None),
                     )
                     # 继承原 LLM 的工具绑定（ChatLLMProvider 是 Pydantic，用 model_copy）
                     if hasattr(current_base_llm, '_bound_tools') and current_base_llm._bound_tools:
@@ -498,6 +499,7 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
                         provider=current_base_llm.provider,
                         temperature=tier_temp,
                         max_tokens=req_max_tokens or getattr(current_base_llm, 'max_tokens', 4096),
+                        model_capabilities=getattr(current_base_llm, 'model_capabilities', None),
                     )
                     if hasattr(current_base_llm, '_bound_tools') and current_base_llm._bound_tools:
                         new_llm._bound_tools = list(current_base_llm._bound_tools)

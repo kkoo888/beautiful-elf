@@ -92,6 +92,22 @@ class ModelCapabilities:
     reasoning_format: str = "none"  # "none" | "deepseek" | "openai" | "gemini" | "think_tags"
 
 
+def dict_to_model_capabilities(caps: dict | None) -> ModelCapabilities | None:
+    """DB capabilities dict → ModelCapabilities dataclass
+
+    DB 格式 (camelCase): {"supportsReasoning": true, "reasoningFormat": "deepseek", ...}
+    """
+    if not caps:
+        return None
+    return ModelCapabilities(
+        supports_reasoning=caps.get("supportsReasoning", False),
+        supports_tools=caps.get("supportsTools", True),
+        supports_streaming=caps.get("supportsStreaming", True),
+        supports_vision=caps.get("supportsVision", False),
+        reasoning_format=caps.get("reasoningFormat", "none"),
+    )
+
+
 # ═══════════════════════════════════════════════════════════
 # Tool Definition — 工具定义
 # ═══════════════════════════════════════════════════════════

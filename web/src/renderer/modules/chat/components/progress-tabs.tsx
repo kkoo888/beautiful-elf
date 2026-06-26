@@ -26,7 +26,7 @@ interface ProgressTabsProps {
   tokenBudget?: number
 }
 
-type TabKey = 'progress' | 'references' | 'board' | 'stats'
+type TabKey = 'progress' | 'references' | 'stats'
 
 export function ProgressTabs({
   goalMode,
@@ -53,16 +53,6 @@ export function ProgressTabs({
       icon: <LinkOutlined />,
       count: contextSources.length,
     },
-    ...(goalMode
-      ? [
-          {
-            key: 'board' as TabKey,
-            label: '看板',
-            icon: <DashboardOutlined />,
-            count: goalTasks.length,
-          },
-        ]
-      : []),
     {
       key: 'stats' as TabKey,
       label: '统计',
@@ -71,7 +61,7 @@ export function ProgressTabs({
     },
   ]
 
-  const renderContent = () => {
+  const renderTabContent = () => {
     switch (activeTab) {
       case 'progress':
         return (
@@ -109,27 +99,6 @@ export function ProgressTabs({
                 <Text type="secondary" style={{ fontSize: 12 }}>暂无参考来源</Text>
               </div>
             )}
-          </div>
-        )
-
-      case 'board':
-        return (
-          <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-            <GoalTaskBoard
-              tasks={goalTasks}
-              iterations={
-                progressSteps.find((s) => s.step === 'goal_progress')?.[
-                  'iterations'
-                ] as number || 0
-              }
-              maxIterations={maxIterations}
-              tokensUsed={
-                tokenStats
-                  ? tokenStats.promptTokens + tokenStats.completionTokens
-                  : 0
-              }
-              tokenBudget={tokenBudget}
-            />
           </div>
         )
 
@@ -190,7 +159,43 @@ export function ProgressTabs({
       </div>
 
       {/* Tab 内容 */}
-      {renderContent()}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {renderTabContent()}
+      </div>
+
+      {/* 看板区域（固定在底部） */}
+      {goalMode && (
+        <div style={{ borderTop: '1px solid #f0f0f0', maxHeight: '45%', overflowY: 'auto', flexShrink: 0 }}>
+          <div style={{ padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, fontSize: 13, fontWeight: 500, color: '#333' }}>
+              <DashboardOutlined style={{ fontSize: 14 }} />
+              任务看板
+            </div>
+            {goalTasks.length > 0 ? (
+              <GoalTaskBoard
+                tasks={goalTasks}
+                iterations={
+                  progressSteps.find((s) => s.step === 'goal_progress')?.[
+                    'iterations'
+                  ] as number || 0
+                }
+                maxIterations={maxIterations}
+                tokensUsed={
+                  tokenStats
+                    ? tokenStats.promptTokens + tokenStats.completionTokens
+                    : 0
+                }
+                tokenBudget={tokenBudget}
+              />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', color: '#bbb', textAlign: 'center', gap: 8 }}>
+                <DashboardOutlined style={{ fontSize: 24, opacity: 0.4 }} />
+                <Text type="secondary" style={{ fontSize: 12 }}>暂无任务</Text>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

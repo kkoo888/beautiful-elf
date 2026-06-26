@@ -78,6 +78,8 @@ def _make_worker_llm_caller(llm, system_prompt: str):
             }
 
         response = await llm.ainvoke(messages)
+        if iteration == 0:
+            return {"messages": messages + [response], "iteration": iteration + 1}
         return {"messages": [response], "iteration": iteration + 1}
 
     return llm_call

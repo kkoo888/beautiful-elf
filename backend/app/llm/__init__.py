@@ -47,6 +47,7 @@ from .types import (
     ContentBlockText,
     ContentBlockToolResult,
     ContentBlockToolUse,
+    dict_to_model_capabilities,
 )
 
 __all__ = [
@@ -84,6 +85,7 @@ __all__ = [
     "ContentBlockText",
     "ContentBlockToolUse",
     "ContentBlockToolResult",
+    "dict_to_model_capabilities",
     # Failures
     "ProviderFailureKind",
     "ProviderRecoveryAction",

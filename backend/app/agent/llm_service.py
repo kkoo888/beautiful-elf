@@ -11,6 +11,7 @@ import logging
 import time
 
 from app.core.logging import get_logger
+from app.llm.types import dict_to_model_capabilities
 
 logger = get_logger(__name__)
 
@@ -108,11 +109,17 @@ class LLMService:
             # 从 DB 构建 LLMProvider 运行时
             llm_provider = llm_runtime.from_db_provider(provider, model_name)
 
+            # 获取模型能力配置
+            model_capabilities = None
+            if m and hasattr(m, 'capabilities'):
+                model_capabilities = dict_to_model_capabilities(m.capabilities)
+
             # 包装成 LangChain 兼容的 ChatModel
             llm = ChatLLMProvider(
                 provider=llm_provider,
                 temperature=final_temperature,
                 max_tokens=final_max_tokens,
+                model_capabilities=model_capabilities,
             )
             self._cache[cache_key] = llm
             self._cache_ts[cache_key] = time.time()

@@ -27,6 +27,7 @@ from app.llm.types import (
     DoneEvent,
     ErrorEvent,
     Message,
+    ModelCapabilities,
     TextDeltaEvent,
     ToolDefinition,
     ToolInputSchema,
@@ -165,6 +166,7 @@ class ChatLLMProvider(BaseChatModel):
     provider: LLMProvider
     temperature: float = 0.7
     max_tokens: int = 4096
+    model_capabilities: ModelCapabilities | None = None
     _bound_tools: list[Any] = PrivateAttr(default=[])  # 存储 bind_tools 绑定的工具
     _bound_tool_choice: Any = PrivateAttr(default=None)  # 存储 tool_choice
 
@@ -287,6 +289,7 @@ class ChatLLMProvider(BaseChatModel):
             system=system or None,
             stop_sequences=stop or [],
             tool_choice=self._bound_tool_choice,
+            model_capabilities=self.model_capabilities,
         )
 
         text_parts: list[str] = []
@@ -400,6 +403,7 @@ class ChatLLMProvider(BaseChatModel):
             system=system or None,
             stop_sequences=stop or [],
             tool_choice=self._bound_tool_choice,
+            model_capabilities=self.model_capabilities,
         )
 
         # 累积工具调用状态（一个流式 tool_call 分多个事件到达）

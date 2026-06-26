@@ -77,11 +77,13 @@ async def migrate():
                     model_name = m.get("id") or m.get("name") or m.get("model_name", "")
                     display_name = m.get("name") or m.get("display_name") or model_name
                     context_length = m.get("contextLength") or m.get("context_length") or 1_000_000
-                    caps = {}
-                    if m.get("supportsVision") or m.get("supports_vision"):
-                        caps["vision"] = True
-                    if m.get("supportsTools") or m.get("supports_tools"):
-                        caps["tools"] = True
+                    caps = {
+                        "supportsVision": bool(m.get("supportsVision") or m.get("supports_vision")),
+                        "supportsTools": bool(m.get("supportsTools") or m.get("supports_tools")),
+                        "supportsStreaming": True,
+                        "supportsReasoning": bool(m.get("supportsReasoning")),
+                        "reasoningFormat": m.get("reasoningFormat", "none"),
+                    }
                 elif isinstance(m, str):
                     model_name = m
                     display_name = m
