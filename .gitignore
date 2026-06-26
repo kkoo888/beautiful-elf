@@ -67,3 +67,4 @@ scripts/sim_*.py
 .mimocode/
 
 seed_expert_team_tech_evolution.sql
+ai_video_team.sql
