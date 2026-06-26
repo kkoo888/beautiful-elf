@@ -9,6 +9,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 from app.core.logging import get_logger
+import logging
 from app.agent.state import AgentState, _content_blocks_to_str
 from app.agent.context_engine import MAX_CONTEXT_CHARS
 from app.agent.utils.common import (
@@ -22,6 +23,7 @@ from app.agent.error_classifier import classify_error, FailoverReason
 from app.agent.utils.goal_helpers import _parse_goal_subtasks, _validate_goal_definition, _build_goal_progress_text, _get_next_pending_subtask
 
 logger = get_logger(__name__)
+llm_debug = logging.getLogger("llm_debug")
 
 
 def _make_model_selector_node(model_selector):
@@ -837,6 +839,7 @@ Answer: 基于工具结果输出该子任务的成果
         _resp_content = _content_to_str(getattr(response, "content", "")) if response.content else ""
         _resp_tool_calls = [{"name": t.get("name", ""), "args": str(t.get("args", {}))[:200]} for t in (response.tool_calls or [])]
         logger.info(f"[llm_call] RESPONSE: elapsed={elapsed:.2f}s has_tools={has_tools} tool_calls={json.dumps(_resp_tool_calls, ensure_ascii=False)} content={_resp_content[:300]}")
+        llm_debug.debug(f"[llm_call] RESPONSE FULL: elapsed={elapsed:.2f}s has_tools={has_tools} content={_resp_content}")
 
         # ── 无工具调用时重试（前沿方案：No-tool-call detector）──
         # 意图明确需要工具 或 Goal 模式执行阶段 或 LLM 嘴上说要搜索但没调工具 → 重试
@@ -889,6 +892,7 @@ Answer: 基于工具结果输出该子任务的成果
                     _retry_resp_content = _content_to_str(getattr(response, "content", "")) if response.content else ""
                     _retry_resp_tc = [{"name": t.get("name", ""), "args": str(t.get("args", {}))[:200]} for t in (response.tool_calls or [])]
                     logger.info(f"[llm_call] RETRY RESPONSE: tool_calls={has_tools} tc={json.dumps(_retry_resp_tc, ensure_ascii=False)} content={_retry_resp_content[:300]}")
+                    llm_debug.debug(f"[llm_call] RETRY RESPONSE FULL: tool_calls={has_tools} content={_retry_resp_content}")
                 except Exception as retry_e:
                     logger.warning(f"[llm_call] 强制重试失败: {retry_e}")
 

@@ -80,6 +80,23 @@ def setup_logging():
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
+    # ── LLM 调试日志：完整记录 LLM 请求/响应 ──
+    llm_debug_handler = TimedRotatingFileHandler(
+        filename=os.path.join(log_dir, "llm_debug.log"),
+        when="midnight",
+        interval=1,
+        backupCount=7,
+        encoding="utf-8",
+    )
+    llm_debug_handler.setFormatter(formatter)
+    llm_debug_handler.addFilter(TraceFilter())
+    llm_debug_handler.suffix = "%Y-%m-%d"
+
+    llm_debug_logger = logging.getLogger("llm_debug")
+    llm_debug_logger.setLevel(logging.DEBUG)
+    llm_debug_logger.addHandler(llm_debug_handler)
+    llm_debug_logger.propagate = False
+
     # 降低第三方库日志级别
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("aiomysql").setLevel(logging.WARNING)

@@ -41,8 +41,7 @@ class HealingReflectionRepository:
         # scope_tags 是 JSON 字段，精确匹配需要 JSON_CONTAINS，在应用层过滤
         results = await self.mapper.find_all(
             db, filters=filters, limit=limit * 2,
-            order_by="confidence",
-            order_desc=True,
+            order_by=HealingReflection.confidence.desc(),
         )
         # 应用层过滤: expired_at > now（mapper 不支持复杂比较）
         active = [r for r in results if r.expired_at and r.expired_at > now]
@@ -57,8 +56,7 @@ class HealingReflectionRepository:
             db,
             filters={"user_id": user_id, "goal_definition": goal_definition, "is_deleted": 0},
             limit=limit,
-            order_by="created_at",
-            order_desc=True,
+            order_by=HealingReflection.created_at.desc(),
         )
 
     async def mark_successful(self, db: AsyncSession, id: int) -> bool:
