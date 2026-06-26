@@ -319,6 +319,8 @@ async def _stream_expert_team(conversation_id: int, team_id: int, messages: list
         "run_id": run.id,
         "max_rounds": team.max_rounds or 3,
         "current_round": 1,
+        "current_phase": 1,
+        "max_phase": 1,
         "db": db,
         "experts_data": experts_data,
         "leader_data": leader_data,

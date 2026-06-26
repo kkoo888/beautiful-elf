@@ -726,7 +726,7 @@ class AgentService:
                 "routing_reason": "default",
                 # Goal 模式
                 "goal_mode": goal_mode,
-                "goal_definition": goal_definition,
+                "goal_definition": goal_definition or (messages[-1].get("content", "") if messages else ""),
                 "goal_iterations": 0,
                 "goal_max_iterations": 50,
                 "goal_token_budget": 50000,

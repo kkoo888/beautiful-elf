@@ -20,11 +20,14 @@
   - get_stream_writer()：节点内推送实时事件（替代 asyncio.Queue）
   - WebSocket 保留：_ws_broadcast 推送前端实时状态
 """
+import asyncio
 import json
+import operator
 import re
 from datetime import datetime
 from typing import Any
-from langgraph.graph import StateGraph, END, START, CompiledGraph
+from langgraph.graph import StateGraph, END, START
+from langgraph.graph.state import CompiledStateGraph as CompiledGraph
 from langgraph.types import Send
 from typing_extensions import TypedDict, Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,9 +85,13 @@ class ExpertTeamState(TypedDict, total=False):
     # ── 最终输出 ─────────────────────────────────────
     final_report: str
 
+    # ── Phase 调度 ─────────────────────────────────────
+    current_phase: int         # 当前执行的 phase 编号（从 1 开始）
+    max_phase: int             # PM 规划的总 phase 数
+
     # ── 元数据 ───────────────────────────────────────
-    total_tokens: int
-    discussion: list[dict]
+    total_tokens: Annotated[int, operator.add]
+    discussion: Annotated[list[dict], operator.add]
     max_execution_time: int
 
     # ── 专家配置（传入用）────────────────────────────
@@ -242,9 +249,14 @@ async def pm_analyze(state: ExpertTeamState) -> dict:
         "- 优先分配给最匹配的专家（按专长匹配）\n"
         "- 可并行的任务分配给不同专家同时执行\n"
         "- 子任务数量控制在 2-10 个，避免过度拆解\n\n"
+        "## Phase 分阶段执行（关键！）\n"
+        "分析子任务之间的依赖关系，为每个子任务分配 phase 编号：\n"
+        "- 同一 phase 的专家可并行执行（互不依赖）\n"
+        "- 不同 phase 按编号顺序串行执行（后一 phase 依赖前一 phase 的产出）\n"
+        "- 无依赖关系的专家应尽量放同一 phase 以提高效率\n"
+        "- phase 编号从 1 开始，连续递增\n\n"
         "## 输出要求\n"
-        "严格按 JSON 格式输出分配计划。\n"
-        "- 通知专家开始执行任务"
+        "严格按 JSON 格式输出分配计划，每个 assignment 必须包含 phase 字段。"
     )
 
     # 返工反馈注入
@@ -264,7 +276,10 @@ async def pm_analyze(state: ExpertTeamState) -> dict:
 ## 用户任务
 {state['input_text']}{feedback_section}
 
-请分析任务并输出分配计划（JSON 格式）。"""
+请分析任务并输出分配计划（JSON 格式）。
+
+输出格式示例：
+{{"assignments": [{{"expert_id": 1, "subtask": "任务描述", "phase": 1}}, {{"expert_id": 3, "subtask": "任务描述", "phase": 2}}], "next_step_instruction": "说明执行顺序"}}"""
 
     content, tokens = await _call_llm(
         state.get("db"),
@@ -278,8 +293,11 @@ async def pm_analyze(state: ExpertTeamState) -> dict:
     assignments = _parse_assignments(content, experts_data)
     enriched = [_enrich_assignment(a, experts_data) for a in assignments]
 
+    # 计算总 phase 数（默认 phase=1，兼容旧格式）
+    max_phase = max((a.get("phase", 1) for a in enriched), default=1)
+
     # 推送 PM 计划事件
-    writer({"type": "pm_plan", "round": current_round, "content": content})
+    writer({"type": "pm_plan", "round": current_round, "content": content, "max_phase": max_phase})
 
     await _ws_broadcast(team_id, "expert_thinking", {
         "expertName": leader.get("member_name", "PM"),
@@ -299,6 +317,8 @@ async def pm_analyze(state: ExpertTeamState) -> dict:
     return {
         "pm_plan": content,
         "assignments": enriched,
+        "current_phase": 1,
+        "max_phase": max_phase,
         "total_tokens": tokens,
         "discussion": [{
             "round": current_round,
@@ -315,7 +335,6 @@ async def expert_execute(state: ExpertTeamState) -> dict:
 
     state 是 Send payload = assignment + 上下文字段。
     """
-    import asyncio
     from app.services.expert_team_service import _call_llm, _ws_broadcast
 
     from langgraph.config import get_stream_writer
@@ -572,43 +591,7 @@ async def expert_execute(state: ExpertTeamState) -> dict:
         if delegation_results:
             content += "\n".join(delegation_results)
 
-        # ── Reflexion: 事后反思（NeurIPS 2023, HumanEval 67→91%）──
-        try:
-            reflexion_obj = await generate_reflexion(
-                db=state.get("db"), provider_id=expert_provider_id,
-                model_name=expert_model_name, expert_name=expert_name,
-                expert_role=expert_role, subtask=subtask,
-                output=content, duration_ms=duration_ms,
-                temperature=float(expert_conf.get("temperature") or 0.3),
-            )
-            if reflexion_obj:
-                reflexion_text = format_reflexion_for_prompt(reflexion_obj)
-                # 存入记忆（跨轮次可召回）
-                await store_reflexion_as_memory(
-                    expert_id=expert_id, team_id=team_id,
-                    reflexion=reflexion_obj, db=state.get("db"),
-                )
-                writer({"type": "expert_reflexion", "expertId": expert_id,
-                        "expertName": expert_name, "success": reflexion_obj.success,
-                        "insights": reflexion_obj.key_insights[:2]})
-        except Exception as e:
-            logger.debug(f"Reflexion 生成失败（非致命）: {e}")
-
-        # ── Fact Verify: 原子声明验证（幻觉检测与修正）──
-        try:
-            fact_result = await verify_facts(
-                llm=await _get_llm_for_verify(state.get("db"), expert_provider_id, expert_model_name, 0.2),
-                text=content, context=context_text, temperature=0.2,
-            )
-            if fact_result and fact_result.refuted > 0:
-                content = fact_result.corrected_text
-                writer({"type": "expert_fact_verify", "expertId": expert_id,
-                        "expertName": expert_name,
-                        "total": fact_result.total_claims,
-                        "refuted": fact_result.refuted,
-                        "hallucination_rate": f"{fact_result.hallucination_rate:.1%}"})
-        except Exception as e:
-            logger.debug(f"Fact Verify 失败（非致命）: {e}")
+        # 反思和验证已移至 post_verify 节点（pm_report 之后统一执行）
 
         # 推送完成事件
         writer({"type": "expert_done", "expertId": expert_id, "expertName": expert_name, "expertRole": expert_role, "avatar": avatar, "content": content, "round": current_round, "durationMs": duration_ms})
@@ -973,18 +956,97 @@ async def pm_report(state: ExpertTeamState) -> dict:
     }
 
 
+async def post_verify(state: ExpertTeamState) -> dict:
+    """统一后处理 — 对最终报告做反思和事实验证（pm_report 之后执行一次）"""
+    from app.services.expert_team_service import _ws_broadcast
+    from langgraph.config import get_stream_writer
+    writer = get_stream_writer()
+
+    final_report = state.get("final_report", "")
+    if not final_report or len(final_report.strip()) < 50:
+        return {}
+
+    team_id = state["team_id"]
+    leader = state["leader_data"]
+    provider_id = state["pm_provider_id"]
+    model_name = state["pm_model_name"]
+    db = state.get("db")
+
+    total_tokens = 0
+
+    # ── 1. Fact Verify: 对最终报告做事实验证 ──
+    try:
+        fact_result = await asyncio.wait_for(
+            verify_facts(
+                llm=await _get_llm_for_verify(db, provider_id, model_name, 0.2),
+                text=final_report,
+                context=state["input_text"],
+                temperature=0.2,
+            ),
+            timeout=60,
+        )
+        if fact_result:
+            total_tokens += fact_result.total_claims  # 近似 token 统计
+            writer({"type": "post_fact_verify",
+                    "total": fact_result.total_claims,
+                    "refuted": fact_result.refuted,
+                    "hallucination_rate": f"{fact_result.hallucination_rate:.1%}"})
+            if fact_result.refuted > 0 and fact_result.corrected_text:
+                # 用修正后的文本更新 final_report
+                return {"final_report": fact_result.corrected_text}
+    except asyncio.TimeoutError:
+        logger.debug("post_verify: fact_verify 超时，跳过")
+    except Exception as e:
+        logger.debug(f"post_verify: fact_verify 失败（非致命）: {e}")
+
+    # ── 2. Reflexion: 对 PM 报告生成反思 ──
+    try:
+        reflexion_obj = await asyncio.wait_for(
+            generate_reflexion(
+                db=db, provider_id=provider_id, model_name=model_name,
+                expert_name=leader.get("member_name", "PM"),
+                expert_role="PM/组长", subtask="生成最终报告",
+                output=final_report, temperature=0.3,
+            ),
+            timeout=30,
+        )
+        if reflexion_obj:
+            await store_reflexion_as_memory(
+                expert_id=0, team_id=team_id,
+                reflexion=reflexion_obj, db=db,
+            )
+            writer({"type": "post_reflexion",
+                    "success": reflexion_obj.success,
+                    "insights": reflexion_obj.key_insights[:3]})
+    except asyncio.TimeoutError:
+        logger.debug("post_verify: reflexion 超时，跳过")
+    except Exception as e:
+        logger.debug(f"post_verify: reflexion 失败（非致命）: {e}")
+
+    return {}
+
+
 # ─── 路由函数 ──────────────────────────────────────────
 
 def fan_out_experts(state: ExpertTeamState) -> list[Send]:
-    """pm_analyze → expert_execute: 动态 fan-out（Send API）
+    """pm_analyze → expert_execute: 按 phase 动态 fan-out（Send API）
 
+    只 Send 当前 phase 的专家。phase 完成后由 phase_gate 决定是否进入下一 phase。
     Send payload = assignment + 上下文字段（team_id, run_id, db 等）。
     LangGraph Send 将 payload 作为 state 传入目标节点。
     """
     assignments = state.get("assignments", [])
     if not assignments:
-        # 无分配 → 直接跳到 pm_evaluate（passthrough 保留完整 state）
         return [Send("passthrough_evaluate", state)]
+
+    current_phase = state.get("current_phase", 1)
+    # 过滤出当前 phase 的专家（兼容无 phase 字段的旧格式，默认 phase=1）
+    phase_assignments = [a for a in assignments if a.get("phase", 1) == current_phase]
+
+    if not phase_assignments:
+        # 当前 phase 无分配 → 跳到 pm_evaluate
+        return [Send("passthrough_evaluate", state)]
+
     # 提取上下文字段，合并到每个 assignment
     ctx = {
         "team_id": state["team_id"],
@@ -1003,10 +1065,12 @@ def fan_out_experts(state: ExpertTeamState) -> list[Send]:
         "feedback_map": state.get("feedback_map", {}),
         "input_text": state["input_text"],
         "total_tokens": state.get("total_tokens", 0),
+        # 传递 phase 上下文，供专家参考前序 phase 的产出
+        "expert_results": state.get("expert_results", []),
     }
     return [
         Send("expert_execute", {**ctx, **assignment})
-        for assignment in assignments
+        for assignment in phase_assignments
     ]
 
 
@@ -1027,12 +1091,47 @@ def route_after_evaluate(state: ExpertTeamState) -> str:
 
 
 def increment_round(state: ExpertTeamState) -> dict:
-    """返工时 current_round + 1"""
-    return {"current_round": state.get("current_round", 1) + 1}
+    """返工时 current_round + 1，重置 current_phase 为 1"""
+    return {
+        "current_round": state.get("current_round", 1) + 1,
+        "current_phase": 1,
+    }
 
 
 def passthrough_evaluate(state: ExpertTeamState) -> dict:
     """无分配时的透传节点 — 保留完整 state，直接流向 pm_evaluate"""
+    return {}
+
+
+def phase_gate(state: ExpertTeamState) -> dict:
+    """Phase 门控 — 检查是否还有下一 phase，更新 current_phase
+
+    所有当前 phase 的专家完成后执行。
+    如果还有下一 phase，递增 current_phase。
+    如果所有 phase 完成，进入评估。
+    """
+    current_phase = state.get("current_phase", 1)
+    max_phase = state.get("max_phase", 1)
+    if current_phase < max_phase:
+        return {"current_phase": current_phase + 1}
+    return {}
+
+
+def route_after_phase_gate(state: ExpertTeamState) -> str:
+    """phase_gate 路由 — 还有下一 phase 继续 fan_out / 全部完成进辩论"""
+    current_phase = state.get("current_phase", 1)
+    max_phase = state.get("max_phase", 1)
+    if current_phase <= max_phase:
+        return "fan_out_experts"
+    return "debate_round"
+
+
+def fan_out_node(state: ExpertTeamState) -> dict:
+    """Fan-out 节点 — 空操作，仅作为 phase 循环的路由目标
+
+    实际的 Send 逻辑在 fan_out_experts 条件边中执行。
+    此节点的作用是：让 phase_gate 有明确的路由目标，而不是回到 pm_analyze。
+    """
     return {}
 
 
@@ -1053,37 +1152,54 @@ def build_expert_team_graph(enable_interrupt: bool = False) -> CompiledGraph:
 
     # 注册节点
     graph.add_node("pm_analyze", pm_analyze)
+    graph.add_node("fan_out_node", fan_out_node)
     graph.add_node("expert_execute", expert_execute)
+    graph.add_node("phase_gate", phase_gate)
     graph.add_node("passthrough_evaluate", passthrough_evaluate)
-    graph.add_node("debate_round", debate_round)  # P1: 辩论轮
+    graph.add_node("debate_round", debate_round)
     graph.add_node("pm_evaluate", pm_evaluate)
     graph.add_node("pm_report", pm_report)
+    graph.add_node("post_verify", post_verify)
     graph.add_node("increment_round", increment_round)
 
-    # 边：START → pm_analyze
+    # ── 流程: START → pm_analyze → fan_out → expert → phase_gate ──
+    #                        ↑                            ↓
+    #                        └──── (下一 phase) ──────────┘
+    #                                                     ↓
+    #                                              (debate → eval → report)
+
     graph.add_edge(START, "pm_analyze")
 
-    # 条件边：pm_analyze → [Send("expert_execute", ...)] (动态 fan-out)
-    graph.add_conditional_edges("pm_analyze", fan_out_experts, ["expert_execute", "passthrough_evaluate"])
+    # pm_analyze → fan_out（PM 只分析一次）
+    graph.add_edge("pm_analyze", "fan_out_node")
 
-    # 边：expert_execute → debate_round（所有专家完成后，先辩论再评估）
-    graph.add_edge("expert_execute", "debate_round")
-    # 边：passthrough_evaluate → pm_evaluate（无分配时透传，跳过辩论）
+    # fan_out_node → 按 phase 动态 Send 专家
+    graph.add_conditional_edges("fan_out_node", fan_out_experts, ["expert_execute", "passthrough_evaluate"])
+
+    # expert_execute → phase_gate（同 phase 所有专家完成后触发）
+    graph.add_edge("expert_execute", "phase_gate")
+
+    # phase_gate → 还有下一 phase 回 fan_out / 全部完成进辩论
+    graph.add_conditional_edges("phase_gate", route_after_phase_gate, {
+        "fan_out_experts": "fan_out_node",
+        "debate_round": "debate_round",
+    })
+
+    # passthrough_evaluate → pm_evaluate（无分配时透传）
     graph.add_edge("passthrough_evaluate", "pm_evaluate")
-    # 边：debate_round → pm_evaluate（辩论后评估）
+
+    # debate_round → pm_evaluate
     graph.add_edge("debate_round", "pm_evaluate")
 
-    # 条件边：pm_evaluate → pm_report (pass) / increment_round → pm_analyze (fail)
+    # pm_evaluate → pass: pm_report / fail: increment_round → pm_analyze
     graph.add_conditional_edges("pm_evaluate", route_after_evaluate, {
         "pm_report": "pm_report",
         "pm_analyze": "increment_round",
     })
 
-    # 边：increment_round → pm_analyze
     graph.add_edge("increment_round", "pm_analyze")
-
-    # 边：pm_report → END
-    graph.add_edge("pm_report", END)
+    graph.add_edge("pm_report", "post_verify")
+    graph.add_edge("post_verify", END)
 
     # 编译
     checkpointer = MemorySaver() if enable_interrupt else None

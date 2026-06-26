@@ -76,6 +76,9 @@ from app.models.user import User
 # Markdown 记忆文件
 from app.models.markdown_memory import MarkdownMemory
 
+# 跨线程记忆
+from app.models.cross_thread_memory import CrossThreadMemory
+
 # 成本追踪
 from app.models.cost_tracking import CostRecord
 
@@ -140,6 +143,7 @@ __all__ = [
     "LLMProvider", "LLMModel", "LLMTierConfig",
     "User",
     "MarkdownMemory",
+    "CrossThreadMemory",
     "CostRecord",
     "VideoGallery",
     "MemorySetting",
