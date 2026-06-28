@@ -455,7 +455,7 @@ async def _fetch_page_content(url: str, max_chars: int = 3000) -> str:
 
 # 自动抓取前 N 个搜索结果的全文（可通过环境变量调整）
 _AUTO_FETCH_COUNT = 3   # 抓取前几个结果
-_AUTO_FETCH_MAX_CHARS = 3000  # 每个结果最大字符数
+_AUTO_FETCH_MAX_CHARS = 5000  # 每个结果最大字符数
 
 
 async def web_search(query: str, max_results: int = 5) -> dict:
