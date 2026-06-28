@@ -904,7 +904,7 @@ async def exec_command(command: str, workdir: str = None, timeout: int = 10, wor
 async def web_fetch(url: str, extract_mode: str = "markdown", max_chars: int = 10000) -> dict:
     """抓取 URL 内容并提取为可读文本
 
-    v5.2: 增加 User-Agent、超时、重试、内容清洗。
+    v5.2: 增加 User-Agent、超时、内容清洗。
     """
     import httpx
     import re
