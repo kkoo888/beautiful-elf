@@ -1,6 +1,33 @@
 """应用配置 - 通过环境变量读取数据库连接信息"""
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+
+def _detect_project_root() -> str:
+    """自动检测项目根目录
+
+    策略（OpenClaw + Claude Code 混合模式）：
+    1. 从当前文件向上查找项目标记文件（docker-compose.yml, .git, backend/）
+    2. 找到即返回，找不到回退到 CWD
+    """
+    # 从 backend/app/core/config.py 向上最多查 5 层
+    current = Path(__file__).resolve().parent
+    markers = {"docker-compose.yml", "docker-compose.yaml", ".git"}
+    for _ in range(5):
+        # 检查是否有项目标记
+        if any((current / m).exists() for m in markers):
+            # 确认是项目根目录（有 backend/ 子目录）
+            if (current / "backend").is_dir():
+                return str(current)
+        current = current.parent
+    # 回退：如果从 backend/ 启动，取父目录
+    cwd = Path.cwd()
+    if (cwd / "backend").is_dir() and (cwd / "docker-compose.yml").exists():
+        return str(cwd)
+    if cwd.name == "backend" and cwd.parent != cwd:
+        return str(cwd.parent)
+    return str(cwd)
 
 
 class Settings(BaseSettings):
@@ -42,8 +69,21 @@ class Settings(BaseSettings):
     MCP_SERVER_HOST: str = "0.0.0.0"
     MCP_SERVER_PORT: int = 6880
 
-    # Workspace
-    WORKSPACE_DIR: str = "./workspace"
+    # Workspace — 默认自动检测项目根目录（backend/ 的父目录）
+    # 显式设置 WORKSPACE_DIR 可覆盖
+    WORKSPACE_DIR: str = ""
+
+    @property
+    def RESOLVED_WORKSPACE(self) -> str:
+        """解析后的工作目录：显式配置 > 自动检测"""
+        if self.WORKSPACE_DIR:
+            return str(Path(self.WORKSPACE_DIR).resolve())
+        return _detect_project_root()
+
+    @property
+    def WORKSPACE(self) -> Path:
+        """解析后的工作目录（Path 对象）"""
+        return Path(self.RESOLVED_WORKSPACE)
 
     # JWT — 必须在 .env 中设置，禁止空值和默认值
     JWT_SECRET_KEY: str = ""

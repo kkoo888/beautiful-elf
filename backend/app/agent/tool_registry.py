@@ -12,6 +12,7 @@
 """
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional, List
 from dataclasses import dataclass, field
 from enum import Enum
@@ -536,13 +537,10 @@ async def execute_code(language: str, code: str) -> dict:
         return {"error": "代码执行超时（10秒）", "code": "EXECUTION_TIMEOUT"}
 
 
-async def read_file(path: str) -> dict:
+async def read_file(path: str, workingDirectory: str = None) -> dict:
     """读取工作空间中的文件"""
-    from app.core.config import get_settings
-    from pathlib import Path
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
-    target = (workspace / path).resolve()
-    if not str(target).startswith(str(workspace)):
+    workspace, target = _resolve_path(path, workingDirectory)
+    if target is None:
         return {"error": "路径穿越攻击已拦截"}
     if not target.exists():
         return {"error": f"文件不存在: {path}"}
@@ -581,32 +579,103 @@ async def query_database(sql: str) -> dict:
         return {"columns": columns, "rows": rows, "count": len(rows)}
 
 
+# ── 工作目录解析（OpenClaw + Claude Code 混合模式）──────────────
+#
+# 设计理念：
+#   - 默认工作目录 = 项目根目录（自动检测，非 backend/）
+#   - 工具可通过 workingDirectory 参数覆盖（Cursor 模式）
+#   - 相对路径 → 解析到工作目录；绝对路径 → 安全检查后允许
+#   - 路径穿越拦截保留（防止访问敏感目录）
+
+# 允许的绝对路径前缀（安全白名单，运行时动态生成）
+def _get_allowed_prefixes() -> tuple:
+    from app.core.config import get_settings
+    workspace = get_settings().RESOLVED_WORKSPACE
+    return (workspace + "/", "/tmp/", "/home/")
+
+# 敏感目录黑名单
+_SENSITIVE_PATHS = (
+    "/etc/shadow", "/etc/passwd", "/etc/sudoers",
+    "/root/.ssh", "/home/.ssh",
+    "/proc", "/sys", "/dev",
+)
+
+
+def _get_workspace(working_directory: str = None) -> Path:
+    """获取工作目录
+
+    优先级：
+    1. workingDirectory 参数（工具调用时指定）
+    2. 配置中的 WORKSPACE_DIR / RESOLVED_WORKSPACE
+    3. 自动检测项目根目录
+    """
+    from app.core.config import get_settings
+    if working_directory:
+        p = Path(working_directory).expanduser()
+        if p.is_absolute():
+            return p.resolve()
+        # 相对路径 → 相对于项目根目录
+        return Path(get_settings().RESOLVED_WORKSPACE).resolve() / p
+    return Path(get_settings().RESOLVED_WORKSPACE).resolve()
+
+
+def _resolve_path(path: str, working_directory: str = None) -> tuple:
+    """解析路径并做安全检查
+
+    Returns:
+        (workspace: Path, target: Path) 或 (workspace, None) 如果被拦截
+    """
+    workspace = _get_workspace(working_directory)
+    raw = Path(path).expanduser()
+
+    # 绝对路径：安全检查
+    if raw.is_absolute():
+        raw_resolved = raw.resolve()
+        # 检查敏感目录
+        for sensitive in _SENSITIVE_PATHS:
+            if str(raw_resolved).startswith(sensitive):
+                return workspace, None
+        # 检查白名单
+        allowed = False
+        for prefix in _get_allowed_prefixes():
+            if str(raw_resolved).startswith(prefix):
+                allowed = True
+                break
+        # 项目根目录内的绝对路径也允许
+        if str(raw_resolved).startswith(str(workspace)):
+            allowed = True
+        if not allowed:
+            return workspace, None
+        return workspace, raw_resolved
+
+    # 相对路径：解析到工作目录
+    target = (workspace / raw).resolve()
+    # 路径穿越检查
+    if not str(target).startswith(str(workspace)):
+        return workspace, None
+    return workspace, target
+
+
 # ── 执行函数注册表（DB 工具自动关联执行函数）──────────────
 # 工具元数据全部由 DB 管理，这里只做 name → 执行函数的映射
 
 # ── 文件系统工具 ─────────────────────────────────────────
 
-async def write_file(path: str, content: str, encoding: str = "utf-8") -> dict:
+async def write_file(path: str, content: str, encoding: str = "utf-8", workingDirectory: str = None) -> dict:
     """写入文件到工作空间"""
-    from app.core.config import get_settings
-    from pathlib import Path
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
-    target = (workspace / path).resolve()
-    if not str(target).startswith(str(workspace)):
+    workspace, target = _resolve_path(path, workingDirectory)
+    if target is None:
         return {"error": "路径穿越攻击已拦截"}
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding=encoding)
     return {"success": True, "bytes_written": len(content.encode(encoding)), "path": path}
 
 
-async def list_files(path: str = ".", pattern: str = None, recursive: bool = False) -> dict:
+async def list_files(path: str = ".", pattern: str = None, recursive: bool = False, workingDirectory: str = None) -> dict:
     """列出工作空间目录下的文件"""
-    from app.core.config import get_settings
-    from pathlib import Path
     import fnmatch
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
-    target = (workspace / path).resolve()
-    if not str(target).startswith(str(workspace)):
+    workspace, target = _resolve_path(path, workingDirectory)
+    if target is None:
         return {"error": "路径穿越攻击已拦截"}
     if not target.exists():
         return {"error": f"目录不存在: {path}"}
@@ -625,13 +694,10 @@ async def list_files(path: str = ".", pattern: str = None, recursive: bool = Fal
     return {"files": entries[:500]}
 
 
-async def apply_patch(path: str, edits: list) -> dict:
+async def apply_patch(path: str, edits: list, workingDirectory: str = None) -> dict:
     """对文件进行精确文本替换"""
-    from app.core.config import get_settings
-    from pathlib import Path
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
-    target = (workspace / path).resolve()
-    if not str(target).startswith(str(workspace)):
+    workspace, target = _resolve_path(path, workingDirectory)
+    if target is None:
         return {"error": "路径穿越攻击已拦截"}
     if not target.exists():
         return {"error": f"文件不存在: {path}"}
@@ -652,14 +718,11 @@ async def apply_patch(path: str, edits: list) -> dict:
 
 # ── Git 工具 ────────────────────────────────────────────
 
-async def _run_git(*args, repo_path: str = ".") -> tuple:
+async def _run_git(*args, repo_path: str = ".", workingDirectory: str = None) -> tuple:
     """执行 git 命令的内部辅助函数"""
     import asyncio
-    from app.core.config import get_settings
-    from pathlib import Path
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
-    target = (workspace / repo_path).resolve()
-    if not str(target).startswith(str(workspace)):
+    workspace, target = _resolve_path(repo_path, workingDirectory)
+    if target is None:
         return 1, "", "路径穿越攻击已拦截"
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -676,9 +739,9 @@ async def _run_git(*args, repo_path: str = ".") -> tuple:
         return 1, "", str(e)
 
 
-async def git_status(repo_path: str = ".") -> dict:
+async def git_status(repo_path: str = ".", workingDirectory: str = None) -> dict:
     """查看 Git 仓库状态"""
-    code, out, err = await _run_git("status", "--porcelain=v1", repo_path=repo_path)
+    code, out, err = await _run_git("status", "--porcelain=v1", repo_path=repo_path, workingDirectory=workingDirectory)
     if code != 0:
         return {"error": err}
     modified, added, deleted, untracked = [], [], [], []
@@ -699,7 +762,7 @@ async def git_status(repo_path: str = ".") -> dict:
     return {"branch": branch_out, "modified": modified, "added": added, "deleted": deleted, "untracked": untracked}
 
 
-async def git_diff(repo_path: str = ".", staged: bool = False, commit: str = None, file_path: str = None) -> dict:
+async def git_diff(repo_path: str = ".", staged: bool = False, commit: str = None, file_path: str = None, workingDirectory: str = None) -> dict:
     """查看 Git 差异"""
     args = ["diff"]
     if staged:
@@ -708,14 +771,14 @@ async def git_diff(repo_path: str = ".", staged: bool = False, commit: str = Non
         args.append(commit)
     if file_path:
         args.append(file_path)
-    code, out, err = await _run_git(*args, repo_path=repo_path)
+    code, out, err = await _run_git(*args, repo_path=repo_path, workingDirectory=workingDirectory)
     if code != 0:
         return {"error": err}
     files_changed = out.count("diff --git")
     return {"diff": out[:10000], "files_changed": files_changed}
 
 
-async def git_commit(repo_path: str = ".", message: str = "", files: list = None) -> dict:
+async def git_commit(repo_path: str = ".", message: str = "", files: list = None, workingDirectory: str = None) -> dict:
     """Git 提交"""
     if files:
         for f in files:
@@ -733,7 +796,7 @@ async def git_commit(repo_path: str = ".", message: str = "", files: list = None
     return {"success": True, "commit_hash": hash_out}
 
 
-async def git_log(repo_path: str = ".", limit: int = 10, file_path: str = None) -> dict:
+async def git_log(repo_path: str = ".", limit: int = 10, file_path: str = None, workingDirectory: str = None) -> dict:
     """查看 Git 日志"""
     args = ["log", f"--max-count={limit}", "--pretty=format:%H|%an|%ai|%s"]
     if file_path:
@@ -751,16 +814,14 @@ async def git_log(repo_path: str = ".", limit: int = 10, file_path: str = None) 
 
 # ── Shell 工具 ──────────────────────────────────────────
 
-async def exec_command(command: str, workdir: str = None, timeout: int = 10) -> dict:
+async def exec_command(command: str, workdir: str = None, timeout: int = 10, workingDirectory: str = None) -> dict:
     """在沙箱中执行 Shell 命令"""
     import asyncio
-    from app.core.config import get_settings
-    from pathlib import Path
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    workspace = _get_workspace(workingDirectory)
     cwd = str(workspace)
     if workdir:
-        target = (workspace / workdir).resolve()
-        if not str(target).startswith(str(workspace)):
+        _, target = _resolve_path(workdir, workingDirectory)
+        if target is None:
             return {"error": "路径穿越攻击已拦截"}
         cwd = str(target)
     # 危险命令拦截
@@ -830,9 +891,7 @@ async def web_fetch(url: str, extract_mode: str = "markdown", max_chars: int = 1
 async def memory_save(content: str, category: str = "fact", tags: list = None) -> dict:
     """保存到长期记忆"""
     from datetime import datetime
-    from pathlib import Path
-    from app.core.config import get_settings
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    workspace = _get_workspace()
     memory_dir = workspace / "memory"
     memory_dir.mkdir(exist_ok=True)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -849,10 +908,8 @@ async def memory_save(content: str, category: str = "fact", tags: list = None) -
 
 async def memory_search(query: str, max_results: int = 5) -> dict:
     """搜索长期记忆（简单关键词匹配）"""
-    from pathlib import Path
-    from app.core.config import get_settings
     import re
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
+    workspace = _get_workspace()
     memory_dir = workspace / "memory"
     if not memory_dir.exists():
         return {"results": []}
@@ -1103,13 +1160,10 @@ async def text_to_speech(text: str, voice: str = "alloy", speed: float = 1.0) ->
     return {"error": "TTS 功能待对接语音合成接口"}
 
 
-async def parse_pdf(path: str, pages: str = None) -> dict:
+async def parse_pdf(path: str, pages: str = None, workingDirectory: str = None) -> dict:
     """解析 PDF 文件"""
-    from app.core.config import get_settings
-    from pathlib import Path
-    workspace = Path(get_settings().WORKSPACE_DIR).resolve()
-    target = (workspace / path).resolve()
-    if not str(target).startswith(str(workspace)):
+    workspace, target = _resolve_path(path, workingDirectory)
+    if target is None:
         return {"error": "路径穿越攻击已拦截"}
     if not target.exists():
         return {"error": f"文件不存在: {path}"}

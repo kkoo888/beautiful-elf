@@ -128,13 +128,16 @@ def _extract_tool_args(tool_call) -> Optional[dict]:
 
 def _extract_scope_path(tool_name: str, args: dict) -> Optional[Path]:
     """提取路径隔离工具的目标路径"""
+    from app.core.config import get_settings
     raw_path = args.get("path")
     if not isinstance(raw_path, str) or not raw_path.strip():
         return None
     expanded = Path(raw_path).expanduser()
     if expanded.is_absolute():
         return expanded
-    return Path.cwd() / expanded
+    # 相对路径 → 解析到工作目录（而非 CWD）
+    workspace = Path(get_settings().RESOLVED_WORKSPACE).resolve()
+    return workspace / expanded
 
 
 def _paths_overlap(left: Path, right: Path) -> bool:
