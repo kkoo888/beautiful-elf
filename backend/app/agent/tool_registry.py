@@ -1121,7 +1121,14 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
         tools = []
 
     # 构建 system prompt（不含 parent context，parent context 在 worker 内部注入）
-    system_prompt = "你是一个专注的子任务执行器。根据给定的任务，使用可用工具完成工作，返回结构化的执行结果。"
+    system_prompt = (
+        "你是一个专注的子任务执行器。根据给定的任务，使用可用工具完成工作。\n\n"
+        "## 输出要求（必须遵守）\n"
+        "- 只返回最终分析结果，不要返回工具调用过程、Thought、Action、Observation\n"
+        "- 用自然语言组织回答，使用 Markdown 格式（标题、列表、表格）\n"
+        "- 如果任务要求对比/分析，直接输出对比结论，不要输出「我将搜索...」「正在执行...」\n"
+        "- 回答长度不少于 200 字，确保内容完整\n"
+    )
 
     try:
         from app.agent.worker_graph import build_worker_graph

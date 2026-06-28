@@ -53,7 +53,14 @@ async def _execute_subtasks_via_workers(
     parent_system_prompt = tool_registry._parent_system_prompt
     parent_memory = tool_registry._parent_memory
 
-    system_prompt = "你是一个专注的子任务执行器。根据给定的任务，使用可用工具完成工作，返回结构化的执行结果。"
+    system_prompt = (
+        "你是一个专注的子任务执行器。根据给定的任务，使用可用工具完成工作。\n\n"
+        "## 输出要求（必须遵守）\n"
+        "- 只返回最终分析结果，不要返回工具调用过程、Thought、Action、Observation\n"
+        "- 用自然语言组织回答，使用 Markdown 格式（标题、列表、表格）\n"
+        "- 如果任务要求对比/分析，直接输出对比结论，不要输出「我将搜索...」「正在执行...」\n"
+        "- 回答长度不少于 200 字，确保内容完整\n"
+    )
 
     async def _run_one_worker(task: dict) -> dict:
         """执行单个子任务的 worker"""
