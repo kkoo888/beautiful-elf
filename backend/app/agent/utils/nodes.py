@@ -184,6 +184,9 @@ def _make_intent_router(intent_router):
 
             return {"intent": intent, "matched_skills": matched_skills}
 
+        writer({"step": "intent", "status": "done", "message": f"意图未命中 ({elapsed:.1f}s)", "elapsed_ms": int(elapsed * 1000)})
+        return {"intent": None}
+
     return intent_router_node
 
 
