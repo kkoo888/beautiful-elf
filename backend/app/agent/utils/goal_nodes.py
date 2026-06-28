@@ -840,6 +840,7 @@ def _make_goal_replanner(llm):
                     "goal_subtasks": new_subtasks,
                     "goal_history": goal_history + [history_entry],
                     "goal_current_plan": replan_result.strategy_change[:500],
+                    "goal_current_task_id": 0,
                 }
 
             except Exception as e:
@@ -851,6 +852,12 @@ def _make_goal_replanner(llm):
                         ft["status"] = "pending"
                         ft["retry_count"] = retry_count + 1
                         ft["progress"] = 0
+                # 清除原始旧 pending（不在 failed_tasks 中的 pending 任务已无意义）
+                failed_task_ids = {ft["id"] for ft in failed_tasks}
+                goal_subtasks = [
+                    t for t in goal_subtasks
+                    if t.get("status") != "pending" or t.get("id") in failed_task_ids
+                ]
 
         # ── 无失败 或 重规划降级 → 简单继续 ──
         pending_tasks = [t for t in goal_subtasks if t.get("status") == "pending"]

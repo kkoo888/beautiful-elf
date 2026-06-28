@@ -336,7 +336,7 @@ async def _handle_agent_ws(websocket: WebSocket, data: dict, user_id: int):
     except WebSocketDisconnect:
         logger.info("WebSocket 客户端断开")
         _stream_done.set()
-    except Exception as e:
+    except (Exception, asyncio.CancelledError) as e:
         logger.error(f"WebSocket Agent 对话失败: {e}", exc_info=True)
         _stream_done.set()
         try:

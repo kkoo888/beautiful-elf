@@ -29,6 +29,7 @@ export function createMainWindow(): BrowserWindow {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   })
 
