@@ -984,6 +984,28 @@ class AgentService:
                     if state_tools:
                         tools_used = list(dict.fromkeys(state_tools))  # 去重保序
 
+                # Goal 模式：Worker 内部的 tool_start 事件不经过 astream_events，
+                # 从 goal_working_memory 和 goal_subtasks 补全 Worker 工具调用
+                if goal_mode:
+                    worker_tools = []
+                    goal_wm = final_state.get("goal_working_memory") or []
+                    for wm in goal_wm:
+                        for t in (wm.get("tools_used") or []):
+                            if t:
+                                worker_tools.append(t)
+                    for st in goal_subtasks:
+                        for t in (st.get("tools") or []):
+                            tool_name = t.get("tool", "") if isinstance(t, dict) else ""
+                            if tool_name:
+                                worker_tools.append(tool_name)
+                    if worker_tools:
+                        # 合并：主图工具 + Worker 工具，去重保序
+                        seen = set(tools_used)
+                        for t in worker_tools:
+                            if t not in seen:
+                                tools_used.append(t)
+                                seen.add(t)
+
             _is_error = bool(final_state and final_state.get("is_error"))
 
             yield {

@@ -97,23 +97,29 @@ def _content_to_str(content) -> str:
 
 
 def _build_message_dicts(state) -> List[dict]:
-    """构建消息列表，过滤掉工具调用日志（Thought/Action/Observation 格式）"""
+    """构建消息列表，归一化格式 + 清理工具调用日志。
+
+    v2.0 (2026 最佳实践):
+      - 使用 _normalize_message 统一格式
+      - Thought/Action/Observation 提取到 thinking 字段，不污染对话历史
+      - 保留消息但清理 content，而非直接丢弃整条消息
+    """
+    from app.agent.utils.nodes import _normalize_message
     result = []
     for m in state.get("messages", []):
-        if isinstance(m, dict):
-            role = m.get("role", "user")
-            content = _content_to_str(m.get("content", ""))
-        else:
-            role = getattr(m, "role", "user")
-            content = _content_to_str(getattr(m, "content", ""))
+        msg = dict(m) if isinstance(m, dict) else {
+            "role": getattr(m, "role", "user"),
+            "content": getattr(m, "content", ""),
+            "tool_calls": getattr(m, "tool_calls", []),
+        }
+        msg = _normalize_message(msg)
 
-        # 过滤掉包含工具调用日志的 assistant 消息
-        if role == "assistant" and content:
-            # 检测 Thought/Action/Observation 格式
-            if ("Thought:" in content and "Action:" in content) or \
-               ("Observation:" in content and "Action:" in content):
-                # 这是工具调用日志，不加入对话历史
-                continue
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+
+        # 跳过空消息
+        if not content and not msg.get("tool_calls"):
+            continue
 
         result.append({"role": role, "content": content})
     return result

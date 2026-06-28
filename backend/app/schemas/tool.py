@@ -10,6 +10,7 @@ class ToolCreate(CamelModel):
     display_name: str = Field(default="", max_length=256, description="显示名称")
     description: str = Field(..., max_length=1024, description="工具描述")
     module: str = Field(..., max_length=128, description="所属模块")
+    category: str = Field(default="general", max_length=32, description="工具分组: search/file/code/git/data/memory/media/comm/agent/doc/general")
     json_schema: Any = Field(..., description="参数 JSON Schema (MCP inputSchema)")
     output_schema: Optional[Any] = Field(default=None, description="输出 JSON Schema (MCP outputSchema)")
     risk_level: str = Field(default="low", description="风险等级: low/medium/high")
@@ -21,6 +22,7 @@ class ToolUpdate(CamelModel):
     display_name: Optional[str] = Field(default=None, max_length=256, description="显示名称")
     description: Optional[str] = Field(default=None, max_length=1024, description="工具描述")
     module: Optional[str] = Field(default=None, max_length=128, description="所属模块")
+    category: Optional[str] = Field(default=None, max_length=32, description="工具分组")
     json_schema: Optional[Any] = Field(default=None, description="参数 JSON Schema")
     output_schema: Optional[Any] = Field(default=None, description="输出 JSON Schema (MCP outputSchema)")
     risk_level: Optional[str] = Field(default=None, description="风险等级: low/medium/high")
@@ -34,6 +36,7 @@ class ToolOut(CamelModel):
     display_name: str
     description: str
     module: str
+    category: str = "general"
     json_schema: Any
     output_schema: Optional[Any] = None
     risk_level: str

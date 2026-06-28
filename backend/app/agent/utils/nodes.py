@@ -1379,6 +1379,8 @@ def _make_evaluator_node(llm=None):
     # ── Phase 2: LLM-as-Judge ──
     _EVALUATOR_PROMPT = """你是一个严格的质量评估员。请评估以下 AI 回答的质量。
 
+当前时间: {current_time}
+
 用户问题:
 {question}
 
@@ -1392,6 +1394,7 @@ AI 回答:
 4. 可读性 — 是否是通顺的自然语言
 
 重要说明（必须遵守）:
+- 当前时间如上所示，回答中提到当前年份或近期年份是合理的，不要误判为幻觉
 - AI 自称「Agnes」或「军师」是正确的，不要扣分
 - AI 称呼用户为「主人」是正确的，不要扣分
 - AI 的身份是「主人的军师」，这是系统设定，不是错误
@@ -1407,7 +1410,9 @@ AI 回答:
         if not llm:
             return None
         try:
-            prompt = _EVALUATOR_PROMPT.format(question=user_question, answer=final_answer[:2000])
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            prompt = _EVALUATOR_PROMPT.format(current_time=current_time, question=user_question, answer=final_answer[:2000])
             resp = await llm.ainvoke([HumanMessage(content=prompt)])
             content = _content_to_str(getattr(resp, "content", ""))
             # 尝试从回复中提取 JSON
@@ -1767,7 +1772,12 @@ def _after_goal_replan(state: AgentState) -> str:
 
 def _select_tool_names_for_intent(state, tool_registry) -> list:
     """
-    B+C 核心：根据 intent 动态选择工具名。
+    B+C 核心：根据 intent + 子任务语义动态选择工具名。
+
+    v2.0: 语义工具选择（2026 最佳实践）
+      - 有 intent → 按 intent 指定的工具列表
+      - Goal 模式 → 根据子任务描述关键词匹配 3-5 个工具
+      - 无 intent → 全量（兜底）
 
     Returns:
         工具名字符串列表（可序列化，存入 state 供 llm_call 使用）
@@ -1775,23 +1785,138 @@ def _select_tool_names_for_intent(state, tool_registry) -> list:
     if not tool_registry:
         return []
 
+    all_tools = tool_registry.list_tools()
+    all_names = {t.name for t in all_tools}
+
     intent = state.get("intent")
-    if not intent:
-        # 无 intent → 全量（Agent 兜底模式）
-        return [t.name for t in tool_registry.list_tools()]
+    if intent:
+        tool_names = intent.get("tool_names")
+        if tool_names is None:
+            return list(all_names)
+        if not tool_names:
+            return []
+        return [n for n in tool_names if n in all_names]
 
-    tool_names = intent.get("tool_names")
-    if tool_names is None:
-        # null → 全量（Agent 模式）
-        return [t.name for t in tool_registry.list_tools()]
+    # Goal 模式：根据子任务描述语义选择工具
+    if state.get("goal_mode"):
+        current_subtask = _get_current_subtask(state)
+        if current_subtask:
+            desc = (current_subtask.get("description", "") + " " + current_subtask.get("title", "")).lower()
+            return _semantic_tool_select(desc, all_tools)
 
-    if not tool_names:
-        # [] → 纯对话，不需要工具
-        return []
+    # 无 intent → 全量
+    return list(all_names)
 
-    # 指定工具列表 → 过滤（只保留 registry 中存在的）
-    all_names = {t.name for t in tool_registry.list_tools()}
-    return [n for n in tool_names if n in all_names]
+
+def _get_current_subtask(state) -> dict:
+    """获取当前正在执行的子任务"""
+    subtasks = state.get("goal_subtasks", [])
+    for st in subtasks:
+        if st.get("status") == "in_progress":
+            return st
+    # 没有 in_progress 的，取第一个 pending
+    for st in subtasks:
+        if st.get("status") == "pending":
+            return st
+    return None
+
+
+def _semantic_tool_select(description: str, all_tools: list) -> list:
+    """
+    根据子任务描述语义匹配工具（2026 最佳实践）。
+
+    策略：
+      1. 关键词 → category 映射
+      2. 按 category 从工具列表中筛选
+      3. 候选集 > 8 个 → 取 Top 8
+      4. 候选集为空 → 回退到通用工具集
+    """
+    # 关键词 → category 映射
+    _KEYWORD_CATEGORY = {
+        "搜索": "search", "search": "search", "查": "search", "找": "search", "google": "search",
+        "文件": "file", "读": "file", "写": "file", "目录": "file", "创建": "file",
+        "代码": "code", "执行": "code", "运行": "code", "python": "code", "脚本": "code",
+        "git": "git", "提交": "git", "diff": "git", "日志": "git",
+        "数据库": "data", "sql": "data", "查询": "data", "分析": "data",
+        "记忆": "memory", "历史": "memory", "之前": "memory",
+        "图片": "media", "视频": "media", "音频": "media", "截图": "media",
+        "发送": "comm", "消息": "comm", "http": "comm", "api": "comm",
+        "翻译": "doc", "pdf": "doc", "文档": "doc",
+    }
+
+    # 按 category 建索引
+    tools_by_category = {}
+    for tool in all_tools:
+        cat = getattr(tool, 'category', 'general')
+        tools_by_category.setdefault(cat, []).append(tool.name)
+
+    # 匹配 category
+    matched_categories = set()
+    for keyword, cat in _KEYWORD_CATEGORY.items():
+        if keyword in description:
+            matched_categories.add(cat)
+
+    # 收集候选工具
+    candidates = []
+    for cat in matched_categories:
+        candidates.extend(tools_by_category.get(cat, []))
+
+    # 如果关键词匹配为空，按工具描述模糊匹配
+    if not candidates:
+        for tool in all_tools:
+            tool_desc = (tool.description or "").lower()
+            if any(word in tool_desc for word in description.split()[:5] if len(word) > 1):
+                candidates.append(tool.name)
+
+    # 去重 + 限制数量
+    candidates = list(dict.fromkeys(candidates))[:8]
+
+    # 兜底：至少返回搜索 + 文件工具
+    if not candidates:
+        candidates = tools_by_category.get("search", []) + tools_by_category.get("file", [])
+
+    all_names = {t.name for t in all_tools}
+    return [c for c in candidates if c in all_names] or ["web_search", "read_file"]
+
+def _normalize_message(msg: dict) -> dict:
+    """
+    归一化消息格式（2026 最佳实践）。
+
+    处理问题：
+      - content 是 list[dict] → 转为 str
+      - content 里嵌入了 Thought/Action/Observation → 提取到 thinking 字段
+      - tool_calls 在 content 里（ReAct 模式）→ 提取到 tool_calls 字段
+    """
+    from app.agent.state import _content_blocks_to_str
+
+    if not isinstance(msg, dict):
+        return msg
+
+    role = msg.get("role", "")
+    content = _content_blocks_to_str(msg.get("content", ""))
+    tool_calls = msg.get("tool_calls", [])
+
+    # 从 content 里提取 Thought（移到 thinking 字段，不污染最终回答）
+    if role in ("assistant", "human") and content:
+        import re
+        thought_match = re.match(r"^Thought:\s*(.+?)(?:\n\n|\nAction:)", content, re.DOTALL)
+        if thought_match:
+            msg["thinking"] = thought_match.group(1).strip()
+
+    # 归一化 content
+    msg["content"] = content
+
+    # 确保 tool_calls 是 list
+    if not isinstance(tool_calls, list):
+        msg["tool_calls"] = []
+
+    return msg
+
+
+def _normalize_messages(messages: list) -> list:
+    """批量归一化消息列表"""
+    return [_normalize_message(m) for m in messages]
+
 
 def _extract_last_message(state) -> str:
     messages = state.get("messages", [])

@@ -38,6 +38,7 @@ class ToolDef:
     parameters: dict            # JSON Schema (MCP inputSchema)
     risk_level: RiskLevel       # 风险等级
     module: str                 # 所属模块
+    category: str = "general"   # 工具分组: search/file/code/git/data/memory/media/comm/agent/doc/general
     func: Optional[Callable] = None  # 执行函数（可选，内置工具才有）
     output_schema: Optional[dict] = None  # MCP outputSchema（可选）
     display_name: str = ""      # 显示名称（MCP title，友好名称）
@@ -131,6 +132,7 @@ class ToolRegistry:
                 existing.output_schema = out_schema
                 existing.risk_level = RiskLevel(tool.risk_level)
                 existing.module = tool.module
+                existing.category = getattr(tool, 'category', 'general')
                 existing.display_name = display_name
                 existing.strict_mode = strict
                 if func:
@@ -145,6 +147,7 @@ class ToolRegistry:
                 output_schema=out_schema,
                 risk_level=RiskLevel(tool.risk_level),
                 module=tool.module,
+                category=getattr(tool, 'category', 'general'),
                 func=func,
                 display_name=display_name,
                 strict_mode=strict,
@@ -175,6 +178,7 @@ class ToolRegistry:
                 "description": t.description,
                 "risk": t.risk_level.value,
                 "module": t.module,
+                "category": t.category,
                 "output_schema": t.output_schema,
                 "strict_mode": t.strict_mode,
             }
@@ -423,18 +427,94 @@ class ToolRegistrySnapshot:
 
 # ─── 内置工具实现 ─────────────────────────────────────────
 
+async def _fetch_page_content(url: str, max_chars: int = 3000) -> str:
+    """抓取单个 URL 的正文内容（web_search 内部用，不对外暴露）"""
+    import re
+    import httpx
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        }
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True, verify=False) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "")
+            text = resp.text
+            if "text/html" in content_type:
+                text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL)
+                text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
+                text = re.sub(r"<[^>]+>", " ", text)
+                text = re.sub(r"\s+", " ", text).strip()
+            return text[:max_chars]
+    except Exception:
+        return ""
+
+
+# 自动抓取前 N 个搜索结果的全文（可通过环境变量调整）
+_AUTO_FETCH_COUNT = 3   # 抓取前几个结果
+_AUTO_FETCH_MAX_CHARS = 3000  # 每个结果最大字符数
+
+
 async def web_search(query: str, max_results: int = 5) -> dict:
+    max_results = int(max_results)  # 防御：LLM 可能传字符串
     """搜索互联网获取实时信息
 
-    降级链: SearXNG → DuckDuckGo → web_fetch 抓取 → 空结果（让 LLM 凭自身知识回答）
-    v6.0: 搜索失败不再返回 error，返回空结果 + fallback 标记，避免污染对话历史。
+    优先使用 MiMo 搜索 API（小米，每日免费 1000 次）。
+    降级链: MiMo Search → SearXNG → 空结果
+    v8.0: 搜索后自动抓取前 N 个结果全文，消除二次 web_fetch 降级。
     """
+    import os
+    import asyncio
     import httpx
     from app.core.config import get_settings
 
-    searxng_url = get_settings().SEARXNG_URL.strip()
+    # ── 1. 优先 MiMo 搜索 API（免费、国内可用）──
+    mimo_token = os.getenv("MIMO_SEARCH_TOKEN", "").strip()
+    mimo_api_url = os.getenv("MIMO_SEARCH_API_URL", "https://aistudio.xiaomimimo.com/open-apis/search").strip()
 
-    # ── 1. 尝试 SearXNG ──
+    if mimo_token:
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    mimo_api_url,
+                    json={"token": mimo_token, "query": query},
+                    headers={"Content-Type": "application/json"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("code") == 0:
+                    web_pages = data.get("data", {}).get("webPages", {}).get("value", [])
+                    if web_pages:
+                        results = [
+                            {
+                                "title": r.get("name", ""),
+                                "url": r.get("url", ""),
+                                "snippet": r.get("snippet", "") or r.get("summary", ""),
+                                "source": r.get("siteName", ""),
+                                "date": r.get("datePublished", "").split("T")[0] if r.get("datePublished") else "",
+                            }
+                            for r in web_pages[:max_results]
+                        ]
+                        # 自动抓取前 N 个结果的全文（并发，不阻塞整体超时）
+                        fetch_count = min(_AUTO_FETCH_COUNT, len(results))
+                        if fetch_count > 0:
+                            urls_to_fetch = [r["url"] for r in results[:fetch_count] if r["url"]]
+                            fetched = await asyncio.gather(
+                                *[_fetch_page_content(u, _AUTO_FETCH_MAX_CHARS) for u in urls_to_fetch],
+                                return_exceptions=True,
+                            )
+                            for i, content in enumerate(fetched):
+                                if isinstance(content, str) and content:
+                                    results[i]["content"] = content
+                        return {"results": results}
+        except Exception as e:
+            logger.warning(f"[web_search] MiMo 搜索失败: {e}")
+
+    # ── 2. 降级 SearXNG ──
+    searxng_url = get_settings().SEARXNG_URL.strip()
     if searxng_url:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -444,59 +524,28 @@ async def web_search(query: str, max_results: int = 5) -> dict:
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                results = data.get("results", [])[:max_results]
-                if results:
-                    return {"results": [
+                raw_results = data.get("results", [])[:max_results]
+                if raw_results:
+                    results = [
                         {"title": r.get("title", ""), "url": r.get("url", ""), "snippet": r.get("content", "")}
-                        for r in results
-                    ]}
-        except Exception:
-            pass  # 降级到 DuckDuckGo
-
-    # ── 2. 降级 DuckDuckGo（免费，无需 API Key）──
-    try:
-        from duckduckgo_search import DDGS
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-            if results:
-                return {"results": [
-                    {"title": r.get("title", ""), "url": r.get("href", ""), "snippet": r.get("body", "")}
-                    for r in results
-                ]}
-    except Exception:
-        pass  # 降级到 web_fetch
-
-    # ── 3. 降级 web_fetch: 用已知搜索引擎抓取结果页 ──
-    try:
-        from duckduckgo_search import DDGS
-        # DDGS 可能部分可用（返回空但不抛异常），尝试 Google 抓取
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-            resp = await client.get(
-                "https://html.duckduckgo.com/html/",
-                params={"q": query},
-                headers={"User-Agent": "Mozilla/5.0"},
-            )
-            if resp.status_code == 200:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(resp.text, "html.parser")
-                results = []
-                for r in soup.select(".result__body")[:max_results]:
-                    title = r.select_one(".result__a")
-                    snippet = r.select_one(".result__snippet")
-                    link = r.select_one(".result__url")
-                    if title:
-                        results.append({
-                            "title": title.get_text(strip=True),
-                            "url": link.get_text(strip=True) if link else "",
-                            "snippet": snippet.get_text(strip=True) if snippet else "",
-                        })
-                if results:
+                        for r in raw_results
+                    ]
+                    # SearXNG 也做自动抓取
+                    fetch_count = min(_AUTO_FETCH_COUNT, len(results))
+                    if fetch_count > 0:
+                        urls_to_fetch = [r["url"] for r in results[:fetch_count] if r["url"]]
+                        fetched = await asyncio.gather(
+                            *[_fetch_page_content(u, _AUTO_FETCH_MAX_CHARS) for u in urls_to_fetch],
+                            return_exceptions=True,
+                        )
+                        for i, content in enumerate(fetched):
+                            if isinstance(content, str) and content:
+                                results[i]["content"] = content
                     return {"results": results}
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-    # ── 4. 全部失败：返回空结果 + fallback 标记 ──
-    # 不返回 error，避免污染对话历史；LLM 会用自身知识回答
+    # ── 3. 全部失败，返回空结果 ──
     return {"results": [], "fallback": "no_search_available", "message": "搜索服务暂不可用，请用自身知识回答"}
 
 

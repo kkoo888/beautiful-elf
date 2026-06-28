@@ -29,6 +29,20 @@ const MODULE_OPTIONS = [
   { value: '其他', label: '其他' },
 ]
 
+const CATEGORY_OPTIONS = [
+  { value: 'search', label: '🔍 搜索' },
+  { value: 'file', label: '📁 文件' },
+  { value: 'code', label: '💻 代码' },
+  { value: 'git', label: '🔀 Git' },
+  { value: 'data', label: '📊 数据' },
+  { value: 'memory', label: '🧠 记忆' },
+  { value: 'media', label: '🎬 多媒体' },
+  { value: 'comm', label: '📡 通信' },
+  { value: 'agent', label: '🤖 Agent' },
+  { value: 'doc', label: '📄 文档' },
+  { value: 'general', label: '⚙️ 通用' },
+]
+
 /** 默认 JSON Schema 模板 */
 const DEFAULT_SCHEMA = JSON.stringify(
   { type: 'object', properties: {}, required: [] },
@@ -47,6 +61,7 @@ export function ToolFormModal({ open, tool, onOk, onCancel, confirmLoading }: To
           displayName: tool.displayName,
           description: tool.description,
           module: tool.module,
+          category: tool.category ?? 'general',
           riskLevel: tool.riskLevel ?? 'low',
           jsonSchema: JSON.stringify(tool.jsonSchema, null, 2),
         })
@@ -55,6 +70,7 @@ export function ToolFormModal({ open, tool, onOk, onCancel, confirmLoading }: To
         form.setFieldsValue({
           riskLevel: 'low',
           module: '查',
+          category: 'general',
           jsonSchema: DEFAULT_SCHEMA,
         })
       }
@@ -116,6 +132,14 @@ export function ToolFormModal({ open, tool, onOk, onCancel, confirmLoading }: To
             style={{ flex: 1 }}
           >
             <Select options={MODULE_OPTIONS} placeholder="选择模块" />
+          </Form.Item>
+
+          <Form.Item
+            name="category"
+            label="工具分组"
+            style={{ flex: 1 }}
+          >
+            <Select options={CATEGORY_OPTIONS} placeholder="选择分组" />
           </Form.Item>
 
           <Form.Item

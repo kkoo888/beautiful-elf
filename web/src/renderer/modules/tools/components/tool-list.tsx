@@ -15,6 +15,20 @@ const RISK_MAP: Record<string, { label: string; color: string }> = {
   high: { label: '高', color: 'error' },
 }
 
+const CATEGORY_MAP: Record<string, { label: string; icon: string }> = {
+  search: { label: '搜索', icon: '🔍' },
+  file: { label: '文件', icon: '📁' },
+  code: { label: '代码', icon: '💻' },
+  git: { label: 'Git', icon: '🔀' },
+  data: { label: '数据', icon: '📊' },
+  memory: { label: '记忆', icon: '🧠' },
+  media: { label: '多媒体', icon: '🎬' },
+  comm: { label: '通信', icon: '📡' },
+  agent: { label: 'Agent', icon: '🤖' },
+  doc: { label: '文档', icon: '📄' },
+  general: { label: '通用', icon: '⚙️' },
+}
+
 interface ToolListProps {
   tools: ToolInfo[]
   total: number
@@ -50,6 +64,16 @@ export function ToolList({ tools, total, page, pageSize, loading, onEdit, onDele
       key: 'description',
       ellipsis: true,
       width: 260,
+    },
+    {
+      title: '工具分组',
+      dataIndex: 'category',
+      key: 'category',
+      width: 100,
+      render: (category: string) => {
+        const { label, icon } = CATEGORY_MAP[category] ?? CATEGORY_MAP.general
+        return <Tag>{icon} {label}</Tag>
+      },
     },
     {
       title: '功能类别',

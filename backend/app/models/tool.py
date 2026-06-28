@@ -25,6 +25,7 @@ class Tool(BaseModel):
     display_name = Column(String(256), default="", comment="显示名称")
     description = Column(String(1024), nullable=False, comment="工具描述")
     module = Column(String(128), nullable=False, comment="功能类别")
+    category = Column(String(32), nullable=False, default="general", comment="工具分组: search/file/code/git/data/memory/media/comm/agent/doc/general")
     json_schema = Column(JSON, nullable=False, comment="参数 JSON Schema (MCP inputSchema)")
     output_schema = Column(JSON, nullable=False, default=dict, comment="输出 JSON Schema (MCP outputSchema)")
     risk_level = Column(String(16), nullable=False, default="low", comment="风险等级: low/medium/high")
@@ -36,6 +37,8 @@ class Tool(BaseModel):
     __table_args__ = (
         Index("idx_tool_module", "module"),
         Index("idx_tool_is_deleted_enabled", "is_deleted", "is_enabled"),
+        Index("idx_tool_category", "category"),
+        Index("idx_tool_is_deleted_category", "is_deleted", "category"),
     )
 
 

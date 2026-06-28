@@ -12,6 +12,8 @@ export interface ToolInfo {
   description: string
   /** 功能类别（增/删/改/查/计算/其他） */
   module: string
+  /** 工具分组: search/file/code/git/data/memory/media/comm/agent/doc/general */
+  category: string
   /** JSON Schema */
   jsonSchema: Record<string, unknown>
   /** 风险等级 */
@@ -66,6 +68,7 @@ export interface CreateToolInput {
   displayName: string
   description: string
   module: string
+  category?: string
   jsonSchema: Record<string, unknown>
   riskLevel: string
 }
@@ -75,6 +78,7 @@ export interface UpdateToolInput {
   displayName?: string
   description?: string
   module?: string
+  category?: string
   jsonSchema?: Record<string, unknown>
   riskLevel?: string
 }

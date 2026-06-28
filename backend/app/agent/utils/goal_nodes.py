@@ -166,7 +166,18 @@ def _make_goal_evaluator(llm):
             writer({"step": "goal_eval", "status": "done", "message": "已达最大迭代次数"})
             return {"goal_status": "failed"}
 
-        # 如果没有 final_answer，说明还没执行过
+        # Goal 模式：优先用 goal_working_memory 评估（Worker 结果），
+        # 而非 final_answer（可能是规划阶段的短文本）
+        goal_working_memory = state.get("goal_working_memory") or []
+        if goal_working_memory:
+            wm_texts = []
+            for wm in goal_working_memory:
+                summary = wm.get("result_summary", "")
+                if summary:
+                    wm_texts.append(summary)
+            if wm_texts:
+                final_answer = "\n\n".join(wm_texts)
+
         if not final_answer:
             return {"goal_status": "in_progress", "goal_iterations": iterations + 1}
 

@@ -153,32 +153,60 @@ def _validate_dependencies(goal_subtasks: list) -> list[str]:
 # ── 子任务辅助函数 ─────────────────────────────────────────
 
 def _get_next_pending_subtask(goal_subtasks: list) -> "dict | None":
-    """获取下一个待执行子任务（DAG 拓扑排序）"""
+    """获取下一个待执行子任务（DAG 拓扑排序 + 依赖失败跳过）。
+
+    v2.0 (2026 最佳实践):
+      - 前置任务 done → 执行
+      - 前置任务 failed → 跳过当前任务，标记为 skipped
+      - 前置任务 pending/in_progress → 等待
+    """
     if not goal_subtasks:
         return None
+
     done_ids = {t["id"] for t in goal_subtasks if t.get("status") == "done"}
+    failed_ids = {t["id"] for t in goal_subtasks if t.get("status") == "failed"}
+
+    # 先标记依赖失败的 pending 任务为 skipped
+    for task in goal_subtasks:
+        if task.get("status") != "pending":
+            continue
+        deps = task.get("dependencies", [])
+        if any(d in failed_ids for d in deps):
+            task["status"] = "skipped"
+            task["skip_reason"] = "前置任务失败"
+
+    # 找可执行的 pending 任务（依赖全部 done）
     for task in goal_subtasks:
         if task.get("status") != "pending":
             continue
         deps = task.get("dependencies", [])
         if all(d in done_ids for d in deps):
             return task
+
+    # 兜底：返回无依赖的 pending 任务
     for task in goal_subtasks:
-        if task.get("status") == "pending":
+        if task.get("status") == "pending" and not task.get("dependencies"):
             return task
+
     return None
 
 
 def _get_parallel_ready_tasks(goal_subtasks: list, max_parallel: int = 3) -> list:
-    """获取可并行执行的 pending 子任务"""
+    """获取可并行执行的 pending 子任务（跳过依赖失败的）"""
     if not goal_subtasks:
         return []
     done_ids = {t["id"] for t in goal_subtasks if t.get("status") == "done"}
+    failed_ids = {t["id"] for t in goal_subtasks if t.get("status") == "failed"}
     ready = []
     for task in goal_subtasks:
         if task.get("status") != "pending":
             continue
         deps = task.get("dependencies", [])
+        # 依赖失败 → 跳过
+        if any(d in failed_ids for d in deps):
+            task["status"] = "skipped"
+            task["skip_reason"] = "前置任务失败"
+            continue
         if all(d in done_ids for d in deps):
             ready.append(task)
         if len(ready) >= max_parallel:
