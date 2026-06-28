@@ -1127,7 +1127,7 @@ async def spawn_agent(task: str, label: str = None, mode: str = "run", timeout: 
         "**最终回答必须是完整的分析内容，不是摘要或文件引用。**\n\n"
         "具体规则：\n"
         "1. 你的最终回答 = 用户看到的完整交付物，直接输出全部内容\n"
-        "2. 禁止输出：Thought、Action、Observation、工具调用日志、「我将搜索...」「正在执行...」\n"
+        "2. 最终回答中不要包含工具调用过程（Thought/Action/Observation），但调用工具时正常使用\n"
         "3. 禁止：「详见文件 xxx」「完整报告已保存」— 所有内容必须在回答中完整呈现\n"
         "4. 使用 Markdown 格式：标题(##)、列表(-)、表格(|)、代码块(```)\n"
         "5. 如果任务要求对比，直接输出对比表格和结论\n"
