@@ -18,9 +18,10 @@ class WebSocketManager:
         # channel -> set of websockets
         self._connections: Dict[str, Set[WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket, channel: str = "default"):
-        """接受并注册连接"""
-        await websocket.accept()
+    async def connect(self, websocket: WebSocket, channel: str = "default", _already_accepted: bool = False):
+        """注册连接（默认 accept，_already_accepted=True 时跳过）"""
+        if not _already_accepted:
+            await websocket.accept()
         if channel not in self._connections:
             self._connections[channel] = set()
         self._connections[channel].add(websocket)

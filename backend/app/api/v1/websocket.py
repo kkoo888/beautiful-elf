@@ -65,6 +65,9 @@ async def websocket_endpoint(
     /ws          → 默认 channel (default)
     /ws/{channel} → 指定 channel: chat, pet, notification, system 等
     """
+    # 先 accept，再鉴权（未 accept 时不能 close/receive）
+    await websocket.accept()
+
     # JWT 鉴权（无 token 时允许 guest 连接）
     user_id, close_code = await _authenticate_ws(websocket, token)
     if user_id is None:
@@ -77,7 +80,7 @@ async def websocket_endpoint(
     websocket.state.user_id = user_id
     logger.info(f"WebSocket 连接: channel={channel} user_id={user_id}")
 
-    await ws_manager.connect(websocket, channel)
+    await ws_manager.connect(websocket, channel, _already_accepted=True)
 
     # 全局心跳 + 空闲超时
     import asyncio as _asyncio
@@ -134,6 +137,11 @@ async def websocket_endpoint(
 
     except WebSocketDisconnect:
         pass
+    except RuntimeError:
+        # accept 后连接异常断开时 receive_json 抛出 RuntimeError
+        logger.debug(f"WebSocket 运行时异常（连接已断）: channel={channel} user_id={user_id}")
+    except Exception as e:
+        logger.error(f"WebSocket 未预期异常: {e}", exc_info=True)
     finally:
         _hb_done.set()
         _hb_task.cancel()
