@@ -586,7 +586,7 @@ async def execute_code(language: str, code: str) -> dict:
         return {"error": "代码执行超时（10秒）", "code": "EXECUTION_TIMEOUT"}
 
 
-async def read_file(path: str, workingDirectory: str = None) -> dict:
+async def read_file(path: str, encoding: str = "utf-8", workingDirectory: str = None) -> dict:
     """读取工作空间中的文件"""
     workspace, target = _resolve_path(path, workingDirectory)
     if target is None:
@@ -595,7 +595,7 @@ async def read_file(path: str, workingDirectory: str = None) -> dict:
         return {"error": f"文件不存在: {path}"}
     if target.stat().st_size > 1_000_000:
         return {"error": "文件过大（>1MB）"}
-    return {"content": target.read_text(encoding="utf-8", errors="ignore")[:50000]}
+    return {"content": target.read_text(encoding=encoding, errors="ignore")[:50000]}
 
 
 async def query_database(sql: str) -> dict:
