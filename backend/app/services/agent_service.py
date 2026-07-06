@@ -525,18 +525,8 @@ class AgentService:
                     if not isinstance(data, (list, tuple)) or len(data) < 2:
                         continue
                     msg_chunk, metadata = data[0], data[1] if len(data) > 1 else {}
-                    if isinstance(data, dict) and data.get("event") == "content-block-delta":
-                        block = (data.get("delta") or {})
-                        if block.get("type") == "text-delta":
-                            token_text = block.get("text", "")
-                            if token_text:
-                                _got_llm_tokens = True
-                                yield {"type": "token", "content": token_text}
-                        elif block.get("type") == "thinking":
-                            thinking_text = block.get("thinking", "")
-                            if thinking_text:
-                                yield {"type": "thinking", "content": thinking_text}
-                    elif hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
+                    # AIMessageChunk: token + thinking
+                    if hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
                         if getattr(msg_chunk, "type", "") == "AIMessageChunk":
                             # 处理 thinking content blocks
                             if isinstance(msg_chunk.content, list):
@@ -785,6 +775,11 @@ class AgentService:
                     if custom_events_iter:
                         async for data in custom_events_iter:
                             if isinstance(data, dict):
+                                # Thinking 事件（从 nodes.py writer() 推送）
+                                if data.get("type") == "thinking":
+                                    logger.info(f"[agent_service] Thinking 事件: {data.get('content', '')[:50]}")
+                                    await _custom_q.put({"type": "thinking", "content": data.get("content", "")})
+                                    continue
                                 if data.get("step") == "goal_subtasks":
                                     await _custom_q.put({"type": "goal_subtasks", "subtasks": data.get("subtasks", [])})
                                 await _custom_q.put({"type": "progress", **data})
@@ -804,6 +799,11 @@ class AgentService:
             merged = _async_merge(_main_event_iter(), _custom_aiter)
 
             async for event in merged:
+                # Thinking 事件（从 custom stream 推送）
+                if isinstance(event, dict) and event.get("type") == "thinking":
+                    logger.info(f"[agent_service] Yielding thinking: {event.get('content', '')[:50]}")
+                    yield event
+                    continue
                 # custom 事件已由 merge 实时推送，直接 yield
                 if isinstance(event, dict) and event.get("type") in ("progress", "goal_subtasks"):
                     # 跟踪 goal_current_task_id 变化（用于关联工具调用与子任务）
@@ -827,46 +827,29 @@ class AgentService:
                     msg_chunk, metadata = data[0], data[1] if len(data) > 1 else {}
                     node_name = metadata.get("langgraph_node", "") if isinstance(metadata, dict) else ""
 
-                    # v3 content-block 协议
-                    if isinstance(msg_chunk, dict) and msg_chunk.get("event") == "content-block-delta":
-                        block = (msg_chunk.get("delta") or {})
-                        if block.get("type") == "text-delta":
-                            token_text = block.get("text", "")
-                            if token_text:
-                                _got_llm_tokens = True
-                                yield {"type": "token", "content": token_text}
-                    elif isinstance(msg_chunk, dict) and msg_chunk.get("event") == "content-block-start":
-                        block = msg_chunk.get("content_block", {})
-                        if isinstance(block, dict) and block.get("type") == "thinking":
-                            thinking_text = block.get("thinking", "")
-                            if thinking_text:
-                                yield {"type": "thinking", "content": thinking_text}
-                    elif isinstance(msg_chunk, dict) and msg_chunk.get("event") == "reasoning-delta":
-                        reasoning_text = msg_chunk.get("delta", {}).get("reasoning", "") if isinstance(msg_chunk.get("delta"), dict) else ""
-                        if reasoning_text:
-                            yield {"type": "thinking", "content": reasoning_text}
-                    # 兼容 AIMessageChunk
-                    elif hasattr(msg_chunk, "content") and msg_chunk.content and hasattr(msg_chunk, "type"):
+                    # AIMessageChunk: token + reasoning（raw event 模式下 msg_chunk 始终是 AIMessageChunk）
+                    if hasattr(msg_chunk, "content") and hasattr(msg_chunk, "type"):
                         if getattr(msg_chunk, "type", "") == "AIMessageChunk":
-                            _got_llm_tokens = True
-                            token_text = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
-                            yield {"type": "token", "content": token_text}
+                            # thinking content blocks
+                            if isinstance(msg_chunk.content, list):
+                                for block in msg_chunk.content:
+                                    if isinstance(block, dict) and block.get("type") == "thinking":
+                                        thinking_text = block.get("thinking", "")
+                                        if thinking_text:
+                                            yield {"type": "thinking", "content": thinking_text}
+                            elif msg_chunk.content:
+                                _got_llm_tokens = True
+                                token_text = msg_chunk.content if isinstance(msg_chunk.content, str) else _content_blocks_to_str(msg_chunk.content)
+                                yield {"type": "token", "content": token_text}
                     # thinking 实时增量（从 additional_kwargs.reasoning_content_delta 读取）
-                    if hasattr(msg_chunk, "additional_kwargs"):
-                        reasoning_delta = msg_chunk.additional_kwargs.get("reasoning_content_delta")
+                    _ak = getattr(msg_chunk, "additional_kwargs", None) or getattr(getattr(msg_chunk, "message", None), "additional_kwargs", None)
+                    if _ak:
+                        reasoning_delta = _ak.get("reasoning_content_delta")
                         if reasoning_delta:
                             yield {"type": "thinking", "content": reasoning_delta}
 
                     # usage
-                    if isinstance(msg_chunk, dict) and msg_chunk.get("event") == "message-finish":
-                        usage = msg_chunk.get("usage") or {}
-                        pt = usage.get("input_tokens", 0) or 0
-                        ct = usage.get("output_tokens", 0) or 0
-                        if pt or ct:
-                            total_prompt_tokens += pt
-                            total_completion_tokens += ct
-                            yield {"type": "cost_update", "prompt_tokens": total_prompt_tokens, "completion_tokens": total_completion_tokens}
-                    elif hasattr(msg_chunk, "usage_metadata") and msg_chunk.usage_metadata:
+                    if hasattr(msg_chunk, "usage_metadata") and msg_chunk.usage_metadata:
                         usage = msg_chunk.usage_metadata
                         pt = getattr(usage, "input_tokens", 0) or 0
                         ct = getattr(usage, "output_tokens", 0) or 0

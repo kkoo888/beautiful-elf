@@ -47,6 +47,13 @@ class ToolUseEndEvent:
 
 
 @dataclass
+class ReasoningDeltaEvent:
+    """推理过程增量片段"""
+    kind: Literal["reasoning_delta"] = field(default="reasoning_delta", init=False)
+    text: str = ""
+
+
+@dataclass
 class DoneEvent:
     """流式完成"""
     kind: Literal["done"] = field(default="done", init=False)
@@ -70,6 +77,7 @@ class ErrorEvent:
 
 StreamEvent = (
     TextDeltaEvent
+    | ReasoningDeltaEvent
     | ToolUseStartEvent
     | ToolUseDeltaEvent
     | ToolUseEndEvent
@@ -89,7 +97,7 @@ class ModelCapabilities:
     supports_tools: bool = True
     supports_streaming: bool = True
     supports_vision: bool = False
-    reasoning_format: str = "none"  # "none" | "deepseek" | "openai" | "gemini" | "think_tags"
+    reasoning_format: str = "none"  # "none" | "deepseek" | "openai" | "gemini" | "think_tags" | "agnes"
 
 
 def dict_to_model_capabilities(caps: dict | None) -> ModelCapabilities | None:

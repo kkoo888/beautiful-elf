@@ -108,8 +108,8 @@ export interface ExpertTeamSSEEvent {
 }
 
 /**
- * 执行专家团 — SSE 流式返回
- * 后端返回 text/event-stream，前端逐事件处理
+ * 执行专家团 — WebSocket 流式返回
+ * 通过已有的 WS 持久连接发送，逐事件回调
  */
 export async function executeExpertTeam(
   teamId: number,
@@ -117,52 +117,86 @@ export async function executeExpertTeam(
   onEvent: (event: ExpertTeamSSEEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const token = localStorage.getItem('beautiful-elf:auth_token')
-  const base = (apiClient.defaults.baseURL || '').replace(/\/+$/, '')
-  const url = `${base}/expert_teams/${teamId}/execute`
+  return new Promise<void>((resolve, reject) => {
+    const token = localStorage.getItem('beautiful-elf:auth_token')
+    const base = (apiClient.defaults.baseURL || '').replace(/^http/, 'ws').replace(/\/+$/, '')
+    const url = `${base}/api/v1/ws/chat?token=${token || ''}`
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(input),
-    signal,
-  })
+    const ws = new WebSocket(url)
+    let settled = false
 
-  if (!res.ok) {
-    throw new Error(`专家团执行失败: ${res.status} ${res.statusText}`)
-  }
+    const cleanup = () => {
+      ws.removeEventListener('message', handleMessage)
+      ws.removeEventListener('close', handleClose)
+      ws.removeEventListener('error', handleError)
+      if (signal) signal.removeEventListener('abort', handleAbort)
+    }
 
-  const reader = res.body?.getReader()
-  if (!reader) throw new Error('无法读取 SSE 流')
-
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        try {
-          const event = JSON.parse(line.slice(6)) as ExpertTeamSSEEvent
-          onEvent(event)
-        } catch {
-          // 心跳行或无效 JSON，跳过
+    const handleMessage = (event: MessageEvent) => {
+      if (settled) return
+      try {
+        const data = JSON.parse(event.data)
+        // 心跳
+        if (data.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }))
+          return
         }
+        // 专家团事件（后端直接透传 dict，字段在顶层）
+        if (data.type && data.type !== 'pong') {
+          onEvent(data as ExpertTeamSSEEvent)
+        }
+        // done/error 结束
+        if (data.type === 'done' || data.type === 'error') {
+          settled = true
+          cleanup()
+          if (data.type === 'error') {
+            reject(new Error(data.message || '专家团执行失败'))
+          } else {
+            resolve()
+          }
+        }
+      } catch { /* skip malformed */ }
+    }
+
+    const handleClose = () => {
+      if (!settled) {
+        settled = true
+        cleanup()
+        reject(new Error('WebSocket 连接断开'))
       }
     }
-  } finally {
-    reader.releaseLock()
-  }
+
+    const handleError = () => {
+      if (!settled) {
+        settled = true
+        cleanup()
+        reject(new Error('WebSocket 连接失败'))
+      }
+    }
+
+    const handleAbort = () => {
+      if (!settled) {
+        settled = true
+        cleanup()
+        ws.close()
+        reject(new DOMException('Aborted', 'AbortError'))
+      }
+    }
+
+    ws.addEventListener('message', handleMessage)
+    ws.addEventListener('close', handleClose)
+    ws.addEventListener('error', handleError)
+    if (signal) signal.addEventListener('abort', handleAbort)
+
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({
+        type: 'expert_team_execute',
+        teamId,
+        inputText: input.inputText,
+        maxRounds: input.maxRounds ?? null,
+      }))
+    })
+  })
 }
 
 export async function fetchExpertTeamRuns(

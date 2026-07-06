@@ -514,6 +514,11 @@ def _make_llm_caller(llm, tool_registry=None, model_selector=None, context_lengt
                 except Exception as e:
                     logger.debug(f"[llm_call] tier 覆盖跳过: {e}")
 
+        # ── 路由闭环：effective_reasoning → LLM thinking 开关 ──
+        if effective_reasoning and hasattr(current_base_llm, 'thinking'):
+            current_base_llm.thinking = True
+            logger.info(f"[llm_call] Thinking 模式已启用 (reasoning_depth={reasoning_depth})")
+
         writer({"step": "llm", "status": "calling", "message": f"正在生成回答... (模型: {model_label}, 路由: {route_class}/{tier}, 思考: {thinking_mode}, reasoning: {effective_reasoning})"})
 
         system_prompt = state.get("system_prompt") or state.get("context") or \
@@ -820,7 +825,44 @@ Answer: 基于工具结果输出该子任务的成果
         logger.info(f"[llm_call] REQUEST: tools={_bound_tools} tool_choice={_tc_setting} messages={json.dumps(_log_msgs, ensure_ascii=False)}")
 
         try:
-            response = await current_llm.ainvoke(lc_messages)
+            # ── 流式调用 LLM（astream 替代 ainvoke）──
+            # astream 让 ReasoningDeltaEvent 能通过 writer() 实时推送到前端
+            from app.llm.types import ReasoningDeltaEvent
+            text_parts = []
+            accumulated_tool_calls = {}
+            response = None
+
+            _chunk_count = 0
+            async for chunk in current_llm._astream(lc_messages):
+                _chunk_count += 1
+                msg = chunk.message
+                # Reasoning 内容实时推送
+                _ak = getattr(msg, 'additional_kwargs', {})
+                if _ak:
+                    reasoning_delta = _ak.get('reasoning_content_delta')
+                    if reasoning_delta:
+                        writer({'type': 'thinking', 'content': reasoning_delta})
+                        if _chunk_count <= 3:
+                            logger.info(f"[llm_call] Thinking 推送 chunk#{_chunk_count}: {reasoning_delta[:50]}")
+                elif _chunk_count <= 3:
+                    logger.info(f"[llm_call] chunk#{_chunk_count}: content={repr(msg.content[:50]) if msg.content else ''} ak={_ak}")
+                # 文本内容累积
+                if msg.content:
+                    text_parts.append(msg.content)
+                # 工具调用累积
+                for tc in (msg.tool_calls or []):
+                    tc_id = tc.get('id', '')
+                    if tc_id and tc_id in accumulated_tool_calls:
+                        accumulated_tool_calls[tc_id]['args'].update(tc.get('args', {}))
+                    elif tc_id:
+                        accumulated_tool_calls[tc_id] = dict(tc)
+
+            # 构造 response 对象（兼容后续代码）
+            from langchain_core.messages import AIMessage
+            _content = ''.join(text_parts)
+            _tool_calls = list(accumulated_tool_calls.values()) if accumulated_tool_calls else []
+            response = AIMessage(content=_content, tool_calls=_tool_calls)
+
         except Exception as e:
             # LangGraph 官方模式：错误通过 writer 推送 + 存入 state.error
             # 不污染 messages（对话历史），避免下轮 LLM 上下文被污染

@@ -132,6 +132,13 @@ async def websocket_endpoint(
                 _idle_since = time.time()
                 continue
 
+            # 专家团直接执行
+            if data.get("type") == "expert_team_execute" and channel == "chat":
+                _idle_since = time.time()
+                await _handle_expert_team_ws(websocket, data, user_id)
+                _idle_since = time.time()
+                continue
+
             # 其他消息广播
             await ws_manager.broadcast(channel, data)
 
@@ -473,3 +480,70 @@ async def _handle_resume_ws(websocket: WebSocket, data: dict, user_id: int):
             await producer_task
         except (asyncio.CancelledError, Exception):
             pass
+
+
+async def _handle_expert_team_ws(websocket: WebSocket, data: dict, user_id: int):
+    """专家团直接执行 — 通过 WebSocket（替代原 SSE 路径）
+
+    请求格式:
+      {"type": "expert_team_execute", "teamId": 1, "inputText": "...", "maxRounds": 3}
+
+    事件格式（与原 SSE 完全一致，前端 ExpertTeamSSEEvent 无需修改）:
+      {"type": "expert_start", "expertName": "...", ...}
+      {"type": "expert_done", "expertName": "...", ...}
+      {"type": "pm_plan", "content": "..."}
+      {"type": "pm_eval", "evaluation": {...}}
+      {"type": "pm_report", "content": "..."}
+      {"type": "done", "durationMs": ..., "runId": ...}
+      {"type": "error", "message": "..."}
+    """
+    import asyncio
+    from app.core.database import AsyncSessionLocal
+    from app.services.expert_team_service import ExpertTeamService
+    from app.schemas.expert_team import ExpertTeamExecuteRequest
+
+    team_id = data.get("teamId", 0)
+    input_text = data.get("inputText", "")
+    max_rounds = data.get("maxRounds")
+
+    if not team_id or not input_text:
+        await websocket.send_json({"type": "error", "message": "teamId 和 inputText 不能为空"})
+        return
+
+    request = ExpertTeamExecuteRequest(input_text=input_text, max_rounds=max_rounds)
+    service = ExpertTeamService()
+
+    _stream_done = asyncio.Event()
+
+    async def _produce():
+        try:
+            async with AsyncSessionLocal() as db:
+                async def on_progress(event: dict):
+                    """progress 回调 → 直接通过 WebSocket 发送（与 SSE 事件格式一致）"""
+                    if not _stream_done.is_set():
+                        await websocket.send_json(event)
+
+                result = await service.execute_team(db, team_id, request, on_progress=on_progress)
+                elapsed = result.get("durationMs", 0)
+                if not _stream_done.is_set():
+                    await websocket.send_json({
+                        "type": "done",
+                        "durationMs": elapsed,
+                        "runId": result.get("runId"),
+                    })
+        except Exception as e:
+            logger.error(f"[ws] 专家团执行失败: {e}", exc_info=True)
+            try:
+                await websocket.send_json({"type": "error", "message": str(e)})
+            except Exception:
+                pass
+        finally:
+            _stream_done.set()
+
+    try:
+        await _produce()
+    except WebSocketDisconnect:
+        _stream_done.set()
+    except Exception as e:
+        logger.error(f"[ws] 专家团 WS 异常: {e}", exc_info=True)
+        _stream_done.set()

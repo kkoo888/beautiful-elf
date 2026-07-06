@@ -16,7 +16,7 @@
 v1.2 重构变更:
   - state.py: AgentState 从 Pydantic BaseModel 迁移到 TypedDict
   - engine.py: 意图路由纳入图内，Context Engine 动态组装
-  - agent_service.py: 流式对话改用 astream + stream_mode（替代 astream_events）
+  - agent_service.py: 流式对话改用 astream_events(version="v3") + StreamTransformer
   - context_engine.py: 新增，多源 Context 组装管道
   - tool_registry.py: Copy-on-Write 快照，并发安全
   - tracing.py: 结构化追踪，AgentTrace 数据结构

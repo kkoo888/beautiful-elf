@@ -28,6 +28,7 @@ from app.llm.types import (
     ErrorEvent,
     Message,
     ModelCapabilities,
+    ReasoningDeltaEvent,
     TextDeltaEvent,
     ToolDefinition,
     ToolInputSchema,
@@ -167,6 +168,8 @@ class ChatLLMProvider(BaseChatModel):
     temperature: float = 0.7
     max_tokens: int = 4096
     model_capabilities: ModelCapabilities | None = None
+    thinking: bool = False  # 是否启用 Thinking 模式
+    thinking_budget_tokens: int = 5000  # Thinking 预算
     _bound_tools: list[Any] = PrivateAttr(default=[])  # 存储 bind_tools 绑定的工具
     _bound_tool_choice: Any = PrivateAttr(default=None)  # 存储 tool_choice
 
@@ -288,6 +291,8 @@ class ChatLLMProvider(BaseChatModel):
             temperature=temperature,
             system=system or None,
             stop_sequences=stop or [],
+            thinking=self.thinking,
+            thinking_budget_tokens=self.thinking_budget_tokens,
             tool_choice=self._bound_tool_choice,
             model_capabilities=self.model_capabilities,
         )
@@ -402,6 +407,8 @@ class ChatLLMProvider(BaseChatModel):
             temperature=temperature,
             system=system or None,
             stop_sequences=stop or [],
+            thinking=self.thinking,
+            thinking_budget_tokens=self.thinking_budget_tokens,
             tool_choice=self._bound_tool_choice,
             model_capabilities=self.model_capabilities,
         )
@@ -457,6 +464,17 @@ class ChatLLMProvider(BaseChatModel):
                             }],
                         ),
                     )
+
+            elif isinstance(event, ReasoningDeltaEvent):
+                # 推理过程增量 — 通过 additional_kwargs 传递给 agent_service
+                logger.info(f"[langchain_adapter] ReasoningDeltaEvent: {event.text[:100]}")
+                chunk = ChatGenerationChunk(
+                    message=AIMessageChunk(
+                        content="",
+                        additional_kwargs={"reasoning_content_delta": event.text},
+                    ),
+                )
+                yield chunk
 
             elif isinstance(event, ErrorEvent):
                 # 修复：LLM 错误应抛出异常而非混入正常内容

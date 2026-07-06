@@ -1,9 +1,7 @@
 """专家团工作流 API — 符合 API 设计规范"""
-import asyncio
 import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -21,8 +19,6 @@ from app.schemas.response import ApiResult, ApiPageResult
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
-SSE_HEARTBEAT_INTERVAL = 15
-
 router = APIRouter()
 service = ExpertTeamService()
 
@@ -321,23 +317,6 @@ async def bind_experts_to_team(
 
 # ─── 执行与运行记录 ─────────────────────────────────────
 
-@router.post("/{team_id}/execute")
-async def execute_expert_team(
-    team_id: int,
-    data: ExpertTeamExecuteRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """执行专家团工作流 — SSE 流式推送"""
-    return StreamingResponse(
-        _stream_expert_team(service, db, team_id, data),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
 @router.get("/{team_id}/runs", response_model=ApiPageResult[ExpertTeamRunOut])
 async def list_expert_team_runs(
     team_id: int,
@@ -414,51 +393,3 @@ async def list_role_runs(
     runs = await service.list_role_runs(db, run_id)
     return ApiResult(data=runs)
 
-
-# ─── SSE 流式推送 ────────────────────────────────────────
-
-async def _stream_expert_team(service: ExpertTeamService, db: AsyncSession,
-                               team_id: int, data: ExpertTeamExecuteRequest):
-    """专家团 SSE 流式执行 — 复用 chat.py 的 Queue + 心跳模式"""
-    _queue: asyncio.Queue = asyncio.Queue()
-    _stream_done = asyncio.Event()
-
-    async def _heartbeat():
-        try:
-            while not _stream_done.is_set():
-                await asyncio.sleep(SSE_HEARTBEAT_INTERVAL)
-                if not _stream_done.is_set():
-                    await _queue.put(": heartbeat\n\n")
-        except asyncio.CancelledError:
-            pass
-
-    async def _produce():
-        try:
-            async def on_progress(event: dict):
-                await _queue.put(f"data: {json.dumps(event, ensure_ascii=False)}\n\n")
-
-            result = await service.execute_team(db, team_id, data, on_progress=on_progress)
-            elapsed = result.get("durationMs", 0)
-            await _queue.put(
-                f"data: {json.dumps({'type': 'done', 'durationMs': elapsed, 'runId': result.get('runId')}, ensure_ascii=False)}\n\n"
-            )
-        except Exception as e:
-            logger.error(f"专家团执行失败: {e}", exc_info=True)
-            await _queue.put(
-                f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
-            )
-        finally:
-            _stream_done.set()
-            await _queue.put(None)
-
-    heartbeat_task = asyncio.create_task(_heartbeat())
-    producer_task = asyncio.create_task(_produce())
-
-    try:
-        while True:
-            item = await _queue.get()
-            if item is None:
-                break
-            yield item
-    finally:
-        heartbeat_task.cancel()

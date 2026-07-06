@@ -24,6 +24,7 @@ from .types import (
     Message,
     ModelCapabilities,
     ModelInfo,
+    ReasoningDeltaEvent,
     StreamEvent,
     TextDeltaEvent,
     ToolDefinition,
@@ -282,7 +283,10 @@ class OpenAIProvider:
             payload["tool_choice"] = tc
 
         # ── 日志：打印实际 HTTP payload 关键字段 ──
-        logger.info(f"[openai_provider] PAYLOAD: model={payload.get('model')} stream={payload.get('stream')} tool_choice={payload.get('tool_choice')} msg_count={len(payload.get('messages', []))}")
+        _extra = f" chat_template_kwargs={payload.get('chat_template_kwargs')}" if payload.get('chat_template_kwargs') else ""
+        _extra += f" thinking={payload.get('thinking')}" if payload.get('thinking') else ""
+        logger.info(f"[openai_provider] PAYLOAD: model={payload.get('model')} stream={payload.get('stream')} tool_choice={payload.get('tool_choice')} msg_count={len(payload.get('messages', []))}{_extra}")
+        logger.info(f"[openai_provider] CONFIG: thinking={cfg.thinking} caps.supports_reasoning={caps.supports_reasoning if caps else 'None'} caps.reasoning_format={caps.reasoning_format if caps else 'None'}")
 
         # ── Reasoning 模式注入 ──
         if caps and caps.supports_reasoning and cfg.thinking:
@@ -293,11 +297,17 @@ class OpenAIProvider:
                 payload["reasoning_effort"] = effort
             elif caps.reasoning_format == "gemini":
                 payload["reasoning_effort"] = "high"
+            elif caps.reasoning_format == "agnes":
+                payload["chat_template_kwargs"] = {"enable_thinking": True}
+                logger.info(f"[openai_provider] Agnes Thinking 注入: chat_template_kwargs={payload['chat_template_kwargs']}")
         elif caps and caps.supports_reasoning and not cfg.thinking:
             if caps.reasoning_format == "deepseek":
                 payload["thinking"] = {"type": "disabled"}
             elif caps.reasoning_format == "gemini":
                 payload["reasoning_effort"] = "none"
+
+        # ── 日志：打印完整 payload（调试用）──
+        logger.info(f"[openai_provider] FULL_PAYLOAD: {json.dumps(payload, ensure_ascii=False, default=str)[:500]}")
 
         # ── HTTP 请求 ──
         headers: dict[str, str] = {
@@ -378,10 +388,12 @@ class OpenAIProvider:
                                 yield TextDeltaEvent(text=text)
                                 assistant_text_parts.append(text)
 
-                            # Reasoning content（DeepSeek / OpenAI o1/o3）
+                            # Reasoning content（DeepSeek / OpenAI o1/o3 / Agnes）
                             reasoning_str = delta.get("reasoning_content")
                             if reasoning_str:
                                 reasoning_parts.append(reasoning_str)
+                                yield ReasoningDeltaEvent(text=reasoning_str)
+                                logger.info(f"[openai_provider] reasoning_content delta: {reasoning_str[:100]}")
                             reasoning_details = delta.get("reasoning_details")
                             if reasoning_details:
                                 for detail in reasoning_details:
