@@ -105,7 +105,7 @@ function DisconnectBanner({
         description={
           isAuthError ? (
             <Space>
-              <Button size="small" type="primary" onClick={() => { window.location.href = '/login' }}>
+              <Button size="small" type="primary" onClick={() => { window.location.href = '/settings' }}>
                 重新登录
               </Button>
               <Button size="small" type="text" onClick={() => setDismissed(true)}>
