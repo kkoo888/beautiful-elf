@@ -22,7 +22,7 @@ import {
   Typography,
   Modal,
   Popconfirm,
-  message,
+  App,
   Empty,
   Tooltip,
   Divider,
@@ -141,6 +141,7 @@ const MODEL_PRESETS: Record<string, { modelName: string; displayName: string; co
 }
 
 export function LlmProviderSettings() {
+  const { message } = App.useApp()
   const [providers, setProviders] = useState<LLMProvider[]>([])
   const [loading, setLoading] = useState(true)
 
