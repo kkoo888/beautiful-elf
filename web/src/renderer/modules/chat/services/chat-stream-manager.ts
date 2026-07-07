@@ -100,14 +100,14 @@ class ChatStreamManager {
     let resolveDone!: () => void
     const done = new Promise<void>((r) => { resolveDone = r })
 
-    // 超时保护：30s 无事件视为失败
+    // 超时保护：180s 无事件视为失败
     const timeout = setTimeout(() => {
       if (this.currentPending) {
         this.currentPending.onError?.(new Error('连接超时，请重试'))
         this.currentPending.resolveDone()
         this.currentPending = null
       }
-    }, 30_000)
+    }, 180_000)
 
     this.currentPending = { onToken, onError, callbacks, resolveDone, timeout }
 
@@ -164,7 +164,7 @@ class ChatStreamManager {
         this.currentPending.resolveDone()
         this.currentPending = null
       }
-    }, 30_000)
+    }, 180_000)
 
     this.currentPending = { onToken, onError, callbacks, resolveDone, timeout }
 

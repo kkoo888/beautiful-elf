@@ -112,7 +112,7 @@ export function chatStream(
         completed = true
         resolveDone()
       }
-    }, 30_000)
+    }, 180_000)
   }
 
   // 消息分发
@@ -259,7 +259,7 @@ export function chatResumeStream(
         completed = true
         resolveDone()
       }
-    }, 30_000)
+    }, 180_000)
   }
 
   const handleMessage = (event: MessageEvent) => {
