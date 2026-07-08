@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Tabs, Table, Tag, Card, Button, Empty, Spin, Badge, message, Alert } from 'antd'
+import { Tabs, Table, Tag, Card, Button, Empty, Spin, Badge, App, Alert } from 'antd'
 import {
   HistoryOutlined,
   NodeIndexOutlined,
@@ -269,6 +269,7 @@ function SkillSuggestionList() {
 // ── 主面板 ───────────────────────────────────────────────
 
 export default function IntentLearningPanel() {
+  const { message } = App.useApp()
   const { data: corrections = [] } = useIntentCorrections()
   const { data: patterns = [] } = useBehaviorPatterns()
   const { data: suggestions = [] } = useSkillSuggestions()

@@ -109,6 +109,8 @@ export function LoginSettings() {
           saveAuth(data.data.accessToken, data.data.user)
           setAuth({ token: data.data.accessToken, user: data.data.user })
           message.success('登录成功')
+          // 通知 WebSocket 重连（清除 auth_expired 状态）
+          window.dispatchEvent(new Event('ws-reconnect'))
           // 记住密码
           if (remember) {
             saveCredentials(values.username, values.password)

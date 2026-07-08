@@ -23,7 +23,7 @@ from app.repository.skill_repo import SkillRepository
 from app.schemas.intent_learning import (
     IntentCorrectionOut, IntentCorrectionCreate,
     BehaviorPatternOut,
-    SkillSuggestionOut, SkillSuggestionCreate,
+    SkillSuggestionOut,
 )
 from app.schemas.skill import SkillOut
 from app.core.exceptions import RecordNotFoundError

@@ -9,7 +9,7 @@ from app.schemas.auth import (
 from app.core.security import (
     hash_password, verify_password, create_access_token,
 )
-from app.core.exceptions import RecordNotFoundError, DuplicateEntryError, SkillError
+from app.core.exceptions import RecordNotFoundError, DuplicateEntryError, AuthUnauthorizedError
 
 
 class AuthService:
@@ -47,13 +47,13 @@ class AuthService:
         """登录，返回 JWT access_token + 用户信息"""
         user = await self.repo.find_by_username(db, data.username)
         if not user:
-            raise SkillError("用户名或密码错误")
+            raise AuthUnauthorizedError("用户名或密码错误")
 
         if not verify_password(data.password, user.password_hash):
-            raise SkillError("用户名或密码错误")
+            raise AuthUnauthorizedError("用户名或密码错误")
 
         if not user.is_enabled:
-            raise SkillError("账号已被禁用")
+            raise AuthUnauthorizedError("账号已被禁用")
 
         access_token = create_access_token(data={"user_id": user.id, "sub": str(user.id)})
         return LoginResponse(access_token=access_token, user=self._to_user_info_out(user))
@@ -74,7 +74,7 @@ class AuthService:
             raise RecordNotFoundError("用户不存在")
 
         if not verify_password(data.old_password, user.password_hash):
-            raise SkillError("旧密码错误")
+            raise AuthUnauthorizedError("旧密码错误")
 
         await self.repo.update(db, user_id, {
             "password_hash": hash_password(data.new_password),

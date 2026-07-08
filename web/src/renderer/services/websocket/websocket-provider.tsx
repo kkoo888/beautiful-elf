@@ -183,11 +183,25 @@ export function WebSocketProvider({
     }
     window.addEventListener('ws-auth-error', handleChatAuthError)
 
+    // 监听登录成功事件，触发 WebSocket 重连
+    const handleWsReconnect = () => {
+      if (mounted) {
+        setCloseReason(null)
+        const client = clientRef.current
+        if (client) {
+          client.disconnect()
+          setTimeout(() => client.connect(), 100)
+        }
+      }
+    }
+    window.addEventListener('ws-reconnect', handleWsReconnect)
+
     return () => {
       mounted = false
       unsub()
       unsubReason()
       window.removeEventListener('ws-auth-error', handleChatAuthError)
+      window.removeEventListener('ws-reconnect', handleWsReconnect)
       client.destroy()
       clientRef.current = null
     }
