@@ -41,6 +41,7 @@ const SettingsPanel = React.lazy(() => import('@/modules/settings/settings-panel
 const ExpertTeamPanel = React.lazy(() => import('@/modules/expert-team'))
 const ImageGalleryPanel = React.lazy(() => import('@/modules/image-gallery'))
 const VideoGalleryPanel = React.lazy(() => import('@/modules/video-gallery'))
+const IntentLearningPanel = React.lazy(() => import('@/modules/intent-learning/intent-learning-panel'))
 
 export function ChatPage() {
   return (
@@ -182,6 +183,14 @@ export function VideoGalleryPage() {
   return (
     <PageSuspense moduleName="视频画廊">
       <VideoGalleryPanel />
+    </PageSuspense>
+  )
+}
+
+export function IntentLearningPage() {
+  return (
+    <PageSuspense moduleName="意图学习">
+      <IntentLearningPanel />
     </PageSuspense>
   )
 }

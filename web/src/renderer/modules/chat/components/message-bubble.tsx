@@ -29,6 +29,7 @@ import 'prismjs/components/prism-go'
 import styles from './chat-panel.module.css'
 import { FeedbackButtons } from './feedback-buttons'
 import { QuickAnswerBadge } from './quick-answer-badge'
+import { IntentCorrectionButton } from './intent-correction-button'
 import type { ChatMessage, FeedbackData } from '../types/chat'
 
 /** ◆ 符号替换为前端 UI icon */
@@ -218,13 +219,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onFeedbac
           </div>
         )}
 
-        {/* AI 反馈按钮 — 仅在消息完成后显示 */}
-        {isAssistant && onFeedback && message.completed && (
-          <FeedbackButtons
-            messageId={message.id}
-            feedback={message.feedback}
-            onFeedback={onFeedback}
-          />
+        {/* AI 反馈按钮 + 纠正意图 — 仅在消息完成后显示 */}
+        {isAssistant && message.completed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {onFeedback && (
+              <FeedbackButtons
+                messageId={message.id}
+                feedback={message.feedback}
+                onFeedback={onFeedback}
+              />
+            )}
+            <IntentCorrectionButton
+              originalIntent={message.content}
+              intentRoute={message.metadata?.intentRoute?.module}
+            />
+          </div>
         )}
       </div>
     </div>

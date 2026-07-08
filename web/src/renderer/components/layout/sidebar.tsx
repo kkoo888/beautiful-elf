@@ -17,6 +17,7 @@ import {
   TeamOutlined,
   PictureOutlined,
   PlayCircleOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppStore } from '@/stores/use-app-store'
@@ -52,6 +53,7 @@ const menuItems: ItemType[] = [
       { key: '/skills', icon: <ToolOutlined />, label: '技能' },
       { key: '/image-gallery', icon: <PictureOutlined />, label: '图片画廊' },
       { key: '/video-gallery', icon: <PlayCircleOutlined />, label: '视频画廊' },
+      { key: '/intent-learning', icon: <ExperimentOutlined />, label: '意图学习' },
     ],
   },
   {

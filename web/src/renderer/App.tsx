@@ -29,6 +29,7 @@ import {
   ExpertTeamPage,
   ImageGalleryPage,
   VideoGalleryPage,
+  IntentLearningPage,
 } from '@/pages'
 
 const queryClient = new QueryClient({
@@ -113,6 +114,7 @@ export default function App() {
                   <Route path="expert-team" element={<ExpertTeamPage />} />
                   <Route path="image-gallery" element={<ImageGalleryPage />} />
                   <Route path="video-gallery" element={<VideoGalleryPage />} />
+                  <Route path="intent-learning" element={<IntentLearningPage />} />
                   <Route path="settings" element={<SettingsPage />} />
                 </Route>
               </Routes>

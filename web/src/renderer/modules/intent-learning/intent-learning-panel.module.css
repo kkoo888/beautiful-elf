@@ -1,3 +1,277 @@
+/* 意图学习面板样式 */
+
 .panel {
-  padding: 16px;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 统计概览卡片 */
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.statCard {
+  padding: 20px 24px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f0f5ff 0%, #f6ffed 100%);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.statCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.statCard:nth-child(2) {
+  background: linear-gradient(135deg, #fff0f6 0%, #f0f5ff 100%);
+}
+
+.statCard:nth-child(3) {
+  background: linear-gradient(135deg, #f6ffed 0%, #fffbe6 100%);
+}
+
+:global(.dark) .statCard,
+:global(.dark) .statCard:nth-child(2),
+:global(.dark) .statCard:nth-child(3) {
+  background: linear-gradient(135deg, #1a1f30 0%, #1a2a1a 100%);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.statIcon {
+  font-size: 28px;
+  margin-bottom: 12px;
+  opacity: 0.85;
+}
+
+.statValue {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+:global(.dark) .statValue {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.statLabel {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+:global(.dark) .statLabel {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Tab 内容区 */
+.tabContent {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* 纠正历史表格 */
+.correctionTable {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.intentText {
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+:global(.dark) .intentText {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 行为模式卡片 */
+.patternCard {
+  margin-bottom: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: border-color 0.2s ease;
+}
+
+.patternCard:hover {
+  border-color: var(--ant-color-primary-border);
+}
+
+:global(.dark) .patternCard {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.patternHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.patternDesc {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.75);
+  margin: 0;
+  line-height: 1.6;
+}
+
+:global(.dark) .patternDesc {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.frequencyBadge {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.actionFlow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.actionTag {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  background: #f0f5ff;
+  border: 1px solid #d6e4ff;
+  color: #1677ff;
+}
+
+:global(.dark) .actionTag {
+  background: #1a1f30;
+  border-color: #1a3a6e;
+  color: #4096ff;
+}
+
+.actionArrow {
+  color: rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+}
+
+:global(.dark) .actionArrow {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* 技能建议卡片 */
+.suggestionCard {
+  margin-bottom: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+}
+
+.suggestionCard:hover {
+  border-color: #b7eb8f;
+  box-shadow: 0 2px 8px rgba(82, 196, 26, 0.08);
+}
+
+:global(.dark) .suggestionCard {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global(.dark) .suggestionCard:hover {
+  border-color: #389e0d;
+  box-shadow: 0 2px 8px rgba(82, 196, 26, 0.12);
+}
+
+.suggestionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.suggestionName {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+  margin: 0 0 4px 0;
+}
+
+:global(.dark) .suggestionName {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.suggestionDesc {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.55);
+  margin: 0;
+  line-height: 1.6;
+}
+
+:global(.dark) .suggestionDesc {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.suggestionMeta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.35);
+}
+
+:global(.dark) .suggestionMeta {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.suggestionActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 空状态美化 */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: rgba(0, 0, 0, 0.35);
+}
+
+:global(.dark) .emptyState {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.emptyIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.4;
+}
+
+.emptyText {
+  font-size: 14px;
+  text-align: center;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .statsRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .statCard {
+    padding: 14px 16px;
+  }
+
+  .statValue {
+    font-size: 22px;
+  }
 }

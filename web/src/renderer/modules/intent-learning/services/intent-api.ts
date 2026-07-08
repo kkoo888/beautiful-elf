@@ -1,146 +1,95 @@
-import dayjs from 'dayjs'
-import type { IntentCorrection, BehaviorPattern, SkillSuggestion } from '../types/intent-learning'
+import type { IntentCorrection, BehaviorPattern, SkillSuggestion, AnalyzeResult } from '../types/intent-learning'
 
-const MOCK_CORRECTIONS: IntentCorrection[] = [
-  {
-    id: '1',
-    originalIntent: '帮我写个周报',
-    correctModule: '工作流',
-    createdAt: dayjs().subtract(1, 'hour').toISOString(),
-  },
-  {
-    id: '2',
-    originalIntent: '翻译这段话',
-    correctModule: '翻译',
-    createdAt: dayjs().subtract(2, 'hour').toISOString(),
-  },
-  {
-    id: '3',
-    originalIntent: '记住我的密码是...',
-    correctModule: '记忆',
-    createdAt: dayjs().subtract(3, 'hour').toISOString(),
-  },
-  {
-    id: '4',
-    originalIntent: '帮我剪贴这段代码',
-    correctModule: '剪贴板',
-    createdAt: dayjs().subtract(5, 'hour').toISOString(),
-  },
-  {
-    id: '5',
-    originalIntent: '明天下午三点开会',
-    correctModule: '日程',
-    createdAt: dayjs().subtract(8, 'hour').toISOString(),
-  },
-  {
-    id: '6',
-    originalIntent: '这段代码有bug',
-    correctModule: '代码片段',
-    createdAt: dayjs().subtract(12, 'hour').toISOString(),
-  },
-  {
-    id: '7',
-    originalIntent: '关于Rust的知识',
-    correctModule: '知识库',
-    createdAt: dayjs().subtract(1, 'day').toISOString(),
-  },
-]
+const API_BASE = '/api/v1/intent-learning'
 
-const MOCK_PATTERNS: BehaviorPattern[] = [
-  {
-    id: '1',
-    description: '每天早上查看日程并整理待办',
-    frequency: 28,
-    actions: ['查询日程', '列出待办', '设置提醒'],
-  },
-  {
-    id: '2',
-    description: '翻译收到的外文消息后回复',
-    frequency: 15,
-    actions: ['接收消息', '检测语言', '翻译', '回复'],
-  },
-  {
-    id: '3',
-    description: '复制代码片段到剪贴板后格式化',
-    frequency: 22,
-    actions: ['复制代码', '检测语言', '格式化', '保存'],
-  },
-  {
-    id: '4',
-    description: '写周报时先汇总本周工作',
-    frequency: 8,
-    actions: ['查询工作记录', '分类汇总', '生成周报', '导出'],
-  },
-]
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json()
+  if (json.code && json.code !== 'SUCCESS') throw new Error(json.message || '请求失败')
+  // 防御：后端返回 {code: 'SUCCESS', data: null} 时，调用方访问 res.data 不会出错
+  return (json.data !== undefined ? json : { ...json, data: json.data ?? {} }) as T
+}
 
-const MOCK_SUGGESTIONS: SkillSuggestion[] = [
-  {
-    id: '1',
-    patternId: '1',
-    name: '早间日程助手',
-    description: '自动查询当日日程并生成待办清单，支持设置提醒',
-    createdAt: dayjs().subtract(2, 'day').toISOString(),
-  },
-  {
-    id: '2',
-    patternId: '2',
-    name: '智能翻译回复',
-    description: '检测外文消息并自动翻译，生成回复建议',
-    createdAt: dayjs().subtract(3, 'day').toISOString(),
-  },
-  {
-    id: '3',
-    patternId: '4',
-    name: '周报生成器',
-    description: '基于本周工作记录自动生成周报草稿',
-    createdAt: dayjs().subtract(5, 'day').toISOString(),
-  },
-]
+// ── 纠正历史 ─────────────────────────────────────────────
 
 export async function fetchCorrections(): Promise<IntentCorrection[]> {
   try {
-    // const res = await apiClient.get('/intent-learning/corrections')
-    // return res.data
-    throw new Error('use mock')
+    const res = await request<{ data: any[] }>(`${API_BASE}/corrections?page=1&pageSize=100`)
+    return (res.data || []).map((item: any) => ({
+      id: String(item.id),
+      originalIntent: item.originalIntent || item.original_intent || '',
+      correctModule: item.correctModule || item.correct_module || '',
+      createdAt: item.createdAt || item.created_at || '',
+    }))
   } catch {
-    return [...MOCK_CORRECTIONS]
+    return []
   }
 }
+
+export async function createCorrection(originalIntent: string, correctModule: string): Promise<void> {
+  await request(`${API_BASE}/corrections`, {
+    method: 'POST',
+    body: JSON.stringify({ originalIntent, correctModule }),
+  })
+}
+
+// ── 行为模式 ─────────────────────────────────────────────
 
 export async function fetchPatterns(): Promise<BehaviorPattern[]> {
   try {
-    // const res = await apiClient.get('/intent-learning/patterns')
-    // return res.data
-    throw new Error('use mock')
+    const res = await request<{ data: any[] }>(`${API_BASE}/patterns?page=1&pageSize=100`)
+    return (res.data || []).map((item: any) => ({
+      id: String(item.id),
+      description: item.description || '',
+      frequency: item.frequency || 0,
+      actions: item.actions || [],
+      isSolved: item.isSolved ?? item.is_solved ?? 0,
+      createdAt: item.createdAt || item.created_at || '',
+    }))
   } catch {
-    return [...MOCK_PATTERNS]
+    return []
   }
 }
 
+// ── 技能建议 ─────────────────────────────────────────────
+
 export async function fetchSuggestions(): Promise<SkillSuggestion[]> {
   try {
-    // const res = await apiClient.get('/intent-learning/suggestions')
-    // return res.data
-    throw new Error('use mock')
+    const res = await request<{ data: any[] }>(`${API_BASE}/suggestions?page=1&pageSize=100&status=0`)
+    return (res.data || []).map((item: any) => ({
+      id: String(item.id),
+      patternId: String(item.patternId || item.pattern_id || ''),
+      name: item.name || '',
+      description: item.description || '',
+      ignoreCount: item.ignoreCount ?? item.ignore_count ?? 0,
+      lastFeedback: item.lastFeedback || item.last_feedback || '',
+      createdAt: item.createdAt || item.created_at || '',
+    }))
   } catch {
-    return [...MOCK_SUGGESTIONS]
+    return []
   }
 }
 
 export async function acceptSuggestion(id: string): Promise<void> {
-  try {
-    // await apiClient.post(`/intent-learning/suggestions/${id}/accept`)
-    throw new Error('use mock')
-  } catch {
-    console.log(`Suggestion ${id} accepted (mock)`)
-  }
+  await request(`${API_BASE}/suggestions/${id}/accept`, { method: 'POST' })
 }
 
 export async function ignoreSuggestion(id: string): Promise<void> {
-  try {
-    // await apiClient.post(`/intent-learning/suggestions/${id}/ignore`)
-    throw new Error('use mock')
-  } catch {
-    console.log(`Suggestion ${id} ignored (mock)`)
-  }
+  await request(`${API_BASE}/suggestions/${id}/ignore`, { method: 'POST' })
+}
+
+// ── 行为分析 ─────────────────────────────────────────────
+
+export async function analyzeBehavior(): Promise<AnalyzeResult> {
+  const res = await request<{ data: AnalyzeResult }>(`${API_BASE}/analyze`, { method: 'POST' })
+  return res.data
+}
+
+export async function createIntentFromPattern(patternId: string): Promise<any> {
+  const res = await request<{ data: any }>(`${API_BASE}/patterns/${patternId}/create-intent`, { method: 'POST' })
+  return res.data
 }

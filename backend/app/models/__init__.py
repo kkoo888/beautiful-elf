@@ -13,6 +13,7 @@ from app.models.rag_config import RagConfig
 
 # 意图
 from app.models.intent import Intent, IntentUsage
+from app.models.intent_learning import IntentCorrection, BehaviorPattern, SkillSuggestion
 
 # 技能
 from app.models.skill import Skill, SkillStats

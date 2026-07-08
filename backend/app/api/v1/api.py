@@ -32,6 +32,7 @@ from app.api.v1 import (
     ollama,
     llm_provider,
     intent,
+    intent_learning,
     auth,
     debug,
     image_gallery,
@@ -79,6 +80,7 @@ api_router.include_router(video_gallery.router, prefix="/video_gallery", tags=["
 api_router.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
 api_router.include_router(llm_provider.router, prefix="/llm_providers", tags=["llm_provider"])
 api_router.include_router(intent.router, prefix="/intents", tags=["intent"])
+api_router.include_router(intent_learning.router, prefix="/intent-learning", tags=["intent-learning"])
 
 # 系统
 api_router.include_router(notification.router, prefix="/notifications", tags=["notification"])

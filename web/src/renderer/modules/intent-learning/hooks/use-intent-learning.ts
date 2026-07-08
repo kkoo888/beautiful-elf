@@ -5,6 +5,8 @@ import {
   fetchSuggestions,
   acceptSuggestion,
   ignoreSuggestion,
+  analyzeBehavior,
+  createIntentFromPattern,
 } from '../services/intent-api'
 
 export function useIntentCorrections() {
@@ -33,6 +35,7 @@ export function useSkillSuggestions() {
     mutationFn: acceptSuggestion,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['skill-suggestions'] })
+      queryClient.invalidateQueries({ queryKey: ['skills'] })  // 刷新技能列表
     },
   })
 
@@ -48,4 +51,28 @@ export function useSkillSuggestions() {
     acceptSuggestion: accept.mutateAsync,
     ignoreSuggestion: ignore.mutateAsync,
   }
+}
+
+export function useAnalyzeBehavior() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: analyzeBehavior,
+    onSuccess: () => {
+      // 分析完成后刷新所有相关数据
+      queryClient.invalidateQueries({ queryKey: ['behavior-patterns'] })
+      queryClient.invalidateQueries({ queryKey: ['skill-suggestions'] })
+    },
+  })
+}
+
+export function useCreateIntentFromPattern() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: createIntentFromPattern,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['behavior-patterns'] })
+    },
+  })
 }
