@@ -1,5 +1,32 @@
 export type PetInteractionType = 'feed' | 'clean' | 'chat' | 'play'
 
+/**
+ * 互动类型枚举（与后端 InteractionType IntEnum 对齐）
+ * 后端: backend/app/models/pet.py → InteractionType
+ */
+export const PET_INTERACTION_TYPE_ID: Record<PetInteractionType, number> = {
+  feed: 0,
+  clean: 1,
+  chat: 2,
+  play: 3,
+} as const
+
+/** ID → 名称反向映射 */
+export const PET_INTERACTION_ID_TYPE: Record<number, PetInteractionType> = {
+  0: 'feed',
+  1: 'clean',
+  2: 'chat',
+  3: 'play',
+} as const
+
+/** 互动效果描述（与后端 INTERACTION_EFFECT_DESC 对齐） */
+export const PET_INTERACTION_EFFECT_DESC: Record<PetInteractionType, string> = {
+  feed: '饥饿度 +20',
+  clean: '清洁度 +20',
+  chat: '心情 +15, 亲密 +5',
+  play: '心情 +25, 经验 +10',
+} as const
+
 export interface PetInteraction {
   id: number
   type: PetInteractionType

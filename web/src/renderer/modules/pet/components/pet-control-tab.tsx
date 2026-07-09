@@ -95,31 +95,30 @@ export default function PetControlTab() {
     })()
   }, [])
 
-  // 刷新场景（通过 toggle 宠物窗口触发重新渲染）
+  // 刷新场景（通过 IPC 直接通知宠物窗口重载）
   const handleRefresh = useCallback(async () => {
     if (!isElectron) {
       message.warning('当前环境不支持宠物窗口')
       return
     }
     message.info('正在刷新场景...')
-    await petApi.hide()
-    // 短暂延迟后重新显示，触发 pet-app 中的重载逻辑
-    setTimeout(async () => {
-      await petApi.show()
-    }, 200)
+    const result = await petApi.reload()
+    if (!result.success) {
+      message.error(result.message || '刷新失败，请先显示宠物窗口')
+    }
   }, [isElectron, petApi])
 
-  // 重载模型（同刷新，pet-app 在可见时会检查并重载模型）
+  // 重载模型（通过 IPC 直接通知宠物窗口重载当前模型）
   const handleReloadModel = useCallback(async () => {
     if (!isElectron) {
       message.warning('当前环境不支持宠物窗口')
       return
     }
     message.info('正在重载模型...')
-    await petApi.hide()
-    setTimeout(async () => {
-      await petApi.show()
-    }, 200)
+    const result = await petApi.reload()
+    if (!result.success) {
+      message.error(result.message || '重载失败，请先显示宠物窗口')
+    }
   }, [isElectron, petApi])
 
   // 切换宠物显示/隐藏 - 使用 IPC 返回值，不依赖闭包状态

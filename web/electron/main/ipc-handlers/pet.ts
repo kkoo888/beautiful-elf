@@ -83,4 +83,14 @@ export function registerPetHandlers(): void {
   ipcMain.on('pet:model-changed', () => {
     notifyPetWindowModelChanged()
   })
+
+  // 请求宠物窗口强制重载当前模型（刷新场景）
+  ipcMain.handle('pet:reload', () => {
+    const petWin = getPetWindow()
+    if (!petWin || petWin.isDestroyed()) {
+      return { success: false, error: 'PET_WINDOW_ERROR', message: '宠物窗口未打开' }
+    }
+    petWin.webContents.send('pet:force-reload')
+    return { success: true }
+  })
 }

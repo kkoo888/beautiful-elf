@@ -22,6 +22,14 @@ export const petApi = {
   sendScreenshot: (data: string) => {
     ipcRenderer.send('pet:screenshot', data)
   },
+  /** 请求宠物窗口重新加载当前模型（刷新场景） */
+  reload: () => ipcRenderer.invoke('pet:reload'),
+  /** 监听强制重载通知（刷新场景用），返回清理函数 */
+  onForceReload: (callback: () => void): (() => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('pet:force-reload', handler)
+    return () => ipcRenderer.removeListener('pet:force-reload', handler)
+  },
   /** 通知宠物窗口模型已切换，触发重新加载 */
   notifyModelChanged: () => {
     ipcRenderer.send('pet:model-changed')

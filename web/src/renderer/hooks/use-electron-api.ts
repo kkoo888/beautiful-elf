@@ -67,11 +67,19 @@ export function useElectronApi() {
       sendScreenshot: (data: string) => {
         if (isElectron) window.electronAPI.pet.sendScreenshot(data)
       },
+      reload: async (): Promise<{ success: boolean; message?: string }> => {
+        if (isElectron) return window.electronAPI.pet.reload()
+        return { success: false, message: '非 Electron 环境' }
+      },
       notifyModelChanged: () => {
         if (isElectron) window.electronAPI.pet.notifyModelChanged()
       },
       onModelChanged: (callback: () => void): (() => void) => {
         if (isElectron) return window.electronAPI.pet.onModelChanged(callback)
+        return () => {}
+      },
+      onForceReload: (callback: () => void): (() => void) => {
+        if (isElectron) return window.electronAPI.pet.onForceReload(callback)
         return () => {}
       },
     }),

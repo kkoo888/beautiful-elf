@@ -8,10 +8,11 @@
 import { apiClient, extractData } from '@/services/api-client'
 import type { PetAttributes } from '@/types'
 import type { PetInteraction, PetInteractionType } from '../types/pet'
-
-const INTERACTION_TYPE_MAP: Record<PetInteractionType, number> = { feed: 0, clean: 1, chat: 2, play: 3 }
-const INTERACTION_TYPE_NAME_MAP: Record<number, PetInteractionType> = { 0: 'feed', 1: 'clean', 2: 'chat', 3: 'play' }
-const INTERACT_EFFECTS: Record<PetInteractionType, string> = { feed: '饥饿度 +20', clean: '清洁度 +20', chat: '心情 +15, 亲密 +5', play: '心情 +25, 经验 +10' }
+import {
+  PET_INTERACTION_TYPE_ID,
+  PET_INTERACTION_ID_TYPE,
+  PET_INTERACTION_EFFECT_DESC,
+} from '../types/pet'
 
 export async function fetchPetAttributes(): Promise<PetAttributes> {
   const data = extractData(await apiClient.get('/pets')) as Record<string, number>
@@ -19,10 +20,10 @@ export async function fetchPetAttributes(): Promise<PetAttributes> {
 }
 
 export async function interact(type: PetInteractionType): Promise<{ attributes: PetAttributes; interaction: PetInteraction }> {
-  const result = extractData(await apiClient.post('/pets/interactions', { interaction_type: INTERACTION_TYPE_MAP[type] })) as any
+  const result = extractData(await apiClient.post('/pets/interactions', { interaction_type: PET_INTERACTION_TYPE_ID[type] })) as any
   return {
     attributes: { hunger: result.pet.hunger, clean: result.pet.clean, mood: result.pet.mood, health: result.pet.health, intimacy: result.pet.intimacy, level: result.pet.level },
-    interaction: { id: String(Date.now()), type, effect: INTERACT_EFFECTS[type], createdAt: new Date().toISOString() },
+    interaction: { id: String(Date.now()), type, effect: PET_INTERACTION_EFFECT_DESC[type], createdAt: new Date().toISOString() },
   }
 }
 
@@ -31,7 +32,7 @@ export async function fetchInteractions(params: { page?: number; pageSize?: numb
     params: { page: params.page ?? 1, pageSize: params.pageSize ?? 20 },
   })) as any[]
   return items.map((item) => ({
-    id: String(item.id), type: INTERACTION_TYPE_NAME_MAP[item.interactionType] ?? 'feed',
+    id: String(item.id), type: PET_INTERACTION_ID_TYPE[item.interactionType] ?? 'feed',
     effect: item.effectDesc ?? '', createdAt: item.createdAt ?? new Date().toISOString(),
   }))
 }

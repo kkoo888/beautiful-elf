@@ -8,41 +8,62 @@ from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate, PetAttribu
 from app.schemas.response import ApiResult, ApiPageResult
 
 router = APIRouter()
-_service = PetService()
+
+
+def _get_service() -> PetService:
+    return PetService()
 
 
 @router.get("", response_model=ApiResult[PetAttributeOut])
-async def list_pets(db: AsyncSession = Depends(get_db)) -> ApiResult[PetAttributeOut]:
+async def list_pets(
+    db: AsyncSession = Depends(get_db),
+    service: PetService = Depends(_get_service),
+) -> ApiResult[PetAttributeOut]:
     """获取宠物属性"""
-    item = await _service.get_attributes(db)
+    item = await service.get_attributes(db)
     return ApiResult(data=item)
 
 
 @router.put("", response_model=ApiResult[PetAttributeOut])
-async def update_pet(data: PetAttributeUpdate, db: AsyncSession = Depends(get_db)) -> ApiResult[PetAttributeOut]:
+async def update_pet(
+    data: PetAttributeUpdate,
+    db: AsyncSession = Depends(get_db),
+    service: PetService = Depends(_get_service),
+) -> ApiResult[PetAttributeOut]:
     """更新宠物属性"""
-    item = await _service.update_attributes(db, data)
+    item = await service.update_attributes(db, data)
     return ApiResult(data=item)
 
 
 @router.post("/interactions")
-async def create_interaction(data: PetInteractionCreate, db: AsyncSession = Depends(get_db)):
+async def create_interaction(
+    data: PetInteractionCreate,
+    db: AsyncSession = Depends(get_db),
+    service: PetService = Depends(_get_service),
+):
     """宠物互动（喂食/清洁/聊天/玩耍）"""
-    result = await _service.interact(db, data)
+    result = await service.interact(db, data)
     return ApiResult(data=result)
 
 
 @router.post("/models/scan")
-async def scan_models(data: ModelScanRequest):
+async def scan_models(
+    data: ModelScanRequest,
+    service: PetService = Depends(_get_service),
+):
     """扫描目录下的 3D 模型文件"""
-    result = _service.scan_models(data.dir_path)
+    result = service.scan_models(data.dir_path)
     return ApiResult(data=result)
 
 
 @router.post("/models/switch")
-async def switch_model(data: ModelSwitchRequest, db: AsyncSession = Depends(get_db)):
+async def switch_model(
+    data: ModelSwitchRequest,
+    db: AsyncSession = Depends(get_db),
+    service: PetService = Depends(_get_service),
+):
     """切换宠物模型"""
-    result = await _service.switch_model(db, data.model_path)
+    result = await service.switch_model(db, data.model_path)
     return ApiResult(data=result)
 
 
@@ -51,7 +72,8 @@ async def list_interactions(
     page: int = Query(default=1, ge=1, description="页码"),
     page_size: int = Query(default=20, ge=1, le=100, description="每页数量", alias="pageSize"),
     db: AsyncSession = Depends(get_db),
+    service: PetService = Depends(_get_service),
 ) -> ApiPageResult:
     """查询互动记录（分页）"""
-    items, total = await _service.get_interactions(db, page, page_size)
+    items, total = await service.get_interactions(db, page, page_size)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
