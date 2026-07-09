@@ -61,12 +61,13 @@ export default function PetApp() {
 
       const onProgress = (pct: number, msg: string) => setStatus(msg)
 
-      await scene.loadModel(modelPath, onProgress)
+      const modelUrl = modelPath.startsWith('file:') ? modelPath : `file://${modelPath}`
+      await scene.loadModel(modelUrl, onProgress)
 
-      const vmdPath = deriveVmdPath(modelPath)
+      const vmdPath = deriveVmdPath(modelUrl)
       if (vmdPath) {
         try {
-          await scene.loadModelWithAnimation(modelPath, vmdPath, onProgress)
+          await scene.loadModelWithAnimation(modelUrl, vmdPath, onProgress)
         } catch {
           // VMD 可选，静默忽略
         }
@@ -92,7 +93,6 @@ export default function PetApp() {
         setLoading(true)
         setStatus('初始化 3D 场景...')
         await scene.init()
-        setReady(true)
 
         setStatus('读取模型配置...')
         const modelPath = await fetchModelPath()
@@ -103,13 +103,15 @@ export default function PetApp() {
 
           const onProgress = (pct: number, msg: string) => setStatus(msg)
 
-          await scene.loadModel(modelPath, onProgress)
+          // Electron 中本地文件需要 file:// 前缀
+          const modelUrl = modelPath.startsWith('file:') ? modelPath : `file://${modelPath}`
+          await scene.loadModel(modelUrl, onProgress)
 
-          const vmdPath = deriveVmdPath(modelPath)
+          const vmdPath = deriveVmdPath(modelUrl)
           if (vmdPath) {
             setStatus(`尝试加载动画: ${vmdPath.split('/').pop() || vmdPath}`)
             try {
-              await scene.loadModelWithAnimation(modelPath, vmdPath, onProgress)
+              await scene.loadModelWithAnimation(modelUrl, vmdPath, onProgress)
               setStatus('模型+动画加载完成')
             } catch (vmdErr) {
               console.warn('[PetApp] VMD load failed, falling back to model-only:', vmdErr)
@@ -121,6 +123,9 @@ export default function PetApp() {
         } else {
           setStatus('未配置模型，请在设置中选择模型目录')
         }
+
+        // 模型加载完成后再启动截图（避免截到空白画面）
+        setReady(true)
 
         // 通知主窗口：宠物已就绪
         if (window.electronAPI?.pet) {
@@ -154,18 +159,19 @@ export default function PetApp() {
     }
   }, [])
 
-  // 定期截图发给主窗口（使用 toDataURL 替代 toBlob+readAsDataURL，链路更短）
+  // 定期截图发给主窗口（异步 toBlob，3 秒间隔）
   useEffect(() => {
     if (!ready) return
     const scene = sceneRef.current
     if (!scene) return
 
     const timer = setInterval(() => {
-      const dataUrl = scene.getScreenshotDataURL()
-      if (dataUrl) {
-        window.electronAPI?.pet?.sendScreenshot(dataUrl)
-      }
-    }, 1000)
+      scene.getScreenshotBlob((dataUrl) => {
+        if (dataUrl) {
+          window.electronAPI?.pet?.sendScreenshot(dataUrl)
+        }
+      })
+    }, 3000)
 
     return () => clearInterval(timer)
   }, [ready])
@@ -232,12 +238,13 @@ export default function PetApp() {
       if (modelPath) {
         currentModelPathRef.current = modelPath
         const onProgress = (pct: number, msg: string) => setStatus(msg)
-        await scene.loadModel(modelPath, onProgress)
+        const modelUrl = modelPath.startsWith('file:') ? modelPath : `file://${modelPath}`
+        await scene.loadModel(modelUrl, onProgress)
 
-        const vmdPath = deriveVmdPath(modelPath)
+        const vmdPath = deriveVmdPath(modelUrl)
         if (vmdPath) {
           try {
-            await scene.loadModelWithAnimation(modelPath, vmdPath, onProgress)
+            await scene.loadModelWithAnimation(modelUrl, vmdPath, onProgress)
           } catch { /* optional */ }
         }
         setStatus('模型加载完成')

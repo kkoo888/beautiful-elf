@@ -21,6 +21,13 @@ function startMouseTracking(): void {
     try {
       const cursor = screen.getCursorScreenPoint()
       const bounds = petWindow.getBounds()
+      // 窗口外不追踪
+      const inWindow =
+        cursor.x >= bounds.x &&
+        cursor.x <= bounds.x + bounds.width &&
+        cursor.y >= bounds.y &&
+        cursor.y <= bounds.y + bounds.height
+      if (!inWindow) return
       // 归一化到 -1 ~ 1（相对于窗口中心）
       const normalizedX = ((cursor.x - bounds.x) / bounds.width) * 2 - 1
       const normalizedY = ((cursor.y - bounds.y) / bounds.height) * 2 - 1
@@ -63,6 +70,7 @@ export function createPetWindow(): BrowserWindow {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false, // 允许加载本地 PMX 模型文件
       preload: join(__dirname, '../preload/index.js'),
     },
   })
