@@ -30,6 +30,12 @@ export const petApi = {
     ipcRenderer.on('pet:force-reload', handler)
     return () => ipcRenderer.removeListener('pet:force-reload', handler)
   },
+  /** 监听全局鼠标移动（30fps，归一化坐标 -1~1），返回清理函数 */
+  onGlobalMouseMove: (callback: (pos: { x: number; y: number }) => void): (() => void) => {
+    const handler = (_: Electron.IpcRendererEvent, pos: { x: number; y: number }) => callback(pos)
+    ipcRenderer.on('global-mouse-move', handler)
+    return () => ipcRenderer.removeListener('global-mouse-move', handler)
+  },
   /** 通知宠物窗口模型已切换，触发重新加载 */
   notifyModelChanged: () => {
     ipcRenderer.send('pet:model-changed')

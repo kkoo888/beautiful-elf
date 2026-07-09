@@ -7,6 +7,40 @@ let petWindow: BrowserWindow | null = null
 /** 外部注入的可见性变化回调（由 window-manager 设置，避免循环依赖） */
 let visibilityCallback: ((visible: boolean) => void) | null = null
 
+/** 鼠标追踪定时器 */
+let mouseTrackInterval: ReturnType<typeof setInterval> | null = null
+
+/** 启动 30fps 鼠标追踪，将归一化坐标发送给宠物窗口 */
+function startMouseTracking(): void {
+  if (mouseTrackInterval) return
+  mouseTrackInterval = setInterval(() => {
+    if (!petWindow || petWindow.isDestroyed()) {
+      stopMouseTracking()
+      return
+    }
+    try {
+      const cursor = screen.getCursorScreenPoint()
+      const bounds = petWindow.getBounds()
+      // 归一化到 -1 ~ 1（相对于窗口中心）
+      const normalizedX = ((cursor.x - bounds.x) / bounds.width) * 2 - 1
+      const normalizedY = ((cursor.y - bounds.y) / bounds.height) * 2 - 1
+      petWindow.webContents.send('global-mouse-move', {
+        x: Math.max(-1, Math.min(1, normalizedX)),
+        y: Math.max(-1, Math.min(1, normalizedY)),
+      })
+    } catch {
+      // 静默忽略
+    }
+  }, 33) // 30fps
+}
+
+function stopMouseTracking(): void {
+  if (mouseTrackInterval) {
+    clearInterval(mouseTrackInterval)
+    mouseTrackInterval = null
+  }
+}
+
 export function setPetVisibilityCallback(cb: (visible: boolean) => void): void {
   visibilityCallback = cb
 }
@@ -42,22 +76,23 @@ export function createPetWindow(): BrowserWindow {
 
   // 性能自适应：不可见时降帧
   petWindow.on('hide', () => {
+    stopMouseTracking()
     if (petWindow && !petWindow.isDestroyed()) {
       petWindow.webContents.send('pet:visibility-change', false)
     }
-    // 通知外部：宠物窗口已隐藏（通过回调注入，避免循环依赖）
     visibilityCallback?.(false)
   })
   petWindow.on('show', () => {
+    startMouseTracking()
     if (petWindow && !petWindow.isDestroyed()) {
       petWindow.webContents.send('pet:visibility-change', true)
     }
-    // 通知外部：宠物窗口已显示（通过回调注入，避免循环依赖）
     visibilityCallback?.(true)
   })
 
   // 窗口关闭处理
   petWindow.on('closed', () => {
+    stopMouseTracking()
     petWindow = null
   })
 

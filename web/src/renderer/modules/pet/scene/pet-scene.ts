@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
 /** 加载超时时间 (ms) */
 const LOAD_TIMEOUT_MS = 10_000
@@ -8,13 +9,20 @@ const FPS_VISIBLE = 60
 const FPS_HIDDEN = 5
 /** 模型边界 padding 系数 */
 const CAMERA_PADDING = 1.2
+/** 鼠标追踪平滑系数（0-1，越大越快） */
+const MOUSE_LERP = 0.08
+/** 头部骨骼名称列表（PMX 常见命名） */
+const HEAD_BONE_NAMES = ['頭', 'head', 'Head', '頭部']
+/** 眼球骨骼名称列表 */
+const EYE_BONE_NAMES = ['左目', '右目', 'leftEye', 'rightEye', 'Eye_L', 'Eye_R']
 
 /** 加载进度回调 */
 export type LoadProgressCallback = (progress: number, status: string) => void
 
 /**
  * 宠物 3D 场景管理
- * 负责：Three.js 场景初始化、PMX 模型加载、VMD 动画、渲染循环、截图
+ * 负责：Three.js 场景初始化、PMX 模型加载、VMD 动画、渲染循环、
+ *       OrbitControls 交互、鼠标追踪视线跟随、截图
  *
  * 使用 Three.js r171 官方 MMDLoader（本地模块）
  */
@@ -23,6 +31,7 @@ export class PetScene {
   private renderer: THREE.WebGLRenderer | null = null
   private scene: THREE.Scene | null = null
   private camera: THREE.PerspectiveCamera | null = null
+  private controls: OrbitControls | null = null
   private clock: THREE.Clock | null = null
   private animationId: number | null = null
   private visible = true
@@ -45,6 +54,19 @@ export class PetScene {
   private contextLost = false
   private contextLostHandler: (() => void) | null = null
   private contextRestoredHandler: (() => void) | null = null
+
+  // ── 鼠标追踪 ──
+  /** 鼠标归一化坐标 (-1 ~ 1) */
+  private mouseX = 0
+  private mouseY = 0
+  /** 头部骨骼引用 */
+  private headBone: THREE.Bone | null = null
+  /** 眼球骨骼引用 */
+  private eyeBones: THREE.Bone[] = []
+  /** 头部初始旋转 */
+  private headRestRotation = new THREE.Euler()
+  /** 眼球初始旋转 */
+  private eyeRestRotations: THREE.Euler[] = []
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -84,6 +106,18 @@ export class PetScene {
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000)
     this.camera.position.set(0, 12, 25)
     this.camera.lookAt(0, 10, 0)
+
+    // ── OrbitControls（右键旋转，左键保留给窗口拖拽） ──
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+    this.controls.target.set(0, 10, 0)
+    this.controls.enableDamping = true
+    this.controls.dampingFactor = 0.05
+    this.controls.enableZoom = false
+    this.controls.mouseButtons = {
+      LEFT: null as unknown as THREE.MOUSE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE,
+    }
 
     // ── 灯光系统（4 灯配置，参考 PeroCore） ──
 
@@ -297,6 +331,9 @@ export class PetScene {
 
     this._isLoaded = false
     this.mesh = mesh
+
+    // 缓存头部/眼球骨骼引用（鼠标追踪用）
+    this.findHeadAndEyeBones()
   }
 
   /** 将模型材质升级为 PBR MeshStandardMaterial */
@@ -374,6 +411,9 @@ export class PetScene {
 
       const delta = this.clock!.getDelta()
 
+      // 更新 OrbitControls 阻尼
+      this.controls?.update()
+
       if (this.helper) {
         try {
           this.helper.update(delta)
@@ -381,6 +421,9 @@ export class PetScene {
           // helper 更新失败时静默忽略
         }
       }
+
+      // 鼠标追踪：头部/眼球跟随
+      this.updateMouseLook()
 
       try {
         this.renderer.render(this.scene, this.camera)
@@ -430,6 +473,85 @@ export class PetScene {
       return canvas.toDataURL('image/png')
     } catch {
       return null
+    }
+  }
+
+  // ── 鼠标追踪 ──────────────────────────────────────
+
+  /** 设置鼠标归一化坐标（由外部 IPC 调用） */
+  setMousePosition(normalizedX: number, normalizedY: number): void {
+    this.mouseX = normalizedX
+    this.mouseY = normalizedY
+  }
+
+  /** 模型加载后查找头部/眼球骨骼并缓存引用 */
+  private findHeadAndEyeBones(): void {
+    this.headBone = null
+    this.eyeBones = []
+    this.eyeRestRotations = []
+
+    if (!this.mesh) return
+
+    this.mesh.traverse((child) => {
+      if (!(child instanceof THREE.Bone)) return
+
+      const name = child.name
+
+      // 头部骨骼
+      if (!this.headBone && HEAD_BONE_NAMES.some((n) => name.includes(n))) {
+        this.headBone = child
+        this.headRestRotation.copy(child.rotation)
+      }
+
+      // 眼球骨骼
+      if (EYE_BONE_NAMES.some((n) => name.includes(n))) {
+        this.eyeBones.push(child)
+        this.eyeRestRotations.push(child.rotation.clone())
+      }
+    })
+  }
+
+  /** 每帧更新头部/眼球朝向鼠标方向（平滑插值） */
+  private updateMouseLook(): void {
+    if (!this.mesh || (!this.headBone && this.eyeBones.length === 0)) return
+
+    // 鼠标坐标转为旋转角度（弧度）
+    // mouseX: -1(左) ~ 1(右) → 水平旋转 ±25°
+    // mouseY: -1(上) ~ 1(下) → 垂直旋转 ±15°
+    const targetYaw = this.mouseX * 0.44   // ~25°
+    const targetPitch = -this.mouseY * 0.26 // ~15°（Y 轴反转）
+
+    // 头部跟随（全角度）
+    if (this.headBone) {
+      this.headBone.rotation.y = THREE.MathUtils.lerp(
+        this.headBone.rotation.y,
+        this.headRestRotation.y + targetYaw,
+        MOUSE_LERP,
+      )
+      this.headBone.rotation.x = THREE.MathUtils.lerp(
+        this.headBone.rotation.x,
+        this.headRestRotation.x + targetPitch,
+        MOUSE_LERP,
+      )
+    }
+
+    // 眼球跟随（较小角度，更加灵敏）
+    const eyeYaw = targetYaw * 0.6
+    const eyePitch = targetPitch * 0.6
+    for (let i = 0; i < this.eyeBones.length; i++) {
+      const bone = this.eyeBones[i]
+      const rest = this.eyeRestRotations[i]
+      if (!bone || !rest) continue
+      bone.rotation.y = THREE.MathUtils.lerp(
+        bone.rotation.y,
+        rest.y + eyeYaw,
+        MOUSE_LERP * 1.5,
+      )
+      bone.rotation.x = THREE.MathUtils.lerp(
+        bone.rotation.x,
+        rest.x + eyePitch,
+        MOUSE_LERP * 1.5,
+      )
     }
   }
 
@@ -491,6 +613,9 @@ export class PetScene {
         this.mesh.material.dispose()
       }
     }
+
+    this.controls?.dispose()
+    this.controls = null
 
     this.helper?.dispose()
 

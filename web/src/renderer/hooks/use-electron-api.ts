@@ -82,6 +82,10 @@ export function useElectronApi() {
         if (isElectron) return window.electronAPI.pet.onForceReload(callback)
         return () => {}
       },
+      onGlobalMouseMove: (callback: (pos: { x: number; y: number }) => void): (() => void) => {
+        if (isElectron) return window.electronAPI.pet.onGlobalMouseMove(callback)
+        return () => {}
+      },
     }),
     [isElectron]
   )

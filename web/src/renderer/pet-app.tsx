@@ -137,12 +137,18 @@ export default function PetApp() {
     initPet()
 
     // 可见性变化 → 控制渲染帧率
-    const cleanup = window.electronAPI?.pet?.onVisibilityChange((visible: boolean) => {
+    const cleanupVis = window.electronAPI?.pet?.onVisibilityChange((visible: boolean) => {
       scene.setVisible(visible)
     })
 
+    // 鼠标追踪 → 驱动头部/眼球跟随
+    const cleanupMouse = window.electronAPI?.pet?.onGlobalMouseMove((pos) => {
+      scene.setMousePosition(pos.x, pos.y)
+    })
+
     return () => {
-      cleanup?.()
+      cleanupVis?.()
+      cleanupMouse?.()
       scene.dispose()
       sceneRef.current = null
     }

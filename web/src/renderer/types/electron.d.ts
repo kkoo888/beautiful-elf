@@ -33,6 +33,8 @@ interface PetApi {
   onModelChanged: (callback: () => void) => (() => void)
   /** 监听强制重载通知（刷新场景），返回清理函数 */
   onForceReload: (callback: () => void) => (() => void)
+  /** 监听全局鼠标移动（30fps，归一化坐标 -1~1），返回清理函数 */
+  onGlobalMouseMove: (callback: (pos: { x: number; y: number }) => void) => (() => void)
 }
 
 interface DialogApi {
