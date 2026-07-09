@@ -803,14 +803,27 @@ def _resolve_path(path: str, working_directory: str = None) -> tuple:
 
 # ── 文件系统工具 ─────────────────────────────────────────
 
+# 单文件写入上限（1MB）
+_MAX_WRITE_BYTES = 1 * 1024 * 1024
+# apply_patch 最大编辑次数
+_MAX_PATCH_EDITS = 100
+
+
 async def write_file(path: str, content: str, encoding: str = "utf-8", workingDirectory: str = None) -> dict:
     """写入文件到工作空间"""
     workspace, target = _resolve_path(path, workingDirectory)
     if target is None:
         return {"error": "路径穿越攻击已拦截"}
+    # 目标是目录时拦截
+    if target.exists() and target.is_dir():
+        return {"error": f"目标是目录，不能写入: {path}"}
+    # 大小限制
+    content_bytes = len(content.encode(encoding))
+    if content_bytes > _MAX_WRITE_BYTES:
+        return {"error": f"内容过大 ({content_bytes} bytes)，上限 {_MAX_WRITE_BYTES} bytes"}
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding=encoding)
-    return {"success": True, "bytes_written": len(content.encode(encoding)), "path": path}
+    return {"success": True, "bytes_written": content_bytes, "path": path}
 
 
 async def list_files(path: str = ".", pattern: str = None, recursive: bool = False, workingDirectory: str = None) -> dict:
@@ -843,6 +856,11 @@ async def apply_patch(path: str, edits: list, workingDirectory: str = None) -> d
         return {"error": "路径穿越攻击已拦截"}
     if not target.exists():
         return {"error": f"文件不存在: {path}"}
+    if not target.is_file():
+        return {"error": f"目标不是文件: {path}"}
+    # 编辑次数限制
+    if len(edits) > _MAX_PATCH_EDITS:
+        return {"error": f"编辑次数过多 ({len(edits)})，上限 {_MAX_PATCH_EDITS}"}
     try:
         content = target.read_text(encoding="utf-8")
         replacements = 0
@@ -959,6 +977,7 @@ async def git_log(repo_path: str = ".", limit: int = 10, file_path: str = None, 
 async def exec_command(command: str, workdir: str = None, timeout: int = 10, workingDirectory: str = None) -> dict:
     """在沙箱中执行 Shell 命令"""
     import asyncio
+    import re
     workspace = _get_workspace(workingDirectory)
     cwd = str(workspace)
     if workdir:
@@ -966,11 +985,51 @@ async def exec_command(command: str, workdir: str = None, timeout: int = 10, wor
         if target is None:
             return {"error": "路径穿越攻击已拦截"}
         cwd = str(target)
-    # 危险命令拦截
-    dangerous = ["rm -rf /", "mkfs", "dd if=", "wget ", "curl ", "> /dev/"]
-    for d in dangerous:
-        if d in command:
-            return {"error": f"危险命令已拦截: 包含 '{d}'"}
+
+    # ── 危险命令拦截（正则匹配，防绕过）──
+    cmd_stripped = command.strip()
+    cmd_lower = cmd_stripped.lower()
+
+    # 1. 破坏性命令（删除根目录、格式化、覆写块设备）
+    destructive_patterns = [
+        r'\brm\b[^;]*\s/\s*$',  # rm ... /（删除根目录，行尾）
+        r'\brm\b[^;]*\s~/\s*$',  # rm ... ~/（删除主目录根，行尾）
+        r'\bmkfs\b',
+        r'\bdd\b.*\bif=',
+        r'\bshred\b',
+        r'\bwipefs\b',
+    ]
+    for pattern in destructive_patterns:
+        if re.search(pattern, cmd_lower):
+            return {"error": f"危险命令已拦截: 匹配破坏性操作 '{pattern}'"}
+
+    # 2. 写入敏感路径（重定向到系统文件）
+    sensitive_redirects = [
+        r'>\s*/etc/',
+        r'>>\s*/etc/',
+        r'>\s*/root/',
+        r'>\s*/boot/',
+        r'>\s*/proc/',
+        r'>\s*/sys/',
+        r'>\s*/dev/',
+    ]
+    for pattern in sensitive_redirects:
+        if re.search(pattern, cmd_stripped):
+            return {"error": f"危险命令已拦截: 重定向到敏感路径"}
+
+    # 3. 权限/用户管理
+    privilege_patterns = [
+        r'\buseradd\b',
+        r'\busermod\b',
+        r'\bpasswd\b',
+        r'\bvisudo\b',
+        r'\bchmod\s+777',
+        r'\bchown\s+.*\s+/',
+    ]
+    for pattern in privilege_patterns:
+        if re.search(pattern, cmd_lower):
+            return {"error": f"危险命令已拦截: 权限/用户管理操作"}
+
     try:
         proc = await asyncio.create_subprocess_shell(
             command,
