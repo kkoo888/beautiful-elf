@@ -638,15 +638,26 @@ async def query_database(sql: str) -> dict:
 
 # 允许的绝对路径前缀（安全白名单，运行时动态生成）
 def _get_allowed_prefixes() -> tuple:
+    import sys
     from app.core.config import get_settings
     workspace = get_settings().RESOLVED_WORKSPACE
-    return (workspace + "/", "/tmp/", "/home/")
+    prefixes = [workspace + "/", "/tmp/", "/home/"]
+    # Windows: 允许所有盘符根目录（C:/, D:/ 等）
+    if sys.platform == "win32":
+        import string
+        for drive in string.ascii_uppercase:
+            prefixes.append(f"{drive}:/")
+            prefixes.append(f"{drive}\\\\")
+    return tuple(prefixes)
 
 # 敏感目录黑名单
 _SENSITIVE_PATHS = (
     "/etc/shadow", "/etc/passwd", "/etc/sudoers",
     "/root/.ssh", "/home/.ssh",
     "/proc", "/sys", "/dev",
+    # Windows 敏感目录
+    "C:/Windows/System32/config",
+    "C:\\\\Windows\\\\System32\\\\config",
 )
 
 
