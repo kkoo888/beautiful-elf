@@ -783,8 +783,8 @@ class AgentService:
                                 if data.get("step") == "goal_subtasks":
                                     await _custom_q.put({"type": "goal_subtasks", "subtasks": data.get("subtasks", [])})
                                 await _custom_q.put({"type": "progress", **data})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[agent_service] custom_producer 异常退出: {e}")
                 finally:
                     await _custom_q.put(_SENTINEL)
 
