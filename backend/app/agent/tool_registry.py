@@ -636,29 +636,99 @@ async def query_database(sql: str) -> dict:
 #   - 相对路径 → 解析到工作目录；绝对路径 → 安全检查后允许
 #   - 路径穿越拦截保留（防止访问敏感目录）
 
-# 允许的绝对路径前缀（安全白名单，运行时动态生成）
-def _get_allowed_prefixes() -> tuple:
+# ── 跨平台路径安全白名单 ──────────────────────────────────
+#
+# 设计参考 Claude Code pathValidation.ts:
+#   - deny 优先，白名单兜底
+#   - 用 Path.is_relative_to() 替代字符串前缀匹配
+#   - 路径统一 resolve() 后再比较（处理符号链接 + 规范化）
+
+# 敏感目录黑名单（deny 优先，匹配时用 is_relative_to）
+_SENSITIVE_DIRS: list = []  # 运行时初始化
+_SENSITIVE_INITIALIZED = False
+
+
+def _init_sensitive_dirs():
+    """延迟初始化敏感目录列表（避免导入时访问配置）"""
+    global _SENSITIVE_DIRS, _SENSITIVE_INITIALIZED
+    if _SENSITIVE_INITIALIZED:
+        return
+    _SENSITIVE_INITIALIZED = True
+
+    dirs = [
+        Path("/etc"),
+        Path("/root"),
+        Path("/proc"),
+        Path("/sys"),
+        Path("/dev"),
+        Path("/boot"),
+    ]
+    # Windows 敏感目录
+    import sys
+    if sys.platform == "win32":
+        for drive_letter in "Cc":
+            win_dir = Path(f"{drive_letter}:/Windows")
+            dirs.append(win_dir)
+    _SENSITIVE_DIRS = [d.resolve() for d in dirs if d.exists()]
+
+
+# 允许的根目录（白名单）
+_ALLOWED_ROOTS: list = []
+_ALLOWED_INITIALIZED = False
+
+
+def _init_allowed_roots():
+    """延迟初始化白名单根目录"""
+    global _ALLOWED_ROOTS, _ALLOWED_INITIALIZED
+    if _ALLOWED_INITIALIZED:
+        return
+    _ALLOWED_INITIALIZED = True
+
     import sys
     from app.core.config import get_settings
-    workspace = get_settings().RESOLVED_WORKSPACE
-    prefixes = [workspace + "/", "/tmp/", "/home/"]
-    # Windows: 允许所有盘符根目录（C:/, D:/ 等）
+
+    roots = []
+    # 1. 工作目录
+    workspace = Path(get_settings().RESOLVED_WORKSPACE).resolve()
+    roots.append(workspace)
+    # 2. /tmp
+    roots.append(Path("/tmp").resolve())
+    # 3. 用户主目录
+    roots.append(Path.home().resolve())
+
+    # 4. Windows: 所有盘符根目录
     if sys.platform == "win32":
         import string
         for drive in string.ascii_uppercase:
-            prefixes.append(f"{drive}:/")
-            prefixes.append(f"{drive}\\\\")
-    return tuple(prefixes)
+            drive_path = Path(f"{drive}:/")
+            if drive_path.exists():
+                roots.append(drive_path.resolve())
 
-# 敏感目录黑名单
-_SENSITIVE_PATHS = (
-    "/etc/shadow", "/etc/passwd", "/etc/sudoers",
-    "/root/.ssh", "/home/.ssh",
-    "/proc", "/sys", "/dev",
-    # Windows 敏感目录
-    "C:/Windows/System32/config",
-    "C:\\\\Windows\\\\System32\\\\config",
-)
+    _ALLOWED_ROOTS = roots
+
+
+def _is_path_allowed(resolved_path: Path) -> bool:
+    """检查路径是否在白名单内（用 is_relative_to 安全比较）"""
+    _init_allowed_roots()
+    for root in _ALLOWED_ROOTS:
+        try:
+            if resolved_path.is_relative_to(root):
+                return True
+        except (ValueError, OSError):
+            continue
+    return False
+
+
+def _is_path_sensitive(resolved_path: Path) -> bool:
+    """检查路径是否在敏感目录内"""
+    _init_sensitive_dirs()
+    for sensitive in _SENSITIVE_DIRS:
+        try:
+            if resolved_path.is_relative_to(sensitive):
+                return True
+        except (ValueError, OSError):
+            continue
+    return False
 
 
 def _get_workspace(working_directory: str = None) -> Path:
@@ -682,6 +752,13 @@ def _get_workspace(working_directory: str = None) -> Path:
 def _resolve_path(path: str, working_directory: str = None) -> tuple:
     """解析路径并做安全检查
 
+    安全检查流程（参考 Claude Code pathValidation.ts）：
+      1. expanduser() 展开 ~
+      2. resolve() 解析符号链接 + 规范化
+      3. 检查敏感目录黑名单（deny 优先）
+      4. 检查白名单根目录
+      5. 相对路径额外检查路径穿越
+
     Returns:
         (workspace: Path, target: Path) 或 (workspace, None) 如果被拦截
     """
@@ -690,29 +767,34 @@ def _resolve_path(path: str, working_directory: str = None) -> tuple:
 
     # 绝对路径：安全检查
     if raw.is_absolute():
-        raw_resolved = raw.resolve()
-        # 检查敏感目录
-        for sensitive in _SENSITIVE_PATHS:
-            if str(raw_resolved).startswith(sensitive):
-                return workspace, None
-        # 检查白名单
-        allowed = False
-        for prefix in _get_allowed_prefixes():
-            if str(raw_resolved).startswith(prefix):
-                allowed = True
-                break
-        # 项目根目录内的绝对路径也允许
-        if str(raw_resolved).startswith(str(workspace)):
-            allowed = True
-        if not allowed:
+        try:
+            raw_resolved = raw.resolve()
+        except (OSError, ValueError):
             return workspace, None
+
+        # 1. 检查敏感目录黑名单（deny 优先）
+        if _is_path_sensitive(raw_resolved):
+            return workspace, None
+
+        # 2. 检查白名单
+        if not _is_path_allowed(raw_resolved):
+            return workspace, None
+
         return workspace, raw_resolved
 
     # 相对路径：解析到工作目录
-    target = (workspace / raw).resolve()
-    # 路径穿越检查
-    if not str(target).startswith(str(workspace)):
+    try:
+        target = (workspace / raw).resolve()
+    except (OSError, ValueError):
         return workspace, None
+
+    # 路径穿越检查（用 is_relative_to）
+    try:
+        if not target.is_relative_to(workspace):
+            return workspace, None
+    except (ValueError, OSError):
+        return workspace, None
+
     return workspace, target
 
 
