@@ -49,6 +49,9 @@ class WhitelistOut(BaseModel):
     def from_orm_model(cls, obj):
         d = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
         d["risk_level_label"] = RISK_LEVEL_MAP.get(d.get("risk_level", 0), "low")
+        # datetime → str，避免 Pydantic 校验报错
+        if d.get("created_at") is not None:
+            d["created_at"] = str(d["created_at"])
         return cls(**d)
 
 

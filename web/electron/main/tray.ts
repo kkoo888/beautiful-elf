@@ -4,7 +4,7 @@ import { join } from 'path'
 let tray: Tray | null = null
 
 export function createTray(mainWindow: BrowserWindow | null): void {
-  const icon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
+  const icon = nativeImage.createFromPath(join(__dirname, '../../resources/icons/icon.png'))
   tray = new Tray(icon)
 
   const contextMenu = Menu.buildFromTemplate([

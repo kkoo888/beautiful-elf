@@ -17,6 +17,7 @@ import {
   ApiOutlined,
   UserOutlined,
   ThunderboltOutlined,
+  PictureOutlined,
 } from '@ant-design/icons'
 import { PageHeader } from '@/components/page-header'
 import { useSettings } from '../hooks/use-settings'
@@ -31,9 +32,15 @@ import { SoulSettings } from './soul-settings'
 import { PromptManager } from './prompt-manager'
 import { DataManagement } from './data-management'
 import { LoginSettings } from './login-settings'
+import { BasicInfoSettings } from './basic-info-settings'
 import styles from './settings-panel.module.css'
 
 const TAB_ITEMS = [
+  {
+    key: 'basic_info',
+    label: '基本信息',
+    icon: <PictureOutlined />,
+  },
   {
     key: 'account',
     label: '账号',
@@ -106,6 +113,8 @@ export default function SettingsPanel() {
   const renderTabContent = useCallback(
     (key: string) => {
       switch (key) {
+        case 'basic_info':
+          return <BasicInfoSettings />
         case 'account':
           return <LoginSettings />
         case 'llm_provider':

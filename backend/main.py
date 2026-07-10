@@ -390,6 +390,13 @@ async def trace_middleware(request: Request, call_next):
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(ws_router, prefix="/api/v1")
 
+# 静态文件挂载（品牌图片等用户上传资源）
+import os
+from fastapi.staticfiles import StaticFiles
+_uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+os.makedirs(_uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_uploads_dir), name="uploads")
+
 
 if __name__ == "__main__":
     import uvicorn

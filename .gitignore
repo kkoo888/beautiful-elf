@@ -67,4 +67,6 @@ scripts/sim_*.py
 .mimocode/
 
 seed_expert_team_tech_evolution.sql
-ai_video_team.sql
+ai_video_team.sql-e 
+# 品牌图片（用户上传）
+backend/uploads/branding/

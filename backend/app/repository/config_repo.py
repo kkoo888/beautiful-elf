@@ -30,6 +30,22 @@ class ConfigRepository:
         return await self.mapper.count(db)
 
     async def create(self, db: AsyncSession, data: dict) -> Setting:
+        """创建配置，如果已存在（含软删除）则恢复并更新"""
+        # 检查是否有同名记录（含软删除）
+        stmt = select(Setting).where(Setting.settings_key == data.get('settings_key', ''))
+        result = await db.execute(stmt)
+        existing = result.scalar_one_or_none()
+        if existing:
+            # 已存在（可能被软删除），直接更新所有字段 + 恢复
+            from sqlalchemy import update as sa_update
+            update_stmt = (
+                sa_update(Setting)
+                .where(Setting.id == existing.id)
+                .values(**data, is_deleted=0)
+            )
+            await db.execute(update_stmt)
+            await db.flush()
+            return await self.find_by_key(db, data.get('settings_key', ''))
         return await self.mapper.create(db, data)
 
     async def update_by_key(self, db: AsyncSession, key: str, data: dict) -> Optional[Setting]:

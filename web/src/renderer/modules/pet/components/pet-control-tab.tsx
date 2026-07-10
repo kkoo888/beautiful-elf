@@ -9,6 +9,7 @@ import {
   ZoomOutOutlined,
 } from '@ant-design/icons'
 import { useElectronApi } from '@/hooks'
+import { apiClient, extractData } from '@/services/api-client'
 import { loadPetModelPath, loadPetSettings } from '../services/pet-api'
 import PetScreenshotPreview from './pet-screenshot-preview'
 
@@ -30,6 +31,7 @@ export default function PetControlTab() {
   const [modelPath, setModelPath] = useState<string | null>(null)
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [idleOn, setIdleOn] = useState(true)
+  const [bgImage, setBgImage] = useState<string>('')
   const latestScreenshotRef = useRef<string | null>(null)
   const rafIdRef = useRef<number | null>(null)
 
@@ -79,6 +81,19 @@ export default function PetControlTab() {
       }
     }
   }, [isElectron, petApi])
+
+  // 加载品牌背景图（从 setting 表）
+  useEffect(() => {
+    apiClient
+      .get('/configs/branding.background_image')
+      .then((res) => {
+        const data = extractData(res) as { keyValue?: string }
+        if (data?.keyValue) {
+          setBgImage(`${window.location.origin}/${data.keyValue}`)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   // 加载模型信息
   useEffect(() => {
@@ -202,8 +217,11 @@ export default function PetControlTab() {
           height: 300,
           borderRadius: 10,
           overflow: 'hidden',
-          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+          background: bgImage
+            ? `url(${bgImage}) center/cover no-repeat`
+            : 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
           border: '1px solid rgba(255,255,255,0.06)',
+          transition: 'background 0.3s ease',
         }}
       >
         <PetScreenshotPreview

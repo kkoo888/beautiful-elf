@@ -169,8 +169,8 @@ export function LoginSettings() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
             <Avatar
               size={64}
-              src={auth.user.avatarUrl || undefined}
-              icon={!auth.user.avatarUrl ? <UserOutlined /> : undefined}
+              src={auth.user.avatarUrl || '/default_avatar.png'}
+              icon={!auth.user.avatarUrl && !'/default_avatar.png' ? <UserOutlined /> : undefined}
             />
             <div>
               <Title level={5} style={{ margin: 0 }}>

@@ -1,7 +1,10 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { setPetVisibilityCallback } from './pet-window'
+
+// 应用图标
+const appIcon = nativeImage.createFromPath(join(__dirname, '../../resources/icons/icon.png'))
 
 /**
  * 窗口管理器
@@ -24,6 +27,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     title: 'Beautiful-Elf',
+    icon: appIcon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

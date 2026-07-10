@@ -40,6 +40,7 @@ from app.api.v1 import (
     scheduler_control,
     rag_config,
     tool_approval,
+    branding,
 )
 
 api_router = APIRouter()
@@ -83,6 +84,7 @@ api_router.include_router(llm_provider.router, prefix="/llm_providers", tags=["l
 api_router.include_router(intent.router, prefix="/intents", tags=["intent"])
 api_router.include_router(intent_learning.router, prefix="/intent-learning", tags=["intent-learning"])
 api_router.include_router(tool_approval.router, prefix="/tool-approval", tags=["tool-approval"])
+api_router.include_router(branding.router, prefix="/branding", tags=["branding"])
 
 # 系统
 api_router.include_router(notification.router, prefix="/notifications", tags=["notification"])
