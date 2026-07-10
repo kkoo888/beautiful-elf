@@ -16,11 +16,18 @@ repo = ToolApprovalWhitelistRepository()
 
 # ── Schemas ──────────────────────────────────────────────
 
+# 风险等级常量
+RISK_LOW = 0
+RISK_MEDIUM = 1
+RISK_HIGH = 2
+RISK_LEVEL_MAP = {0: "low", 1: "medium", 2: "high"}
+
+
 class WhitelistCreate(BaseModel):
     tool_name: str = Field(..., min_length=1, max_length=128)
     path_pattern: str = Field(default="", max_length=512)
     command_pattern: str = Field(default="", max_length=1024)
-    risk_level: str = Field(default="low", pattern="^(low|medium|high)$")
+    risk_level: int = Field(default=0, ge=0, le=2, description="0=low 1=medium 2=high")
     note: str = Field(default="", max_length=500)
 
 
@@ -29,13 +36,20 @@ class WhitelistOut(BaseModel):
     tool_name: str
     path_pattern: str
     command_pattern: str
-    risk_level: str
+    risk_level: int
+    risk_level_label: str = ""
     note: str
     hit_count: int
     created_at: str
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_orm_model(cls, obj):
+        d = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+        d["risk_level_label"] = RISK_LEVEL_MAP.get(d.get("risk_level", 0), "low")
+        return cls(**d)
 
 
 # ── CRUD ─────────────────────────────────────────────────
@@ -54,7 +68,7 @@ async def list_whitelist(
         filters["tool_name"] = tool_name
     items = await repo.find_all(db, offset=offset, limit=pagination.page_size, **filters)
     total = await repo.count(db, **filters)
-    return ApiPageResult(data=[WhitelistOut.model_validate(i) for i in items], total=total)
+    return ApiPageResult(data=[WhitelistOut.from_orm_model(i) for i in items], total=total)
 
 
 @router.post("", response_model=ApiResult[WhitelistOut])
@@ -72,7 +86,7 @@ async def create_whitelist(
         "risk_level": data.risk_level,
         "note": data.note,
     })
-    return ApiResult(data=WhitelistOut.model_validate(item))
+    return ApiResult(data=WhitelistOut.from_orm_model(item))
 
 
 @router.delete("/{item_id}", response_model=ApiResult)
@@ -100,7 +114,7 @@ async def check_whitelist(
         return ApiResult(data={
             "allowed": True,
             "rule_id": match.id,
-            "risk_level": match.risk_level,
+            "risk_level": RISK_LEVEL_MAP.get(match.risk_level, "low"),
             "note": match.note,
         })
     return ApiResult(data={"allowed": False})

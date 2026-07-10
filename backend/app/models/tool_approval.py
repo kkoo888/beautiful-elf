@@ -10,16 +10,23 @@ from sqlalchemy import Column, BigInteger, Integer, String, Text, Index
 from app.models.base import BaseModel
 
 
+# 风险等级常量（对应 DB tinyint）
+RISK_LOW = 0
+RISK_MEDIUM = 1
+RISK_HIGH = 2
+RISK_LEVEL_MAP = {0: "low", 1: "medium", 2: "high"}
+
+
 class ToolApprovalWhitelist(BaseModel):
     """工具审批白名单"""
     __tablename__ = "tool_approval_whitelist"
 
-    user_id = Column(BigInteger, nullable=False, default=0, comment="用户 ID")
+    user_id = Column(BigInteger().with_variant(BigInteger, "mysql", unsigned=True), nullable=False, default=0, comment="用户 ID")
     tool_name = Column(String(128), nullable=False, default="", comment="工具名称: exec_command / write_file / apply_patch")
     path_pattern = Column(String(512), nullable=False, default="", comment="路径模式: 精确路径或前缀 (e.g. /home/work/project)")
-    command_pattern = Column(String(1024), nullable=False, default="", comment="命令模式: 精确命令或正则 (e.g. git status)")
-    risk_level = Column(String(16), nullable=False, default="low", comment="风险等级: low / medium / high")
-    note = Column(Text, nullable=False, default="", comment="用户备注（为什么允许）")
+    command_pattern = Column(String(1024), nullable=False, default="", comment="命令模式: 子串匹配 (e.g. git status)")
+    risk_level = Column(Integer, nullable=False, default=0, comment="风险等级: 0=low 1=medium 2=high")
+    note = Column(Text, nullable=False, default="", comment="用户备注")
     hit_count = Column(Integer, nullable=False, default=0, comment="命中次数")
 
     __table_args__ = (
