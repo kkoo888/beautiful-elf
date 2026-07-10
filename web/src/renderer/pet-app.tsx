@@ -61,7 +61,9 @@ export default function PetApp() {
 
       const onProgress = (pct: number, msg: string) => setStatus(msg)
 
-      const modelUrl = modelPath.startsWith('file:') ? modelPath : `file://${modelPath}`
+      const modelUrl = modelPath.startsWith('file:')
+        ? modelPath
+        : `file:///${modelPath.replace(/\\/g, '/')}`
       await scene.loadModel(modelUrl, onProgress)
 
       const vmdPath = deriveVmdPath(modelUrl)
@@ -104,7 +106,9 @@ export default function PetApp() {
           const onProgress = (pct: number, msg: string) => setStatus(msg)
 
           // Electron 中本地文件需要 file:// 前缀
-          const modelUrl = modelPath.startsWith('file:') ? modelPath : `file://${modelPath}`
+          const modelUrl = modelPath.startsWith('file:')
+        ? modelPath
+        : `file:///${modelPath.replace(/\\/g, '/')}`
           await scene.loadModel(modelUrl, onProgress)
 
           const vmdPath = deriveVmdPath(modelUrl)
@@ -224,6 +228,59 @@ export default function PetApp() {
     return () => cleanup?.()
   }, [])
 
+  // 监听控制面板的缩放 / 动作指令（放大缩小 + 待机动画开关）
+  useEffect(() => {
+    if (!window.electronAPI?.pet) return
+
+    const cleanups = [
+      window.electronAPI.pet.onZoom((factor: number) => {
+        sceneRef.current?.zoomBy(factor)
+      }),
+      window.electronAPI.pet.onSetIdle((enabled: boolean) => {
+        sceneRef.current?.setIdleEnabled(enabled)
+      }),
+      window.electronAPI.pet.onResetZoom(() => {
+        sceneRef.current?.resetZoom()
+      }),
+    ]
+
+    return () => cleanups.forEach((c) => c?.())
+  }, [])
+
+  // 左键拖拽宠物窗口（移动窗口位置）；右键留给 OrbitControls 旋转，滚轮留给缩放
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    let dragging = false
+
+    const onMove = (e: MouseEvent) => {
+      if (!dragging) return
+      window.electronAPI?.pet?.dragWindowBy(e.movementX, e.movementY)
+    }
+    const onUp = () => {
+      if (!dragging) return
+      dragging = false
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 0) return // 仅左键拖动
+      if (e.target instanceof HTMLButtonElement) return // 不拦截按钮点击（如重试）
+      dragging = true
+      e.preventDefault()
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    }
+
+    container.addEventListener('mousedown', onDown)
+    return () => {
+      container.removeEventListener('mousedown', onDown)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
   // 重试加载
   const handleRetry = useCallback(async () => {
     setError(null)
@@ -238,7 +295,9 @@ export default function PetApp() {
       if (modelPath) {
         currentModelPathRef.current = modelPath
         const onProgress = (pct: number, msg: string) => setStatus(msg)
-        const modelUrl = modelPath.startsWith('file:') ? modelPath : `file://${modelPath}`
+        const modelUrl = modelPath.startsWith('file:')
+        ? modelPath
+        : `file:///${modelPath.replace(/\\/g, '/')}`
         await scene.loadModel(modelUrl, onProgress)
 
         const vmdPath = deriveVmdPath(modelUrl)

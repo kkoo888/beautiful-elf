@@ -21,14 +21,8 @@ function startMouseTracking(): void {
     try {
       const cursor = screen.getCursorScreenPoint()
       const bounds = petWindow.getBounds()
-      // 窗口外不追踪
-      const inWindow =
-        cursor.x >= bounds.x &&
-        cursor.x <= bounds.x + bounds.width &&
-        cursor.y >= bounds.y &&
-        cursor.y <= bounds.y + bounds.height
-      if (!inWindow) return
-      // 归一化到 -1 ~ 1（相对于窗口中心）
+      // 全局追踪：即使光标移出宠物窗口，仍按窗口中心归一化并发送，
+      // 模型会持续朝光标方向看（超出窗口范围时坐标被钳制在 ±1，即看向最边缘方向）
       const normalizedX = ((cursor.x - bounds.x) / bounds.width) * 2 - 1
       const normalizedY = ((cursor.y - bounds.y) / bounds.height) * 2 - 1
       petWindow.webContents.send('global-mouse-move', {
@@ -63,7 +57,9 @@ export function createPetWindow(): BrowserWindow {
     transparent: true,
     frame: false,
     alwaysOnTop: true,
-    resizable: false,
+    resizable: true,
+    minWidth: 200,
+    minHeight: 200,
     skipTaskbar: true,
     hasShadow: false,
     show: false,

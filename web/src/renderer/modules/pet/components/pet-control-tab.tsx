@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Button, Space, Badge, Row, Col, Card, Typography, message } from 'antd'
+import { Button, Space, Badge, Row, Col, Card, Typography, Switch, message } from 'antd'
 import {
   ReloadOutlined,
   SyncOutlined,
   PlayCircleOutlined,
   PauseCircleOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
 } from '@ant-design/icons'
 import { useElectronApi } from '@/hooks'
 import { loadPetModelPath, loadPetSettings } from '../services/pet-api'
@@ -27,6 +29,7 @@ export default function PetControlTab() {
   const [modelName, setModelName] = useState<string>('-')
   const [modelPath, setModelPath] = useState<string | null>(null)
   const [screenshot, setScreenshot] = useState<string | null>(null)
+  const [idleOn, setIdleOn] = useState(true)
   const latestScreenshotRef = useRef<string | null>(null)
   const rafIdRef = useRef<number | null>(null)
 
@@ -95,6 +98,29 @@ export default function PetControlTab() {
     })()
   }, [])
 
+  // 订阅模型切换通知（设置页面切了模型后刷新当前信息）
+  useEffect(() => {
+    if (!isElectron) return
+
+    const cleanup = petApi.onModelChanged(() => {
+      void (async () => {
+        try {
+          const [settings, directPath] = await Promise.all([
+            loadPetSettings(),
+            loadPetModelPath(),
+          ])
+          const path = (settings?.modelPath as string) ?? directPath ?? null
+          setModelPath(path)
+          setModelName(getModelName(path))
+        } catch {
+          setModelName('-')
+        }
+      })()
+    })
+
+    return () => cleanup()
+  }, [isElectron, petApi])
+
   // 刷新场景（通过 IPC 直接通知宠物窗口重载）
   const handleRefresh = useCallback(async () => {
     if (!isElectron) {
@@ -119,6 +145,37 @@ export default function PetControlTab() {
     if (!result.success) {
       message.error(result.message || '重载失败，请先显示宠物窗口')
     }
+  }, [isElectron, petApi])
+
+  // 缩放（放大缩小）
+  const handleZoom = useCallback(async (factor: number) => {
+    if (!isElectron) {
+      message.warning('当前环境不支持宠物窗口')
+      return
+    }
+    const result = await petApi.zoom(factor)
+    if (!result.success) message.error(result.message || '缩放失败，请先显示宠物窗口')
+  }, [isElectron, petApi])
+
+  // 重置缩放
+  const handleResetZoom = useCallback(async () => {
+    if (!isElectron) {
+      message.warning('当前环境不支持宠物窗口')
+      return
+    }
+    const result = await petApi.resetZoom()
+    if (!result.success) message.error(result.message || '重置失败，请先显示宠物窗口')
+  }, [isElectron, petApi])
+
+  // 待机动画（动作）开关
+  const handleToggleIdle = useCallback(async (checked: boolean) => {
+    setIdleOn(checked)
+    if (!isElectron) {
+      message.warning('当前环境不支持宠物窗口')
+      return
+    }
+    const result = await petApi.setIdle(checked)
+    if (!result.success) message.error(result.message || '设置失败，请先显示宠物窗口')
   }, [isElectron, petApi])
 
   // 切换宠物显示/隐藏 - 使用 IPC 返回值，不依赖闭包状态
@@ -173,6 +230,22 @@ export default function PetControlTab() {
           重载模型
         </Button>
       </div>
+
+      {/* 交互控制：缩放 + 待机动作 */}
+      <Card size="small" title="交互控制" styles={{ body: { padding: '12px 16px' } }}>
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Text type="secondary" style={{ width: 40 }}>缩放</Text>
+            <Button size="small" icon={<ZoomInOutlined />} onClick={() => handleZoom(1.15)}>放大</Button>
+            <Button size="small" icon={<ZoomOutOutlined />} onClick={() => handleZoom(1 / 1.15)}>缩小</Button>
+            <Button size="small" icon={<ReloadOutlined />} onClick={handleResetZoom}>重置</Button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text type="secondary">待机动作</Text>
+            <Switch checked={idleOn} onChange={handleToggleIdle} checkedChildren="开" unCheckedChildren="关" />
+          </div>
+        </Space>
+      </Card>
 
       {/* 下方：状态信息横向排列 */}
       <Row gutter={12}>

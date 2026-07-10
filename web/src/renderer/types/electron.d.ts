@@ -22,6 +22,14 @@ interface PetApi {
   getAttributes: () => Promise<Record<string, unknown>>
   /** 请求宠物窗口重新加载当前模型 */
   reload: () => Promise<{ success: boolean; message?: string }>
+  /** 相对缩放因子（放大缩小宠物） */
+  zoom: (factor: number) => Promise<{ success: boolean; message?: string }>
+  /** 设置待机动画（动作）开关 */
+  setIdle: (enabled: boolean) => Promise<{ success: boolean; message?: string }>
+  /** 重置缩放到 1 */
+  resetZoom: () => Promise<{ success: boolean; message?: string }>
+  /** 拖动宠物窗口：按光标增量移动窗口位置 */
+  dragWindowBy: (dx: number, dy: number) => void
   /** 监听截图更新，返回清理函数 */
   onScreenshotUpdate: (callback: (data: string) => void) => (() => void)
   /** 监听可见性变化，返回清理函数 */
@@ -33,6 +41,12 @@ interface PetApi {
   onModelChanged: (callback: () => void) => (() => void)
   /** 监听强制重载通知（刷新场景），返回清理函数 */
   onForceReload: (callback: () => void) => (() => void)
+  /** 监听缩放指令（放大缩小），返回清理函数 */
+  onZoom: (callback: (factor: number) => void) => (() => void)
+  /** 监听待机动画（动作）开关指令，返回清理函数 */
+  onSetIdle: (callback: (enabled: boolean) => void) => (() => void)
+  /** 监听重置缩放指令，返回清理函数 */
+  onResetZoom: (callback: () => void) => (() => void)
   /** 监听全局鼠标移动（30fps，归一化坐标 -1~1），返回清理函数 */
   onGlobalMouseMove: (callback: (pos: { x: number; y: number }) => void) => (() => void)
 }

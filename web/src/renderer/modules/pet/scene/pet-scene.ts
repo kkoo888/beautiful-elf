@@ -51,6 +51,16 @@ export class PetScene {
   private clock: THREE.Clock | null = null
   private _isLoaded = false
 
+  // ── 缩放 / 待机动画（动作） ──
+  private zoomScale = 1
+  private idleEnabled = true
+  private idleBaseY = 0
+  /** 模型脚底在 scale=1 时的世界 Y，用于缩放时把脚底锚定到该高度，使宠物始终贴窗口底部 */
+  private anchorFeetY = 0
+  private elapsedTime = 0
+  private static readonly ZOOM_MIN = 0.3
+  private static readonly ZOOM_MAX = 4
+
   // ── Stage 3: 渲染 ──
   private animationId: number | null = null
   private visible = true
@@ -120,6 +130,9 @@ export class PetScene {
     this.controls.addEventListener('start', () => { this.controlsActive = true })
     this.controls.addEventListener('end', () => { this.controlsActive = false })
 
+    // 滚轮缩放（在宠物窗口内直接滚轮放大缩小）
+    this.renderer.domElement.addEventListener('wheel', this.handleWheel)
+
     // 灯光（4 灯配置）
     this.setupLights()
 
@@ -186,6 +199,12 @@ export class PetScene {
     }
   }
 
+  /** 从模型路径中提取资源目录，确保纹理、toon 等相对资源能正确解析 */
+  private getResourcePath(modelPath: string): string {
+    const lastSlash = modelPath.lastIndexOf('/')
+    return lastSlash >= 0 ? modelPath.substring(0, lastSlash + 1) : modelPath
+  }
+
   /** 加载 PMX 模型（无动画） */
   async loadModel(modelPath: string, onProgress?: LoadProgressCallback): Promise<void> {
     if (!this.scene || !this.loader) return
@@ -193,6 +212,11 @@ export class PetScene {
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error(`加载超时: ${modelPath}`)), LOAD_TIMEOUT_MS)
+
+      // 显式设置资源目录：MMDLoader 用它作为相对纹理（tex/、sph/、toon 等）的解析基准，
+      // 模型会自行按 PMX 内记录的文件名（面/发/服/肌/sph...）在目录内加载，无需干预文件名
+      const modelDir = this.getResourcePath(modelPath)
+      this.loader!.setResourcePath(modelDir)
 
       this.loader.load(
         modelPath,
@@ -227,6 +251,11 @@ export class PetScene {
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error(`加载超时: ${modelPath}`)), LOAD_TIMEOUT_MS)
+
+      // 显式设置资源目录：MMDLoader 用它作为相对纹理（tex/、sph/、toon 等）的解析基准，
+      // 模型会自行按 PMX 内记录的文件名（面/发/服/肌/sph...）在目录内加载，无需干预文件名
+      const modelDir = this.getResourcePath(modelPath)
+      this.loader!.setResourcePath(modelDir)
 
       this.loader.loadWithAnimation(
         modelPath,
@@ -285,7 +314,7 @@ export class PetScene {
    *   7. 骨骼缓存
    */
   private applyModel(mesh: THREE.SkinnedMesh): void {
-    // 1. 清理旧模型
+      // 1. 清理旧模型
     this.disposeCurrentMesh()
 
     // 2. 材质管线
@@ -295,8 +324,15 @@ export class PetScene {
     mesh.castShadow = true
     mesh.receiveShadow = true
 
-    this._isLoaded = false
     this.mesh = mesh
+
+    // 重置缩放与待机动画基准（以模型当前位置为浮动基准）
+    mesh.scale.setScalar(1)
+    const box0 = new THREE.Box3().setFromObject(mesh)
+    this.anchorFeetY = box0.min.y // 脚底世界 Y（scale=1 时），缩放时脚底锚定于此
+    this.idleBaseY = mesh.position.y
+    this.zoomScale = 1
+    this.elapsedTime = 0
 
     // 4. 添加到场景
     this.scene!.add(mesh)
@@ -309,23 +345,38 @@ export class PetScene {
 
     // 7. 骨骼缓存
     this.findHeadAndEyeBones()
+
+    // 模型已成功应用至场景，标记加载完成
+    this._isLoaded = true
   }
 
-  /** 材质管线：保留 toon 风格 / Phong→PBR / 通用回退 */
+  /** 材质管线：保留 MMD toon / Standard / Toon / 通用回退 */
   private materialPipeline(mesh: THREE.SkinnedMesh): void {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
 
     const result = materials.map((mat) => {
-      if (mat instanceof THREE.MeshStandardMaterial) {
-        mat.skinning = true
+      // MMDLoader 输出的专用 toon shader 材质 —— 必须原样保留，不能替换成 PBR。
+      // 否则 gradientMap / matcap / MMD 专用光照逻辑会全部丢失，模型变成黑色剪影。
+      if ((mat as any).isMMDToonMaterial) {
         return mat
       }
-      // MMDLoader 的 toon 材质 → 保留（卡通风格核心）
+
+      // 已经是 PBR/Standard → 直接用
+      if (mat instanceof THREE.MeshStandardMaterial) {
+        return mat
+      }
+
+      // 普通 Toon → 保留
       if (mat instanceof THREE.MeshToonMaterial) {
-        mat.skinning = true
         mat.needsUpdate = true
         return mat
       }
+
+      // 其他自定义 ShaderMaterial → 原样保留，避免破坏特殊 shader
+      if (mat instanceof THREE.ShaderMaterial) {
+        return mat
+      }
+
       // Phong → PBR
       if (mat instanceof THREE.MeshPhongMaterial) {
         const pbr = new THREE.MeshStandardMaterial()
@@ -338,13 +389,13 @@ export class PetScene {
         pbr.opacity = mat.opacity
         pbr.side = mat.side
         pbr.alphaTest = mat.alphaTest
-        pbr.skinning = true
         pbr.roughness = mat.shininess > 0 ? Math.max(0.2, 1.0 - mat.shininess / 100) : 0.6
         pbr.metalness = 0.1
         pbr.needsUpdate = true
         mat.dispose()
         return pbr
       }
+
       // 通用回退 → PBR
       const pbr = new THREE.MeshStandardMaterial()
       pbr.map = (mat as any).map ?? null
@@ -352,7 +403,6 @@ export class PetScene {
       pbr.opacity = mat.opacity
       pbr.side = mat.side
       pbr.alphaTest = mat.alphaTest
-      pbr.skinning = true
       pbr.roughness = 0.5
       pbr.metalness = 0.1
       pbr.needsUpdate = true
@@ -398,8 +448,28 @@ export class PetScene {
     const fov = this.camera.fov * (Math.PI / 180)
     const distance = Math.max((maxDim * CAMERA_PADDING) / (2 * Math.tan(fov / 2)), 5)
 
-    this.camera.position.set(center.x, center.y, center.z + distance * 1.5)
-    this.camera.lookAt(center)
+    // 相机到模型平面（z=center.z）的实际距离，与下方 position.z 一致
+    const camDist = distance * 1.5
+    // 该平面上视口的半高（世界单位）：halfH = camDist * tan(fov/2)
+    const halfH = camDist * Math.tan(fov / 2)
+
+    // 脚底贴窗口底部：把相机注视点上移，使脚底落在视口底边附近
+    // （留 BOTTOM_MARGIN 余量防止脚底被窗口底边裁切）。
+    // 推导：视口底边世界 Y = targetY - halfH；令脚底 footY 落在底边上方
+    // BOTTOM_MARGIN×(2halfH) 处 → footY = targetY - halfH + BOTTOM_MARGIN×2halfH
+    // → targetY = footY + halfH×(1 - 2×BOTTOM_MARGIN)。
+    // 配合渲染循环 anchorFeetY 锚定（缩放时脚底世界 Y 不变），
+    // 缩放后脚底投影始终贴窗口底部，模型从脚底向上生长、不上浮。
+    const BOTTOM_MARGIN = 0.04
+    const footY = center.y - size.y / 2
+    const targetY = footY + halfH * (1 - 2 * BOTTOM_MARGIN)
+
+    this.camera.position.set(center.x, targetY, center.z + camDist)
+    this.camera.lookAt(center.x, targetY, center.z)
+    // 同步 OrbitControls 注视点，否则右键旋转时相机会跳回模型中心
+    if (this.controls) {
+      this.controls.target.set(center.x, targetY, center.z)
+    }
   }
 
   /** 缓存头部/眼球骨骼引用 */
@@ -441,15 +511,35 @@ export class PetScene {
 
       // delta clamp：防止隐藏后跳帧
       const delta = Math.min(this.clock!.getDelta(), DELTA_CLAMP)
+      this.elapsedTime += delta
 
       // OrbitControls：只在交互中更新
       if (this.controlsActive) {
         this.controls?.update()
       }
 
-      // 动画：只在有 VMD 动画时更新
-      if (this.helper && this.hasAnimation) {
+      // 动画：有 VMD 动画时更新 helper（优先于待机动画）
+      const vmdActive = !!(this.helper && this.hasAnimation)
+      if (vmdActive) {
         try { this.helper.update(delta) } catch { /* ignore */ }
+      }
+
+      // 网格变换：缩放（放大缩小）+ 待机动画（动作）
+      if (this.mesh && (this.mesh as any).scale && (this.mesh as any).position) {
+        const idleActive = this.idleEnabled && !vmdActive
+        const breath = idleActive ? 1 + Math.sin(this.elapsedTime * 2.2) * 0.02 : 1
+        const s = this.zoomScale * breath
+        ;(this.mesh as any).scale.setScalar(s)
+        // 锚定脚底到固定世界 Y（anchorFeetY）：缩放时模型从脚底向上生长，
+        // 脚底始终贴在原位置（窗口底部），避免放大后整只宠物上浮。
+        const floatOffset = idleActive ? Math.sin(this.elapsedTime * 1.6) * 0.2 * s : 0
+        ;(this.mesh as any).position.y =
+          this.anchorFeetY - (this.anchorFeetY - this.idleBaseY) * s + floatOffset
+        if (idleActive) {
+          if ((this.mesh as any).rotation) (this.mesh as any).rotation.y = Math.sin(this.elapsedTime * 0.5) * 0.08
+        } else {
+          if ((this.mesh as any).rotation) (this.mesh as any).rotation.y = 0
+        }
       }
 
       // 鼠标追踪：只在鼠标移动时更新
@@ -471,7 +561,9 @@ export class PetScene {
     }
 
     const targetYaw = this.mouseX * 0.44
-    const targetPitch = -this.mouseY * 0.26
+    // MMD 头骨绕 +X 旋转为「低头」：鼠标在窗口顶部时 mouseY≈-1，需让宠物「抬头」，
+    // 故 pitch = +mouseY（顶部→负值→抬头，底部→正值→低头），与视觉一致。
+    const targetPitch = this.mouseY * 0.26
 
     let converged = true
 
@@ -526,6 +618,42 @@ export class PetScene {
     this.visible = visible
     this.fpsInterval = 1000 / (visible ? FPS_VISIBLE : FPS_HIDDEN)
     this.lastFrameTime = 0
+  }
+
+  /** 滚轮缩放处理（宠物窗口内直接滚轮放大缩小） */
+  private handleWheel = (e: WheelEvent): void => {
+    e.preventDefault()
+    this.zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12)
+  }
+
+  /** 相对缩放（放大缩小），限制在 [ZOOM_MIN, ZOOM_MAX] */
+  zoomBy(factor: number): void {
+    this.zoomScale = Math.min(PetScene.ZOOM_MAX, Math.max(PetScene.ZOOM_MIN, this.zoomScale * factor))
+  }
+
+  /** 设置绝对缩放值 */
+  setZoom(scale: number): void {
+    this.zoomScale = Math.min(PetScene.ZOOM_MAX, Math.max(PetScene.ZOOM_MIN, scale))
+  }
+
+  /** 当前缩放值 */
+  getZoom(): number {
+    return this.zoomScale
+  }
+
+  /** 重置缩放到 1 */
+  resetZoom(): void {
+    this.zoomScale = 1
+  }
+
+  /** 开启/关闭待机动画（动作） */
+  setIdleEnabled(enabled: boolean): void {
+    this.idleEnabled = enabled
+  }
+
+  /** 待机动画是否开启 */
+  isIdleEnabled(): boolean {
+    return this.idleEnabled
   }
 
   /** 窗口 resize */
@@ -607,6 +735,7 @@ export class PetScene {
   /** 销毁所有资源 */
   dispose(): void {
     window.removeEventListener('resize', this.handleResize)
+    this.renderer?.domElement.removeEventListener('wheel', this.handleWheel)
     this.removeContextLossHandlers()
 
     if (this.animationId !== null) { cancelAnimationFrame(this.animationId); this.animationId = null }

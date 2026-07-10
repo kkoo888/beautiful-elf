@@ -21,6 +21,7 @@ vi.mock('three', async () => {
     outputColorSpace = ''
     toneMapping = 0
     toneMappingExposure = 1.0
+    shadowMap = { enabled: false, type: 0 }
   }
 
   class MockPerspectiveCamera {
@@ -39,11 +40,15 @@ vi.mock('three', async () => {
   class MockAmbientLight {}
   class MockDirectionalLight {
     position = { set: vi.fn() }
+    castShadow = false
+    shadow = { mapSize: { width: 0, height: 0 }, bias: 0, normalBias: 0 }
   }
   class MockClock {
     getDelta = vi.fn(() => 0.016)
   }
   class MockBox3 {
+    min = { x: 0, y: 0, z: 0 } as unknown as THREE.Vector3
+    max = { x: 0, y: 0, z: 0 } as unknown as THREE.Vector3
     setFromObject = vi.fn().mockReturnThis()
     getCenter = vi.fn(() => ({ x: 0, y: 5, z: 0 } as unknown as THREE.Vector3))
     getSize = vi.fn(() => ({ x: 2, y: 10, z: 2 } as unknown as THREE.Vector3))
@@ -75,13 +80,20 @@ vi.mock('three', async () => {
 // 注意：load/loadWithAnimation 挂载在 prototype 上（而非 class field），
 // 确保超时测试中可以用 prototype.load = vi.fn() 覆盖所有实例。
 vi.mock('three/examples/jsm/loaders/MMDLoader.js', () => {
-  class MockMMDLoader {}
+  class MockMMDLoader {
+    setResourcePath = vi.fn()
+    setPath = vi.fn()
+  }
 
   MockMMDLoader.prototype.load = vi.fn(
     (url: string, onLoad: (mesh: unknown) => void) => {
       const mockMesh = {
         geometry: { dispose: vi.fn() },
         material: { dispose: vi.fn() },
+        traverse: vi.fn(),
+        scale: { setScalar: vi.fn() },
+        position: { y: 0 },
+        rotation: { y: 0 },
       }
       setTimeout(() => onLoad(mockMesh), 0)
     }
@@ -96,6 +108,10 @@ vi.mock('three/examples/jsm/loaders/MMDLoader.js', () => {
       const mockMesh = {
         geometry: { dispose: vi.fn() },
         material: { dispose: vi.fn() },
+        traverse: vi.fn(),
+        scale: { setScalar: vi.fn() },
+        position: { y: 0 },
+        rotation: { y: 0 },
       }
       const mockAnimation = { name: 'test-anim', tracks: [] }
       setTimeout(() => onLoad({ mesh: mockMesh, animation: mockAnimation }), 0)
@@ -115,6 +131,29 @@ vi.mock('three/examples/jsm/animation/MMDAnimationHelper.js', () => {
       remove = vi.fn().mockReturnThis()
       update = vi.fn().mockReturnThis()
       dispose = vi.fn()
+    },
+  }
+})
+
+// ─── Mock OrbitControls（匹配 pet-scene.ts 的真实导入路径）───
+// 说明：pet-scene.ts 用的是真实 OrbitControls（来自 three/addons），
+// 而本测试整体 mock 了 'three'，导致 OrbitControls 内部依赖的真实
+// Vector3 / Euler / Quaternion 失效。这里用轻量 mock 替代，
+// 仅覆盖 PetScene 实际调用的 API（target.set / addEventListener /
+// update / dispose 等），避免加载需要完整相机对象的真实实现。
+vi.mock('three/addons/controls/OrbitControls.js', () => {
+  return {
+    OrbitControls: class MockOrbitControls {
+      target = { set: vi.fn() }
+      enableDamping = false
+      dampingFactor = 0
+      enableZoom = false
+      mouseButtons: Record<string, unknown> = {}
+      addEventListener = vi.fn()
+      removeEventListener = vi.fn()
+      update = vi.fn()
+      dispose = vi.fn()
+      constructor(_camera: unknown, _domElement: unknown) {}
     },
   }
 })
@@ -400,6 +439,55 @@ describe('MMD 渲染链路测试', () => {
       expect(typeof (helper as any).remove).toBe('function')
       expect(typeof (helper as any).update).toBe('function')
       expect(typeof (helper as any).dispose).toBe('function')
+    })
+  })
+
+  describe('9. 缩放与待机动画', () => {
+    it('加载后默认缩放为 1、待机动画开启', async () => {
+      const { PetScene } = await import('../scene/pet-scene')
+      const scene = new PetScene(container)
+      await scene.init()
+      await scene.loadModel('/models/test.pmx')
+
+      expect(scene.getZoom()).toBe(1)
+      expect(scene.isIdleEnabled()).toBe(true)
+
+      scene.dispose()
+    })
+
+    it('zoomBy 放大并限制在 [0.3, 4] 区间', async () => {
+      const { PetScene } = await import('../scene/pet-scene')
+      const scene = new PetScene(container)
+      await scene.init()
+      await scene.loadModel('/models/test.pmx')
+
+      scene.zoomBy(2)
+      expect(scene.getZoom()).toBeGreaterThan(1)
+
+      // 连续放大应被上限截断到 4
+      for (let i = 0; i < 10; i++) scene.zoomBy(2)
+      expect(scene.getZoom()).toBe(4)
+
+      // 连续缩小应被下限截断到 0.3
+      for (let i = 0; i < 20; i++) scene.zoomBy(0.5)
+      expect(scene.getZoom()).toBe(0.3)
+
+      scene.dispose()
+    })
+
+    it('setIdleEnabled 切换待机动画开关', async () => {
+      const { PetScene } = await import('../scene/pet-scene')
+      const scene = new PetScene(container)
+      await scene.init()
+      await scene.loadModel('/models/test.pmx')
+
+      scene.setIdleEnabled(false)
+      expect(scene.isIdleEnabled()).toBe(false)
+
+      scene.setIdleEnabled(true)
+      expect(scene.isIdleEnabled()).toBe(true)
+
+      scene.dispose()
     })
   })
 })

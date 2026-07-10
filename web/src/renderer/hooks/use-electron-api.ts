@@ -71,6 +71,21 @@ export function useElectronApi() {
         if (isElectron) return window.electronAPI.pet.reload()
         return { success: false, message: '非 Electron 环境' }
       },
+      zoom: async (factor: number): Promise<{ success: boolean; message?: string }> => {
+        if (isElectron) return window.electronAPI.pet.zoom(factor)
+        return { success: false, message: '非 Electron 环境' }
+      },
+      setIdle: async (enabled: boolean): Promise<{ success: boolean; message?: string }> => {
+        if (isElectron) return window.electronAPI.pet.setIdle(enabled)
+        return { success: false, message: '非 Electron 环境' }
+      },
+      resetZoom: async (): Promise<{ success: boolean; message?: string }> => {
+        if (isElectron) return window.electronAPI.pet.resetZoom()
+        return { success: false, message: '非 Electron 环境' }
+      },
+      dragWindowBy: (dx: number, dy: number): void => {
+        if (isElectron) window.electronAPI.pet.dragWindowBy(dx, dy)
+      },
       notifyModelChanged: () => {
         if (isElectron) window.electronAPI.pet.notifyModelChanged()
       },

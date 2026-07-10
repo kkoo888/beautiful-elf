@@ -57,3 +57,12 @@ Object.defineProperty(window, 'ResizeObserver', {
   writable: true,
   value: MockResizeObserver
 })
+
+// Polyfill requestAnimationFrame / cancelAnimationFrame
+// jsdom 不实现这两个 API，而 PetScene 的渲染循环依赖 requestAnimationFrame
+if (typeof globalThis.requestAnimationFrame !== 'function') {
+  globalThis.requestAnimationFrame = ((cb: (time: number) => void) =>
+    setTimeout(() => cb(performance.now()), 16) as unknown as number) as typeof requestAnimationFrame
+  globalThis.cancelAnimationFrame = ((id: number) =>
+    clearTimeout(id)) as typeof cancelAnimationFrame
+}

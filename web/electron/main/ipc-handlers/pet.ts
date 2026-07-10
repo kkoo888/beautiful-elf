@@ -93,4 +93,42 @@ export function registerPetHandlers(): void {
     petWin.webContents.send('pet:force-reload')
     return { success: true }
   })
+
+  // 缩放（放大缩小）：转发到宠物窗口
+  ipcMain.handle('pet:zoom', (_e, factor: number) => {
+    const petWin = getPetWindow()
+    if (!petWin || petWin.isDestroyed()) {
+      return { success: false, message: '宠物窗口未打开' }
+    }
+    petWin.webContents.send('pet:zoom', factor)
+    return { success: true }
+  })
+
+  // 待机动画（动作）开关：转发到宠物窗口
+  ipcMain.handle('pet:idle', (_e, enabled: boolean) => {
+    const petWin = getPetWindow()
+    if (!petWin || petWin.isDestroyed()) {
+      return { success: false, message: '宠物窗口未打开' }
+    }
+    petWin.webContents.send('pet:idle', enabled)
+    return { success: true }
+  })
+
+  // 重置缩放：转发到宠物窗口
+  ipcMain.handle('pet:reset-zoom', () => {
+    const petWin = getPetWindow()
+    if (!petWin || petWin.isDestroyed()) {
+      return { success: false, message: '宠物窗口未打开' }
+    }
+    petWin.webContents.send('pet:reset-zoom')
+    return { success: true }
+  })
+
+  // 拖动宠物窗口：按光标增量移动窗口位置
+  ipcMain.on('pet:drag-window', (_e, dx: number, dy: number) => {
+    const petWin = getPetWindow()
+    if (!petWin || petWin.isDestroyed()) return
+    const [x, y] = petWin.getPosition()
+    petWin.setPosition(x + dx, y + dy)
+  })
 }
