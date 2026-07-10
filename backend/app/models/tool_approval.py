@@ -21,7 +21,7 @@ class ToolApprovalWhitelist(BaseModel):
     """工具审批白名单"""
     __tablename__ = "tool_approval_whitelist"
 
-    user_id = Column(BigInteger().with_variant(BigInteger, "mysql", unsigned=True), nullable=False, default=0, comment="用户 ID")
+    user_id = Column(BigInteger, nullable=False, default=0, comment="用户 ID")
     tool_name = Column(String(128), nullable=False, default="", comment="工具名称: exec_command / write_file / apply_patch")
     path_pattern = Column(String(512), nullable=False, default="", comment="路径模式: 精确路径或前缀 (e.g. /home/work/project)")
     command_pattern = Column(String(1024), nullable=False, default="", comment="命令模式: 子串匹配 (e.g. git status)")

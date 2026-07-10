@@ -118,6 +118,9 @@ from app.models.memory_insight import MemoryInsight
 from app.models.observation import MemoryObservation
 from app.models.observation_source import MemoryObservationSource
 
+# 工具审批白名单
+from app.models.tool_approval import ToolApprovalWhitelist
+
 __all__ = [
     "BaseModel",
     "Conversation", "Message",
@@ -148,4 +151,5 @@ __all__ = [
     "CostRecord",
     "VideoGallery",
     "MemorySetting",
+    "ToolApprovalWhitelist",
 ]
