@@ -108,6 +108,9 @@ export interface GoalTask {
   tools?: ToolProgress[]
 }
 
+/** 风险等级 */
+export type RiskLevel = 'low' | 'medium' | 'high'
+
 /** 审批请求 */
 export interface ApprovalRequest {
   /** 工具名称 */
@@ -116,6 +119,18 @@ export interface ApprovalRequest {
   args: Record<string, unknown>
   /** 提示消息 */
   message: string
+  /** 风险等级 */
+  riskLevel?: RiskLevel
+  /** 工作目录 */
+  workingDirectory?: string
+  /** 命令预览（exec_command 专用） */
+  commandPreview?: string
+  /** Diff 预览（write_file / apply_patch 专用） */
+  diffPreview?: string
+  /** 影响分析（如「将删除 3 个文件」） */
+  impactSummary?: string
+  /** 是否超出工作区 */
+  outsideWorkspace?: boolean
 }
 
 /** 反馈数据 */

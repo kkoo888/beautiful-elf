@@ -301,7 +301,77 @@ async def _handle_agent_ws(websocket: WebSocket, data: dict, user_id: int):
                 elif event_type == "cost_update":
                     await _queue.put({"type": "chat_cost_update", "prompt_tokens": event["prompt_tokens"], "completion_tokens": event["completion_tokens"]})
                 elif event_type == "approval_required":
-                    await _queue.put({"type": "chat_approval_required", "tool": event.get("tool", ""), "args": event.get("args", {}), "message": event.get("message", "")})
+                    tool_name = event.get("tool", "")
+                    tool_args = event.get("args", {})
+                    # 检查白名单
+                    try:
+                        from app.core.database import AsyncSessionLocal
+                        from app.repository.tool_approval_repo import ToolApprovalWhitelistRepository
+                        _whitelist_repo = ToolApprovalWhitelistRepository()
+                        async with AsyncSessionLocal() as wl_db:
+                            # 提取路径和命令
+                            _path = tool_args.get("path", "") or tool_args.get("workdir", "") or ""
+                            _cmd = tool_args.get("command", "") if tool_name == "exec_command" else ""
+                            _match = await _whitelist_repo.find_match(
+                                wl_db, user_id=user_id, tool_name=tool_name,
+                                path=_path, command=_cmd,
+                            )
+                            if _match:
+                                await _whitelist_repo.increment_hit(wl_db, _match.id)
+                                logger.info(f"[ws] 白名单命中: tool={tool_name} rule_id={_match.id}")
+                                # 自动批准，不弹窗
+                                continue
+                    except Exception as e:
+                        logger.debug(f"[ws] 白名单检查跳过: {e}")
+                    # 构建审批事件（含风险等级、命令预览等）
+                    _risk = "high"  # 需要审批的一般都是 high
+                    _cmd_preview = ""
+                    _impact = ""
+                    _outside = False
+                    if tool_name == "exec_command":
+                        _cmd_preview = tool_args.get("command", "")
+                        _workspace = str(settings.RESOLVED_WORKSPACE) if hasattr(settings, "RESOLVED_WORKSPACE") else ""
+                        if _cmd_preview:
+                            # 检查是否涉及工作区外路径
+                            import re as _re
+                            _outside_paths = _re.findall(r'(?:>|>>|cat|rm|cp|mv)\s+(/[^\s]+)', _cmd_preview)
+                            for _p in _outside_paths:
+                                if _workspace and not _p.startswith(_workspace) and not _p.startswith("/tmp"):
+                                    _outside = True
+                                    break
+                    elif tool_name == "write_file":
+                        _path = tool_args.get("path", "")
+                        _content = tool_args.get("content", "")
+                        _size = len(_content.encode("utf-8")) if _content else 0
+                        _impact = f"将写入 {_size:,} bytes 到 {_path}"
+                    elif tool_name == "apply_patch":
+                        _edits = tool_args.get("edits", [])
+                        _impact = f"将执行 {len(_edits)} 处文本替换"
+                    # 发送通知
+                    try:
+                        from app.core.database import AsyncSessionLocal
+                        from app.services.notification_service import NotificationService
+                        from app.schemas.notification import NotificationCreate
+                        _notif_svc = NotificationService()
+                        async with AsyncSessionLocal() as notif_db:
+                            await _notif_svc.create_notification(notif_db, NotificationCreate(
+                                type="tool_approval",
+                                title=f"工具审批: {tool_name}",
+                                content=event.get("message", f"{tool_name} 需要确认"),
+                                user_id=user_id,
+                            ))
+                    except Exception as e:
+                        logger.debug(f"[ws] 通知发送跳过: {e}")
+                    await _queue.put({
+                        "type": "chat_approval_required",
+                        "tool": tool_name,
+                        "args": tool_args,
+                        "message": event.get("message", ""),
+                        "riskLevel": _risk,
+                        "commandPreview": _cmd_preview,
+                        "impactSummary": _impact,
+                        "outsideWorkspace": _outside,
+                    })
                 elif event_type == "done":
                     # 保存助手消息
                     await _save_assistant_message(_accumulated_content, event.get("prompt_tokens", 0) + event.get("completion_tokens", 0))

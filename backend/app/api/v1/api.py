@@ -39,6 +39,7 @@ from app.api.v1 import (
     video_gallery,
     scheduler_control,
     rag_config,
+    tool_approval,
 )
 
 api_router = APIRouter()
@@ -81,6 +82,7 @@ api_router.include_router(ollama.router, prefix="/ollama", tags=["ollama"])
 api_router.include_router(llm_provider.router, prefix="/llm_providers", tags=["llm_provider"])
 api_router.include_router(intent.router, prefix="/intents", tags=["intent"])
 api_router.include_router(intent_learning.router, prefix="/intent-learning", tags=["intent-learning"])
+api_router.include_router(tool_approval.router, prefix="/tool-approval", tags=["tool-approval"])
 
 # 系统
 api_router.include_router(notification.router, prefix="/notifications", tags=["notification"])

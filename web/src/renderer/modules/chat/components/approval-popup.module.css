@@ -1,0 +1,183 @@
+/* approval-popup.module.css — 从输入框底部滑出的审批弹窗 */
+
+.overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px 8px;
+  pointer-events: none;
+  animation: slideUp 0.25s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.popup {
+  width: 100%;
+  max-width: 680px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-color, #e8e8e8);
+  border-radius: 12px;
+  box-shadow:
+    0 -4px 20px rgba(0, 0, 0, 0.08),
+    0 -1px 4px rgba(0, 0, 0, 0.04);
+  padding: 12px 16px;
+  pointer-events: auto;
+}
+
+/* 头部 */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #1a1a1a);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.countdown {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.countdownDanger {
+  color: #ff4d4f;
+  font-weight: 600;
+}
+
+/* 工作区警告 */
+.workspaceWarning {
+  background: #fff2e8;
+  border: 1px solid #ffbb96;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #d4380d;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 预览区 */
+.preview {
+  margin-bottom: 8px;
+}
+
+.previewLabel {
+  font-size: 11px;
+  color: var(--text-secondary, #999);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.commandBlock {
+  background: var(--bg-code, #1e1e1e);
+  color: #d4d4d4;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  overflow-x: auto;
+  margin: 0;
+  max-height: 120px;
+}
+
+.commandBlock code {
+  color: #9cdcfe;
+}
+
+.diffBlock {
+  background: var(--bg-code, #1e1e1e);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  overflow-x: auto;
+  margin: 0;
+  max-height: 150px;
+}
+
+.argsBlock {
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  overflow-x: auto;
+  margin: 0;
+  max-height: 100px;
+}
+
+/* 影响分析 */
+.impact {
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #ad6800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 消息 */
+.message {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+/* 操作按钮 */
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.shortcuts {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary, #bbb);
+}
+
+.shortcuts span {
+  padding: 2px 6px;
+  background: var(--bg-secondary, #f0f0f0);
+  border-radius: 4px;
+}
