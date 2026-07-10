@@ -16,12 +16,22 @@ vi.mock('three', async () => {
     domElement = document.createElement('canvas')
     setSize = vi.fn()
     setPixelRatio = vi.fn()
+    setClearColor = vi.fn()
     render = vi.fn()
     dispose = vi.fn()
     outputColorSpace = ''
     toneMapping = 0
     toneMappingExposure = 1.0
     shadowMap = { enabled: false, type: 0 }
+    // 各向异性：materialPipeline 读取硬件上限
+    capabilities = { getMaxAnisotropy: vi.fn(() => 8) }
+  }
+
+  // PMREMGenerator：真实实现依赖 WebGL 上下文，测试中用轻量 mock 生成假环境贴图
+  class MockPMREMGenerator {
+    constructor(_renderer: unknown) {}
+    fromScene = vi.fn(() => ({ texture: {} }))
+    dispose = vi.fn()
   }
 
   class MockPerspectiveCamera {
@@ -41,7 +51,22 @@ vi.mock('three', async () => {
   class MockDirectionalLight {
     position = { set: vi.fn() }
     castShadow = false
-    shadow = { mapSize: { width: 0, height: 0 }, bias: 0, normalBias: 0 }
+    target = { position: { set: vi.fn() }, updateMatrixWorld: vi.fn() }
+    shadow = {
+      mapSize: { width: 0, height: 0 },
+      bias: 0,
+      normalBias: 0,
+      // 阴影相机：生产代码在 updateGroundPlane 中按模型尺寸配置其视锥
+      camera: {
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        near: 0,
+        far: 0,
+        updateProjectionMatrix: vi.fn(),
+      },
+    }
   }
   class MockClock {
     getDelta = vi.fn(() => 0.016)
@@ -70,6 +95,7 @@ vi.mock('three', async () => {
     Clock: MockClock,
     Box3: MockBox3,
     Vector3: MockVector3,
+    PMREMGenerator: MockPMREMGenerator,
     SRGBColorSpace: 'srgb',
     ACESFilmicToneMapping: 4,
     Material: class MockMaterial { dispose = vi.fn() },
@@ -157,6 +183,10 @@ vi.mock('three/addons/controls/OrbitControls.js', () => {
     },
   }
 })
+
+vi.mock('three/addons/environments/RoomEnvironment.js', () => ({
+  RoomEnvironment: class MockRoomEnvironment {},
+}))
 
 // ─── 测试套件 ───
 

@@ -350,25 +350,6 @@ export default function PetApp() {
         </div>
       )}
 
-      {/* 状态提示 */}
-      {status && !error && !loading && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 8,
-            left: 8,
-            right: 8,
-            color: 'rgba(255,255,255,0.6)',
-            fontSize: 11,
-            textAlign: 'center',
-            pointerEvents: 'none',
-            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-          }}
-        >
-          {status}
-        </div>
-      )}
-
       {/* 错误状态 */}
       {error && (
         <div

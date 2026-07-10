@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 
 // ════════════════════════════════════════════════════════════
 // 常量
@@ -48,7 +49,9 @@ export class PetScene {
   private controlsActive = false // OrbitControls 交互中才更新
   private mesh: THREE.SkinnedMesh | null = null
   private ground: THREE.Mesh | null = null // 动态阴影地面
+  private dirLight: THREE.DirectionalLight | null = null // 主定向光（投影阴影）
   private clock: THREE.Clock | null = null
+
   private _isLoaded = false
 
   // ── 缩放 / 待机动画（动作） ──
@@ -97,19 +100,28 @@ export class PetScene {
     const height = this.container.clientHeight
 
     // 渲染器
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false })
     this.renderer.setSize(width, height)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    // AgX 色调映射：比 ACES 更中性、胶片底片感，是新场景更好的基线（three r161+）
+    this.renderer.toneMapping = THREE.AgXToneMapping
     this.renderer.toneMappingExposure = 1.0
     this.renderer.shadowMap.enabled = true
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    // VSM 软阴影：接触阴影更柔和、不易 peter-panning（配合 shadow.radius/blurSamples）
+    this.renderer.shadowMap.type = THREE.VSMShadowMap
+    // 保持窗口透明（clearColor alpha=0），供无边框桌宠窗口叠加桌面
+    this.renderer.setClearColor(0x000000, 0)
     this.container.appendChild(this.renderer.domElement)
     this.setupContextLossHandlers()
 
     // 场景
     this.scene = new THREE.Scene()
+
+    // IBL 环境光（RoomEnvironment 摄影棚）：为 PBR 材质提供基于图像的漫/镜反射，
+    // 补上「只有直射+环境光」的扁平感。注意：MMDToonMaterial 是自定义 shader，
+    // 默认不吃 scene.environment，此项主要惠及 materialPipeline 中转成 Standard 的部件。
+    this.setupEnvironment()
 
     // 相机
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000)
@@ -147,6 +159,19 @@ export class PetScene {
     this.startRenderLoop()
   }
 
+  /** IBL 环境：RoomEnvironment 经 PMREM 生成环境贴图，赋给 scene.environment */
+  private setupEnvironment(): void {
+    if (!this.renderer || !this.scene) return
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer)
+      const envScene = new RoomEnvironment()
+      this.scene.environment = pmrem.fromScene(envScene, 0.04).texture
+      pmrem.dispose()
+    } catch (e) {
+      console.warn('[PetScene] setupEnvironment failed:', e)
+    }
+  }
+
   /** 4 灯配置：环境光 + 半球光 + 主定向光（阴影）+ 补光 + 轮廓光 */
   private setupLights(): void {
     if (!this.scene) return
@@ -158,14 +183,23 @@ export class PetScene {
     this.scene.add(new THREE.HemisphereLight(0xddeeff, 0x202020, 0.5))
 
     // 主定向光 + 阴影（512 足够桌面宠物）
+    // 注意：DirectionalLight 默认阴影正交视锥仅为 ±5 且 target 在原点，
+    // 模型加载后需在 updateGroundPlane 中按模型尺寸重新配置阴影相机并瞄准模型中心，
+    // 否则脚底阴影会被裁切/偏移。此处仅创建并保存引用。
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2)
     dirLight.position.set(20, 50, 30)
     dirLight.castShadow = true
     dirLight.shadow.mapSize.width = SHADOW_MAP_SIZE
     dirLight.shadow.mapSize.height = SHADOW_MAP_SIZE
-    dirLight.shadow.bias = -0.0001
+    // VSM 软阴影参数：bias 归零（VSM 靠方差处理自遮挡），用 radius/blurSamples 控制柔和度
+    dirLight.shadow.bias = 0
     dirLight.shadow.normalBias = 0.05
+    dirLight.shadow.radius = 3
+    dirLight.shadow.blurSamples = 8
+    this.dirLight = dirLight
     this.scene.add(dirLight)
+    // target 必须加入场景图，其 matrixWorld 才会随模型加载后重新对准中心而更新
+    this.scene.add(dirLight.target)
 
     // 补光灯（暖色柔化阴影）
     const fillLight = new THREE.DirectionalLight(0xffeedd, 0.4)
@@ -354,7 +388,18 @@ export class PetScene {
   private materialPipeline(mesh: THREE.SkinnedMesh): void {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
 
+    // 纹理各向异性：斜视/转头时贴图更锐利（取硬件上限）
+    const maxAniso = this.renderer?.capabilities?.getMaxAnisotropy?.() ?? 1
+
     const result = materials.map((mat) => {
+      // 纹理增强：对所有材质的漫反射贴图统一设各向异性 + sRGB 色彩空间
+      const diffuse = (mat as any).map as THREE.Texture | undefined | null
+      if (diffuse) {
+        diffuse.anisotropy = maxAniso
+        diffuse.colorSpace = THREE.SRGBColorSpace
+        diffuse.needsUpdate = true
+      }
+
       // MMDLoader 输出的专用 toon shader 材质 —— 必须原样保留，不能替换成 PBR。
       // 否则 gradientMap / matcap / MMD 专用光照逻辑会全部丢失，模型变成黑色剪影。
       if ((mat as any).isMMDToonMaterial) {
@@ -435,6 +480,24 @@ export class PetScene {
     this.ground.position.y = box.min.y
     this.ground.receiveShadow = true
     this.scene.add(this.ground)
+
+    // 配置阴影相机覆盖整个模型，并将光源目标对准模型中心。
+    // 否则 DirectionalLight 默认 ±5 的正交视锥太小、且默认 target 在原点，
+    // 模型远大于该范围时脚底阴影会被裁切或偏移，无法完整落在地面。
+    if (this.dirLight) {
+      const cam = this.dirLight.shadow.camera
+      const halfX = Math.max(size.x, size.z) * 1.5
+      const halfY = size.y * 1.5
+      cam.left = -halfX
+      cam.right = halfX
+      cam.top = halfY
+      cam.bottom = -halfY
+      cam.near = 0.1
+      cam.far = 200
+      cam.updateProjectionMatrix()
+      this.dirLight.target.position.set(center.x, center.y, center.z)
+      this.dirLight.target.updateMatrixWorld()
+    }
   }
 
   /** 相机适配（带 padding） */
@@ -748,6 +811,7 @@ export class PetScene {
     this.controls = null
     this.helper?.dispose()
     this.helper = null
+
     this.renderer?.dispose()
     this.renderer?.domElement.remove()
 
