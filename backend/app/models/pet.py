@@ -32,7 +32,7 @@ INTERACTION_EFFECT_DESC: dict[int, str] = {
     InteractionType.FEED: "饥饿度 +20",
     InteractionType.CLEAN: "清洁度 +20",
     InteractionType.CHAT: "心情 +15, 亲密 +5",
-    InteractionType.PLAY: "心情 +25, 经验 +10",
+    InteractionType.PLAY: "心情 +25, 经验 +10（可触发升级，等级*100 为升级阈值）",
 }
 
 

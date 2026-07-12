@@ -88,7 +88,16 @@ class PetService:
         elif interaction_type == InteractionType.CHAT:
             return {"mood": min(pet.mood + 15, 100), "intimacy": pet.intimacy + 5}
         elif interaction_type == InteractionType.PLAY:
-            return {"mood": min(pet.mood + 25, 100), "exp": pet.exp + 10}
+            new_exp = pet.exp + 10
+            new_level = pet.level
+            # 升级判定：当前等级 * 100 为升级所需经验，等级上限 100
+            while new_exp >= new_level * 100 and new_level < 100:
+                new_exp -= new_level * 100
+                new_level += 1
+            result = {"mood": min(pet.mood + 25, 100), "exp": new_exp}
+            if new_level != pet.level:
+                result["level"] = new_level
+            return result
         return {}
 
     async def get_interactions(

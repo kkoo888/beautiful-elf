@@ -27,6 +27,7 @@ class TestCalcInteractionEffect:
         pet.health = kwargs.get("health", 80)
         pet.intimacy = kwargs.get("intimacy", 10)
         pet.exp = kwargs.get("exp", 0)
+        pet.level = kwargs.get("level", 1)
         return pet
 
     def test_feed_normal(self):
@@ -60,14 +61,44 @@ class TestCalcInteractionEffect:
         assert effect == {"mood": 100, "intimacy": 5}
 
     def test_play_increases_mood_and_exp(self):
-        pet = self._make_pet(mood=40, exp=100)
+        pet = self._make_pet(mood=40, exp=50, level=1)
         effect = PetService._calc_interaction_effect(InteractionType.PLAY, pet)
-        assert effect == {"mood": 65, "exp": 110}
+        assert effect == {"mood": 65, "exp": 60}
 
     def test_play_mood_cap_at_100(self):
-        pet = self._make_pet(mood=90, exp=0)
+        pet = self._make_pet(mood=90, exp=0, level=1)
         effect = PetService._calc_interaction_effect(InteractionType.PLAY, pet)
         assert effect == {"mood": 100, "exp": 10}
+
+    def test_play_triggers_level_up(self):
+        """经验满 100（等级1*100）时自动升级"""
+        pet = self._make_pet(mood=40, exp=95, level=1)
+        effect = PetService._calc_interaction_effect(InteractionType.PLAY, pet)
+        assert effect["level"] == 2
+        assert effect["exp"] == 5  # 105 - 100 = 5
+        assert effect["mood"] == 65
+
+    def test_play_multi_level_up(self):
+        """一次互动连续升多级"""
+        pet = self._make_pet(mood=40, exp=195, level=1)
+        effect = PetService._calc_interaction_effect(InteractionType.PLAY, pet)
+        # exp=205, level1需要100→升到2剩105, level2需要200→不够(105<200)
+        assert effect["level"] == 2
+        assert effect["exp"] == 105
+
+    def test_play_no_level_up_at_cap(self):
+        """等级 100 时不再升级，经验继续累积"""
+        pet = self._make_pet(mood=40, exp=50, level=100)
+        effect = PetService._calc_interaction_effect(InteractionType.PLAY, pet)
+        assert "level" not in effect
+        assert effect["exp"] == 60
+
+    def test_play_level_99_to_100(self):
+        """99 级升 100 级需要 9900 经验"""
+        pet = self._make_pet(mood=40, exp=9895, level=99)
+        effect = PetService._calc_interaction_effect(InteractionType.PLAY, pet)
+        assert effect["level"] == 100
+        assert effect["exp"] == 5  # 9905 - 9900 = 5
 
 
 # ── 离线衰减计算测试 ──────────────────────────────────────
