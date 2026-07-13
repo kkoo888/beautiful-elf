@@ -1,22 +1,35 @@
 .panel {
   padding: 20px;
   background: linear-gradient(165deg, #faf8f5 0%, #f5f0ea 100%);
-  min-height: 100%;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 /* 外层容器（pet-panel.tsx）不加 padding，由各 tab 自行管理 */
 .panelShell {
-  min-height: 100%;
+  height: 100%;
 }
 
-/* ── 主布局：左右分栏 ── */
+/* Ant Design Tabs 内容区撑满高度 */
+.panelShell :global(.ant-tabs) {
+  height: 100%;
+}
+.panelShell :global(.ant-tabs-content) {
+  height: 100%;
+}
+.panelShell :global(.ant-tabs-tabpane-active) {
+  height: 100%;
+}
+
+/* ── 主布局：左右分栏，左侧拉伸填满高度 ── */
 .mainLayout {
   display: flex;
   gap: 20px;
-  align-items: flex-start;
+  align-items: stretch;
+  height: 100%;
 }
 
-/* ── 左侧：截图预览 ── */
+/* ── 左侧：截图预览，拉伸到父容器高度 ── */
 .previewSide {
   flex-shrink: 0;
   width: 240px;
@@ -27,7 +40,8 @@
 
 .previewWrap {
   width: 240px;
-  height: 384px;
+  flex: 1;
+  min-height: 0;
   border-radius: 16px;
   overflow: hidden;
   position: relative;
