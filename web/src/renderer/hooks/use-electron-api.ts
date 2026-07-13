@@ -56,17 +56,18 @@ export function useElectronApi() {
         if (isElectron) return window.electronAPI.pet.getAttributes()
         return null
       },
-      onScreenshotUpdate: (callback: (data: string) => void): (() => void) => {
-        if (isElectron) return window.electronAPI.pet.onScreenshotUpdate(callback)
-        return () => {}
+      saveScreenshot: async (buffer: ArrayBuffer): Promise<void> => {
+        if (isElectron) await window.electronAPI.pet.saveScreenshot(buffer)
+      },
+      readLatestScreenshot: async (): Promise<string | null> => {
+        if (isElectron) return window.electronAPI.pet.readLatestScreenshot()
+        return null
       },
       onVisibilityChange: (callback: (visible: boolean) => void): (() => void) => {
         if (isElectron) return window.electronAPI.pet.onVisibilityChange(callback)
         return () => {}
       },
-      sendScreenshot: (data: string) => {
-        if (isElectron) window.electronAPI.pet.sendScreenshot(data)
-      },
+
       reload: async (): Promise<{ success: boolean; message?: string }> => {
         if (isElectron) return window.electronAPI.pet.reload()
         return { success: false, message: '非 Electron 环境' }

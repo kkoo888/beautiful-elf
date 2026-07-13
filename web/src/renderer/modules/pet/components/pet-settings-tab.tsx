@@ -203,7 +203,11 @@ export default function PetSettingsTab() {
               value={settings.modelPath || undefined}
               onChange={handleModelChange}
               loading={modelsLoading}
-              options={models.map((m) => ({ label: m.name, value: m.path }))}
+              options={models.map((m) => ({
+                label: m.loadable ? m.name : `${m.name}（不支持加载）`,
+                value: m.path,
+                disabled: !m.loadable,
+              }))}
               notFoundContent={modelsLoading ? '扫描中...' : modelDir ? '目录下无模型文件' : '请先选择目录'}
               disabled={!modelDir}
             />

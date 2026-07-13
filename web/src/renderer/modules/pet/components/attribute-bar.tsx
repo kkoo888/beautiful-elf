@@ -10,7 +10,8 @@ interface AttributeBarProps {
 }
 
 export default function AttributeBar({ label, value, max = 100, icon, color }: AttributeBarProps) {
-  const percent = Math.round((value / max) * 100)
+  const effectiveMax = Math.max(max, value) // 防止溢出
+  const percent = Math.min(100, Math.round((value / effectiveMax) * 100))
   const isLow = value < 30
 
   return (
@@ -29,7 +30,7 @@ export default function AttributeBar({ label, value, max = 100, icon, color }: A
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {isLow && <WarningOutlined style={{ color: '#ef4444' }} />}
           <Typography.Text type={isLow ? 'danger' : undefined} strong>
-            {value}/{max}
+            {value}{value <= max ? `/${max}` : ''}
           </Typography.Text>
         </span>
       </div>

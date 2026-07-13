@@ -56,6 +56,7 @@ class ModelInfo(CamelModel):
     name: str = Field(..., description="模型文件名")
     path: str = Field(..., description="模型完整路径")
     size: int = Field(..., description="文件大小（字节）")
+    loadable: bool = Field(True, description="当前加载器是否支持（false=预览，不可加载）")
 
 
 class ModelScanResponse(CamelModel):

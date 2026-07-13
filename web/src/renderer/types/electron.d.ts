@@ -30,11 +30,12 @@ interface PetApi {
   resetZoom: () => Promise<{ success: boolean; message?: string }>
   /** 拖动宠物窗口：按光标增量移动窗口位置 */
   dragWindowBy: (dx: number, dy: number) => void
-  /** 监听截图更新，返回清理函数 */
-  onScreenshotUpdate: (callback: (data: string) => void) => (() => void)
+  /** 保存截图到磁盘（ArrayBuffer） */
+  saveScreenshot: (buffer: ArrayBuffer) => Promise<void>
+  /** 读取最新截图文件路径（file:// URL） */
+  readLatestScreenshot: () => Promise<string | null>
   /** 监听可见性变化，返回清理函数 */
   onVisibilityChange: (callback: (visible: boolean) => void) => (() => void)
-  sendScreenshot: (data: string) => void
   /** 通知宠物窗口模型已切换，触发重新加载 */
   notifyModelChanged: () => void
   /** 监听模型切换通知（路径变更），返回清理函数 */

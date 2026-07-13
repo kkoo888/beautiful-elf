@@ -11,8 +11,11 @@ from app.repository.pet_repo import PetRepository
 from app.repository.config_repo import ConfigRepository
 from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate, PetAttributeOut
 
-# 支持的 3D 模型格式
-MODEL_EXTENSIONS = {".pmx", ".vmd", ".glb", ".gltf", ".fbx", ".obj"}
+# 加载器实际支持的 3D 模型格式（MMDLoader 仅支持 PMX，VMD 是动画格式不算模型）
+# 未来加 GLTFLoader/FBXLoader 时再扩展
+MODEL_EXTENSIONS = {".pmx"}
+# 扫描时额外展示的格式（标记为“不支持加载”，避免用户困惑）
+PREVIEW_EXTENSIONS = {".glb", ".gltf", ".fbx", ".obj"}
 
 
 class PetService:
@@ -139,31 +142,35 @@ class PetService:
                 status_code=400,
             )
 
+        all_ext = MODEL_EXTENSIONS | PREVIEW_EXTENSIONS
         models = []
 
+        def _add_file(f: Path, prefix: str = ""):
+            if not f.is_file() or f.suffix.lower() not in all_ext:
+                return
+            ext = f.suffix.lower()
+            loadable = ext in MODEL_EXTENSIONS
+            display = f"{prefix}{f.name}" if prefix else f.name
+            models.append({
+                "name": display,
+                "path": str(f),
+                "size": f.stat().st_size,
+                "loadable": loadable,
+            })
+
         for f in sorted(target.iterdir()):
-            if f.is_file() and f.suffix.lower() in MODEL_EXTENSIONS:
-                models.append({
-                    "name": f.name,
-                    "path": str(f),
-                    "size": f.stat().st_size,
-                })
+            _add_file(f)
 
         for sub in sorted(target.iterdir()):
             if sub.is_dir():
                 for f in sorted(sub.iterdir()):
-                    if f.is_file() and f.suffix.lower() in MODEL_EXTENSIONS:
-                        display_name = f.name if f.stem == sub.name else f"{sub.name} / {f.name}"
-                        models.append({
-                            "name": display_name,
-                            "path": str(f),
-                            "size": f.stat().st_size,
-                        })
+                    prefix = f"{sub.name} / " if f.stem != sub.name else ""
+                    _add_file(f, prefix)
 
         return {"dir_path": str(target), "models": models}
 
     async def switch_model(self, db: AsyncSession, model_path: str) -> dict:
-        """切换宠物模型，保存到 settings 表"""
+        """切换宠物模型，保存到 pet_settings JSON 中（统一数据源）"""
         p = Path(model_path)
         if not p.exists():
             raise AppError(
@@ -172,14 +179,20 @@ class PetService:
                 status_code=404,
             )
 
-        existing = await self.config_repo.find_by_key(db, "pet_model_path")
+        import json
+        existing = await self.config_repo.find_by_key(db, "pet_settings")
         if existing:
-            await self.config_repo.update_by_key(db, "pet_model_path", {"key_value": model_path})
+            try:
+                settings = json.loads(existing.key_value)
+            except (json.JSONDecodeError, TypeError):
+                settings = {}
+            settings["modelPath"] = model_path
+            await self.config_repo.update_by_key(db, "pet_settings", {"key_value": json.dumps(settings, ensure_ascii=False)})
         else:
             await self.config_repo.create(db, {
-                "settings_key": "pet_model_path",
-                "key_value": model_path,
-                "description": "宠物模型路径",
+                "settings_key": "pet_settings",
+                "key_value": json.dumps({"modelPath": model_path}, ensure_ascii=False),
+                "description": "宠物设置（JSON）",
             })
 
         return {"model_path": model_path}

@@ -131,10 +131,7 @@ export default function PetApp() {
         // 模型加载完成后再启动截图（避免截到空白画面）
         setReady(true)
 
-        // 通知主窗口：宠物已就绪
-        if (window.electronAPI?.pet) {
-          window.electronAPI.pet.sendScreenshot('')
-        }
+
       } catch (err: any) {
         console.error('[PetApp] init failed:', err)
         setError(err.message || '初始化失败')
@@ -163,16 +160,16 @@ export default function PetApp() {
     }
   }, [])
 
-  // 定期截图发给主窗口（异步 toBlob，3 秒间隔）
+  // 定期截图保存到磁盘（异步 toBlob → ArrayBuffer → IPC 写文件，3 秒间隔）
   useEffect(() => {
     if (!ready) return
     const scene = sceneRef.current
     if (!scene) return
 
     const timer = setInterval(() => {
-      scene.getScreenshotBlob((dataUrl) => {
-        if (dataUrl) {
-          window.electronAPI?.pet?.sendScreenshot(dataUrl)
+      scene.getScreenshotArrayBuffer((buffer) => {
+        if (buffer) {
+          window.electronAPI?.pet?.saveScreenshot(buffer)
         }
       })
     }, 3000)

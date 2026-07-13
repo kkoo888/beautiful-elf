@@ -1,5 +1,7 @@
 """宠物属性 API — RESTful 规范"""
-from fastapi import APIRouter, Depends, Query
+import os
+from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -8,6 +10,9 @@ from app.schemas.pet import PetAttributeUpdate, PetInteractionCreate, PetAttribu
 from app.schemas.response import ApiResult, ApiPageResult
 
 router = APIRouter()
+
+# 截图目录（对齐 image_gallery 的 IMAGE_DIR 模式）
+SCREENSHOT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "uploads", "pet-screenshots")
 
 
 def _get_service() -> PetService:
@@ -77,3 +82,15 @@ async def list_interactions(
     """查询互动记录（分页）"""
     items, total = await service.get_interactions(db, page, page_size)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/screenshot/latest")
+async def serve_screenshot():
+    """通过 HTTP 提供最新截图（对齐 image_gallery/files 模式）"""
+    file_path = os.path.join(SCREENSHOT_DIR, "latest.png")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="截图不存在")
+    resp = FileResponse(file_path, media_type="image/png")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp

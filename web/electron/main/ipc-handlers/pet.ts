@@ -1,6 +1,14 @@
 import { ipcMain } from 'electron'
+import { join } from 'path'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { getPetWindow, showPetWindow, hidePetWindow, isPetWindowVisible } from '../pet-window'
-import { getMainWindow } from '../window-manager'
+
+// 截图目录：backend/uploads/pet-screenshots/
+const SCREENSHOT_DIR = join(__dirname, '..', '..', '..', '..', 'backend', 'uploads', 'pet-screenshots')
+function ensureScreenshotDir(): string {
+  if (!existsSync(SCREENSHOT_DIR)) mkdirSync(SCREENSHOT_DIR, { recursive: true })
+  return SCREENSHOT_DIR
+}
 
 /** 转发模型切换通知到宠物窗口 */
 function notifyPetWindowModelChanged(): void {
@@ -71,11 +79,27 @@ export function registerPetHandlers(): void {
     }
   })
 
-  // 截图传输 (宠物窗口 → 主窗口)
-  ipcMain.on('pet:screenshot', (_, data) => {
-    const mainWin = getMainWindow()
-    if (mainWin && !mainWin.isDestroyed()) {
-      mainWin.webContents.send('pet:screenshot-update', data)
+  // 保存截图到磁盘（pet 窗口调用，ArrayBuffer）
+  ipcMain.handle('pet:save-screenshot', (_, buffer: ArrayBuffer) => {
+    try {
+      const dir = ensureScreenshotDir()
+      writeFileSync(join(dir, 'latest.png'), Buffer.from(buffer))
+    } catch (e) {
+      console.warn('[pet] save screenshot failed:', e)
+    }
+  })
+
+  // 读取最新截图 URL（主窗口调用，返回 HTTP URL 或 null）
+  // 对齐 image_gallery 模式：通过后端 API 提供文件，避免 file:// 协议限制
+  ipcMain.handle('pet:read-screenshot', () => {
+    try {
+      const dir = ensureScreenshotDir()
+      const filePath = join(dir, 'latest.png')
+      if (!existsSync(filePath)) return null
+      // 返回 HTTP URL，主窗口通过后端 API 加载（与 image_gallery/files 一致）
+      return 'http://localhost:6680/api/v1/pets/screenshot/latest'
+    } catch {
+      return null
     }
   })
 

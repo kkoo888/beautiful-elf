@@ -7,21 +7,19 @@ export const petApi = {
   toggle: () => ipcRenderer.invoke('pet:toggle'),
   isVisible: () => ipcRenderer.invoke('pet:isVisible'),
   getAttributes: () => ipcRenderer.invoke('pet:getAttributes'),
-  /** 监听截图更新，返回清理函数 */
-  onScreenshotUpdate: (callback: (data: string) => void): (() => void) => {
-    const handler = (_: Electron.IpcRendererEvent, data: string) => callback(data)
-    ipcRenderer.on('pet:screenshot-update', handler)
-    return () => ipcRenderer.removeListener('pet:screenshot-update', handler)
-  },
+  /** 保存截图到磁盘（ArrayBuffer，pet 窗口用） */
+  saveScreenshot: (buffer: ArrayBuffer): Promise<void> =>
+    ipcRenderer.invoke('pet:save-screenshot', buffer),
+  /** 读取最新截图文件路径（主窗口用） */
+  readLatestScreenshot: (): Promise<string | null> =>
+    ipcRenderer.invoke('pet:read-screenshot'),
   /** 监听可见性变化，返回清理函数 */
   onVisibilityChange: (callback: (visible: boolean) => void): (() => void) => {
     const handler = (_: Electron.IpcRendererEvent, visible: boolean) => callback(visible)
     ipcRenderer.on('pet:visibility-change', handler)
     return () => ipcRenderer.removeListener('pet:visibility-change', handler)
   },
-  sendScreenshot: (data: string) => {
-    ipcRenderer.send('pet:screenshot', data)
-  },
+
   /** 请求宠物窗口重新加载当前模型（刷新场景） */
   reload: () => ipcRenderer.invoke('pet:reload'),
   /** 相对缩放因子（放大缩小宠物） */

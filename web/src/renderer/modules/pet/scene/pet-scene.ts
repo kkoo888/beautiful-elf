@@ -6,18 +6,22 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 // 常量
 // ════════════════════════════════════════════════════════════
 
-const LOAD_TIMEOUT_MS = 10_000
+const LOAD_TIMEOUT_BASE_MS = 10_000
+const LOAD_TIMEOUT_PER_MB_MS = 2_000
+const LOAD_MAX_RETRIES = 1
 const FPS_VISIBLE = 60
-const FPS_HIDDEN = 5
 const CAMERA_PADDING = 1.2
 const MOUSE_LERP = 0.08
 const MOUSE_CONVERGE_THRESHOLD = 0.001
-const DELTA_CLAMP = 0.1 // 最大帧间隔 100ms，防止隐藏后跳帧
+const DELTA_CLAMP = 0.1 // 最大帧间隔 100ms，防止 tab 切换/resize 等异常跳帧
 const SHADOW_MAP_SIZE = 512 // 桌面宠物 400x500 窗口，512 足够
 const HEAD_BONE_NAMES = ['頭', 'head', 'Head', '頭部']
 const EYE_BONE_NAMES = ['左目', '右目', 'leftEye', 'rightEye', 'Eye_L', 'Eye_R']
 
 export type LoadProgressCallback = (progress: number, status: string) => void
+
+// IBL 环境贴图缓存（RoomEnvironment 是固定内容，全生命周期复用一次）
+let _cachedEnvTexture: THREE.Texture | null = null
 
 // ════════════════════════════════════════════════════════════
 // PetScene
@@ -49,6 +53,8 @@ export class PetScene {
   private controlsActive = false // OrbitControls 交互中才更新
   private mesh: THREE.SkinnedMesh | null = null
   private ground: THREE.Mesh | null = null // 动态阴影地面
+  private groundGeo: THREE.PlaneGeometry | null = null // 复用的地面几何体
+  private groundMat: THREE.ShadowMaterial | null = null // 复用的地面材质
   private dirLight: THREE.DirectionalLight | null = null // 主定向光（投影阴影）
   private clock: THREE.Clock | null = null
 
@@ -86,6 +92,20 @@ export class PetScene {
     this.container = container
   }
 
+  /** 检测是否支持 VSM 阴影（需要高精度浮点纹理 + 二次采样） */
+  private _supportsVSM(): boolean {
+    try {
+      const gl = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl')
+      if (!gl) return false
+      // VSM 需要浮点颜色缓冲；检查 OES_texture_float 或 WebGL2 内置支持
+      const isWebGL2 = (gl as WebGL2RenderingContext).MAX_SAMPLES !== undefined
+      if (isWebGL2) return true
+      return !!gl.getExtension('OES_texture_float')
+    } catch {
+      return false
+    }
+  }
+
   get isLoaded(): boolean {
     return this._isLoaded
   }
@@ -108,8 +128,11 @@ export class PetScene {
     this.renderer.toneMapping = THREE.AgXToneMapping
     this.renderer.toneMappingExposure = 1.0
     this.renderer.shadowMap.enabled = true
-    // VSM 软阴影：接触阴影更柔和、不易 peter-panning（配合 shadow.radius/blurSamples）
-    this.renderer.shadowMap.type = THREE.VSMShadowMap
+    // 阴影类型自适应：高端 GPU 用 VSM 软阴影，低端降级为 PCFSoftShadowMap
+    // VSM 需要额外 blur pass（~2x 开销），低端设备可能卡顿
+    this.renderer.shadowMap.type = this._supportsVSM()
+      ? THREE.VSMShadowMap
+      : THREE.PCFSoftShadowMap
     // 保持窗口透明（clearColor alpha=0），供无边框桌宠窗口叠加桌面
     this.renderer.setClearColor(0x000000, 0)
     this.container.appendChild(this.renderer.domElement)
@@ -159,13 +182,18 @@ export class PetScene {
     this.startRenderLoop()
   }
 
-  /** IBL 环境：RoomEnvironment 经 PMREM 生成环境贴图，赋给 scene.environment */
+  /** IBL 环境：RoomEnvironment 经 PMREM 生成环境贴图，缓存复用 */
   private setupEnvironment(): void {
     if (!this.renderer || !this.scene) return
     try {
+      if (_cachedEnvTexture) {
+        this.scene.environment = _cachedEnvTexture
+        return
+      }
       const pmrem = new THREE.PMREMGenerator(this.renderer)
       const envScene = new RoomEnvironment()
-      this.scene.environment = pmrem.fromScene(envScene, 0.04).texture
+      _cachedEnvTexture = pmrem.fromScene(envScene, 0.04).texture
+      this.scene.environment = _cachedEnvTexture
       pmrem.dispose()
     } catch (e) {
       console.warn('[PetScene] setupEnvironment failed:', e)
@@ -191,11 +219,15 @@ export class PetScene {
     dirLight.castShadow = true
     dirLight.shadow.mapSize.width = SHADOW_MAP_SIZE
     dirLight.shadow.mapSize.height = SHADOW_MAP_SIZE
-    // VSM 软阴影参数：bias 归零（VSM 靠方差处理自遮挡），用 radius/blurSamples 控制柔和度
+    // 阴影参数：VSM 用 radius/blurSamples 控制柔和度，PCF 用 radius 控制采样范围
     dirLight.shadow.bias = 0
     dirLight.shadow.normalBias = 0.05
-    dirLight.shadow.radius = 3
-    dirLight.shadow.blurSamples = 8
+    if (this.renderer?.shadowMap.type === THREE.VSMShadowMap) {
+      dirLight.shadow.radius = 3
+      dirLight.shadow.blurSamples = 8
+    } else {
+      dirLight.shadow.radius = 2
+    }
     this.dirLight = dirLight
     this.scene.add(dirLight)
     // target 必须加入场景图，其 matrixWorld 才会随模型加载后重新对准中心而更新
@@ -239,19 +271,62 @@ export class PetScene {
     return lastSlash >= 0 ? modelPath.substring(0, lastSlash + 1) : modelPath
   }
 
-  /** 加载 PMX 模型（无动画） */
+  /** 计算动态超时（大文件给更多时间） */
+  private _calcTimeout(fileSize?: number): number {
+    if (fileSize && fileSize > 0) {
+      const mb = fileSize / (1024 * 1024)
+      return Math.max(LOAD_TIMEOUT_BASE_MS, mb * LOAD_TIMEOUT_PER_MB_MS)
+    }
+    return LOAD_TIMEOUT_BASE_MS
+  }
+
+  /** 创建占位立方体（加载失败时的 fallback） */
+  private _createPlaceholder(): THREE.Mesh {
+    const geo = new THREE.BoxGeometry(2, 4, 2)
+    const mat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.7 })
+    const cube = new THREE.Mesh(geo, mat)
+    cube.castShadow = true
+    cube.receiveShadow = true
+    return cube
+  }
+
+  /** 加载 PMX 模型（无动画，支持重试 + fallback） */
   async loadModel(modelPath: string, onProgress?: LoadProgressCallback): Promise<void> {
     if (!this.scene || !this.loader) return
     onProgress?.(0, '加载模型中...')
 
+    const modelDir = this.getResourcePath(modelPath)
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt <= LOAD_MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) onProgress?.(0, `重试中 (${attempt}/${LOAD_MAX_RETRIES})...`)
+        await this._loadModelOnce(modelPath, modelDir, onProgress)
+        return // 成功
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e))
+        if (attempt < LOAD_MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 500)) // 重试前等 500ms
+        }
+      }
+    }
+
+    // 全部重试失败 → 显示占位立方体，不抛异常
+    console.warn(`[PetScene] loadModel failed after ${LOAD_MAX_RETRIES + 1} attempts:`, lastError)
+    this.disposeCurrentMesh()
+    const placeholder = this._createPlaceholder()
+    this.mesh = placeholder as unknown as THREE.SkinnedMesh
+    this.scene.add(placeholder)
+    this.fitCameraToModel(placeholder as unknown as THREE.SkinnedMesh)
+    this._isLoaded = true
+    onProgress?.(100, '加载失败，显示占位模型')
+  }
+
+  private _loadModelOnce(modelPath: string, modelDir: string, onProgress?: LoadProgressCallback): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error(`加载超时: ${modelPath}`)), LOAD_TIMEOUT_MS)
+      const timeout = setTimeout(() => reject(new Error(`加载超时: ${modelPath}`)), this._calcTimeout())
 
-      // 显式设置资源目录：MMDLoader 用它作为相对纹理（tex/、sph/、toon 等）的解析基准，
-      // 模型会自行按 PMX 内记录的文件名（面/发/服/肌/sph...）在目录内加载，无需干预文件名
-      const modelDir = this.getResourcePath(modelPath)
       this.loader!.setResourcePath(modelDir)
-
       this.loader.load(
         modelPath,
         (mesh: THREE.SkinnedMesh) => {
@@ -274,7 +349,7 @@ export class PetScene {
     })
   }
 
-  /** 加载 PMX 模型 + VMD 动画 */
+  /** 加载 PMX 模型 + VMD 动画（支持重试） */
   async loadModelWithAnimation(
     modelPath: string,
     vmdPath: string,
@@ -283,21 +358,38 @@ export class PetScene {
     if (!this.scene || !this.loader) return
     onProgress?.(0, '加载模型+动画中...')
 
+    const modelDir = this.getResourcePath(modelPath)
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt <= LOAD_MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) onProgress?.(0, `重试中 (${attempt}/${LOAD_MAX_RETRIES})...`)
+        await this._loadModelWithAnimationOnce(modelPath, vmdPath, modelDir, onProgress)
+        return
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e))
+        if (attempt < LOAD_MAX_RETRIES) await new Promise(r => setTimeout(r, 500))
+      }
+    }
+
+    console.warn(`[PetScene] loadModelWithAnimation failed after ${LOAD_MAX_RETRIES + 1} attempts:`, lastError)
+    // 动画加载失败不 fallback，直接抛（动画是可选的）
+    throw lastError
+  }
+
+  private _loadModelWithAnimationOnce(
+    modelPath: string, vmdPath: string, modelDir: string, onProgress?: LoadProgressCallback,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error(`加载超时: ${modelPath}`)), LOAD_TIMEOUT_MS)
+      const timeout = setTimeout(() => reject(new Error(`加载超时: ${modelPath}`)), this._calcTimeout())
 
-      // 显式设置资源目录：MMDLoader 用它作为相对纹理（tex/、sph/、toon 等）的解析基准，
-      // 模型会自行按 PMX 内记录的文件名（面/发/服/肌/sph...）在目录内加载，无需干预文件名
-      const modelDir = this.getResourcePath(modelPath)
       this.loader!.setResourcePath(modelDir)
-
       this.loader.loadWithAnimation(
         modelPath,
         vmdPath,
         (result: { mesh: THREE.SkinnedMesh; animation: THREE.AnimationClip }) => {
           clearTimeout(timeout)
           this.applyModel(result.mesh)
-
           if (this.helper) {
             try {
               this.helper.add(result.mesh, { animation: result.animation, physics: true })
@@ -306,7 +398,6 @@ export class PetScene {
               console.warn('[PetScene] helper.add failed:', e)
             }
           }
-
           this.currentModelPath = modelPath
           this.currentVmdPath = vmdPath
           onProgress?.(100, '模型+动画加载完成')
@@ -458,14 +549,13 @@ export class PetScene {
     mesh.material = result.length === 1 ? result[0] : result
   }
 
-  /** 动态阴影地面：根据模型 bbox 自动调整大小 */
+  /** 动态阴影地面：根据模型 bbox 自动调整大小（复用几何体和材质） */
   private updateGroundPlane(mesh: THREE.SkinnedMesh): void {
     if (!this.scene) return
 
-    // 移除旧地面
+    // 移除旧地面（不 dispose 几何体和材质，后续复用）
     if (this.ground) {
       this.scene.remove(this.ground)
-      this.ground.geometry.dispose()
     }
 
     const box = new THREE.Box3().setFromObject(mesh)
@@ -473,12 +563,23 @@ export class PetScene {
     const center = box.getCenter(new THREE.Vector3())
     const groundSize = Math.max(size.x, size.z) * CAMERA_PADDING * 3
 
-    const geo = new THREE.PlaneGeometry(groundSize, groundSize)
-    const mat = new THREE.ShadowMaterial({ opacity: 0.3 })
-    this.ground = new THREE.Mesh(geo, mat)
-    this.ground.rotation.x = -Math.PI / 2
+    // 复用或创建几何体 + 材质
+    if (!this.groundGeo) {
+      this.groundGeo = new THREE.PlaneGeometry(groundSize, groundSize)
+    } else {
+      // PlaneGeometry 不支持直接 resize，用 scale 模拟
+    }
+    if (!this.groundMat) {
+      this.groundMat = new THREE.ShadowMaterial({ opacity: 0.3 })
+    }
+    if (!this.ground) {
+      this.ground = new THREE.Mesh(this.groundGeo, this.groundMat)
+      this.ground.rotation.x = -Math.PI / 2
+      this.ground.receiveShadow = true
+    }
+    // 用 scale 适配不同模型尺寸（基准 PlaneGeometry 是 1x1）
+    this.ground.scale.set(groundSize, groundSize, 1)
     this.ground.position.y = box.min.y
-    this.ground.receiveShadow = true
     this.scene.add(this.ground)
 
     // 配置阴影相机覆盖整个模型，并将光源目标对准模型中心。
@@ -676,11 +777,23 @@ export class PetScene {
     }
   }
 
-  /** 设置可见性 */
+  /** 设置可见性：隐藏时暂停渲染循环，显示时恢复 */
   setVisible(visible: boolean): void {
     this.visible = visible
-    this.fpsInterval = 1000 / (visible ? FPS_VISIBLE : FPS_HIDDEN)
-    this.lastFrameTime = 0
+    if (visible) {
+      this.fpsInterval = 1000 / FPS_VISIBLE
+      this.lastFrameTime = 0
+      // 恢复渲染循环
+      if (this.animationId === null && !this.contextLost) {
+        this.startRenderLoop()
+      }
+    } else {
+      // 暂停渲染循环，释放 GPU
+      if (this.animationId !== null) {
+        cancelAnimationFrame(this.animationId)
+        this.animationId = null
+      }
+    }
   }
 
   /** 滚轮缩放处理（宠物窗口内直接滚轮放大缩小） */
@@ -736,28 +849,14 @@ export class PetScene {
     return this.renderer?.domElement ?? null
   }
 
-  /** 异步截图（toBlob，不阻塞渲染线程） */
-  getScreenshotDataURL(): string | null {
-    const canvas = this.renderer?.domElement
-    if (!canvas) return null
-    try {
-      return canvas.toDataURL('image/png')
-    } catch {
-      return null
-    }
-  }
-
-  /** 异步截图（toBlob 回调，推荐用于定时截图） */
-  getScreenshotBlob(callback: (dataUrl: string | null) => void): void {
+  /** 异步截图 → ArrayBuffer（用于写入磁盘，不经过 base64 编码） */
+  getScreenshotArrayBuffer(callback: (buffer: ArrayBuffer | null) => void): void {
     const canvas = this.renderer?.domElement
     if (!canvas) { callback(null); return }
     try {
       canvas.toBlob((blob) => {
         if (!blob) { callback(null); return }
-        const reader = new FileReader()
-        reader.onload = () => callback(reader.result as string)
-        reader.onerror = () => callback(null)
-        reader.readAsDataURL(blob)
+        blob.arrayBuffer().then(callback).catch(() => callback(null))
       }, 'image/png')
     } catch {
       callback(null)
@@ -805,7 +904,9 @@ export class PetScene {
 
     this.disposeCurrentMesh()
 
-    if (this.ground) { this.scene?.remove(this.ground); this.ground.geometry.dispose(); this.ground = null }
+    if (this.ground) { this.scene?.remove(this.ground); this.ground = null }
+    if (this.groundGeo) { this.groundGeo.dispose(); this.groundGeo = null }
+    if (this.groundMat) { this.groundMat.dispose(); this.groundMat = null }
 
     this.controls?.dispose()
     this.controls = null

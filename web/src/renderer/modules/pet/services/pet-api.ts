@@ -37,7 +37,7 @@ export async function fetchInteractions(params: { page?: number; pageSize?: numb
   }))
 }
 
-export async function scanModels(dirPath: string): Promise<{ name: string; path: string; size: number }[]> {
+export async function scanModels(dirPath: string): Promise<{ name: string; path: string; size: number; loadable: boolean }[]> {
   const data = extractData(await apiClient.post('/pets/models/scan', { dir_path: dirPath })) as any
   return data?.models ?? []
 }

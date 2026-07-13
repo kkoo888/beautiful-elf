@@ -379,27 +379,27 @@ describe('MMD 渲染链路测试', () => {
     })
   })
 
-  describe('5. 可见性与帧率控制', () => {
-    it('setVisible(false) 降低帧率到 5fps', async () => {
+  describe('5. 可见性与渲染循环控制', () => {
+    it('setVisible(false) 暂停渲染循环（GPU 零开销）', async () => {
       const { PetScene } = await import('../scene/pet-scene')
       const scene = new PetScene(container)
       await scene.init()
 
       scene.setVisible(false)
-      // 渲染循环仍在运行，但以低帧率运行
+      // 渲染循环已暂停，等待一小段时间确认无帧输出
       await new Promise((r) => setTimeout(r, 50))
 
       scene.dispose()
     })
 
-    it('setVisible(true) 恢复帧率到 60fps', async () => {
+    it('setVisible(true) 恢复渲染循环', async () => {
       const { PetScene } = await import('../scene/pet-scene')
       const scene = new PetScene(container)
       await scene.init()
 
       scene.setVisible(false)
       scene.setVisible(true)
-
+      // 恢复后渲染循环重新运行
       await new Promise((r) => setTimeout(r, 50))
 
       scene.dispose()

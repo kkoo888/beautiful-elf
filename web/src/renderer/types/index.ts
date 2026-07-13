@@ -478,9 +478,9 @@ declare global {
         hide: () => Promise<void>
         toggle: () => Promise<void>
         getAttributes: () => Promise<PetAttributes | { error: string; message: string }>
-        onScreenshotUpdate: (callback: (data: string) => void) => void
+        saveScreenshot: (buffer: ArrayBuffer) => Promise<void>
+        readLatestScreenshot: () => Promise<string | null>
         onVisibilityChange: (callback: (visible: boolean) => void) => void
-        sendScreenshot: (data: string) => void
       }
     }
   }

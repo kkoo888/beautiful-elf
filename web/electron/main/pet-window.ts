@@ -10,9 +10,17 @@ let visibilityCallback: ((visible: boolean) => void) | null = null
 /** 鼠标追踪定时器 */
 let mouseTrackInterval: ReturnType<typeof setInterval> | null = null
 
-/** 启动 30fps 鼠标追踪，将归一化坐标发送给宠物窗口 */
+/** 鼠标追踪脏标记状态 */
+let _lastMouseX = 0
+let _lastMouseY = 0
+const MOUSE_MOVE_THRESHOLD = 0.002 // 归一化坐标变化阈值，低于此值不发送 IPC
+
+/** 启动 1fps 鼠标追踪（仅在鼠标实际移动时发送 IPC） */
 function startMouseTracking(): void {
   if (mouseTrackInterval) return
+  // 重置脏标记，避免恢复显示时发送过期坐标
+  _lastMouseX = NaN
+  _lastMouseY = NaN
   mouseTrackInterval = setInterval(() => {
     if (!petWindow || petWindow.isDestroyed()) {
       stopMouseTracking()
@@ -21,18 +29,19 @@ function startMouseTracking(): void {
     try {
       const cursor = screen.getCursorScreenPoint()
       const bounds = petWindow.getBounds()
-      // 全局追踪：即使光标移出宠物窗口，仍按窗口中心归一化并发送，
-      // 模型会持续朝光标方向看（超出窗口范围时坐标被钳制在 ±1，即看向最边缘方向）
-      const normalizedX = ((cursor.x - bounds.x) / bounds.width) * 2 - 1
-      const normalizedY = ((cursor.y - bounds.y) / bounds.height) * 2 - 1
-      petWindow.webContents.send('global-mouse-move', {
-        x: Math.max(-1, Math.min(1, normalizedX)),
-        y: Math.max(-1, Math.min(1, normalizedY)),
-      })
+      const normalizedX = Math.max(-1, Math.min(1, ((cursor.x - bounds.x) / bounds.width) * 2 - 1))
+      const normalizedY = Math.max(-1, Math.min(1, ((cursor.y - bounds.y) / bounds.height) * 2 - 1))
+      // 脏标记：坐标变化超过阈值才发送 IPC，省掉 ~95% 无意义轮询
+      if (Math.abs(normalizedX - _lastMouseX) > MOUSE_MOVE_THRESHOLD ||
+          Math.abs(normalizedY - _lastMouseY) > MOUSE_MOVE_THRESHOLD) {
+        _lastMouseX = normalizedX
+        _lastMouseY = normalizedY
+        petWindow.webContents.send('global-mouse-move', { x: normalizedX, y: normalizedY })
+      }
     } catch {
       // 静默忽略
     }
-  }, 33) // 30fps
+  }, 1000) // 1fps：桌面宠物对鼠标跟随延迟不敏感，1s 足够
 }
 
 function stopMouseTracking(): void {
@@ -50,8 +59,8 @@ export function createPetWindow(): BrowserWindow {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
 
   petWindow = new BrowserWindow({
-    width: 400,
-    height: 500,
+    width: 640,
+    height: 1024,
     x: width - 420,
     y: height - 520,
     transparent: true,
