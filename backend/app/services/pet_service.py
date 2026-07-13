@@ -89,7 +89,11 @@ class PetService:
         elif interaction_type == InteractionType.CLEAN:
             return {"clean": min(pet.clean + 20, 100)}
         elif interaction_type == InteractionType.CHAT:
-            return {"mood": min(pet.mood + 15, 100), "intimacy": pet.intimacy + 5}
+            effect = {"mood": min(pet.mood + 15, 100), "intimacy": pet.intimacy + 5}
+            # 健康恢复：饥饿>30 且 清洁>40 时，聊天可恢复健康
+            if pet.hunger > 30 and pet.clean > 40:
+                effect["health"] = min(pet.health + 5, 100)
+            return effect
         elif interaction_type == InteractionType.PLAY:
             new_exp = pet.exp + 10
             new_level = pet.level

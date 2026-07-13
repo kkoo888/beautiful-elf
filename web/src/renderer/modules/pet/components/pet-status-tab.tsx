@@ -10,12 +10,12 @@ dayjs.extend(relativeTime)
 dayjs.locale('zh-cn')
 
 const ATTR_CONFIG = [
-  { key: 'hunger', label: '饥饿', icon: '🍖', color: '#f97316' },
-  { key: 'clean', label: '清洁', icon: '🧹', color: '#3b82f6' },
-  { key: 'mood', label: '心情', icon: '😊', color: '#22c55e' },
-  { key: 'health', label: '健康', icon: '❤️', color: '#ef4444' },
-  { key: 'intimacy', label: '亲密', icon: '💕', color: '#ec4899' },
-  { key: 'level', label: '等级', icon: '⭐', color: '#eab308' },
+  { key: 'hunger', label: '饥饿', icon: '🍖', color: '#f97316', max: 100 },
+  { key: 'clean', label: '清洁', icon: '🧹', color: '#3b82f6', max: 100 },
+  { key: 'mood', label: '心情', icon: '😊', color: '#22c55e', max: 100 },
+  { key: 'health', label: '健康', icon: '❤️', color: '#ef4444', max: 100 },
+  { key: 'intimacy', label: '亲密', icon: '💕', color: '#ec4899', max: 1000 },
+  { key: 'level', label: '等级', icon: '⭐', color: '#eab308', max: 100 },
 ] as const
 
 export default function PetStatusTab() {
@@ -33,9 +33,9 @@ export default function PetStatusTab() {
     <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       <Card size="small" title="宠物属性">
         <Row gutter={[16, 8]}>
-          {ATTR_CONFIG.map(({ key, label, icon, color }) => (
+          {ATTR_CONFIG.map(({ key, label, icon, color, max }) => (
             <Col span={12} key={key}>
-              <AttributeBar label={label} value={attributes[key]} icon={icon} color={color} />
+              <AttributeBar label={label} value={attributes[key]} icon={icon} color={color} max={max} />
             </Col>
           ))}
         </Row>

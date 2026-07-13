@@ -29,19 +29,20 @@
   height: 100%;
 }
 
-/* ── 左侧：截图预览，拉伸到父容器高度 ── */
+/* ── 左侧：截图预览，按 5:8 比例撑满高度 ── */
 .previewSide {
   flex-shrink: 0;
-  width: 240px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
 }
 
 .previewWrap {
-  width: 240px;
   flex: 1;
   min-height: 0;
+  aspect-ratio: 5 / 8;
+  max-width: 100%;
   border-radius: 16px;
   overflow: hidden;
   position: relative;

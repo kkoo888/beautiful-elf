@@ -23,7 +23,7 @@ export const PET_INTERACTION_ID_TYPE: Record<number, PetInteractionType> = {
 export const PET_INTERACTION_EFFECT_DESC: Record<PetInteractionType, string> = {
   feed: '饥饿度 +20',
   clean: '清洁度 +20',
-  chat: '心情 +15, 亲密 +5',
+  chat: '心情 +15, 亲密 +5, 健康 +5',
   play: '心情 +25, 经验 +10',
 } as const
 
