@@ -16,13 +16,13 @@ import {
 
 export async function fetchPetAttributes(): Promise<PetAttributes> {
   const data = extractData(await apiClient.get('/pets')) as Record<string, number>
-  return { hunger: data.hunger, clean: data.clean, mood: data.mood, health: data.health, intimacy: data.intimacy, level: data.level }
+  return { hunger: data.hunger, clean: data.clean, mood: data.mood, health: data.health, intimacy: data.intimacy, level: data.level, exp: data.exp }
 }
 
 export async function interact(type: PetInteractionType): Promise<{ attributes: PetAttributes; interaction: PetInteraction }> {
   const result = extractData(await apiClient.post('/pets/interactions', { interaction_type: PET_INTERACTION_TYPE_ID[type] })) as any
   return {
-    attributes: { hunger: result.pet.hunger, clean: result.pet.clean, mood: result.pet.mood, health: result.pet.health, intimacy: result.pet.intimacy, level: result.pet.level },
+    attributes: { hunger: result.pet.hunger, clean: result.pet.clean, mood: result.pet.mood, health: result.pet.health, intimacy: result.pet.intimacy, level: result.pet.level, exp: result.pet.exp },
     interaction: { id: String(Date.now()), type, effect: PET_INTERACTION_EFFECT_DESC[type], createdAt: new Date().toISOString() },
   }
 }

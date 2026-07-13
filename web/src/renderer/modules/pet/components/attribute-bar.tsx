@@ -7,11 +7,20 @@ interface AttributeBarProps {
   max?: number
   icon: string
   color: string
+  /** 自定义百分比（0-100），优先于 value/max 计算 */
+  percentOverride?: number
 }
 
-export default function AttributeBar({ label, value, max = 100, icon, color }: AttributeBarProps) {
-  const percent = Math.min(100, Math.round((value / max) * 100))
-  const isLow = value < 30
+export default function AttributeBar({
+  label,
+  value,
+  max = 100,
+  icon,
+  color,
+  percentOverride,
+}: AttributeBarProps) {
+  const percent = percentOverride ?? Math.min(100, Math.round((value / max) * 100))
+  const isLow = max <= 100 && value < 30 // 只有 0-100 范围的属性才显示低值警告
 
   return (
     <div style={{ marginBottom: 12 }}>

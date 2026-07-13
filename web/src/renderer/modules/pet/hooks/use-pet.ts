@@ -25,7 +25,7 @@ export function usePet() {
   })
 
   return {
-    attributes: attributes ?? { hunger: 0, clean: 0, mood: 0, health: 0, intimacy: 0, level: 0 },
+    attributes: attributes ?? { hunger: 0, clean: 0, mood: 0, health: 0, intimacy: 0, level: 0, exp: 0 },
     isLoading,
     interact: mutation.mutateAsync,
     interactions,

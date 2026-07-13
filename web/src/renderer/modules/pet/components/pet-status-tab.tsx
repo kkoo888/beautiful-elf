@@ -33,11 +33,27 @@ export default function PetStatusTab() {
     <Space orientation="vertical" style={{ width: '100%' }} size="middle">
       <Card size="small" title="宠物属性">
         <Row gutter={[16, 8]}>
-          {ATTR_CONFIG.map(({ key, label, icon, color, max }) => (
-            <Col span={12} key={key}>
-              <AttributeBar label={label} value={attributes[key]} icon={icon} color={color} max={max} />
-            </Col>
-          ))}
+          {ATTR_CONFIG.map(({ key, label, icon, color, max }) => {
+            // 等级条：显示当前等级内经验进度 (exp / level*100)
+            const isLevel = key === 'level'
+            const expNeeded = isLevel ? attributes.level * 100 : max
+            const levelPercent = isLevel
+              ? Math.min(100, Math.round((attributes.exp / expNeeded) * 100))
+              : undefined
+
+            return (
+              <Col span={12} key={key}>
+                <AttributeBar
+                  label={isLevel ? `等级 ${attributes.level}` : label}
+                  value={isLevel ? attributes.exp : attributes[key]}
+                  icon={icon}
+                  color={color}
+                  max={isLevel ? expNeeded : max}
+                  percentOverride={levelPercent}
+                />
+              </Col>
+            )
+          })}
         </Row>
       </Card>
 
