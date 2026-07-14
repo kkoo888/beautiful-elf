@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Button, Switch, Typography, message } from 'antd'
+import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 import {
   ReloadOutlined,
   SyncOutlined,
@@ -53,11 +54,10 @@ export default function PetControlTab() {
   const handleScreenshot = useCallback(async () => {
     if (!isElectron) { message.warning('当前环境不支持宠物窗口'); return }
     petApi.requestScreenshot()
-    // 等 1s 让 pet 窗口完成上传，再通过 API URL 显示
+    // 等 1s 让 pet 窗口完成上传，再通过 API URL 显示（对齐 image_gallery/files 模式）
     setTimeout(() => {
-      // 直接用 API URL 作为 img src（对齐 image_gallery/files 模式）
-      // 加时间戳避免浏览器缓存旧图
-      setScreenshot(`/api/v1/pets/screenshot/latest?t=${Date.now()}`)
+      const url = `${API_BASE_URL}${API_PREFIX}/pets/screenshot/latest?t=${Date.now()}`
+      setScreenshot(url)
     }, 1000)
   }, [isElectron, petApi])
 
