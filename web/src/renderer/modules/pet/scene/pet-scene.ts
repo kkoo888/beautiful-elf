@@ -849,15 +849,12 @@ export class PetScene {
     return this.renderer?.domElement ?? null
   }
 
-  /** 异步截图 → ArrayBuffer（用于写入磁盘，不经过 base64 编码） */
-  getScreenshotArrayBuffer(callback: (buffer: ArrayBuffer | null) => void): void {
+  /** 异步截图 → Blob（用于 HTTP 上传） */
+  getScreenshotBlob(callback: (blob: Blob | null) => void): void {
     const canvas = this.renderer?.domElement
     if (!canvas) { callback(null); return }
     try {
-      canvas.toBlob((blob) => {
-        if (!blob) { callback(null); return }
-        blob.arrayBuffer().then(callback).catch(() => callback(null))
-      }, 'image/png')
+      canvas.toBlob((blob) => callback(blob), 'image/png')
     } catch {
       callback(null)
     }

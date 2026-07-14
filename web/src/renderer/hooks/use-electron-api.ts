@@ -56,13 +56,6 @@ export function useElectronApi() {
         if (isElectron) return window.electronAPI.pet.getAttributes()
         return null
       },
-      saveScreenshot: async (buffer: ArrayBuffer): Promise<void> => {
-        if (isElectron) await window.electronAPI.pet.saveScreenshot(buffer)
-      },
-      readLatestScreenshot: async (): Promise<string | null> => {
-        if (isElectron) return window.electronAPI.pet.readLatestScreenshot()
-        return null
-      },
       requestScreenshot: () => {
         if (isElectron) window.electronAPI.pet.requestScreenshot()
       },

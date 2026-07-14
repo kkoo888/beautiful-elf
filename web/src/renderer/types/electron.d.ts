@@ -30,10 +30,6 @@ interface PetApi {
   resetZoom: () => Promise<{ success: boolean; message?: string }>
   /** 拖动宠物窗口：按光标增量移动窗口位置 */
   dragWindowBy: (dx: number, dy: number) => void
-  /** 保存截图到磁盘（ArrayBuffer） */
-  saveScreenshot: (buffer: ArrayBuffer) => Promise<void>
-  /** 读取最新截图文件路径（file:// URL） */
-  readLatestScreenshot: () => Promise<string | null>
   /** 请求宠物窗口截图 */
   requestScreenshot: () => void
   /** 监听截图请求（pet 窗口用） */

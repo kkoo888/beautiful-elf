@@ -3,6 +3,7 @@ import { Spin } from 'antd'
 import { LoadingOutlined } from '@ant-design/icons'
 import { PetScene } from './modules/pet/scene/pet-scene'
 import { loadPetModelPath, loadPetSettings } from './modules/pet/services/pet-api'
+import { apiClient } from '@/services/api-client'
 
 /**
  * 从后端读取已保存的模型路径
@@ -161,13 +162,23 @@ export default function PetApp() {
   }, [])
 
   // 监听手动截图请求（主窗口点击“截图”按钮触发）
+  // 对齐图片画廊模式：canvas → blob → FormData → POST 后端
   useEffect(() => {
     if (!window.electronAPI?.pet) return
     const cleanup = window.electronAPI.pet.onRequestScreenshot(() => {
       const scene = sceneRef.current
       if (!scene) return
-      scene.getScreenshotArrayBuffer((buffer) => {
-        if (buffer) window.electronAPI?.pet?.saveScreenshot(buffer)
+      scene.getScreenshotBlob(async (blob) => {
+        if (!blob) return
+        const formData = new FormData()
+        formData.append('file', blob, 'latest.png')
+        try {
+          await apiClient.post('/pets/screenshot/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+        } catch (e) {
+          console.warn('[PetApp] screenshot upload failed:', e)
+        }
       })
     })
     return () => cleanup?.()

@@ -1,6 +1,6 @@
 """宠物属性 API — RESTful 规范"""
 import os
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,6 +82,18 @@ async def list_interactions(
     """查询互动记录（分页）"""
     items, total = await service.get_interactions(db, page, page_size)
     return ApiPageResult(data=items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/screenshot/upload")
+async def upload_screenshot(file: UploadFile = File(...)):
+    """上传截图（对齐 image_gallery/upload-temp 模式）"""
+    os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+    file_name = "latest.png"
+    file_path = os.path.join(SCREENSHOT_DIR, file_name)
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+    return ApiResult(data={"filePath": file_path, "fileName": file_name})
 
 
 @router.get("/screenshot/latest")

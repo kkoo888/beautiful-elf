@@ -1,14 +1,5 @@
-import { ipcMain, app } from 'electron'
-import { join } from 'path'
-import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { ipcMain } from 'electron'
 import { getPetWindow, showPetWindow, hidePetWindow, isPetWindowVisible } from '../pet-window'
-
-// 截图目录：用 userData 保证路径可靠（不依赖 __dirname 构建路径）
-function getScreenshotDir(): string {
-  const dir = join(app.getPath('userData'), 'pet-screenshots')
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  return dir
-}
 
 /** 转发模型切换通知到宠物窗口 */
 function notifyPetWindowModelChanged(): void {
@@ -76,30 +67,6 @@ export function registerPetHandlers(): void {
       })
     } catch {
       return { error: 'PET_WINDOW_ERROR', message: '宠物窗口通信异常' }
-    }
-  })
-
-  // 保存截图到磁盘（pet 窗口调用，ArrayBuffer）
-  ipcMain.handle('pet:save-screenshot', (_, buffer: ArrayBuffer) => {
-    try {
-      const dir = getScreenshotDir()
-      writeFileSync(join(dir, 'latest.png'), Buffer.from(buffer))
-    } catch (e) {
-      console.warn('[pet] save screenshot failed:', e)
-    }
-  })
-
-  // 读取最新截图（主窗口调用，返回 data URL）
-  ipcMain.handle('pet:read-screenshot', () => {
-    try {
-      const dir = getScreenshotDir()
-      const filePath = join(dir, 'latest.png')
-      if (!existsSync(filePath)) return null
-      const { readFileSync } = require('fs')
-      const buffer = readFileSync(filePath)
-      return `data:image/png;base64,${buffer.toString('base64')}`
-    } catch {
-      return null
     }
   })
 
