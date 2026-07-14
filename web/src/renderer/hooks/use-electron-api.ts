@@ -63,6 +63,13 @@ export function useElectronApi() {
         if (isElectron) return window.electronAPI.pet.readLatestScreenshot()
         return null
       },
+      requestScreenshot: () => {
+        if (isElectron) window.electronAPI.pet.requestScreenshot()
+      },
+      onRequestScreenshot: (callback: () => void): (() => void) => {
+        if (isElectron) return window.electronAPI.pet.onRequestScreenshot(callback)
+        return () => {}
+      },
       onVisibilityChange: (callback: (visible: boolean) => void): (() => void) => {
         if (isElectron) return window.electronAPI.pet.onVisibilityChange(callback)
         return () => {}

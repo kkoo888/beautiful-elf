@@ -160,22 +160,18 @@ export default function PetApp() {
     }
   }, [])
 
-  // 定期截图保存到磁盘（异步 toBlob → ArrayBuffer → IPC 写文件，3 秒间隔）
+  // 监听手动截图请求（主窗口点击“截图”按钮触发）
   useEffect(() => {
-    if (!ready) return
-    const scene = sceneRef.current
-    if (!scene) return
-
-    const timer = setInterval(() => {
+    if (!window.electronAPI?.pet) return
+    const cleanup = window.electronAPI.pet.onRequestScreenshot(() => {
+      const scene = sceneRef.current
+      if (!scene) return
       scene.getScreenshotArrayBuffer((buffer) => {
-        if (buffer) {
-          window.electronAPI?.pet?.saveScreenshot(buffer)
-        }
+        if (buffer) window.electronAPI?.pet?.saveScreenshot(buffer)
       })
-    }, 3000)
-
-    return () => clearInterval(timer)
-  }, [ready])
+    })
+    return () => cleanup?.()
+  }, [])
 
   // 监听可见性变化 → 检查模型更新
   useEffect(() => {

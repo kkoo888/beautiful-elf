@@ -34,6 +34,10 @@ interface PetApi {
   saveScreenshot: (buffer: ArrayBuffer) => Promise<void>
   /** 读取最新截图文件路径（file:// URL） */
   readLatestScreenshot: () => Promise<string | null>
+  /** 请求宠物窗口截图 */
+  requestScreenshot: () => void
+  /** 监听截图请求（pet 窗口用） */
+  onRequestScreenshot: (callback: () => void) => (() => void)
   /** 监听可见性变化，返回清理函数 */
   onVisibilityChange: (callback: (visible: boolean) => void) => (() => void)
   /** 通知宠物窗口模型已切换，触发重新加载 */

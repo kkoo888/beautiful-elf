@@ -148,6 +148,14 @@ export function registerPetHandlers(): void {
     return { success: true }
   })
 
+  // 请求宠物窗口截图（主窗口 "截图" 按钮触发，转发到 pet 窗口）
+  ipcMain.on('pet:request-screenshot', () => {
+    const petWin = getPetWindow()
+    if (petWin && !petWin.isDestroyed()) {
+      petWin.webContents.send('pet:request-screenshot')
+    }
+  })
+
   // 拖动宠物窗口：按光标增量移动窗口位置
   ipcMain.on('pet:drag-window', (_e, dx: number, dy: number) => {
     const petWin = getPetWindow()

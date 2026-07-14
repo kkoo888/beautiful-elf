@@ -8,6 +8,7 @@ import {
   ZoomInOutlined,
   ZoomOutOutlined,
   UndoOutlined,
+  CameraOutlined,
 } from '@ant-design/icons'
 import { useElectronApi } from '@/hooks'
 import { apiClient, extractData } from '@/services/api-client'
@@ -48,16 +49,17 @@ export default function PetControlTab() {
     })
   }, [])
 
-  // ── 轮询截图（3s，HTTP URL）──
-  useEffect(() => {
-    if (!isElectron) return
-    const poll = setInterval(async () => {
+  // ── 手动截图（点击按钮触发）──
+  const handleScreenshot = useCallback(async () => {
+    if (!isElectron) { message.warning('当前环境不支持宠物窗口'); return }
+    petApi.requestScreenshot()
+    // 等 500ms 让 pet 窗口写完文件，再读取
+    setTimeout(async () => {
       try {
         const url = await petApi.readLatestScreenshot()
         if (url) setScreenshot(url)
       } catch { /* 文件不存在 */ }
-    }, 3000)
-    return () => clearInterval(poll)
+    }, 500)
   }, [isElectron, petApi])
 
   // ── 品牌背景图 ──
@@ -196,6 +198,9 @@ export default function PetControlTab() {
               </Button>
               <Button className={styles.actionBtn} icon={<ReloadOutlined />} onClick={handleRefresh}>
                 重载模型
+              </Button>
+              <Button className={styles.actionBtn} icon={<CameraOutlined />} onClick={handleScreenshot}>
+                截图
               </Button>
             </div>
           </div>

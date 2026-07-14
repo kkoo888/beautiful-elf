@@ -480,6 +480,8 @@ declare global {
         getAttributes: () => Promise<PetAttributes | { error: string; message: string }>
         saveScreenshot: (buffer: ArrayBuffer) => Promise<void>
         readLatestScreenshot: () => Promise<string | null>
+        requestScreenshot: () => void
+        onRequestScreenshot: (callback: () => void) => (() => void)
         onVisibilityChange: (callback: (visible: boolean) => void) => void
       }
     }

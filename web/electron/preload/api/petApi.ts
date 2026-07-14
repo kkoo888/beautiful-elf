@@ -13,6 +13,14 @@ export const petApi = {
   /** 读取最新截图文件路径（主窗口用） */
   readLatestScreenshot: (): Promise<string | null> =>
     ipcRenderer.invoke('pet:read-screenshot'),
+  /** 请求宠物窗口截图（主窗口调用，转发到 pet 窗口） */
+  requestScreenshot: () => ipcRenderer.send('pet:request-screenshot'),
+  /** 监听截图请求（pet 窗口用），返回清理函数 */
+  onRequestScreenshot: (callback: () => void): (() => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('pet:request-screenshot', handler)
+    return () => ipcRenderer.removeListener('pet:request-screenshot', handler)
+  },
   /** 监听可见性变化，返回清理函数 */
   onVisibilityChange: (callback: (visible: boolean) => void): (() => void) => {
     const handler = (_: Electron.IpcRendererEvent, visible: boolean) => callback(visible)
