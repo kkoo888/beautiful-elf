@@ -17,14 +17,14 @@
 /* ── 左侧：截图预览，固定宽度，高度按 5:8 比例自适应 ── */
 .previewSide {
   flex-shrink: 0;
-  width: 280px;
+  width: 340px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
 .previewWrap {
-  width: 280px;
+  width: 340px;
   aspect-ratio: 5 / 8;
   border-radius: 16px;
   overflow: hidden;
