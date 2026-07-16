@@ -105,7 +105,7 @@ vi.mock('three', async () => {
 // ─── Mock MMDLoader（匹配 pet-scene.ts 的真实导入路径）───
 // 注意：load/loadWithAnimation 挂载在 prototype 上（而非 class field），
 // 确保超时测试中可以用 prototype.load = vi.fn() 覆盖所有实例。
-vi.mock('three/examples/jsm/loaders/MMDLoader.js', () => {
+vi.mock('@/lib/mmd/loaders/MMDLoader.js', () => {
   class MockMMDLoader {
     setResourcePath = vi.fn()
     setPath = vi.fn()
@@ -150,7 +150,7 @@ vi.mock('three/examples/jsm/loaders/MMDLoader.js', () => {
 })
 
 // ─── Mock MMDAnimationHelper（匹配 pet-scene.ts 的真实导入路径）───
-vi.mock('three/examples/jsm/animation/MMDAnimationHelper.js', () => {
+vi.mock('@/lib/mmd/animation/MMDAnimationHelper.js', () => {
   return {
     MMDAnimationHelper: class MockMMDAnimationHelper {
       add = vi.fn().mockReturnThis()
@@ -204,14 +204,14 @@ describe('MMD 渲染链路测试', () => {
 
   describe('1. 模块导入验证', () => {
     it('MMDLoader 可以从 three examples 模块导入', async () => {
-      const { MMDLoader } = await import('three/examples/jsm/loaders/MMDLoader.js')
+      const { MMDLoader } = await import('@/lib/mmd/loaders/MMDLoader.js')
       expect(MMDLoader).toBeDefined()
       expect(typeof MMDLoader).toBe('function')
     })
 
     it('MMDAnimationHelper 可以从 three examples 模块导入', async () => {
       const { MMDAnimationHelper } = await import(
-        'three/examples/jsm/animation/MMDAnimationHelper.js'
+        '@/lib/mmd/animation/MMDAnimationHelper.js'
       )
       expect(MMDAnimationHelper).toBeDefined()
       expect(typeof MMDAnimationHelper).toBe('function')
@@ -307,7 +307,7 @@ describe('MMD 渲染链路测试', () => {
     it('loadModel() 超时处理（10s）', async () => {
       const { PetScene } = await import('../scene/pet-scene')
       // 重新 mock MMDLoader 使其永不回调（在 fake timers 下）
-      const { MMDLoader } = await import('three/examples/jsm/loaders/MMDLoader.js')
+      const { MMDLoader } = await import('@/lib/mmd/loaders/MMDLoader.js')
       const originalLoad = (
         MMDLoader as unknown as { prototype: { load: typeof vi.fn } }
       ).prototype.load
@@ -335,7 +335,7 @@ describe('MMD 渲染链路测试', () => {
     it('loadModelWithAnimation() 超时处理（10s）', async () => {
       const { PetScene } = await import('../scene/pet-scene')
       // 使 loadWithAnimation 永不回调
-      const { MMDLoader } = await import('three/examples/jsm/loaders/MMDLoader.js')
+      const { MMDLoader } = await import('@/lib/mmd/loaders/MMDLoader.js')
       const originalFn = (
         MMDLoader as unknown as { prototype: { loadWithAnimation: typeof vi.fn } }
       ).prototype.loadWithAnimation
@@ -451,7 +451,7 @@ describe('MMD 渲染链路测试', () => {
 
   describe('8. MMDLoader 官方 API 兼容性', () => {
     it('MMDLoader 继承自 Loader', async () => {
-      const { MMDLoader } = await import('three/examples/jsm/loaders/MMDLoader.js')
+      const { MMDLoader } = await import('@/lib/mmd/loaders/MMDLoader.js')
       const loader = new MMDLoader()
       // 验证实例创建成功
       expect(loader).toBeDefined()
@@ -462,7 +462,7 @@ describe('MMD 渲染链路测试', () => {
 
     it('MMDAnimationHelper 支持 add/remove/update/dispose', async () => {
       const { MMDAnimationHelper } = await import(
-        'three/examples/jsm/animation/MMDAnimationHelper.js'
+        '@/lib/mmd/animation/MMDAnimationHelper.js'
       )
       const helper = new MMDAnimationHelper()
       expect(typeof (helper as any).add).toBe('function')
