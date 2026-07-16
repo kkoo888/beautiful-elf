@@ -40,7 +40,8 @@ export default defineConfig({
       alias: {
         '@': resolve(__dirname, 'src/renderer'),
         '@shared': resolve(__dirname, 'src/shared'),
-        '@electron': resolve(__dirname, 'electron')
+        '@electron': resolve(__dirname, 'electron'),
+        '@mmd': resolve(__dirname, 'src/lib/mmd')
       }
     },
     plugins: [react()],

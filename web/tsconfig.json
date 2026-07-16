@@ -17,7 +17,8 @@
     "paths": {
       "@/*": ["src/renderer/*"],
       "@shared/*": ["src/shared/*"],
-      "@electron/*": ["electron/*"]
+      "@electron/*": ["electron/*"],
+      "@mmd/*": ["src/lib/mmd/*"]
     }
   },
   "include": ["src/**/*", "electron/**/*"],
