@@ -152,7 +152,7 @@ export function BasicInfoSettings() {
                 alt="背景图预览"
                 style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }}
                 fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-                preview={{ mask: <div style={{ fontSize: 14 }}>点击预览</div> }}
+                preview={{ cover: <div style={{ fontSize: 14 }}>点击预览</div> }}
               />
             </div>
           </div>

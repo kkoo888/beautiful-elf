@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Card, Form, InputNumber, Switch, Button, Space, Tooltip, Typography, Divider, message, Skeleton } from 'antd'
+import { Card, Form, InputNumber, Switch, Button, Space, Tooltip, Typography, Divider, App, Skeleton } from 'antd'
 import {
   SaveOutlined,
   ReloadOutlined,
@@ -87,6 +87,7 @@ const GROUPS = [
 ]
 
 export function RagSettings() {
+  const { message } = App.useApp()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)

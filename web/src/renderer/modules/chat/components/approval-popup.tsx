@@ -9,7 +9,7 @@
  *   - 90秒超时自动拒绝
  */
 import React, { useEffect, useState, useCallback } from 'react'
-import { Button, Tag, Tooltip, message as antMessage } from 'antd'
+import { Button, Tag, Tooltip, App } from 'antd'
 import {
   CloseOutlined,
   CheckOutlined,
@@ -52,6 +52,7 @@ export const ApprovalPopup: React.FC<ApprovalPopupProps> = ({
   onReject,
   onWhitelist,
 }) => {
+  const { message: antMessage } = App.useApp()
   const [countdown, setCountdown] = useState(TIMEOUT_SECONDS)
   const [showWhitelistForm, setShowWhitelistForm] = useState(false)
 

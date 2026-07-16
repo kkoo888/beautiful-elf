@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useState } from 'react'
-import { Button, Tooltip, Modal, Select, Typography, Space, message } from 'antd'
+import { Button, Tooltip, Modal, Select, Typography, Space, App } from 'antd'
 import { AimOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import { createCorrection } from '@/modules/intent-learning/services/intent-api'
 
@@ -33,6 +33,7 @@ export const IntentCorrectionButton: React.FC<IntentCorrectionButtonProps> = ({
   originalIntent,
   intentRoute,
 }) => {
+  const { message } = App.useApp()
   const [modalVisible, setModalVisible] = useState(false)
   const [selectedModule, setSelectedModule] = useState<string>()
   const [submitting, setSubmitting] = useState(false)

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Button, Switch, Typography, message } from 'antd'
+import { Button, Switch, Typography, App } from 'antd'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 import {
   ReloadOutlined,
@@ -25,6 +25,7 @@ function getModelName(path: string | null): string {
 
 export default function PetControlTab() {
   const { pet: petApi, isElectron } = useElectronApi()
+  const { message } = App.useApp()
 
   const [petActive, setPetActive] = useState(false)
   const [petWindowVisible, setPetWindowVisible] = useState(false)

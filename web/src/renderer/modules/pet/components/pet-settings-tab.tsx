@@ -10,8 +10,8 @@ import {
   Button,
   Typography,
   Descriptions,
-  message,
   Spin,
+  App,
 } from 'antd'
 import {
   FolderOpenOutlined,
@@ -37,6 +37,7 @@ export default function PetSettingsTab() {
   const queryClient = useQueryClient()
   const { pet: petApi, dialog: dialogApi, isElectron } = useElectronApi()
   const [modelDir, setModelDir] = useState<string>('')
+  const { message } = App.useApp()
 
   // ── 启动时加载已保存的设置 ──
   useEffect(() => {
