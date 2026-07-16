@@ -249,20 +249,20 @@ export class PetScene {
   private async setupLoaders(): Promise<void> {
     try {
       // ammo.js 需要作为全局变量，MMDPhysics 依赖 window.Ammo
-      await import('@/lib/mmd/libs/ammo.js')
+      await import('../../../../lib/mmd/libs/ammo.js')
     } catch (e) {
       console.warn('[PetScene] ammo.js load failed (physics disabled):', e)
     }
 
     try {
-      const mod = await import('@/lib/mmd/loaders/MMDLoader.js')
+      const mod = await import('../../../../lib/mmd/loaders/MMDLoader.js')
       this.loader = new mod.MMDLoader()
     } catch (e) {
       console.warn('[PetScene] MMDLoader import failed:', e)
     }
 
     try {
-      const mod = await import('@/lib/mmd/animation/MMDAnimationHelper.js')
+      const mod = await import('../../../../lib/mmd/animation/MMDAnimationHelper.js')
       this.helper = new mod.MMDAnimationHelper({
         afterglow: 2.0,
         resetPhysicsOnLoop: true,
