@@ -1,13 +1,15 @@
-/**
+﻿/**
  * 灵魂配置组件
  * 名称、头像、性格标签、说话风格、情感倾向、背景故事、实时预览
  */
 
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Input, Select, Slider, Typography, Tag, Upload, App } from 'antd'
 import { UserOutlined, CameraOutlined } from '@ant-design/icons'
 import type { SoulConfig } from '../types/settings'
 import { PERSONALITY_PRESETS, SPEAKING_STYLES } from '../types/settings'
+import { uploadAvatar } from '../services/settings-api'
+import { toAvatarUrl } from '../utils/avatar'
 import styles from './settings-panel.module.css'
 
 const { Text } = Typography
@@ -21,6 +23,7 @@ interface SoulSettingsProps {
 export function SoulSettings({ soul, onChange }: SoulSettingsProps) {
   const { message } = App.useApp()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   /** 切换性格标签 */
   const togglePersonality = useCallback(
@@ -36,15 +39,35 @@ export function SoulSettings({ soul, onChange }: SoulSettingsProps) {
 
   /** 处理头像上传 */
   const handleAvatarUpload = useCallback(
-    (file: File) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        onChange({ avatar: e.target?.result as string })
+    async (file: File) => {
+      // 验证文件类型
+      if (!file.type.startsWith('image/')) {
+        message.error('请上传图片文件')
+        return false
       }
-      reader.readAsDataURL(file)
+      
+      // 验证文件大小（最大 2MB）
+      if (file.size > 2 * 1024 * 1024) {
+        message.error('头像文件最大 2MB')
+        return false
+      }
+      
+      setIsUploading(true)
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        const result = await uploadAvatar(formData)
+        onChange({ avatar: result.path })
+        message.success('头像上传成功')
+      } catch (error) {
+        message.error('头像上传失败，请重试')
+        console.error('头像上传失败:', error)
+      } finally {
+        setIsUploading(false)
+      }
       return false
     },
-    [onChange]
+    [onChange, message]
   )
 
   /** 实时人格描述预览 */
@@ -74,7 +97,7 @@ export function SoulSettings({ soul, onChange }: SoulSettingsProps) {
         <div className={styles.avatarUpload}>
           <div className={styles.avatarPreview} onClick={() => fileInputRef.current?.click()}>
             {soul.avatar ? (
-              <img src={soul.avatar} alt="avatar" />
+              <img src={toAvatarUrl(soul.avatar)} alt="avatar" />
             ) : (
               <UserOutlined style={{ color: '#bfbfbf' }} />
             )}
@@ -83,17 +106,14 @@ export function SoulSettings({ soul, onChange }: SoulSettingsProps) {
             <Upload
               showUploadList={false}
               beforeUpload={(file) => {
-                if (!file.type.startsWith('image/')) {
-                  message.error('请上传图片文件')
-                  return false
-                }
                 handleAvatarUpload(file)
                 return false
               }}
               accept="image/*"
+              disabled={isUploading}
             >
-              <Tag icon={<CameraOutlined />} color="pink" style={{ cursor: 'pointer' }}>
-                上传头像
+              <Tag icon={<CameraOutlined />} color="pink" style={{ cursor: isUploading ? 'not-allowed' : 'pointer' }}>
+                {isUploading ? '上传中...' : '上传头像'}
               </Tag>
             </Upload>
             <input
@@ -107,7 +127,7 @@ export function SoulSettings({ soul, onChange }: SoulSettingsProps) {
               }}
             />
             <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
-              支持 JPG、PNG 格式
+              支持 JPG、PNG 格式，最大 2MB
             </Text>
           </div>
         </div>

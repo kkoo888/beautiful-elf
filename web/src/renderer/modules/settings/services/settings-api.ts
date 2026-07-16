@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 设置系统 API 服务
  *
  * 后端 Query 参数: page, page_size → snake_case
@@ -178,4 +178,11 @@ export async function updateTierConfig(id: number, payload: Partial<{
 
 export async function deleteTierConfigs(tier: string): Promise<void> {
   await apiClient.delete(`/llm_providers/tier-mapping/${tier}`)
+}
+
+export async function uploadAvatar(formData: FormData): Promise<{ path: string }> {
+  const resp = await apiClient.post('/soul_configs/upload-avatar', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return extractData(resp)
 }

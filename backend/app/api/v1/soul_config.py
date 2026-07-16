@@ -1,17 +1,22 @@
-"""人格配置 API — RESTful 规范"""
+﻿"""人格配置 API — RESTful 规范"""
+import os
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.services.soul_config_service import SoulConfigService
-from app.schemas.soul_config import SoulConfigCreate, SoulConfigUpdate, SoulConfigOut
+from app.schemas.soul_config import SoulConfigCreate, SoulConfigUpdate, SoulConfigOut, UploadAvatarResult
 from app.schemas.response import ApiResult, ApiPageResult
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()
 _service = SoulConfigService()
+
+# 头像存储目录（backend/uploads/avatars/）
+AVATAR_DIR = os.path.join(os.path.dirname(__file__), '../../../uploads/avatars')
+os.makedirs(AVATAR_DIR, exist_ok=True)
 
 
 async def _refresh_soul_cache(db: AsyncSession) -> None:
@@ -65,3 +70,29 @@ async def delete_soul_config(config_id: int, db: AsyncSession = Depends(get_db))
     await _service.delete_soul_config(db, config_id)
     await _refresh_soul_cache(db)
     return ApiResult(message="删除成功")
+
+
+@router.post("/upload-avatar", response_model=ApiResult[UploadAvatarResult])
+async def upload_avatar(file: UploadFile = File(...)):
+    """上传头像，返回相对路径"""
+    # 验证文件类型
+    if not file.content_type or not file.content_type.startswith('image/'):
+        return ApiResult(code="SOUL_INVALID_TYPE", message="文件类型错误", user_tip="请上传图片文件")
+    
+    # 验证文件大小（最大 2MB）
+    content = await file.read()
+    if len(content) > 2 * 1024 * 1024:
+        return ApiResult(code="SOUL_FILE_TOO_LARGE", message="文件过大", user_tip="头像文件最大 2MB")
+    
+    # 生成文件名
+    ext = os.path.splitext(file.filename or 'avatar.png')[1] or '.png'
+    filename = f"avatar_{hash(content) & 0xFFFFFFFF:08x}{ext}"
+    filepath = os.path.join(AVATAR_DIR, filename)
+    
+    # 保存文件
+    with open(filepath, 'wb') as f:
+        f.write(content)
+    
+    relative_path = f"uploads/avatars/{filename}"
+    logger.info(f"[soul] 头像已上传: {relative_path}")
+    return ApiResult(data=UploadAvatarResult(path=relative_path))

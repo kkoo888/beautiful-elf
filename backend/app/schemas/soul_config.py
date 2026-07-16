@@ -1,4 +1,4 @@
-"""人格配置 Schema"""
+﻿"""人格配置 Schema"""
 from typing import Optional, Any, List
 from datetime import datetime
 from pydantic import Field
@@ -36,3 +36,8 @@ class SoulConfigOut(CamelModel):
     is_active: int
     created_at: datetime
     updated_at: datetime
+
+
+class UploadAvatarResult(CamelModel):
+    """头像上传结果"""
+    path: str = Field(..., description="头像文件相对路径")
