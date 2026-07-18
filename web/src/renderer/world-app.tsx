@@ -20,6 +20,7 @@ import {
   CloseOutlined,
 } from '@ant-design/icons'
 import { SceneBuilder, type SceneBlockData } from '../lib/virtual-world/scene-builder'
+import { loadBlockTypes } from '../lib/virtual-world/block-registry'
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type { VirtualWorldScene, VirtualWorldSceneBlock } from './modules/virtual-world/types'
 import styles from './world-app.module.css'
@@ -222,6 +223,11 @@ export default function WorldApp() {
   const loadScene = useCallback(async () => {
     try {
       setLoading(true)
+      setStatus('加载方块类型...')
+
+      // 先从 API 加载方块类型
+      await loadBlockTypes()
+
       setStatus('查找激活场景...')
 
       const scene = await fetchActiveScene()

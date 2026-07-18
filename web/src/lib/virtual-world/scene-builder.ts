@@ -5,7 +5,7 @@
  */
 
 import * as THREE from 'three'
-import { BLOCK_TYPES, type BlockType, createBlockGeometry } from './block-registry'
+import { BLOCK_TYPES, type BlockType, createBlockGeometry, loadBlockTypes, getBlockType } from './block-registry'
 import { createMaterial } from './materials'
 
 // ── 类型定义 ──
@@ -94,7 +94,7 @@ export class SceneBuilder {
     assertRotation(rotationY)
 
     const key = blockKey(x, y, z)
-    const blockType = BLOCK_TYPES[blockId]
+    const blockType = getBlockType(blockId)
     if (!blockType) throw new Error(`未知方块类型: ${blockId}`)
 
     const matId = materialId ?? blockType.defaultMaterial

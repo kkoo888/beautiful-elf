@@ -1,228 +1,157 @@
 /**
- * 积木类型注册表
- * 对齐设计文档 §3.1 积木类型定义 + §3.2 积木库 + §3.4 Three.js 原生基础方块
+ * 积木类型注册表 — 从 API 动态加载
+ *
+ * 方块类型数据存储在数据库中，通过 API 加载后缓存到内存。
+ * 不再硬编码，保证数据库是唯一数据源。
  */
 
 import * as THREE from 'three'
 
-// ── 积木类型定义 ──
+// ── 类型定义 ──
 
-export type GeometryType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'plane' | 'torus' | 'capsule' | 'circle'
+export type GeometryType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'plane' | 'torus' | 'capsule' | 'circle' | 'dodecahedron' | 'icosahedron'
 
 export type BlockCategory = 'structure' | 'decoration' | 'nature' | 'furniture' | 'light' | 'road'
 
 export interface BlockGeometryConfig {
   type: GeometryType
-  args: number[] // 几何体参数，顺序对齐 Three.js 构造函数
+  args: Record<string, number>  // 几何体参数，key-value 形式
 }
 
 export interface BlockType {
-  id: string                    // 唯一标识，如 'cube', 'wall', 'floor'
+  id: string                    // block_id，如 'cube', 'wall', 'floor'
   name: string                  // 显示名称
   category: BlockCategory
   geometry: BlockGeometryConfig
   defaultMaterial: string       // 默认材质 ID
-  size: [number, number, number] // 占用空间 [宽, 高, 深]（网格单位）
   description: string
   tags: string[]
 }
 
-// ── 积木库 ──
+// ── 运行时注册表（从 API 加载后填充）──
 
-export const BLOCK_TYPES: Record<string, BlockType> = {
-  // 结构类
-  cube: {
-    id: 'cube', name: '方块', category: 'structure',
-    geometry: { type: 'box', args: [1, 1, 1] },
-    defaultMaterial: 'brick', size: [1, 1, 1],
-    description: '基础方块', tags: ['基础', '建筑'],
-  },
-  wall: {
-    id: 'wall', name: '墙壁', category: 'structure',
-    geometry: { type: 'box', args: [1, 3, 0.2] },
-    defaultMaterial: 'brick', size: [1, 3, 1],
-    description: '墙体', tags: ['建筑', '墙'],
-  },
-  floor: {
-    id: 'floor', name: '地板', category: 'structure',
-    geometry: { type: 'box', args: [1, 0.1, 1] },
-    defaultMaterial: 'wood', size: [1, 1, 1],
-    description: '地板', tags: ['建筑', '地面'],
-  },
-  roof_slope: {
-    id: 'roof_slope', name: '斜屋顶', category: 'structure',
-    geometry: { type: 'cone', args: [0.7, 1, 4] },
-    defaultMaterial: 'brick', size: [1, 1, 1],
-    description: '斜屋顶', tags: ['建筑', '屋顶'],
-  },
-  pillar: {
-    id: 'pillar', name: '柱子', category: 'structure',
-    geometry: { type: 'cylinder', args: [0.15, 0.15, 3, 8] },
-    defaultMaterial: 'concrete', size: [1, 3, 1],
-    description: '支撑柱', tags: ['建筑', '柱'],
-  },
-  window: {
-    id: 'window', name: '窗户', category: 'structure',
-    geometry: { type: 'box', args: [0.8, 1, 0.05] },
-    defaultMaterial: 'glass', size: [1, 1, 1],
-    description: '透明窗', tags: ['建筑', '窗'],
-  },
+export const BLOCK_TYPES: Map<string, BlockType> = new Map()
 
-  // 装饰类
-  tree_trunk: {
-    id: 'tree_trunk', name: '树干', category: 'decoration',
-    geometry: { type: 'cylinder', args: [0.1, 0.1, 2, 8] },
-    defaultMaterial: 'wood', size: [1, 2, 1],
-    description: '树干', tags: ['植物', '树'],
-  },
-  tree_canopy: {
-    id: 'tree_canopy', name: '树冠', category: 'decoration',
-    geometry: { type: 'sphere', args: [0.8, 16, 16] },
-    defaultMaterial: 'grass', size: [2, 2, 2],
-    description: '树叶', tags: ['植物', '树'],
-  },
-  bush: {
-    id: 'bush', name: '灌木', category: 'decoration',
-    geometry: { type: 'sphere', args: [0.4, 12, 12] },
-    defaultMaterial: 'grass', size: [1, 1, 1],
-    description: '绿植', tags: ['植物'],
-  },
-  rock: {
-    id: 'rock', name: '石头', category: 'decoration',
-    geometry: { type: 'sphere', args: [0.3, 8, 6] },
-    defaultMaterial: 'stone', size: [1, 1, 1],
-    description: '自然石块', tags: ['自然', '石'],
-  },
-  fence: {
-    id: 'fence', name: '栅栏', category: 'decoration',
-    geometry: { type: 'box', args: [1, 0.8, 0.05] },
-    defaultMaterial: 'wood', size: [1, 1, 1],
-    description: '围栏', tags: ['建筑', '围栏'],
-  },
-  lamp_post: {
-    id: 'lamp_post', name: '路灯', category: 'light',
-    geometry: { type: 'cylinder', args: [0.03, 0.03, 3, 6] },
-    defaultMaterial: 'metal', size: [1, 3, 1],
-    description: '街灯', tags: ['灯光', '路灯'],
-  },
+let _loaded = false
+let _loading = false
 
-  // 自然类
-  water: {
-    id: 'water', name: '水面', category: 'nature',
-    geometry: { type: 'plane', args: [1, 1] },
-    defaultMaterial: 'water', size: [1, 1, 1],
-    description: '水面', tags: ['自然', '水'],
-  },
-  grass_block: {
-    id: 'grass_block', name: '草地', category: 'nature',
-    geometry: { type: 'box', args: [1, 0.1, 1] },
-    defaultMaterial: 'grass', size: [1, 1, 1],
-    description: '草地', tags: ['自然', '地面'],
-  },
-  flower: {
-    id: 'flower', name: '花朵', category: 'nature',
-    geometry: { type: 'cylinder', args: [0.05, 0.15, 0.3, 8] },
-    defaultMaterial: 'neon_pink', size: [1, 1, 1],
-    description: '装饰花', tags: ['自然', '花'],
-  },
-  sand: {
-    id: 'sand', name: '沙地', category: 'nature',
-    geometry: { type: 'box', args: [1, 0.1, 1] },
-    defaultMaterial: 'sand', size: [1, 1, 1],
-    description: '沙滩', tags: ['自然', '地面'],
-  },
-  snow: {
-    id: 'snow', name: '雪地', category: 'nature',
-    geometry: { type: 'box', args: [1, 0.1, 1] },
-    defaultMaterial: 'snow', size: [1, 1, 1],
-    description: '冬季', tags: ['自然', '地面'],
-  },
-  // 结构补充
-  roof_flat: {
-    id: 'roof_flat', name: '平屋顶', category: 'structure',
-    geometry: { type: 'box', args: [1, 0.1, 1] },
-    defaultMaterial: 'concrete', size: [1, 1, 1],
-    description: '平屋顶', tags: ['建筑', '屋顶'],
-  },
-  stairs: {
-    id: 'stairs', name: '楼梯', category: 'structure',
-    geometry: { type: 'box', args: [1, 0.25, 0.5] },
-    defaultMaterial: 'wood', size: [1, 1, 1],
-    description: '台阶', tags: ['建筑', '楼梯'],
-  },
-  // 家具类
-  chair: {
-    id: 'chair', name: '椅子', category: 'furniture',
-    geometry: { type: 'box', args: [0.5, 0.5, 0.5] },
-    defaultMaterial: 'wood', size: [1, 1, 1],
-    description: '坐具', tags: ['家具', '椅子'],
-  },
-  table: {
-    id: 'table', name: '桌子', category: 'furniture',
-    geometry: { type: 'box', args: [1, 0.8, 0.6] },
-    defaultMaterial: 'wood', size: [1, 1, 1],
-    description: '台面', tags: ['家具', '桌子'],
-  },
-  bed: {
-    id: 'bed', name: '床', category: 'furniture',
-    geometry: { type: 'box', args: [2, 0.4, 1] },
-    defaultMaterial: 'wood', size: [2, 1, 1],
-    description: '睡眠', tags: ['家具', '床'],
-  },
-  bookshelf: {
-    id: 'bookshelf', name: '书架', category: 'furniture',
-    geometry: { type: 'box', args: [1, 2, 0.3] },
-    defaultMaterial: 'wood', size: [1, 2, 1],
-    description: '存储', tags: ['家具', '书架'],
-  },
-  sofa: {
-    id: 'sofa', name: '沙发', category: 'furniture',
-    geometry: { type: 'box', args: [1.5, 0.6, 0.8] },
-    defaultMaterial: 'wood', size: [2, 1, 1],
-    description: '座椅', tags: ['家具', '沙发'],
-  },
-  desk: {
-    id: 'desk', name: '书桌', category: 'furniture',
-    geometry: { type: 'box', args: [1.2, 0.75, 0.6] },
-    defaultMaterial: 'wood', size: [1, 1, 1],
-    description: '工作', tags: ['家具', '书桌'],
-  },
-}
+/**
+ * 从后端 API 加载方块类型到 BLOCK_TYPES
+ * 幂等：多次调用只加载一次
+ */
+export async function loadBlockTypes(): Promise<void> {
+  if (_loaded || _loading) return
+  _loading = true
 
-// ── 工具函数 ──
+  try {
+    const { apiClient, extractPaginated } = await import('@/services/api-client')
+    const { items } = extractPaginated(
+      (await apiClient.get('/virtualworld/blocks', {
+        params: { page: 1, pageSize: 500 },
+      })) as unknown as { items: unknown[]; total: number },
+    )
 
-export function getBlockType(id: string): BlockType | undefined {
-  return BLOCK_TYPES[id]
-}
-
-export function getBlocksByCategory(category: BlockCategory): BlockType[] {
-  return Object.values(BLOCK_TYPES).filter(b => b.category === category)
-}
-
-export function getAllBlockTypes(): BlockType[] {
-  return Object.values(BLOCK_TYPES)
+    BLOCK_TYPES.clear()
+    for (const item of items as Array<{
+      blockId: string
+      name: string
+      category: string
+      geometryType: string
+      geometryArgs: Record<string, number> | null
+      defaultMaterial: string
+      description: string
+      tags: string
+    }>) {
+      BLOCK_TYPES.set(item.blockId, {
+        id: item.blockId,
+        name: item.name,
+        category: item.category as BlockCategory,
+        geometry: {
+          type: item.geometryType as GeometryType,
+          args: item.geometryArgs ?? {},
+        },
+        defaultMaterial: item.defaultMaterial,
+        description: item.description,
+        tags: item.tags ? item.tags.split(',').map((t: string) => t.trim()) : [],
+      })
+    }
+    _loaded = true
+  } catch (err) {
+    console.warn('[block-registry] 加载方块类型失败:', err)
+  } finally {
+    _loading = false
+  }
 }
 
 /**
- * 创建积木几何体
+ * 强制重新加载（用于刷新缓存）
+ */
+export async function reloadBlockTypes(): Promise<void> {
+  _loaded = false
+  await loadBlockTypes()
+}
+
+/**
+ * 获取方块类型（同步，需先调 loadBlockTypes）
+ */
+export function getBlockType(id: string): BlockType | undefined {
+  return BLOCK_TYPES.get(id)
+}
+
+/**
+ * 按分类筛选方块
+ */
+export function getBlocksByCategory(category: BlockCategory): BlockType[] {
+  return [...BLOCK_TYPES.values()].filter((b) => b.category === category)
+}
+
+/**
+ * 按标签搜索方块
+ */
+export function getBlocksByTag(tag: string): BlockType[] {
+  return [...BLOCK_TYPES.values()].filter((b) => b.tags.includes(tag))
+}
+
+/**
+ * 是否已加载
+ */
+export function isBlockTypesLoaded(): boolean {
+  return _loaded
+}
+
+// ── 几何体工厂 ──
+
+/**
+ * 根据 BlockGeometryConfig 创建 Three.js BufferGeometry
  */
 export function createBlockGeometry(config: BlockGeometryConfig): THREE.BufferGeometry {
+  const args = config.args
   switch (config.type) {
     case 'box':
-      return new THREE.BoxGeometry(...(config.args as [number, number, number]))
+      return new THREE.BoxGeometry(args.width ?? 1, args.height ?? 1, args.depth ?? 1)
     case 'sphere':
-      return new THREE.SphereGeometry(...(config.args as [number, number, number]))
+      return new THREE.SphereGeometry(args.radius ?? 0.5, args.widthSegments ?? 16, args.heightSegments ?? 12)
     case 'cylinder':
-      return new THREE.CylinderGeometry(...(config.args as [number, number, number, number]))
+      return new THREE.CylinderGeometry(
+        args.radiusTop ?? 0.5, args.radiusBottom ?? 0.5, args.height ?? 1,
+        args.radialSegments ?? 16, args.heightSegments ?? 1,
+      )
     case 'cone':
-      return new THREE.ConeGeometry(...(config.args as [number, number, number]))
+      return new THREE.ConeGeometry(args.radius ?? 0.5, args.height ?? 1, args.radialSegments ?? 16)
     case 'plane':
-      return new THREE.PlaneGeometry(...(config.args as [number, number]))
+      return new THREE.PlaneGeometry(args.width ?? 1, args.height ?? 1)
     case 'torus':
-      return new THREE.TorusGeometry(...(config.args as [number, number, number, number]))
+      return new THREE.TorusGeometry(args.radius ?? 0.5, args.tube ?? 0.2, args.radialSegments ?? 16, args.tubularSegments ?? 32)
+    case 'capsule':
+      return new THREE.CapsuleGeometry(args.radius ?? 0.5, args.length ?? 1, args.capSegments ?? 4, args.radialSegments ?? 8)
     case 'circle':
-      return new THREE.CircleGeometry(...(config.args as [number, number]))
+      return new THREE.CircleGeometry(args.radius ?? 0.5, args.segments ?? 32)
+    case 'dodecahedron':
+      return new THREE.DodecahedronGeometry(args.radius ?? 0.5, args.detail ?? 0)
+    case 'icosahedron':
+      return new THREE.IcosahedronGeometry(args.radius ?? 0.5, args.detail ?? 0)
     default:
+      console.warn(`[block-registry] 未知几何体类型: ${config.type}, 回退到 Box`)
       return new THREE.BoxGeometry(1, 1, 1)
   }
 }
