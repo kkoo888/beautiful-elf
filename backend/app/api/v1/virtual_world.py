@@ -1,5 +1,7 @@
 """虚拟世界 API"""
-from fastapi import APIRouter, Depends, Query
+import os
+from fastapi import APIRouter, Depends, Query, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.services.virtual_world_service import VirtualWorldService
@@ -12,6 +14,12 @@ from app.schemas.response import ApiResult, ApiPageResult
 
 router = APIRouter()
 _service = VirtualWorldService()
+
+# 截图存储目录
+SCREENSHOT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+    "uploads", "virtualworld-screenshots",
+)
 
 
 # ── Scene ──
@@ -116,3 +124,28 @@ async def create_block(
 async def delete_block(block_pk: int, db: AsyncSession = Depends(get_db)) -> ApiResult:
     await _service.delete_block(db, block_pk)
     return ApiResult(message="方块类型已删除")
+
+
+# ── 截图 ──
+
+@router.post("/screenshot/upload")
+async def upload_screenshot(file: UploadFile = File(...)):
+    """上传虚拟世界截图"""
+    os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+    file_path = os.path.join(SCREENSHOT_DIR, "latest.png")
+    content = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(content)
+    return ApiResult(data={"filePath": file_path, "fileName": "latest.png"})
+
+
+@router.get("/screenshot/latest")
+async def serve_screenshot():
+    """提供最新截图"""
+    file_path = os.path.join(SCREENSHOT_DIR, "latest.png")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="截图不存在")
+    resp = FileResponse(file_path, media_type="image/png")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp

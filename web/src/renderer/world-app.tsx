@@ -83,6 +83,7 @@ export default function WorldApp() {
       antialias: true,
       alpha: true,
       premultipliedAlpha: false,
+      preserveDrawingBuffer: true,
     })
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -302,10 +303,29 @@ export default function WorldApp() {
       }
     })
 
+    // 截图请求
+    const cleanupScreenshot = window.electronAPI?.world?.onRequestScreenshot?.(() => {
+      const renderer = rendererRef.current
+      if (!renderer) return
+      renderer.domElement.toBlob(async (blob) => {
+        if (!blob) return
+        const formData = new FormData()
+        formData.append('file', blob, 'latest.png')
+        try {
+          await apiClient.post('/virtualworld/screenshot/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          })
+        } catch (e) {
+          console.warn('[WorldApp] screenshot upload failed:', e)
+        }
+      }, 'image/png')
+    })
+
     return () => {
       window.removeEventListener('resize', handleResize)
       cancelAnimationFrame(animFrameRef.current)
       cleanupVis?.()
+      cleanupScreenshot?.()
 
       controlsRef.current?.dispose()
       rendererRef.current?.dispose()

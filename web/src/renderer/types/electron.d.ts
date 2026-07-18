@@ -74,6 +74,7 @@ interface WorldApi {
   reload: () => Promise<{ success: boolean; message?: string }>
   requestScreenshot: () => void
   dragWindowBy: (dx: number, dy: number) => void
+  onRequestScreenshot: (callback: () => void) => (() => void)
   onVisibilityChange: (callback: (visible: boolean) => void) => (() => void)
 }
 
