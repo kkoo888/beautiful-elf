@@ -85,9 +85,9 @@ class VirtualWorldBlockOut(CamelModel):
 class VirtualWorldSceneBlockCreate(CamelModel):
     """放置方块"""
     block_id: str = Field(..., min_length=1, max_length=64, description="方块类型ID")
-    pos_x: int = Field(0, description="X坐标")
-    pos_y: int = Field(0, description="Y坐标")
-    pos_z: int = Field(0, description="Z坐标")
+    pos_x: float = Field(0, description="X坐标")
+    pos_y: float = Field(0, description="Y坐标")
+    pos_z: float = Field(0, description="Z坐标")
     rotation_y: int = Field(0, ge=0, le=270, description="Y轴旋转(0/90/180/270)")
     material: str = Field("", max_length=64, description="材质覆盖")
 
@@ -97,9 +97,9 @@ class VirtualWorldSceneBlockOut(CamelModel):
     id: int
     scene_id: int
     block_id: str
-    pos_x: int
-    pos_y: int
-    pos_z: int
+    pos_x: float
+    pos_y: float
+    pos_z: float
     rotation_y: int
     material: str
     created_at: datetime

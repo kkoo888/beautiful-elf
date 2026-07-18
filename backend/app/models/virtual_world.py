@@ -1,5 +1,5 @@
 """虚拟世界模型"""
-from sqlalchemy import BigInteger, Integer, String, JSON, Index
+from sqlalchemy import BigInteger, Integer, String, JSON, Float, Index
 from sqlalchemy.dialects.mysql import SMALLINT, INTEGER
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import BaseModel
@@ -52,9 +52,9 @@ class VirtualWorldSceneBlock(BaseModel):
 
     scene_id: Mapped[int] = mapped_column(BigInteger, nullable=False, comment="场景ID")
     block_id: Mapped[str] = mapped_column(String(64), nullable=False, default="", comment="方块类型ID")
-    pos_x: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="X坐标")
-    pos_y: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="Y坐标")
-    pos_z: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="Z坐标")
+    pos_x: Mapped[float] = mapped_column(Float, nullable=False, default=0, comment="X坐标")
+    pos_y: Mapped[float] = mapped_column(Float, nullable=False, default=0, comment="Y坐标")
+    pos_z: Mapped[float] = mapped_column(Float, nullable=False, default=0, comment="Z坐标")
     rotation_y: Mapped[int] = mapped_column(INTEGER(unsigned=True), nullable=False, default=0, comment="Y轴旋转(0/90/180/270)")
     material: Mapped[str] = mapped_column(String(64), nullable=False, default="", comment="材质覆盖(空=默认)")
 
