@@ -15,6 +15,7 @@ import {
 import { useElectronApi } from '@/hooks'
 import { API_BASE_URL, API_PREFIX } from '@shared/constants'
 import { useScenes, useActivateScene, useCreateScene } from '../hooks/use-virtual-world'
+import { placeBlock } from '../services/virtual-world-api'
 import styles from '../virtual-world-panel.module.css'
 
 export default function ControlTab() {
@@ -54,18 +55,73 @@ export default function ControlTab() {
 
   const handleCreateDefault = useCallback(async () => {
     try {
-      await createScene.mutateAsync({
+      // 1. 创建场景
+      const scene = await createScene.mutateAsync({
         name: '默认世界',
         description: '默认虚拟世界场景',
         width: 32,
         depth: 32,
         height: 16,
       })
-      message.success('默认世界已创建')
+
+      // 2. 激活场景
+      await activateScene.mutateAsync(scene.id)
+
+      // 3. 放置默认方块（地板 + 围墙 + 装饰）
+      const sceneId = scene.id
+      const blocks = [
+        // 地板（5x5）
+        ...Array.from({ length: 5 }, (_, x) =>
+          Array.from({ length: 5 }, (_, z) => ({ blockId: 'floor', posX: x, posY: 0, posZ: z }))
+        ).flat(),
+        // 围墙
+        ...Array.from({ length: 5 }, (_, x) => [
+          { blockId: 'wall', posX: x, posY: 0, posZ: 0 },
+          { blockId: 'wall', posX: x, posY: 0, posZ: 4 },
+        ]).flat(),
+        ...Array.from({ length: 3 }, (_, z) => [
+          { blockId: 'wall', posX: 0, posY: 0, posZ: z + 1 },
+          { blockId: 'wall', posX: 4, posY: 0, posZ: z + 1 },
+        ]).flat(),
+        // 屋顶
+        ...Array.from({ length: 5 }, (_, x) =>
+          Array.from({ length: 5 }, (_, z) => ({ blockId: 'roof_flat', posX: x, posY: 3, posZ: z }))
+        ).flat(),
+        // 柱子
+        { blockId: 'pillar', posX: 0, posY: 0, posZ: 0 },
+        { blockId: 'pillar', posX: 4, posY: 0, posZ: 0 },
+        { blockId: 'pillar', posX: 0, posY: 0, posZ: 4 },
+        { blockId: 'pillar', posX: 4, posY: 0, posZ: 4 },
+        // 装饰
+        { blockId: 'tree_trunk', posX: -2, posY: 0, posZ: 2 },
+        { blockId: 'tree_canopy', posX: -2, posY: 2, posZ: 2 },
+        { blockId: 'flower', posX: -1, posY: 0, posZ: 3 },
+        { blockId: 'flower', posX: 6, posY: 0, posZ: 1 },
+        { blockId: 'rock', posX: 6, posY: 0, posZ: 3 },
+      ]
+
+      // 批量放置方块
+      for (const b of blocks) {
+        try {
+          await placeBlock(sceneId, {
+            blockId: b.blockId,
+            posX: b.posX,
+            posY: b.posY,
+            posZ: b.posZ,
+          })
+        } catch {
+          // 忽略单个方块失败
+        }
+      }
+
+      message.success(`默认世界已创建 (${blocks.length} 个方块)`)
+
+      // 4. 重载渲染窗口
+      worldApi.reload()
     } catch {
       message.error('创建失败')
     }
-  }, [createScene])
+  }, [createScene, activateScene, worldApi])
 
   return (
     <div className={styles.panel}>
