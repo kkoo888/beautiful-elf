@@ -74,30 +74,30 @@ export default function ControlTab() {
         ...Array.from({ length: 5 }, (_, x) =>
           Array.from({ length: 5 }, (_, z) => ({ blockId: 'floor', posX: x, posY: 0, posZ: z }))
         ).flat(),
-        // 围墙
+        // 围墙（墙高3，中心在Y=1.5，底部在地板上）
         ...Array.from({ length: 5 }, (_, x) => [
-          { blockId: 'wall', posX: x, posY: 0, posZ: 0 },
-          { blockId: 'wall', posX: x, posY: 0, posZ: 4 },
+          { blockId: 'wall', posX: x, posY: 1.5, posZ: 0 },
+          { blockId: 'wall', posX: x, posY: 1.5, posZ: 4 },
         ]).flat(),
         ...Array.from({ length: 3 }, (_, z) => [
-          { blockId: 'wall', posX: 0, posY: 0, posZ: z + 1 },
-          { blockId: 'wall', posX: 4, posY: 0, posZ: z + 1 },
+          { blockId: 'wall', posX: 0, posY: 1.5, posZ: z + 1 },
+          { blockId: 'wall', posX: 4, posY: 1.5, posZ: z + 1 },
         ]).flat(),
-        // 屋顶
+        // 屋顶（在墙顶）
         ...Array.from({ length: 5 }, (_, x) =>
           Array.from({ length: 5 }, (_, z) => ({ blockId: 'roof_flat', posX: x, posY: 3, posZ: z }))
         ).flat(),
-        // 柱子
-        { blockId: 'pillar', posX: 0, posY: 0, posZ: 0 },
-        { blockId: 'pillar', posX: 4, posY: 0, posZ: 0 },
-        { blockId: 'pillar', posX: 0, posY: 0, posZ: 4 },
-        { blockId: 'pillar', posX: 4, posY: 0, posZ: 4 },
-        // 装饰
-        { blockId: 'tree_trunk', posX: -2, posY: 0, posZ: 2 },
-        { blockId: 'tree_canopy', posX: -2, posY: 2, posZ: 2 },
-        { blockId: 'flower', posX: -1, posY: 0, posZ: 3 },
-        { blockId: 'flower', posX: 6, posY: 0, posZ: 1 },
-        { blockId: 'rock', posX: 6, posY: 0, posZ: 3 },
+        // 柱子（高3，中心在Y=1.5）
+        { blockId: 'pillar', posX: 0, posY: 1.5, posZ: 0 },
+        { blockId: 'pillar', posX: 4, posY: 1.5, posZ: 0 },
+        { blockId: 'pillar', posX: 0, posY: 1.5, posZ: 4 },
+        { blockId: 'pillar', posX: 4, posY: 1.5, posZ: 4 },
+        // 装饰（树干高2，中心在Y=1）
+        { blockId: 'tree_trunk', posX: -2, posY: 1, posZ: 2 },
+        { blockId: 'tree_canopy', posX: -2, posY: 2.5, posZ: 2 },
+        { blockId: 'flower', posX: -1, posY: 0.15, posZ: 3 },
+        { blockId: 'flower', posX: 6, posY: 0.15, posZ: 1 },
+        { blockId: 'rock', posX: 6, posY: 0.15, posZ: 3 },
       ]
 
       // 批量放置方块
