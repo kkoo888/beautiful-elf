@@ -4,6 +4,7 @@ import { LoadingOutlined } from '@ant-design/icons'
 import { PetScene } from './modules/pet/scene/pet-scene'
 import { loadPetModelPath, loadPetSettings } from './modules/pet/services/pet-api'
 import { apiClient } from '@/services/api-client'
+import styles from './pet-app.module.css'
 
 /**
  * 从后端读取已保存的模型路径
@@ -65,17 +66,20 @@ export default function PetApp() {
       const modelUrl = modelPath.startsWith('file:')
         ? modelPath
         : `file:///${modelPath.replace(/\\/g, '/')}`
-      await scene.loadModel(modelUrl, onProgress)
 
       const vmdPath = deriveVmdPath(modelUrl)
       if (vmdPath) {
         try {
           await scene.loadModelWithAnimation(modelUrl, vmdPath, onProgress)
+          setStatus('模型+动画加载完成')
         } catch {
-          // VMD 可选，静默忽略
+          await scene.loadModel(modelUrl, onProgress)
+          setStatus('模型加载完成（无动画）')
         }
+      } else {
+        await scene.loadModel(modelUrl, onProgress)
+        setStatus('模型加载完成')
       }
-      setStatus('模型加载完成')
     } catch (e) {
       console.warn(`[PetApp] reloadIfNeeded (${reason}) failed:`, e)
     } finally {
@@ -110,7 +114,6 @@ export default function PetApp() {
           const modelUrl = modelPath.startsWith('file:')
         ? modelPath
         : `file:///${modelPath.replace(/\\/g, '/')}`
-          await scene.loadModel(modelUrl, onProgress)
 
           const vmdPath = deriveVmdPath(modelUrl)
           if (vmdPath) {
@@ -120,9 +123,11 @@ export default function PetApp() {
               setStatus('模型+动画加载完成')
             } catch (vmdErr) {
               console.warn('[PetApp] VMD load failed, falling back to model-only:', vmdErr)
+              await scene.loadModel(modelUrl, onProgress)
               setStatus('模型加载完成（无动画）')
             }
           } else {
+            await scene.loadModel(modelUrl, onProgress)
             setStatus('模型加载完成')
           }
         } else {
@@ -133,9 +138,10 @@ export default function PetApp() {
         setReady(true)
 
 
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : '初始化失败'
         console.error('[PetApp] init failed:', err)
-        setError(err.message || '初始化失败')
+        setError(msg)
       } finally {
         setLoading(false)
       }
@@ -302,101 +308,48 @@ export default function PetApp() {
         const modelUrl = modelPath.startsWith('file:')
         ? modelPath
         : `file:///${modelPath.replace(/\\/g, '/')}`
-        await scene.loadModel(modelUrl, onProgress)
 
         const vmdPath = deriveVmdPath(modelUrl)
         if (vmdPath) {
           try {
             await scene.loadModelWithAnimation(modelUrl, vmdPath, onProgress)
-          } catch { /* optional */ }
+          } catch {
+            await scene.loadModel(modelUrl, onProgress)
+          }
+        } else {
+          await scene.loadModel(modelUrl, onProgress)
         }
         setStatus('模型加载完成')
       } else {
         setStatus('未配置模型')
       }
-    } catch (err: any) {
-      setError(err.message || '加载失败')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '加载失败'
+      setError(msg)
     } finally {
       setLoading(false)
     }
   }, [])
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        width: '100vw',
-        height: '100vh',
-        overflow: 'hidden',
-        background: 'transparent',
-        position: 'relative',
-      }}
-    >
+    <div ref={containerRef} className={styles.container}>
       {/* 加载中状态 */}
       {loading && !error && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.5)',
-            gap: 12,
-            zIndex: 10,
-          }}
-        >
+        <div className={styles.loadingOverlay}>
           <Spin
             indicator={<LoadingOutlined style={{ fontSize: 32, color: 'rgba(255,255,255,0.8)' }} spin />}
           />
-          <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>{status}</span>
+          <span className={styles.loadingText}>{status}</span>
         </div>
       )}
 
       {/* 错误状态 */}
       {error && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.7)',
-            gap: 16,
-            zIndex: 20,
-          }}
-        >
-          <div style={{ fontSize: 48, opacity: 0.6 }}>⚠️</div>
-          <span style={{ color: '#ff4d4f', fontSize: 14, padding: '0 24px', textAlign: 'center' }}>
-            宠物加载失败
-          </span>
-          <span
-            style={{
-              color: 'rgba(255,255,255,0.5)',
-              fontSize: 12,
-              padding: '0 24px',
-              textAlign: 'center',
-              maxWidth: 300,
-            }}
-          >
-            {error}
-          </span>
-          <button
-            onClick={handleRetry}
-            style={{
-              marginTop: 4,
-              padding: '6px 20px',
-              border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: 4,
-              background: 'rgba(255,255,255,0.1)',
-              color: 'rgba(255,255,255,0.8)',
-              cursor: 'pointer',
-              fontSize: 13,
-            }}
-          >
+        <div className={styles.errorOverlay}>
+          <div className={styles.errorIcon}>⚠️</div>
+          <span className={styles.errorMessage}>宠物加载失败</span>
+          <span className={styles.errorDetail}>{error}</span>
+          <button onClick={handleRetry} className={styles.retryBtn}>
             重试
           </button>
         </div>

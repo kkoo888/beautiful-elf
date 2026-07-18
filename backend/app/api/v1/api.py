@@ -103,3 +103,7 @@ api_router.include_router(debug.router, prefix="/debug", tags=["debug"])
 
 # 定时任务控制
 api_router.include_router(scheduler_control.router, prefix="/scheduler", tags=["scheduler"])
+
+# 虚拟世界
+from app.api.v1 import virtual_world
+api_router.include_router(virtual_world.router, prefix="/virtualworld", tags=["virtualworld"])

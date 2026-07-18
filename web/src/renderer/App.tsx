@@ -23,6 +23,7 @@ import {
   SubagentPage,
   ToolsPage,
   PetPage,
+  VirtualWorldPage,
   PerformancePage,
   NotificationPage,
   SettingsPage,
@@ -109,6 +110,7 @@ export default function App() {
                   <Route path="subagent" element={<SubagentPage />} />
                   <Route path="tools" element={<ToolsPage />} />
                   <Route path="pet" element={<PetPage />} />
+                  <Route path="virtual-world" element={<VirtualWorldPage />} />
                   <Route path="performance" element={<PerformancePage />} />
                   <Route path="notification" element={<NotificationPage />} />
                   <Route path="expert-team" element={<ExpertTeamPage />} />

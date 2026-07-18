@@ -42,7 +42,7 @@
     "react-window": "^1.8.11",
     "reactflow": "^11.11.4",
     "remark-gfm": "^4.0.1",
-    "three": "^0.171.0",
+    "three": "^0.185.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.12"
   },
@@ -59,7 +59,7 @@
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
     "@types/react-window": "^1.8.8",
-    "@types/three": "^0.171.0",
+    "@types/three": "^0.185.0",
     "@typescript-eslint/eslint-plugin": "^8.33.0",
     "@typescript-eslint/parser": "^8.33.0",
     "@vitejs/plugin-react": "^4.5.2",

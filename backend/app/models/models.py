@@ -66,3 +66,7 @@ __all__ = [
     "MemoryEpisode",
     "MemoryInsightHistory",
 ]
+
+# 虚拟世界
+from app.models.virtual_world import VirtualWorldScene, VirtualWorldBlock, VirtualWorldSceneBlock
+__all_virtual_world__ = ["VirtualWorldScene", "VirtualWorldBlock", "VirtualWorldSceneBlock"]

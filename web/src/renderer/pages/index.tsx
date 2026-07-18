@@ -35,6 +35,7 @@ const WorkflowPanel = React.lazy(() => import('@/modules/workflow/workflow-panel
 const SubagentPanel = React.lazy(() => import('@/modules/subagent/subagent-panel'))
 const ToolsPanel = React.lazy(() => import('@/modules/tools/tools-panel'))
 const PetPanel = React.lazy(() => import('@/modules/pet/pet-panel'))
+const VirtualWorldPanel = React.lazy(() => import('@/modules/virtual-world/virtual-world-panel'))
 const PerformancePanel = React.lazy(() => import('@/modules/performance/performance-panel'))
 const NotificationPanel = React.lazy(() => import('@/modules/notification/notification-panel'))
 const SettingsPanel = React.lazy(() => import('@/modules/settings/settings-panel'))
@@ -135,6 +136,14 @@ export function PetPage() {
   return (
     <PageSuspense moduleName="宠物">
       <PetPanel />
+    </PageSuspense>
+  )
+}
+
+export function VirtualWorldPage() {
+  return (
+    <PageSuspense moduleName="虚拟世界">
+      <VirtualWorldPanel />
     </PageSuspense>
   )
 }

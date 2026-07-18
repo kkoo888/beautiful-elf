@@ -39,8 +39,17 @@ export class PetScene {
   private container: HTMLElement
 
   // ── Stage 1: 资产 ──
-  private loader: any = null
-  private helper: any = null
+  // MMDLoader 和 MMDAnimationHelper 通过动态 import 加载，类型在 setupLoaders 中赋值
+  private loader: {
+    load(url: string, onLoad: (mesh: THREE.SkinnedMesh) => void, onProgress?: (event: ProgressEvent) => void, onError?: (error: unknown) => void): void
+    loadWithAnimation(url: string, vmdUrl: string, onLoad: (result: { mesh: THREE.SkinnedMesh; animation: THREE.AnimationClip }) => void, onProgress?: (event: ProgressEvent) => void, onError?: (error: unknown) => void): void
+    setResourcePath(path: string): void
+  } | null = null
+  private helper: {
+    add(mesh: THREE.SkinnedMesh, options: { animation: THREE.AnimationClip; physics: boolean }): void
+    update(delta: number): void
+    dispose(): void
+  } | null = null
   private hasAnimation = false // 有 VMD 动画时才更新 helper
   private currentModelPath: string | null = null
   private currentVmdPath: string | null = null
@@ -491,7 +500,7 @@ export class PetScene {
 
     const result = materials.map((mat) => {
       // 纹理增强：对所有材质的漫反射贴图统一设各向异性 + sRGB 色彩空间
-      const diffuse = (mat as any).map as THREE.Texture | undefined | null
+      const diffuse = ('map' in mat ? mat.map : null) as THREE.Texture | undefined | null
       if (diffuse) {
         diffuse.anisotropy = maxAniso
         diffuse.colorSpace = THREE.SRGBColorSpace
@@ -500,7 +509,7 @@ export class PetScene {
 
       // MMDLoader 输出的专用 toon shader 材质 —— 必须原样保留，不能替换成 PBR。
       // 否则 gradientMap / matcap / MMD 专用光照逻辑会全部丢失，模型变成黑色剪影。
-      if ((mat as any).isMMDToonMaterial) {
+      if ('isMMDToonMaterial' in mat && (mat as Record<string, unknown>).isMMDToonMaterial) {
         return mat
       }
 
@@ -541,7 +550,7 @@ export class PetScene {
 
       // 通用回退 → PBR
       const pbr = new THREE.MeshStandardMaterial()
-      pbr.map = (mat as any).map ?? null
+      pbr.map = ('map' in mat ? mat.map : null) as THREE.Texture | null ?? null
       pbr.transparent = mat.transparent
       pbr.opacity = mat.opacity
       pbr.side = mat.side
@@ -692,24 +701,24 @@ export class PetScene {
       // 动画：有 VMD 动画时更新 helper（优先于待机动画）
       const vmdActive = !!(this.helper && this.hasAnimation)
       if (vmdActive) {
-        try { this.helper.update(delta) } catch { /* ignore */ }
+        try { this.helper.update(delta) } catch (e) { console.warn('[PetScene] helper.update failed:', e) }
       }
 
       // 网格变换：缩放（放大缩小）+ 待机动画（动作）
-      if (this.mesh && (this.mesh as any).scale && (this.mesh as any).position) {
+      if (this.mesh) {
         const idleActive = this.idleEnabled && !vmdActive
         const breath = idleActive ? 1 + Math.sin(this.elapsedTime * 2.2) * 0.02 : 1
         const s = this.zoomScale * breath
-        ;(this.mesh as any).scale.setScalar(s)
+        this.mesh.scale.setScalar(s)
         // 锚定脚底到固定世界 Y（anchorFeetY）：缩放时模型从脚底向上生长，
         // 脚底始终贴在原位置（窗口底部），避免放大后整只宠物上浮。
         const floatOffset = idleActive ? Math.sin(this.elapsedTime * 1.6) * 0.2 * s : 0
-        ;(this.mesh as any).position.y =
+        this.mesh.position.y =
           this.anchorFeetY - (this.anchorFeetY - this.idleBaseY) * s + floatOffset
         if (idleActive) {
-          if ((this.mesh as any).rotation) (this.mesh as any).rotation.y = Math.sin(this.elapsedTime * 0.5) * 0.08
+          this.mesh.rotation.y = Math.sin(this.elapsedTime * 0.5) * 0.08
         } else {
-          if ((this.mesh as any).rotation) (this.mesh as any).rotation.y = 0
+          this.mesh.rotation.y = 0
         }
       }
 
@@ -718,7 +727,7 @@ export class PetScene {
         this.updateMouseLook()
       }
 
-      try { this.renderer.render(this.scene, this.camera) } catch { /* ignore */ }
+      try { this.renderer.render(this.scene, this.camera) } catch (e) { console.warn('[PetScene] render failed:', e) }
     }
 
     this.animationId = requestAnimationFrame(animate)

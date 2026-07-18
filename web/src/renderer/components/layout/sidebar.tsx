@@ -14,6 +14,7 @@ import {
   SettingOutlined,
   BellOutlined,
   HeartOutlined,
+  BlockOutlined,
   TeamOutlined,
   PictureOutlined,
   PlayCircleOutlined,
@@ -72,6 +73,7 @@ const menuItems: ItemType[] = [
     label: '系统',
     type: 'group' as const,
     children: [
+      { key: '/virtual-world', icon: <BlockOutlined />, label: '虚拟世界' },
       { key: '/pet', icon: <HeartOutlined />, label: '宠物' },
       { key: '/performance', icon: <DashboardOutlined />, label: '性能监控' },
       { key: '/notification', icon: <BellOutlined />, label: '通知' },

@@ -66,10 +66,21 @@ interface DesktopCapturerApi {
   getSources: (options: { types: Array<'screen' | 'window'> }) => Promise<DesktopCapturerSource[]>
 }
 
+interface WorldApi {
+  show: () => Promise<{ success: boolean }>
+  hide: () => Promise<{ success: boolean }>
+  toggle: () => Promise<{ success: boolean; visible: boolean }>
+  isVisible: () => Promise<{ success: boolean; visible: boolean }>
+  reload: () => Promise<{ success: boolean; message?: string }>
+  requestScreenshot: () => void
+  onVisibilityChange: (callback: (visible: boolean) => void) => (() => void)
+}
+
 interface ElectronAPI {
   window: WindowApi
   app: AppApi
   pet: PetApi
+  world: WorldApi
   dialog: DialogApi
   desktopCapturer: DesktopCapturerApi
 }

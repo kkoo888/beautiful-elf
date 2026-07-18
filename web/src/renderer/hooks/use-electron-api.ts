@@ -116,5 +116,38 @@ export function useElectronApi() {
     [isElectron]
   )
 
-  return { isElectron, window: windowApi, app: appApi, pet: petApi, dialog: dialogApi }
+  const worldApi = useMemo(
+    () => ({
+      show: async () => {
+        if (isElectron) return window.electronAPI.world.show()
+        return { success: false }
+      },
+      hide: async () => {
+        if (isElectron) return window.electronAPI.world.hide()
+        return { success: false }
+      },
+      toggle: async () => {
+        if (isElectron) return window.electronAPI.world.toggle()
+        return { success: false, visible: false }
+      },
+      isVisible: async () => {
+        if (isElectron) return window.electronAPI.world.isVisible()
+        return { success: false, visible: false }
+      },
+      reload: async () => {
+        if (isElectron) return window.electronAPI.world.reload()
+        return { success: false }
+      },
+      requestScreenshot: () => {
+        if (isElectron) window.electronAPI.world.requestScreenshot()
+      },
+      onVisibilityChange: (callback: (visible: boolean) => void): (() => void) => {
+        if (isElectron) return window.electronAPI.world.onVisibilityChange(callback)
+        return () => {}
+      },
+    }),
+    [isElectron]
+  )
+
+  return { isElectron, window: windowApi, app: appApi, pet: petApi, world: worldApi, dialog: dialogApi }
 }

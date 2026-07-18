@@ -121,6 +121,9 @@ from app.models.observation_source import MemoryObservationSource
 # 工具审批白名单
 from app.models.tool_approval import ToolApprovalWhitelist
 
+# 虚拟世界
+from app.models.virtual_world import VirtualWorldScene, VirtualWorldBlock, VirtualWorldSceneBlock
+
 __all__ = [
     "BaseModel",
     "Conversation", "Message",

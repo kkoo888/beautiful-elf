@@ -26,6 +26,18 @@ class MySQLMapper(Generic[T]):
         except Exception as e:
             raise StorageError(f"查询失败: {e}")
 
+    async def find_one(self, db: AsyncSession, **kwargs) -> Optional[T]:
+        """按条件查询单条记录"""
+        try:
+            stmt = select(self.model).where(self.model.is_deleted == 0)
+            for key, value in kwargs.items():
+                if hasattr(self.model, key):
+                    stmt = stmt.where(getattr(self.model, key) == value)
+            result = await db.execute(stmt)
+            return result.scalar_one_or_none()
+        except Exception as e:
+            raise StorageError(f"查询失败: {e}")
+
     async def find_all(
         self,
         db: AsyncSession,
