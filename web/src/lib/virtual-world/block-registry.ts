@@ -119,6 +119,74 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
     defaultMaterial: 'grass', size: [1, 1, 1],
     description: '草地', tags: ['自然', '地面'],
   },
+  flower: {
+    id: 'flower', name: '花朵', category: 'nature',
+    geometry: { type: 'cylinder', args: [0.05, 0.15, 0.3, 8] },
+    defaultMaterial: 'neon_pink', size: [1, 1, 1],
+    description: '装饰花', tags: ['自然', '花'],
+  },
+  sand: {
+    id: 'sand', name: '沙地', category: 'nature',
+    geometry: { type: 'box', args: [1, 0.1, 1] },
+    defaultMaterial: 'sand', size: [1, 1, 1],
+    description: '沙滩', tags: ['自然', '地面'],
+  },
+  snow: {
+    id: 'snow', name: '雪地', category: 'nature',
+    geometry: { type: 'box', args: [1, 0.1, 1] },
+    defaultMaterial: 'snow', size: [1, 1, 1],
+    description: '冬季', tags: ['自然', '地面'],
+  },
+  // 结构补充
+  roof_flat: {
+    id: 'roof_flat', name: '平屋顶', category: 'structure',
+    geometry: { type: 'box', args: [1, 0.1, 1] },
+    defaultMaterial: 'concrete', size: [1, 1, 1],
+    description: '平屋顶', tags: ['建筑', '屋顶'],
+  },
+  stairs: {
+    id: 'stairs', name: '楼梯', category: 'structure',
+    geometry: { type: 'box', args: [1, 0.25, 0.5] },
+    defaultMaterial: 'wood', size: [1, 1, 1],
+    description: '台阶', tags: ['建筑', '楼梯'],
+  },
+  // 家具类
+  chair: {
+    id: 'chair', name: '椅子', category: 'furniture',
+    geometry: { type: 'box', args: [0.5, 0.5, 0.5] },
+    defaultMaterial: 'wood', size: [1, 1, 1],
+    description: '坐具', tags: ['家具', '椅子'],
+  },
+  table: {
+    id: 'table', name: '桌子', category: 'furniture',
+    geometry: { type: 'box', args: [1, 0.8, 0.6] },
+    defaultMaterial: 'wood', size: [1, 1, 1],
+    description: '台面', tags: ['家具', '桌子'],
+  },
+  bed: {
+    id: 'bed', name: '床', category: 'furniture',
+    geometry: { type: 'box', args: [2, 0.4, 1] },
+    defaultMaterial: 'wood', size: [2, 1, 1],
+    description: '睡眠', tags: ['家具', '床'],
+  },
+  bookshelf: {
+    id: 'bookshelf', name: '书架', category: 'furniture',
+    geometry: { type: 'box', args: [1, 2, 0.3] },
+    defaultMaterial: 'wood', size: [1, 2, 1],
+    description: '存储', tags: ['家具', '书架'],
+  },
+  sofa: {
+    id: 'sofa', name: '沙发', category: 'furniture',
+    geometry: { type: 'box', args: [1.5, 0.6, 0.8] },
+    defaultMaterial: 'wood', size: [2, 1, 1],
+    description: '座椅', tags: ['家具', '沙发'],
+  },
+  desk: {
+    id: 'desk', name: '书桌', category: 'furniture',
+    geometry: { type: 'box', args: [1.2, 0.75, 0.6] },
+    defaultMaterial: 'wood', size: [1, 1, 1],
+    description: '工作', tags: ['家具', '书桌'],
+  },
 }
 
 // ── 工具函数 ──
