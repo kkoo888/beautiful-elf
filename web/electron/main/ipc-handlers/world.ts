@@ -47,6 +47,14 @@ export function registerWorldHandlers(): void {
     }
   })
 
+  // 窗口拖动
+  ipcMain.on('world:drag-window', (_e, dx: number, dy: number) => {
+    const win = getWorldWindow()
+    if (!win || win.isDestroyed()) return
+    const [x, y] = win.getPosition()
+    win.setPosition(x + dx, y + dy)
+  })
+
   // 可见性变化通知
   ipcMain.on('world:visibility-change', (_, visible: boolean) => {
     // 广播给所有窗口

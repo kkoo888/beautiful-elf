@@ -73,6 +73,7 @@ interface WorldApi {
   isVisible: () => Promise<{ success: boolean; visible: boolean }>
   reload: () => Promise<{ success: boolean; message?: string }>
   requestScreenshot: () => void
+  dragWindowBy: (dx: number, dy: number) => void
   onVisibilityChange: (callback: (visible: boolean) => void) => (() => void)
 }
 

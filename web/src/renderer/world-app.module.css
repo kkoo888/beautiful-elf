@@ -69,3 +69,75 @@
   padding: 2px 8px;
   border-radius: 4px;
 }
+
+/* ── 顶部拖动栏 ── */
+.topBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 12px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  z-index: 20;
+  cursor: grab;
+  -webkit-app-region: drag;
+}
+
+.topBar:active {
+  cursor: grabbing;
+}
+
+.topBarTitle {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-weight: 500;
+  user-select: none;
+}
+
+.topBarActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.topBarBtn {
+  width: 24px !important;
+  height: 24px !important;
+  border: none !important;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px !important;
+  transition: all 0.15s ease !important;
+}
+
+.topBarBtn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.topBarBtnClose {
+  width: 24px !important;
+  height: 24px !important;
+  border: none !important;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px !important;
+  transition: all 0.15s ease !important;
+}
+
+.topBarBtnClose:hover {
+  background: #e81123 !important;
+  color: #fff !important;
+}

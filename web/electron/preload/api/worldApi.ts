@@ -7,6 +7,7 @@ export const worldApi = {
   isVisible: () => ipcRenderer.invoke('world:isVisible'),
   reload: () => ipcRenderer.invoke('world:reload'),
   requestScreenshot: () => ipcRenderer.send('world:request-screenshot'),
+  dragWindowBy: (dx: number, dy: number) => ipcRenderer.send('world:drag-window', dx, dy),
   onVisibilityChange: (callback: (visible: boolean) => void): (() => void) => {
     const handler = (_: Electron.IpcRendererEvent, visible: boolean) => callback(visible)
     ipcRenderer.on('world:visibility-change', handler)

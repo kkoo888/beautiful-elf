@@ -11,8 +11,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { Spin } from 'antd'
-import { LoadingOutlined } from '@ant-design/icons'
+import { Spin, Button } from 'antd'
+import {
+  LoadingOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+  ReloadOutlined,
+  CloseOutlined,
+} from '@ant-design/icons'
 import { SceneBuilder, type SceneBlockData } from '../lib/virtual-world/scene-builder'
 import { apiClient, extractData, extractPaginated } from '@/services/api-client'
 import type { VirtualWorldScene, VirtualWorldSceneBlock } from './modules/virtual-world/types'
@@ -313,8 +319,81 @@ export default function WorldApp() {
     }
   }, [initScene, startRenderLoop, loadScene, handleResize])
 
+  // ── 拖动窗口 ──
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    if (e.target instanceof HTMLButtonElement) return
+    e.preventDefault()
+
+    const onMove = (ev: MouseEvent) => {
+      window.electronAPI?.world?.dragWindowBy(ev.movementX, ev.movementY)
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
+  // ── 缩放 ──
+  const handleZoom = useCallback((factor: number) => {
+    const camera = cameraRef.current
+    const controls = controlsRef.current
+    if (!camera || !controls) return
+
+    const dir = new THREE.Vector3().subVectors(camera.position, controls.target)
+    const dist = dir.length()
+    const newDist = Math.max(5, Math.min(150, dist * factor))
+    dir.normalize().multiplyScalar(newDist)
+    camera.position.copy(controls.target).add(dir)
+    controls.update()
+  }, [])
+
+  const handleZoomIn = useCallback(() => handleZoom(0.8), [handleZoom])
+  const handleZoomOut = useCallback(() => handleZoom(1.25), [handleZoom])
+
+  const handleClose = useCallback(() => {
+    window.electronAPI?.world?.hide()
+  }, [])
+
   return (
     <div ref={containerRef} className={styles.container}>
+      {/* 顶部拖动栏 */}
+      <div className={styles.topBar} onMouseDown={handleDragStart}>
+        <span className={styles.topBarTitle}>🌍 虚拟世界</span>
+        <div className={styles.topBarActions}>
+          <Button
+            type="text"
+            size="small"
+            icon={<ZoomInOutlined />}
+            className={styles.topBarBtn}
+            onClick={handleZoomIn}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<ZoomOutOutlined />}
+            className={styles.topBarBtn}
+            onClick={handleZoomOut}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<ReloadOutlined />}
+            className={styles.topBarBtn}
+            onClick={loadScene}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<CloseOutlined />}
+            className={styles.topBarBtnClose}
+            onClick={handleClose}
+          />
+        </div>
+      </div>
+
       {/* 加载态 */}
       {loading && !error && (
         <div className={styles.overlay}>
@@ -331,7 +410,7 @@ export default function WorldApp() {
         </div>
       )}
 
-      {/* 状态栏 */}
+      {/* 底部状态栏 */}
       {!loading && !error && (
         <div className={styles.statusBar}>
           <span className={styles.statusLabel}>{status}</span>
