@@ -1,0 +1,71 @@
+/* world-app.module.css — 虚拟世界渲染窗口样式 */
+
+.container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  position: relative;
+}
+
+/* ── 通用遮罩 ── */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  gap: 12px;
+  z-index: 10;
+}
+
+.spinIcon {
+  font-size: 32px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.statusText {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+.errorIcon {
+  font-size: 40px;
+  opacity: 0.7;
+}
+
+.errorText {
+  color: #ff7875;
+  font-size: 13px;
+  text-align: center;
+  padding: 0 24px;
+}
+
+/* ── 底部状态栏 ── */
+.statusBar {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+}
+
+.statusLabel {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+.blockBadge {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
