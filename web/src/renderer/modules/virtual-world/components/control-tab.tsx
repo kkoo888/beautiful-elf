@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Button, message } from 'antd'
 import {
+  ControlOutlined,
   PlayCircleOutlined,
   PauseCircleOutlined,
   ReloadOutlined,
