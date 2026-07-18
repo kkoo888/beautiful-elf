@@ -256,20 +256,21 @@
 }
 
 /* ── 按钮行 ── */
+.btnRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 .btnRowHasScene {
-  composes: btnRow;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
 }
 
 .infoIcon {
   margin-right: 4px;
-}
-
-.btnRow {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .btnPrimary {
@@ -592,6 +593,16 @@
   opacity: 0.5;
 }
 
+/* ── 空状态 ── */
+.emptyWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 12px;
+}
+
 .builderEmptyWrap {
   composes: emptyWrap;
   padding: 24px 0;
@@ -682,15 +693,6 @@
   padding: 24px 0;
 }
 
-/* ── 空状态 ── */
-.emptyWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  gap: 12px;
-}
 
 .emptyIcon {
   font-size: 40px;
