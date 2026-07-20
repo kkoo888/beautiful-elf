@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Button, message } from 'antd'
+import { App, Button } from 'antd'
 import {
   ControlOutlined,
   PlayCircleOutlined,
@@ -19,6 +19,7 @@ import { placeBlock } from '../services/virtual-world-api'
 import styles from '../virtual-world-panel.module.css'
 
 export default function ControlTab() {
+  const { message } = App.useApp()
   const { world: worldApi, isElectron } = useElectronApi()
   const [worldVisible, setWorldVisible] = useState(false)
   const [screenshot, setScreenshot] = useState<string | null>(null)
