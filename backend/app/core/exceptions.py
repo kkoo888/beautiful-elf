@@ -1,136 +1,114 @@
-"""统一异常处理 — 符合阿里巴巴 API 规范
-
-错误码格式: {MODULE}_{ERROR_TYPE}
 """
+统一异常处理 - 提供清晰的错误类型和处理机制
+"""
+from typing import Optional, Any, Dict
+from fastapi import HTTPException
 
 
-class AppError(Exception):
-    """应用异常基类"""
-    code: str = "SYSTEM_INTERNAL_ERROR"
-    message: str = "服务器内部错误"
-    user_tip: str = "请稍后重试"
-    status_code: int = 500
-
-    def __init__(self, message: str = None, user_tip: str = None, **kwargs):
-        self.message = message or self.__class__.message
-        self.user_tip = user_tip or self.__class__.user_tip
-        super().__init__(self.message)
-
-
-# ============ 系统级异常 ============
-
-class StorageError(AppError):
-    """存储层异常"""
-    code = "SYSTEM_STORAGE_ERROR"
-    status_code = 500
-    message = "存储服务异常"
-    user_tip = "系统繁忙，请稍后重试"
+class AppException(Exception):
+    """
+    应用基础异常
+    """
+    def __init__(
+        self,
+        message: str,
+        code: str = "UNKNOWN_ERROR",
+        status_code: int = 500,
+        details: Optional[Dict[str, Any]] = None
+    ):
+        self.message = message
+        self.code = code
+        self.status_code = status_code
+        self.details = details or {}
+        super().__init__(message)
 
 
-class RecordNotFoundError(AppError):
-    """记录不存在"""
-    code = "SYSTEM_NOT_FOUND"
-    status_code = 404
-    message = "记录不存在"
-    user_tip = "请检查请求的资源是否存在"
+class NotFoundException(AppException):
+    """资源未找到"""
+    def __init__(self, resource: str, identifier: Any):
+        super().__init__(
+            message=f"{resource} not found: {identifier}",
+            code="NOT_FOUND",
+            status_code=404,
+            details={"resource": resource, "identifier": str(identifier)}
+        )
 
 
-class DuplicateEntryError(AppError):
-    """重复记录"""
-    code = "SYSTEM_DUPLICATE"
-    status_code = 409
-    message = "记录已存在"
-    user_tip = "该记录已存在，请勿重复创建"
+class ValidationException(AppException):
+    """验证错误"""
+    def __init__(self, field: str, message: str):
+        super().__init__(
+            message=f"Validation error: {field} - {message}",
+            code="VALIDATION_ERROR",
+            status_code=422,
+            details={"field": field, "validation_message": message}
+        )
 
 
-class DataConsistencyError(AppError):
-    """数据一致性错误"""
-    code = "SYSTEM_CONSISTENCY"
-    status_code = 500
-    message = "数据一致性错误"
-    user_tip = "系统繁忙，请稍后重试"
+class AuthenticationException(AppException):
+    """认证错误"""
+    def __init__(self, message: str = "Authentication failed"):
+        super().__init__(
+            message=message,
+            code="AUTHENTICATION_ERROR",
+            status_code=401
+        )
 
 
-class ValidationError(AppError):
-    """参数校验失败"""
-    code = "SYSTEM_VALIDATION"
-    status_code = 400
-    message = "参数校验失败"
-    user_tip = "请检查输入参数是否正确"
+class AuthorizationException(AppException):
+    """授权错误"""
+    def __init__(self, message: str = "Access denied"):
+        super().__init__(
+            message=message,
+            code="AUTHORIZATION_ERROR",
+            status_code=403
+        )
 
 
-# ============ 业务异常 ============
-
-class IntentNotFoundError(AppError):
-    code = "INTENT_NOT_FOUND"
-    status_code = 404
-    message = "意图不存在"
-    user_tip = "请检查意图 ID"
-
-
-class OllamaTimeoutError(AppError):
-    code = "AI_TIMEOUT"
-    status_code = 503
-    message = "AI 模型响应超时"
-    user_tip = "AI 服务繁忙，请稍后重试"
+class ConflictException(AppException):
+    """冲突错误"""
+    def __init__(self, resource: str, message: str):
+        super().__init__(
+            message=f"Conflict: {resource} - {message}",
+            code="CONFLICT",
+            status_code=409,
+            details={"resource": resource}
+        )
 
 
-class RagIndexError(AppError):
-    code = "AI_RAG_INDEX_ERROR"
-    status_code = 500
-    message = "RAG 索引错误"
-    user_tip = "知识库索引异常，请联系管理员"
+class ExternalServiceException(AppException):
+    """外部服务错误"""
+    def __init__(self, service: str, message: str):
+        super().__init__(
+            message=f"External service error: {service} - {message}",
+            code="EXTERNAL_SERVICE_ERROR",
+            status_code=502,
+            details={"service": service}
+        )
 
 
-class WorkflowError(AppError):
-    code = "WORKFLOW_ERROR"
-    status_code = 500
-    message = "工作流执行错误"
-    user_tip = "工作流执行失败，请检查配置"
+class RateLimitException(AppException):
+    """速率限制"""
+    def __init__(self, retry_after: int = 60):
+        super().__init__(
+            message="Rate limit exceeded",
+            code="RATE_LIMIT_EXCEEDED",
+            status_code=429,
+            details={"retry_after": retry_after}
+        )
 
 
-class SkillError(AppError):
-    code = "SKILL_ERROR"
-    status_code = 500
-    message = "技能执行错误"
-    user_tip = "技能执行失败，请检查配置"
-
-
-class PetError(AppError):
-    code = "PET_ERROR"
-    status_code = 500
-    message = "宠物系统错误"
-    user_tip = "宠物系统异常，请稍后重试"
-
-
-class ScheduleError(AppError):
-    code = "SCHEDULE_ERROR"
-    status_code = 500
-    message = "日程系统错误"
-    user_tip = "日程系统异常，请稍后重试"
-
-
-class ExpertTeamError(AppError):
-    """专家团系统异常"""
-    code = "EXPERT_TEAM_ERROR"
-    status_code = 500
-    message = "专家团系统错误"
-    user_tip = "专家团操作失败，请稍后重试"
-
-
-# ============ 认证异常 ============
-
-class AuthUnauthorizedError(AppError):
-    """未登录或 token 无效"""
-    code = "AUTH_UNAUTHORIZED"
-    status_code = 401
-    message = "未登录或 token 无效"
-    user_tip = "请先登录"
-
-
-class AuthForbiddenError(AppError):
-    """无权限"""
-    code = "AUTH_FORBIDDEN"
-    status_code = 403
-    message = "无权限访问"
-    user_tip = "请联系管理员获取权限"
+def app_exception_handler(request, exc: AppException):
+    """异常处理器"""
+    from fastapi.responses import JSONResponse
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details
+            }
+        }
+    )
