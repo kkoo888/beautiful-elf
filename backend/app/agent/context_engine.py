@@ -94,6 +94,29 @@ _PROMPT_TASK_COMPLETION = (
     "工具失败时先用自身知识回答（标注「基于模型推理」），再说明工具不可用。实时数据类问题（股价、天气等）标注为推测。"
 )
 
+# ── 引用溯源（对标 Vane Writer [number] 引用系统）────────
+# 解决的问题：LLM 回答无来源，用户无法验证，幻觉难发现
+#
+# Vane 的做法：Context 里每个来源带 [1] [2] 编号，Writer prompt 强制每句引用。
+# 我们复刻同一机制：_retrieve_knowledge 返回带编号的 context，
+# 这里告诉 LLM 必须用 [number] 引用。
+_PROMPT_CITATION = (
+    "\n\n## 引用溯源（Citation）\n"
+    "回答中涉及知识库检索结果时，必须用 [number] 内联引用标注来源。\n\n"
+    "**规则：**\n"
+    "- 知识库内容用 [1] [2] [3] 对应 context 中编号的来源\n"
+    "- 工具结果用 [来源: 工具名] 标注\n"
+    "- 记忆内容用 [来源: 记忆] 标注\n"
+    "- 模型推理/不确定的内容用 [推测] 标注\n"
+    "- 每个事实性陈述必须有至少一个引用\n"
+    "- 多个来源支持同一事实时合并引用：[1][2]\n\n"
+    "**示例：**\n"
+    "✓ 根据[1]，系统采用微服务架构。数据库设计见[2]。\n"
+    "✓ [来源: 天气工具] 今天北京晴，25°C。\n"
+    "✗ 系统采用微服务架构。（无来源 — 不可接受）\n\n"
+    "没有来源支持的信息必须标注 [推测]，宁可说「我不确定」也不要编造。"
+)
+
 # ── 记忆指导 ─────────────────────────────────────────────
 # 解决的问题：记忆写入质量差（保存临时状态、用祈使句写记忆、保存会过期的信息）
 _PROMPT_MEMORY_GUIDANCE = (
@@ -239,6 +262,7 @@ class ContextEngine:
         intent: Optional[dict] = None,
         tools: Optional[List[dict]] = None,
         skill_context: Optional[str] = None,
+        conversation_history: Optional[List[dict]] = None,
     ) -> ContextResult:
         """组装完整的 Context（Write/Select/Compress/Isolate 四策略）"""
         parts: Dict[str, str] = {}
@@ -271,7 +295,7 @@ class ContextEngine:
 
         # 5. RAG 知识库
         if self.rag_pipeline and getattr(self.rag_pipeline, 'is_ready', False) and user_message and budget_remaining > 2000:
-            rag_ctx = await self._retrieve_knowledge(user_message, budget=30_000)
+            rag_ctx = await self._retrieve_knowledge(user_message, budget=30_000, conversation_history=conversation_history)
             if rag_ctx:
                 parts["knowledge"] = rag_ctx
                 budget_remaining -= len(rag_ctx)
@@ -347,6 +371,7 @@ class ContextEngine:
         base += _PROMPT_PARALLEL_TOOLS
         base += _PROMPT_TOOL_ENFORCEMENT
         base += _PROMPT_TASK_COMPLETION
+        base += _PROMPT_CITATION
         base += _PROMPT_MEMORY_GUIDANCE
 
         if intent and intent.get("intent_name") and intent["intent_name"] not in ("semantic_cache_hit", "chitchat"):
@@ -400,17 +425,173 @@ class ContextEngine:
             logger.warning(f"[context_engine] 记忆检索失败（降级跳过）: {e}")
             return "", meta
 
-    async def _retrieve_knowledge(self, query: str, budget: int = 2000) -> str:
+    async def _retrieve_knowledge(self, query: str, budget: int = 2000, conversation_history: List[dict] = None) -> str:
+        """RAG 检索 — LLM 分类器 + 多轮检索 + 编号引用
+
+        v5.0 对标 Vane 三项核心设计：
+          1. LLM 分类器（classifier.ts）：判断是否需要检索、生成 standaloneQuery
+          2. 多轮检索（researcher.ts）：质量驱动的重试循环，最多 3 轮
+          3. 编号引用（writer.ts）：Context 带 [1] [2] 编号，供 Writer 引用
+        """
         try:
-            knowledge_text = await self.rag_pipeline.search(query=query, limit=3)
-            if not knowledge_text:
+            # ── 1. LLM 分类器：判断是否需要检索 ──
+            classification = await self._classify_rag_need(query, conversation_history)
+            if classification and classification.skip_search:
+                logger.info(f"[rag_classifier] 跳过检索: {classification.reason}")
                 return ""
-            if len(knowledge_text) > budget:
-                knowledge_text = knowledge_text[:budget] + "..."
-            return f"【相关知识】\n{knowledge_text}"
+
+            # 使用 standaloneQuery（上下文解耦后的独立查询）
+            search_query = classification.standalone_query if classification and classification.standalone_query else query
+            if search_query != query:
+                logger.info(f"[rag_classifier] standaloneQuery: '{query[:30]}...' → '{search_query[:30]}...'")
+
+            # ── 2. 多轮检索循环（对标 Vane Researcher 工具循环）──
+            max_rounds = 3
+            best_context = ""
+            best_quality = "poor"
+            current_query = search_query
+
+            for round_idx in range(max_rounds):
+                result = await self.rag_pipeline.search_with_quality_check(
+                    query=current_query, limit=5
+                )
+
+                context_text = result.get("context", "")
+                quality = result.get("quality", "poor")
+                avg_score = result.get("avg_score", 0.0)
+                result_count = result.get("result_count", 0)
+
+                logger.info(
+                    f"[rag_round {round_idx + 1}/{max_rounds}] "
+                    f"quality={quality} avg_score={avg_score:.3f} "
+                    f"results={result_count}"
+                )
+
+                # 质量足够好，停止
+                if quality in ("good", "fair") and context_text:
+                    best_context = context_text
+                    best_quality = quality
+                    break
+
+                # 第一轮无结果或质量差，用 LLM 改写查询重试
+                if context_text and not best_context:
+                    best_context = context_text
+                    best_quality = quality
+
+                if round_idx < max_rounds - 1 and self.llm_client:
+                    refined = await self._refine_rag_query_for_retry(current_query, round_idx + 1)
+                    if refined and refined != current_query:
+                        current_query = refined
+                    else:
+                        break  # 改写失败，停止重试
+                else:
+                    break
+
+            if not best_context:
+                return ""
+
+            # ── 3. 给检索结果加编号（对标 Vane Context [number] 系统）──
+            if len(best_context) > budget:
+                best_context = best_context[:budget] + "..."
+
+            # 在 context 前加引用说明
+            citation_header = "以下是知识库检索结果，回答时必须用 [number] 引用对应来源："
+            return f"【相关知识】\n{citation_header}\n{best_context}"
+
         except Exception as e:
             logger.warning(f"[context_engine] RAG 检索失败（降级跳过）: {e}")
             return ""
+
+    async def _classify_rag_need(self, query: str, conversation_history: List[dict] = None):
+        """LLM 分类器 — 判断是否需要 RAG 检索（对标 Vane classifier.ts）
+
+        Vane 的做法：用 LLM 做多维分类，输出 skipSearch + standaloneFollowUp。
+        我们复刻同一机制：用 structured_output 保证格式正确。
+        """
+        if not self.llm_client:
+            return None
+
+        try:
+            from app.agent.structured_schemas import RAGClassifierResult
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            # 构建对话历史上下文
+            history_text = ""
+            if conversation_history:
+                recent = conversation_history[-4:]
+                history_text = "\n".join(
+                    f"[{m.get('role', 'user')}] {_content_to_str(m.get('content', ''))[:200]}"
+                    for m in recent
+                )
+
+            structured_llm = self.llm_client.with_structured_output(RAGClassifierResult)
+            result = await structured_llm.ainvoke([
+                SystemMessage(content=(
+                    "你是一个查询分类器。分析用户查询，判断是否需要知识库检索。\n\n"
+                    "**skip_search=true 的场景（不需要检索）：**\n"
+                    "- 问候、闲聊、告别、感谢\n"
+                    "- 关于对话本身的元问题（'你是谁'、'帮助'）\n"
+                    "- 极简确认/否定（'好的'、'ok'、'不'）\n"
+                    "- 纯数学计算\n"
+                    "- 写作/翻译/改写等不需要外部信息的任务\n"
+                    "- 常识性问题（'地球是圆的吗'）\n\n"
+                    "**skip_search=false 的场景（需要检索）：**\n"
+                    "- 问及具体事实、数据、文档内容\n"
+                    "- 技术问题、专业问题\n"
+                    "- 需要最新信息的问题\n"
+                    "- 拿不准的问题（宁可搜，不遗漏）\n\n"
+                    "**standalone_query 要求：**\n"
+                    "将用户查询改写为脱离对话上下文也能理解的独立查询。\n"
+                    "例如：上下文讨论汽车，用户说'它们怎么工作' → '汽车怎么工作'"
+                )),
+                HumanMessage(content=(
+                    f"{f'【最近对话】{history_text}' if history_text else ''}\n"
+                    f"【用户查询】{query}"
+                )),
+            ])
+
+            logger.info(
+                f"[rag_classifier] skip={result.skip_search} "
+                f"type={result.search_type} reason={result.reason}"
+            )
+            return result
+
+        except Exception as e:
+            logger.debug(f"[rag_classifier] 分类失败（默认检索）: {e}")
+            return None
+
+    async def _refine_rag_query_for_retry(self, original_query: str, round_num: int) -> str:
+        """多轮 RAG：针对上一轮结果不足，生成更精确的查询（对标 Vane Researcher）
+
+        Vane 的做法：每轮先输出推理前言（为什么这样搜），再生成针对性查询。
+        我们复刻同一机制：LLM 分析为什么上一轮不够，生成补充查询。
+        """
+        try:
+            from app.agent.structured_schemas import RewrittenQuery
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            structured_llm = self.llm_client.with_structured_output(RewrittenQuery)
+            result = await structured_llm.ainvoke([
+                SystemMessage(content=(
+                    f"你是一个检索查询优化专家。第 {round_num} 轮检索结果不理想。\n"
+                    "请分析可能原因并生成更精确的查询。\n\n"
+                    "策略（按优先级）：\n"
+                    "1. 拆分复合问题为单一主题\n"
+                    "2. 用同义词替换（'后端' ↔ 'server' ↔ 'backend'）\n"
+                    "3. 去掉口语化填充，保留核心关键词\n"
+                    "4. 增加限定词缩小范围\n\n"
+                    "如果原始查询已经足够精确，返回原文。"
+                )),
+                HumanMessage(content=f"第 {round_num} 轮检索原始查询：{original_query}"),
+            ])
+            refined = result.rewritten_query.strip()
+            reason = getattr(result, 'reason', '')
+            if refined and refined != original_query:
+                logger.info(f"[rag_round {round_num}] 查询改写: '{original_query[:30]}...' → '{refined[:30]}...' reason={reason}")
+            return refined if refined else original_query
+        except Exception as e:
+            logger.debug(f"[rag_round {round_num}] 查询改写失败: {e}")
+            return original_query
 
     def _format_tool_defs(self, tools: List[dict], budget: int = 1000) -> str:
         if not tools:

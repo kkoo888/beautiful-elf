@@ -375,6 +375,89 @@ class RAGPipeline:
         # ── 降级: 手动调用 ──
         return await self._manual_search(query, limit)
 
+    async def search_with_quality_check(self, query: str, limit: int = 5) -> dict:
+        """带质量检查的检索（多轮 RAG 入口）
+
+        v5.0 新增（对标 Vane Researcher 多轮策略）:
+          返回结果 + 质量评分，供调用方决定是否需要重试。
+
+        质量评分逻辑：
+          - 基于 reranker 分数的均值（0-1）
+          - >= 0.6: good — 质量好，可直接使用
+          - >= 0.35: fair — 勉强可用
+          - < 0.35: poor — 需要重试
+
+        Returns:
+            {"context": str, "result_count": int, "avg_score": float, "quality": str}
+        """
+        if not self._initialized:
+            return {"context": "", "result_count": 0, "avg_score": 0.0, "quality": "poor"}
+
+        try:
+            from llama_index.core.schema import QueryBundle
+            from app.agent.injection_guard import wrap_untrusted
+
+            # 混合检索
+            hits = await asyncio.to_thread(
+                self._hybrid_retriever.retrieve, query, top_k=self._hybrid_retriever._final_top_k
+            )
+            if not hits:
+                return {"context": "", "result_count": 0, "avg_score": 0.0, "quality": "poor"}
+
+            doc_ids = [h.doc_id for h in hits]
+            nodes = await asyncio.to_thread(_resolve_nodes, self._hybrid_retriever, query, doc_ids)
+            if not nodes:
+                return {"context": "", "result_count": 0, "avg_score": 0.0, "quality": "poor"}
+
+            # Reranking
+            if self._reranker:
+                query_bundle = QueryBundle(query_str=query)
+                nodes = await asyncio.to_thread(
+                    self._reranker.postprocess_nodes, nodes, query_bundle
+                )
+
+            nodes = nodes[:limit]
+
+            # 质量评分
+            scores = [n.score or 0 for n in nodes]
+            avg_score = sum(scores) / len(scores) if scores else 0.0
+            quality = "good" if avg_score >= 0.6 else ("fair" if avg_score >= 0.35 else "poor")
+
+            # Budget 裁剪
+            max_chars = self._budget.snapshot().max_rag_result_chars
+            total_chars = 0
+            budgeted_nodes = []
+            for node in nodes:
+                if total_chars + len(node.text) > max_chars:
+                    break
+                budgeted_nodes.append(node)
+                total_chars += len(node.text)
+
+            # 拼装带编号的 context（对标 Vane Writer [number] 系统）
+            parts = []
+            for i, node in enumerate(budgeted_nodes, 1):
+                score = node.score or 0
+                filename = node.metadata.get("filename", "未知")
+                source = f"rag:file={filename},score={score:.2f}"
+                wrapped = wrap_untrusted(node.text, source=source)
+                parts.append(f"[{i}] {wrapped}")
+
+            context = "\n\n---\n\n".join(parts)
+            logger.info(
+                f"[rag] 质量检查: {len(budgeted_nodes)} nodes, "
+                f"avg_score={avg_score:.3f}, quality={quality}"
+            )
+
+            return {
+                "context": context,
+                "result_count": len(budgeted_nodes),
+                "avg_score": round(avg_score, 3),
+                "quality": quality,
+            }
+        except Exception as e:
+            logger.warning(f"[rag] 质量检查检索失败: {e}")
+            return {"context": "", "result_count": 0, "avg_score": 0.0, "quality": "poor"}
+
     async def _manual_search(self, query: str, limit: int = 5) -> str:
         """手动检索（Workflow 不可用时的降级方案）
 

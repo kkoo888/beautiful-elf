@@ -115,3 +115,34 @@ class SemanticSubtaskValidation(BaseModel):
     has_hallucination: bool = Field(default=False, description="是否包含幻觉/捏造")
     issues: List[str] = Field(default_factory=list, description="发现的问题")
     suggestion: str = Field(default="", description="改进建议")
+
+
+# ── RAG 分类器（借鉴 Vane Classifier 设计）────────────────
+
+class RAGClassifierResult(BaseModel):
+    """RAG 检索分类结果 — LLM 判断是否需要检索、检索什么类型
+
+    借鉴 Vane classifier.ts 的多维分类设计：
+    - skipSearch: 是否跳过检索（常识/闲聊/Widget可回答）
+    - searchType: 检索类型（knowledge/web/all）
+    - standaloneQuery: 脱离上下文的独立查询词
+    - reason: 分类理由（调试用）
+    """
+    skip_search: bool = Field(
+        description=(
+            "是否可以不检索就回答。true=常识/闲聊/简单问题，" +
+            "false=需要外部信息。拿不准时设 false"
+        )
+    )
+    search_type: str = Field(
+        default="knowledge",
+        description="检索类型：knowledge=知识库, web=网页, all=全部"
+    )
+    standalone_query: str = Field(
+        description=(
+            "脱离对话上下文的独立查询词。" +
+            "例如上下文讨论汽车，用户说'它们怎么工作'，" +
+            "则 standalone_query='汽车怎么工作'"
+        )
+    )
+    reason: str = Field(default="", description="分类理由（调试用，简短）")

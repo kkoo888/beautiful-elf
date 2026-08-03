@@ -20,6 +20,7 @@ class AppException(Exception):
         self.code = code
         self.status_code = status_code
         self.details = details or {}
+        self.user_tip = message
         super().__init__(message)
 
 
@@ -112,3 +113,38 @@ def app_exception_handler(request, exc: AppException):
             }
         }
     )
+
+
+# ── 兼容别名（main.py 和其他模块使用的名称）──
+AppError = AppException
+
+
+class StorageError(AppException):
+    """存储操作错误"""
+    def __init__(self, message: str = "存储操作失败"):
+        super().__init__(message=message, code="STORAGE_ERROR", status_code=500)
+
+
+class RecordNotFoundError(AppException):
+    """记录未找到"""
+    def __init__(self, message: str = "记录不存在"):
+        super().__init__(message=message, code="NOT_FOUND", status_code=404)
+
+
+class DuplicateEntryError(AppException):
+    """重复记录"""
+    def __init__(self, message: str = "记录已存在"):
+        super().__init__(message=message, code="DUPLICATE_ENTRY", status_code=409)
+
+
+class AuthUnauthorizedError(AppException):
+    """认证错误"""
+    def __init__(self, message: str = "认证失败", user_tip: str = "请先登录"):
+        super().__init__(message=message, code="AUTH_UNAUTHORIZED", status_code=401)
+        self.user_tip = user_tip
+
+
+class SkillError(AppException):
+    """技能操作错误"""
+    def __init__(self, message: str = "技能操作失败"):
+        super().__init__(message=message, code="SKILL_ERROR", status_code=400)

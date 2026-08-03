@@ -281,6 +281,7 @@ def _make_context_builder(context_engine, memory_manager, tool_registry=None):
                     user_message=rewritten_query,  # 用改写后的查询
                     intent=state.get("intent"),
                     tools=tool_summaries or (context_engine.get_tool_summaries() if context_engine else None),
+                    conversation_history=_build_message_dicts(state),
                 )
                 system_prompt = result.system_prompt
 
